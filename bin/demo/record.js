@@ -50,10 +50,12 @@ if ( ! OUT ) {
 // demo leads somewhere. The overview loads with the app itself.
 const CORE_ROUTES = [ 'content', 'media', 'comments', 'orders', 'products', 'customers', 'users' ];
 // How far the walk goes on each view: the rows opened in each view's own
-// list (so a page's next and previous lead somewhere), how many tab
-// combinations of two groups are tried before tabs go one at a time, and a
-// time limit per view on a slow dev box.
+// list (so a page's next and previous lead somewhere; the core lists, which
+// a visitor opens first, go further), how many tab combinations of two
+// groups are tried before tabs go one at a time, and a time limit per view
+// on a slow dev box.
 const FIRST_ROWS = 4;
+const CORE_ROWS = 10;
 const MAX_COMBOS = 12;
 const WALK_MS = 5 * 60000;
 // A POST that only renders (an email preview) reads like a GET: it is
@@ -148,7 +150,8 @@ function scrubber( boot, secrets ) {
 		// The tail stops at a backslash too: inside an escaped string it is the
 		// escape of the closing quote, and eating it would break that string.
 		[ /https?:(\\*\/){2}(secure\.|[0-9]\.)?gravatar\.com\\*\/avatar\\*\/[^"'\s)<>\\]*/g, AVATAR ],
-		[ /(_wpnonce=)[0-9a-f]{10}/g, '$1demo' ],
+		// PDF Invoices & Packing Slips signs its links with a nonce of its own.
+		[ /(_wpnonce=|access_key=)[0-9a-f]{10}/g, '$1demo' ],
 		// Only a real nonce: an empty one would match between every character.
 		...( /^[0-9a-f]{10}$/.test( boot.nonce || '' ) ? [ [ new RegExp( boot.nonce, 'g' ), 'demo' ] ] : [] ),
 		...Object.entries( extra ).map( ( [ find, to ] ) => [ new RegExp( escapeRe( find ), 'g' ), to ] ),
@@ -501,7 +504,8 @@ async function capture() {
 				if ( Date.now() > until ) break;
 				const seen = new Set();
 				await reenter( view );
-				for ( let n = 0; n < FIRST_ROWS && Date.now() < until && await openRow( seen ); n++ );
+				const rows = CORE_ROUTES.includes( route ) ? CORE_ROWS : FIRST_ROWS;
+				for ( let n = 0; n < rows && Date.now() < until && await openRow( seen ); n++ );
 				await reenter( view );
 				await turnPage();
 				// Each other tab of the view, and both of its first two groups

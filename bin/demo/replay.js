@@ -6,8 +6,9 @@
  * The REST root sits under the demo's own path, so a request that ever got
  * past the fetch stand-in would 404 on the host site rather than reach its
  * real API. Reads answer from the recording: the exact URL first, else the
- * recording of the same route whose query shares the most with it (a search
- * or a second page shows the first page of that list). Writes answer with a
+ * recording of the same route whose query shares the most with it (a second
+ * page shows the first page of that list, a search the rows of the list that
+ * contain the term). Writes answer with a
  * refusal the app shows as an ordinary error, except a POST that only
  * renders (an email preview), which answers like a read. Links into the
  * recorded site (wp-admin, front-end pages) point at example.com after
@@ -69,6 +70,20 @@
 		}
 		return loading[ view ];
 	};
+	// A list search the walk never typed. The app sends search= (q= in a few
+	// places); a recording that searched for something else is no stand-in.
+	var SEARCH = /^(search|q)=/;
+	var searched = function ( q ) {
+		var term = '';
+		q.forEach( function ( p ) {
+			if ( SEARCH.test( p ) ) {
+				try {
+					term = decodeURIComponent( p.slice( p.indexOf( '=' ) + 1 ).replace( /\+/g, ' ' ) ).trim().toLowerCase();
+				} catch ( e ) {}
+			}
+		} );
+		return term;
+	};
 	// The recording of this route that shares the most query pairs with the
 	// request; on a tie the fewest extra pairs, then the first recorded (a
 	// view's default list, recorded before its tabs and filters).
@@ -78,10 +93,12 @@
 		var all = byRoute[ at < 0 ? key : key.slice( 0, at ) ];
 		if ( ! all ) return null;
 		var want = pairs( at < 0 ? '' : key.slice( at + 1 ) );
+		var term = searched( want );
 		var best = null;
 		var bestScore = -1;
 		var bestExtra = 0;
 		all.forEach( function ( c ) {
+			if ( term && searched( c.q ) ) return;
 			var score = c.q.filter( function ( p ) {
 				return want.indexOf( p ) >= 0;
 			} ).length;
@@ -92,7 +109,44 @@
 				bestExtra = extra;
 			}
 		} );
-		return best;
+		return best && term ? narrow( best, term ) : best;
+	};
+	// Search the list it stands in for: keep the rows with the term in one of
+	// their words (not in keys, links or image paths), and count them.
+	var narrow = function ( hit, term ) {
+		var body;
+		try {
+			body = JSON.parse( hit.body );
+		} catch ( e ) {
+			return hit;
+		}
+		var rows = Array.isArray( body ) ? body : body && Array.isArray( body.items ) ? body.items : null;
+		if ( ! rows ) return hit;
+		var says = function ( v ) {
+			if ( 'string' === typeof v ) return ! /^(https?:|\{\{uploads\}\}|data:)/.test( v ) && v.toLowerCase().indexOf( term ) >= 0;
+			if ( 'number' === typeof v ) return String( v ) === term;
+			if ( v && 'object' === typeof v ) {
+				return Object.keys( v ).some( function ( k ) {
+					return says( v[ k ] );
+				} );
+			}
+			return false;
+		};
+		var kept = rows.filter( says );
+		if ( Array.isArray( body ) ) body = kept;
+		else {
+			body.items = kept;
+			if ( 'number' === typeof body.total ) body.total = kept.length;
+		}
+		var headers = {};
+		Object.keys( hit.headers || {} ).forEach( function ( name ) {
+			headers[ name ] = hit.headers[ name ];
+		} );
+		if ( headers[ 'x-wp-total' ] !== undefined ) {
+			headers[ 'x-wp-total' ] = String( kept.length );
+			headers[ 'x-wp-totalpages' ] = kept.length ? '1' : '0';
+		}
+		return { status: hit.status, body: JSON.stringify( body ), headers: headers };
 	};
 
 	var realFetch = window.fetch.bind( window );
