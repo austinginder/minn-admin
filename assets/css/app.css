@@ -1251,6 +1251,9 @@ button.minn-look-row:focus-visible { outline: 2px solid var(--accent); outline-o
 .minn-status.draft, .minn-status.pending { color: var(--text3); background: var(--panel2); }
 .minn-status.future { color: var(--blue-text); background: rgba(91,155,224,0.14); }
 .minn-status.private { color: var(--amber-text); background: rgba(224,164,88,0.14); }
+/* A pill in a list cell stays inside its column: a long or translated status
+   ("Payment pending", German's longer words) ends in an ellipsis instead. */
+.minn-table-row .minn-status { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: middle; }
 
 /* ===== Media ===== */
 .minn-view-tabs { margin-inline-start: auto; display: flex; gap: 2px; background: var(--panel); border: 1px solid var(--border); border-radius: 9px; padding: 3px; }

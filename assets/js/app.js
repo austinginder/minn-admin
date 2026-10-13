@@ -19698,7 +19698,7 @@
 				const label = timeAgoForKey( raw, colDef.key || colDef.altKey || '', !! colDef.utc );
 				return `<div class="minn-row-meta minn-cell-clip" title="${ esc( raw ) }">${ esc( label ) }</div>`;
 			}
-			case 'pill': return `<div>${ surfacePill( v ) }</div>`;
+			case 'pill': return `<div class="minn-cell-clip">${ surfacePill( v ) }</div>`;
 			case 'title': return `<div class="minn-row-title minn-cell-clip">${ esc( stripTags( String( v || '—' ) ) ) }</div>`;
 			case 'entry-summary': return `<div class="minn-row-title minn-cell-clip">${ esc( entrySummary( item ) ) }</div>`;
 			case 'num': return `<div class="minn-row-meta minn-num">${ esc( String( v == null || v === '' ? '—' : v ) ) }</div>`;
