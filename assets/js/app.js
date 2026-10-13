@@ -19666,7 +19666,9 @@
 				return `<div class="minn-row-meta minn-row-id">${ n ? '#' + esc( n ) : '—' }</div>`;
 			}
 			case 'mono': return `<div class="minn-row-meta mono minn-cell-clip">${ esc( String( v || '—' ) ) }</div>`;
-			default: return `<div class="minn-row-meta minn-cell-clip">${ esc( stripTags( String( v == null || v === '' ? '—' : v ) ) ) }</div>`;
+			// A recipient written "Name <address>" keeps its address: the tag
+			// parse would read <address> as markup. The cell is text either way.
+			default: return `<div class="minn-row-meta minn-cell-clip">${ esc( stripTags( String( v == null || v === '' ? '—' : v ).replace( /<([^<>\s@]+@[^<>\s@]+)>/g, '&lt;$1&gt;' ) ) ) }</div>`;
 		}
 	}
 
