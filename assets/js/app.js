@@ -35587,8 +35587,10 @@
 			// sent takes its own positions. One changed while the save was in
 			// flight (a row typed in, deleted or added) takes, for each row,
 			// its position in what was sent, and a row added since stays new.
+			// The controls are this editor's own, on screen or not: another
+			// post's open dialog never takes this save's anchors.
 			const resynced = {};
-			$$( '[data-pf][data-ftype="rows"], [data-pf][data-ftype="flex"]' ).forEach( ( el ) => {
+			Array.from( ( ed.rowsWraps || new Map() ).values() ).forEach( ( el ) => {
 				if ( typeof el._rowsResync !== 'function' ) return;
 				const pf = el.dataset.pf || '';
 				const sep = pf.indexOf( ':' );
@@ -37544,8 +37546,11 @@
 			} else if ( input.dataset.ftype === 'rows' || input.dataset.ftype === 'flex' ) {
 				// Repeater rows and flexible-content sections own their
 				// rendering and state; every edit (typed or structural) lands
-				// in panelValues like any field.
+				// in panelValues like any field. The editor keeps the latest
+				// control per field, so a save that lands re-anchors it even
+				// while a picker has the dialog closed.
 				bindRowsField( input, ( v ) => write( v ) );
+				( ed.rowsWraps = ed.rowsWraps || new Map() ).set( input.dataset.pf, input );
 			} else if ( input.dataset.ftype === 'wysiwyg' ) {
 				// The rich-text modal opens after the hosting panel modal
 				// closes (the picker-style one-way flow); onClose hands the

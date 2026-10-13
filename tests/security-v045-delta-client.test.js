@@ -15,12 +15,23 @@
  *   H3    WP Migrate's REST calls ride apiRes (same-origin backstop, nonce
  *         refresh) and its table loop posts to Minn's own admin-ajax URL.
  *
+ * Round 2 (17-fix-delta-r2):
+ *   NI2-a     A save from one post landing while another post's rows are
+ *             open leaves that post's anchors alone.
+ *   OS-NI2-g  A save landing while a gallery pick has the dialog closed
+ *             re-anchors the rows the pick then commits.
+ *   A1        A new row starts each shown sub at its default.
+ *   type      The editor refuses a REST base from its address that is not
+ *             a content type.
+ *   locked    A settings tab with every group locked offers no Save.
+ *
  * Every request that could change something outside a fixture is answered
  * by a route mock: the H1 probes never reach the server, and the WP Migrate
  * run is mocked end to end (nothing is migrated). Fixtures (a draft post,
  * a variable product) are made over REST and removed on the way out.
  *
- * MINN_DELTA_ONLY=rows|flex|stock|ids|href|migrate runs one section.
+ * MINN_DELTA_ONLY=rows|flex|stock|ids|href|migrate|nav|gallery|default|type|locked
+ * runs those sections (comma-separated).
  */
 const fs = require( 'fs' );
 const path = require( 'path' );
@@ -92,15 +103,18 @@ const wp = ( ...args ) => execFileSync( 'wp', [ `--path=${ WP }`, ...args ], { e
 	const restPath = await page.evaluate( () => new URL( window.MINN.restUrl, location.origin ).pathname );
 
 	let postId = null;
+	let post2Id = null;
 	let productId = null;
+	let cptId = null;
 
 	try {
 		/* ===== NI-2 · rows edited while a structural save is in flight ===== */
-		const acfFields = ( want( 'rows' ) || want( 'flex' ) ) ? ( ( await api( 'minn-admin/v1/acf/fields?post_type=posts&post_id=0' ) ).body || {} ) : {};
+		const rowsWanted = want( 'rows' ) || want( 'nav' ) || want( 'gallery' ) || want( 'default' );
+		const acfFields = ( rowsWanted || want( 'flex' ) ) ? ( ( await api( 'minn-admin/v1/acf/fields?post_type=posts&post_id=0' ) ).body || {} ) : {};
 		const fields = ( acfFields.groups || [] ).reduce( ( all, g ) => all.concat( g.fields || [] ), [] );
 		const rowsField = fields.find( ( f ) => 'rows' === f.type );
 		const flexField = fields.find( ( f ) => 'flex' === f.type );
-		if ( ( want( 'rows' ) || want( 'flex' ) ) && ( rowsField || flexField ) ) {
+		if ( ( rowsWanted || want( 'flex' ) ) && ( rowsField || flexField ) ) {
 			const made = await api( 'wp/v2/posts', { method: 'POST', body: JSON.stringify( { title: 'Delta rows fixture', status: 'draft', content: '<p>x</p>' } ) } );
 			postId = made.body && Number.isInteger( made.body.id ) && made.body.id > 1 ? made.body.id : null;
 		}
@@ -144,7 +158,7 @@ const wp = ( ...args ) => execFileSync( 'wp', [ `--path=${ WP }`, ...args ], { e
 		};
 		const anchors = ( rows ) => ( rows || [] ).map( ( r ) => ( null == r.__idx ? 'new' : r.__idx ) ).join( ',' );
 
-		if ( want( 'rows' ) && postId && rowsField ) {
+		if ( rowsWanted && postId && rowsField ) {
 			const F = rowsField.name;
 			const sub = ( rowsField.subfields.find( ( s ) => 'text' === s.type ) || rowsField.subfields[ 0 ] ).name;
 			const W = `[data-pf$=":${ F }"]`;
@@ -160,6 +174,7 @@ const wp = ( ...args ) => execFileSync( 'wp', [ `--path=${ WP }`, ...args ], { e
 			const type = ( i, v ) => page.fill( `${ W } [data-rowsub="${ i }:${ sub }"]`, v );
 			const sentRows = ( body ) => ( ( body.minn_acf || {} )[ F ] ) || [];
 
+			if ( want( 'rows' ) ) {
 			// Reorder, then type in a moved row while that save is in flight.
 			await fresh( [ 'A', 'B', 'C' ] );
 			await click( '[data-rmv="2:-1"]' );
@@ -246,6 +261,118 @@ const wp = ( ...args ) => execFileSync( 'wp', [ `--path=${ WP }`, ...args ], { e
 			body = await nextSaveBody();
 			t.check( 'NI-2 control: a delete made while a value save is in flight keeps the stored anchors 0,2', '0,2' === anchors( sentRows( body ) ), anchors( sentRows( body ) ) );
 			t.check( 'NI-2 control: and the rows left are A2, C', 'A2,C' === names( await stored() ), names( await stored() ) );
+			}
+
+			// NI2-a: post 1's save lands while post 2's rows are open and
+			// typed in; post 2's rows keep the anchors of the order it holds.
+			if ( want( 'nav' ) ) {
+				const made2 = await api( 'wp/v2/posts', { method: 'POST', body: JSON.stringify( { title: 'Delta rows fixture 2', status: 'draft', content: '<p>x</p>' } ) } );
+				post2Id = made2.body && Number.isInteger( made2.body.id ) && made2.body.id > 1 ? made2.body.id : null;
+				if ( post2Id ) {
+					await api( 'wp/v2/posts/' + post2Id, { method: 'POST', body: JSON.stringify( { minn_acf: { [ F ]: [ 'X', 'Y', 'Z' ].map( ( n ) => ( { values: { [ sub ]: n } } ) ) } } ) } );
+					const post2Url = new RegExp( 'wp/v2/posts/' + post2Id + '(\\?|$)' );
+					await fresh( [ 'A', 'B', 'C' ] );
+					await click( '[data-rdel="1"]' );
+					const longHold = async ( route ) => {
+						if ( 'POST' === route.request().method() ) await new Promise( ( r ) => setTimeout( r, 15000 ) );
+						await route.continue().catch( () => {} );
+					};
+					await page.route( postUrl, longHold );
+					const flight1 = page.waitForResponse( isSave, { timeout: 120000 } );
+					let landed1 = false;
+					flight1.then( () => { landed1 = true; }, () => {} );
+					await page.keyboard.press( 'Meta+s' );
+					await page.waitForTimeout( 600 );
+					await page.keyboard.press( 'Escape' );
+					await page.waitForSelector( W, { state: 'detached', timeout: 5000 } ).catch( () => null );
+					await page.evaluate( ( to ) => {
+						history.pushState( null, '', to );
+						window.dispatchEvent( new PopStateEvent( 'popstate' ) );
+					}, '/minn-admin/editor/posts/' + post2Id );
+					await page.waitForFunction( ( id ) => !! document.querySelector( '#minn-editor-body' ) && location.pathname.endsWith( '/' + id ), post2Id, { timeout: 60000 } );
+					await openPanelFor( F, 'rows' );
+					await type( 0, 'X2' );
+					const early = landed1;
+					await flight1;
+					await page.unroute( postUrl, longHold );
+					await page.waitForTimeout( 800 );
+					await type( 0, 'X3' );
+					const flight2 = page.waitForResponse( ( res ) => res.request().method() === 'POST' && post2Url.test( res.url() ), { timeout: 120000 } );
+					await page.keyboard.press( 'Meta+s' );
+					const res2 = await flight2;
+					await page.waitForTimeout( 600 );
+					const sent2 = sentRows( JSON.parse( res2.request().postData() || '{}' ) );
+					t.check( 'NI2-a: a save from another post that lands while this post\'s rows are open leaves their anchors alone', '0,1,2' === anchors( sent2 ),
+						anchors( sent2 ) + ( early ? ' (post 1 landed before post 2 was typed in)' : '' ) );
+					const rows2 = ( ( ( await api( 'wp/v2/posts/' + post2Id + '?context=edit&_fields=minn_acf' ) ).body || {} ).minn_acf || {} )[ F ] || [];
+					t.check( 'NI2-a: and post 2 stores X3, Y, Z', 'X3,Y,Z' === names( rows2 ), names( rows2 ) );
+				}
+			}
+
+			// OS-NI2-g: a gallery pick closes the dialog; the idle autosave
+			// lands meanwhile, and Apply then commits the rows it holds.
+			const galSub = ( rowsField.subfields.find( ( s ) => 'gallery' === s.type ) || {} ).name;
+			const canUpload = await page.evaluate( () => !! ( window.MINN.caps && window.MINN.caps.upload ) );
+			if ( want( 'gallery' ) && galSub && canUpload ) {
+				await fresh( [ 'A', 'B', 'C' ] );
+				await click( '[data-rmv="2:-1"]' );
+				await click( '[data-rmv="1:-1"]' );
+				const auto = page.waitForResponse( isSave, { timeout: 90000 } );
+				await page.click( `${ W } [data-rowsub="0:${ galSub }"] [data-gal-edit]` );
+				await page.waitForSelector( '#minn-imgedit-apply', { timeout: 20000 } );
+				const autoRes = await auto;
+				const autoSent = sentRows( JSON.parse( autoRes.request().postData() || '{}' ) );
+				const stillOpen = !! await page.$( '#minn-imgedit-apply' );
+				await page.waitForTimeout( 1000 );
+				await page.click( '#minn-imgedit-apply' );
+				await page.waitForTimeout( 800 );
+				await openPanelFor( F, 'rows' );
+				await type( 1, 'A2' );
+				const body = await nextSaveBody();
+				t.check( 'OS-NI2-g: rows committed by a gallery Apply after a save landed are named by the order it stored', '0,1,2' === anchors( sentRows( body ) ),
+					anchors( sentRows( body ) ) + ' (autosave sent ' + anchors( autoSent ) + ( stillOpen ? ', gallery editor open when it landed' : ', gallery editor closed early' ) + ')' );
+				t.check( 'OS-NI2-g: and the stored rows are C, A2, B', 'C,A2,B' === names( await stored() ), names( await stored() ) );
+			}
+
+			// A1: a new row starts each shown sub at its default, in the
+			// control's shape; a sub without one starts blank.
+			if ( want( 'default' ) ) {
+				const other = ( rowsField.subfields.find( ( s ) => s.name !== sub && 'textarea' === s.type ) || {} ).name;
+				const sel = ( rowsField.subfields.find( ( s ) => 'select' === s.type ) || {} ).name;
+				const fieldsUrl = ( u ) => /\/minn-admin\/v1\/acf\/fields/.test( u.pathname + decodeURIComponent( u.search ) ) && /post_id=/.test( u.search );
+				// The served definition carries a default for the text sub,
+				// as the fields route does for a sub ACF gives one.
+				const withDefault = async ( route ) => {
+					const res = await route.fetch();
+					const json = await res.json().catch( () => null );
+					( ( json && json.groups ) || [] ).forEach( ( g ) => ( g.fields || [] ).forEach( ( f ) => {
+						if ( f.name === F ) ( f.subfields || [] ).forEach( ( sf ) => { if ( sf.name === sub ) sf.default = 'Learn more'; } );
+					} ) );
+					await route.fulfill( { response: res, json } );
+				};
+				await page.route( fieldsUrl, withDefault );
+				try {
+					await fresh( [ 'A' ] );
+					await click( '[data-radd]' );
+					await page.waitForSelector( `${ W } [data-rowsub="1:${ sub }"]`, { timeout: 10000 } );
+					const shown = await page.evaluate( ( a ) => {
+						const val = ( n ) => {
+							const el = document.querySelector( `${ a.W } [data-rowsub="1:${ n }"]` );
+							if ( ! el ) return null;
+							const inp = el.matches( 'input, textarea' ) ? el : el.querySelector( '.minn-ac-input, input, textarea' );
+							return inp ? ( inp.dataset.acValue != null ? inp.dataset.acValue : inp.value ) : null;
+						};
+						return { text: val( a.sub ), other: a.other ? val( a.other ) : '', sel: a.sel ? val( a.sel ) : '' };
+					}, { W, sub, other, sel } );
+					t.check( 'A1: a new row starts a shown sub at its default', 'Learn more' === shown.text, JSON.stringify( shown ) );
+					t.check( 'A1 control: a sub without a default (or an ACF "no default" false) starts blank', '' === shown.other && '' === shown.sel, JSON.stringify( shown ) );
+					const body = await nextSaveBody();
+					const added = sentRows( body )[ 1 ] || {};
+					t.check( 'A1: and the save sends it', 'Learn more' === ( added.values || {} )[ sub ] && ( ! sel || '' === ( added.values || {} )[ sel ] ), JSON.stringify( added.values || {} ) );
+				} finally {
+					await page.unroute( fieldsUrl, withDefault ).catch( () => {} );
+				}
+			}
 		} else if ( want( 'rows' ) ) {
 			console.log( 'SKIP  NI-2 rows: no repeater on posts (ACF Pro)' );
 		}
@@ -468,6 +595,61 @@ const wp = ( ...args ) => execFileSync( 'wp', [ `--path=${ WP }`, ...args ], { e
 			}
 		}
 
+		/* ===== Round 2 · the editor's REST base from its address ===== */
+		if ( want( 'type' ) ) {
+			const seen = [];
+			const probe = ( u ) => /wp\/v2\/users\/999999/.test( u.pathname + decodeURIComponent( u.search ) );
+			const onProbe = ( route ) => {
+				seen.push( route.request().method() + ' ' + route.request().url() );
+				return route.fulfill( { status: 404, contentType: 'application/json', body: JSON.stringify( { code: 'rest_no_route', message: 'probe', data: { status: 404 } } ) } );
+			};
+			await page.route( probe, onProbe );
+			try {
+				await page.goto( BASE + '/minn-admin/editor/users/999999', { waitUntil: 'domcontentloaded' } );
+				await page.waitForSelector( '#minn-view .minn-empty, #minn-editor-body', { timeout: 60000 } ).catch( () => {} );
+				await page.waitForTimeout( 1200 );
+				const shown = await page.evaluate( () => ( document.querySelector( '#minn-view .minn-empty' ) || {} ).textContent || '' );
+				t.check( 'type: an editor address naming a REST base that is not a content type is refused before any request', 0 === seen.length && /Refused a content type: users/.test( shown ), JSON.stringify( { seen, shown: shown.trim().slice( 0, 90 ) } ) );
+			} finally {
+				await page.unroute( probe, onProbe ).catch( () => {} );
+			}
+			// Control: a custom post type's item still opens.
+			const made = await api( 'wp/v2/job-listings', { method: 'POST', body: JSON.stringify( { title: 'Delta type control', status: 'draft', content: '<p>x</p>' } ) } );
+			cptId = made.body && Number.isInteger( made.body.id ) && made.body.id > 1 ? made.body.id : null;
+			if ( cptId ) {
+				await page.goto( BASE + '/minn-admin/editor/job-listings/' + cptId, { waitUntil: 'domcontentloaded' } );
+				const opened = await page.waitForSelector( '#minn-editor-body', { timeout: 60000 } ).then( () => true ).catch( () => false );
+				const title = await page.evaluate( () => ( document.querySelector( '#minn-editor-title' ) || {} ).value || '' );
+				t.check( 'type control: a custom post type item still opens in the editor', opened && 'Delta type control' === title, title );
+			} else {
+				console.log( 'SKIP  type control: no job-listings type to make an item in' );
+			}
+		}
+
+		/* ===== Round 2 · a fully locked settings tab ===== */
+		if ( want( 'locked' ) && surfaces.includes( 'asset-cleanup' ) ) {
+			const lockedRoute = ( u ) => /asset-cleanup\/settings\/optimize/.test( u.pathname + decodeURIComponent( u.search ) );
+			const onLocked = ( route ) => ( 'GET' === route.request().method()
+				? route.fulfill( { status: 200, contentType: 'application/json', body: JSON.stringify( { groups: [ { title: 'CSS', desc: 'Locked probe', fields: [], locked: 4 }, { title: 'JavaScript', fields: [], locked: 3 } ], values: {}, adminUrl: '' } ) } )
+				: route.abort() );
+			const tabState = async () => {
+				await page.goto( BASE + '/minn-admin/asset-cleanup', { waitUntil: 'domcontentloaded' } );
+				await page.waitForSelector( '.minn-surface-settings', { timeout: 60000 } );
+				await page.waitForTimeout( 500 );
+				return page.evaluate( () => ( { save: !! document.querySelector( '#minn-sset-save' ), locked: document.querySelectorAll( '.minn-surface-settings .minn-panel-locked' ).length } ) );
+			};
+			await page.route( lockedRoute, onLocked );
+			let st = null;
+			try {
+				st = await tabState();
+			} finally {
+				await page.unroute( lockedRoute, onLocked ).catch( () => {} );
+			}
+			t.check( 'locked: a settings tab whose every group is locked offers no Save', !! st && ! st.save && 2 === st.locked, JSON.stringify( st ) );
+			st = await tabState();
+			t.check( 'locked control: a tab with fields still offers Save', st.save, JSON.stringify( st ) );
+		}
+
 		/* ===== H3 · WP Migrate through apiRes ===== */
 		const mig = await page.evaluate( () => window.MINN.wpMigrate || null );
 		if ( want( 'migrate' ) && mig ) {
@@ -568,6 +750,8 @@ const wp = ( ...args ) => execFileSync( 'wp', [ `--path=${ WP }`, ...args ], { e
 		t.check( 'suite ran without throwing', false, e.message );
 	} finally {
 		if ( postId ) await deletePost( page, postId ).catch( () => {} );
+		if ( post2Id ) await deletePost( page, post2Id ).catch( () => {} );
+		if ( cptId ) await api( `wp/v2/job-listings/${ cptId }?force=true`, { method: 'DELETE' } ).catch( () => {} );
 		if ( productId ) await api( `wc/v3/products/${ productId }?force=true`, { method: 'DELETE' } ).catch( () => {} );
 		await t.done( browser, errors );
 	}
