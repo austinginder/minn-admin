@@ -796,6 +796,10 @@ $check( '02-01 control: an ordinary row in the copy prints', 200 === $db_st && $
 // 02-02: WooCommerce's tables follow the log viewer's rule.
 if ( ! class_exists( 'WooCommerce' ) ) {
 	$skip( '02-02 WooCommerce inactive' );
+} elseif ( is_multisite() ) {
+	// Only a super admin opens the browser on a network, and a super admin
+	// holds every capability, manage_woocommerce included.
+	$skip( '02-02 single site only' );
 } else {
 	$db_role_uid = $make_user( 'administrator' );
 	$db_wc_table = $wpdb->prefix . 'woocommerce_order_items';

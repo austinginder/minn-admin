@@ -88,6 +88,7 @@ run security-v043-emr single --require=tests/security-v043-emr-const.php
 run security-v043-rc single --user=admin
 run security-v043-registry single --user=admin
 run security-v044-rc single --user=admin
+run security-v045-rc single --user=admin
 run security-v045-registry single --user=admin
 run sweep-v044 single --user=admin
 run write-fences single --user=admin
@@ -102,6 +103,7 @@ run security-v030-wsal subsite
 run security-v031-add-existing subsite --user=admin
 run security-v043-registry subsite --user=admin
 run security-v044-rc subsite --user=admin
+run security-v045-rc subsite --user=admin
 run multi-network-system net2
 
 # roundtrip-surfaces replays bodies a browser run captured; see its header.
