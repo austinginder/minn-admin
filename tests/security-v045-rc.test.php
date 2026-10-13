@@ -368,6 +368,23 @@ if ( ! class_exists( 'Akismet' ) ) {
 	$check( '03-02 control: the card still says a key is set', false !== strpos( $ak_out, '"configured":true' ), substr( $ak_out, 0, 160 ) );
 }
 
+// --- 03-03 CleanTalk: core's settings route keeps the card's tail rule ----------
+// Core registers the connector's option as a REST setting and masks it to
+// its last four characters. Minn's mask let that through for activate_plugins,
+// where the card (8d32da5e) keeps the tail for a network's owner. No lab runs
+// CleanTalk on a network, so off one this checks the mask asks the card's rule.
+if ( ! function_exists( 'minn_admin_cleantalk_connector_rest_mask' ) || ! function_exists( 'minn_admin_cleantalk_key_tail_allowed' ) ) {
+	$skip( '03-03 CleanTalk adapter not loaded' );
+} else {
+	$ct_rf  = new ReflectionFunction( 'minn_admin_cleantalk_connector_rest_mask' );
+	$ct_src = implode( '', array_slice( file( $ct_rf->getFileName() ), $ct_rf->getStartLine() - 1, $ct_rf->getEndLine() - $ct_rf->getStartLine() + 1 ) );
+	$check( '03-03 the wp/v2/settings mask asks the Connectors card\'s tail rule', false !== strpos( $ct_src, 'minn_admin_cleantalk_key_tail_allowed()' ) && false === strpos( $ct_src, "current_user_can( 'activate_plugins' )" ) );
+	$ct_setting = function_exists( 'minn_admin_cleantalk_connector_setting' ) ? minn_admin_cleantalk_connector_setting() : '';
+	if ( is_multisite() && '' !== $ct_setting && ! is_super_admin() && current_user_can( 'activate_plugins' ) ) {
+		$check( '03-03 a site administrator reads the setting empty on a network', '' === minn_admin_cleantalk_connector_rest_mask( null, $ct_setting ) );
+	}
+}
+
 // @sections
 
 $summary();
