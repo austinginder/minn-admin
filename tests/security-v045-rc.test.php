@@ -532,6 +532,48 @@ if ( ! class_exists( 'AAL_Main' ) || ! class_exists( 'AAL_Log_Query' ) || $aal_t
 	}
 }
 
+// --- 02-04 CPT UI: its own capability filter keeps its definitions ------------
+// CPT UI registers every screen at cptui_required_capabilities, which a site
+// raises to keep post type definitions from a client's administrators. Minn's
+// manager let that administrator rename or delete them anyway.
+$cu_types = get_option( 'cptui_post_types', null );
+$cu_slug  = is_array( $cu_types ) ? (string) array_key_first( $cu_types ) : '';
+if ( ! function_exists( 'cptui_get_post_type_data' ) && ! defined( 'CPTUI_VERSION' ) ) {
+	$skip( '02-04 Custom Post Type UI inactive' );
+} elseif ( '' === $cu_slug || ! post_type_exists( $cu_slug ) ) {
+	$skip( '02-04 no CPT UI post type registered' );
+} else {
+	$cu_lock = function () {
+		return 'minn_rc45_agency';
+	};
+	$cu_row = function () use ( $call, $cu_slug ) {
+		list( , $d ) = $call( 'GET', '/minn-admin/v1/post-types' );
+		foreach ( (array) ( $d['items'] ?? $d['types'] ?? array() ) as $row ) {
+			if ( is_array( $row ) && ( $row['slug'] ?? $row['name'] ?? '' ) === $cu_slug ) {
+				return $row;
+			}
+		}
+		return null;
+	};
+	$cu_before = $cu_row();
+	add_filter( 'cptui_required_capabilities', $cu_lock );
+	try {
+		$cu_locked = $cu_row();
+		$check( '02-04 a CPT UI type the site locked reads as not editable', is_array( $cu_locked ) && empty( $cu_locked['editable'] ), wp_json_encode( $cu_locked ) );
+		list( $cu_st ) = $call( 'POST', "/minn-admin/v1/post-types/{$cu_slug}", array( 'label' => 'Rc45 renamed' ) );
+		$check( '02-04 an administrator without CPT UI\'s access may not change it', 403 === $cu_st && get_option( 'cptui_post_types' ) === $cu_types, (string) $cu_st );
+		list( $cu_st ) = $call( 'DELETE', "/minn-admin/v1/post-types/{$cu_slug}" );
+		$check( '02-04 an administrator without CPT UI\'s access may not delete it', 403 === $cu_st && get_option( 'cptui_post_types' ) === $cu_types, (string) $cu_st );
+	} finally {
+		remove_filter( 'cptui_required_capabilities', $cu_lock );
+		if ( get_option( 'cptui_post_types', null ) !== $cu_types ) {
+			update_option( 'cptui_post_types', $cu_types );
+			flush_rewrite_rules();
+		}
+	}
+	$check( '02-04 control: unlocked, the administrator may still edit it', is_array( $cu_before ) && ! empty( $cu_before['editable'] ), wp_json_encode( $cu_before ) );
+}
+
 // @sections
 
 $summary();

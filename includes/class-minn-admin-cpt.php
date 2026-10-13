@@ -327,15 +327,32 @@ class Minn_Admin_CPT {
 		return function_exists( 'acf_get_setting' ) && current_user_can( (string) acf_get_setting( 'capability' ) );
 	}
 
+	/**
+	 * CPT UI's own gate: every one of its screens registers at this filter's
+	 * capability, and its save and delete need a nonce only those screens
+	 * print, so a site that raises it (an agency-only capability) keeps the
+	 * definitions from a client's administrators.
+	 */
+	private static function cptui_can_admin() {
+		return current_user_can( (string) apply_filters( 'cptui_required_capabilities', 'manage_options' ) );
+	}
+
+	private static function cptui_locked_error() {
+		return new WP_Error( 'not_editable', __( 'This site keeps Custom Post Type UI to people with its own access, so this definition can only be changed there.', 'minn-admin' ), array( 'status' => 403 ) );
+	}
+
 	private static function acf_locked_error() {
 		return new WP_Error( 'not_editable', __( 'This site keeps ACF’s settings to people with ACF’s own admin access, so this definition can only be changed there.', 'minn-admin' ), array( 'status' => 403 ) );
 	}
 
 	/** Where a definition can be edited from Minn by the current user. */
 	private static function editable_sources() {
-		$sources = array( 'cptui', 'jet', 'minn' );
+		$sources = array( 'jet', 'minn' );
 		if ( self::acf_can_admin() ) {
 			$sources[] = 'acf';
+		}
+		if ( self::cptui_can_admin() ) {
+			$sources[] = 'cptui';
 		}
 		return $sources;
 	}
@@ -411,7 +428,7 @@ class Minn_Admin_CPT {
 		if ( self::acf_available() && self::acf_can_admin() ) {
 			$backends[] = 'acf';
 		}
-		if ( self::cptui_available() ) {
+		if ( self::cptui_available() && self::cptui_can_admin() ) {
 			$backends[] = 'cptui';
 		}
 		if ( self::jet_available() ) {
@@ -614,6 +631,9 @@ class Minn_Admin_CPT {
 		if ( 'acf' === $source && ! self::acf_can_admin() ) {
 			return self::acf_locked_error();
 		}
+		if ( 'cptui' === $source && ! self::cptui_can_admin() ) {
+			return self::cptui_locked_error();
+		}
 		if ( ! in_array( $source, self::editable_sources(), true ) ) {
 			return new WP_Error( 'not_editable', __( 'This post type is registered in code and can only be changed there.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
@@ -675,6 +695,9 @@ class Minn_Admin_CPT {
 			}
 			wp_trash_post( (int) $existing['ID'] ); // trash, not delete — recoverable in ACF's UI
 		} elseif ( 'cptui' === $source ) {
+			if ( ! self::cptui_can_admin() ) {
+				return self::cptui_locked_error();
+			}
 			$types = (array) get_option( 'cptui_post_types', array() );
 			unset( $types[ $slug ] );
 			update_option( 'cptui_post_types', $types );
@@ -812,6 +835,9 @@ class Minn_Admin_CPT {
 		if ( 'acf' === $source && ! self::acf_can_admin() ) {
 			return self::acf_locked_error();
 		}
+		if ( 'cptui' === $source && ! self::cptui_can_admin() ) {
+			return self::cptui_locked_error();
+		}
 		if ( ! in_array( $source, self::editable_sources(), true ) ) {
 			return new WP_Error( 'not_editable', __( 'This taxonomy is registered in code and can only be changed there.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
@@ -863,6 +889,9 @@ class Minn_Admin_CPT {
 			}
 			wp_trash_post( (int) $existing['ID'] ); // trash, not delete — recoverable in ACF's UI
 		} elseif ( 'cptui' === $source ) {
+			if ( ! self::cptui_can_admin() ) {
+				return self::cptui_locked_error();
+			}
 			$taxes = (array) get_option( 'cptui_taxonomies', array() );
 			unset( $taxes[ $slug ] );
 			update_option( 'cptui_taxonomies', $taxes );
