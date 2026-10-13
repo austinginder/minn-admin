@@ -20377,7 +20377,7 @@
 		} ).join( '<div class="minn-divider"></div>' );
 		const html = `
 			${ groupHtml || `<div class="minn-empty">${ esc( __( 'Nothing to configure here.' ) ) }</div>` }
-			${ ( data.groups || [] ).length ? `<div><button class="minn-btn-primary" id="minn-sset-save">${ esc( __( 'Save changes' ) ) }</button></div>` : '' }`;
+			${ ( data.groups || [] ).some( ( g ) => ( g.fields || [] ).length ) ? `<div><button class="minn-btn-primary" id="minn-sset-save">${ esc( __( 'Save changes' ) ) }</button></div>` : '' }`;
 		return { html, fields };
 	}
 
