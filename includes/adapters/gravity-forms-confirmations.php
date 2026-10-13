@@ -277,7 +277,9 @@ function minn_admin_gfc_preview( $form, $stored, $body ) {
 	if ( 'message' === $c['type'] ) {
 		$html = (string) $c['message'];
 		if ( $entry ) {
-			$html = (string) GFCommon::replace_variables( $html, $form, $entry, false, true, empty( $c['disableAutoformat'] ), 'html' );
+			$html = (string) minn_admin_gfn_guarded( $entry, function ( $entry ) use ( $html, $form, $c ) {
+				return GFCommon::replace_variables( $html, $form, $entry, false, true, empty( $c['disableAutoformat'] ), 'html' );
+			} );
 		}
 		$out['html'] = method_exists( 'GFCommon', 'maybe_sanitize_confirmation_message' ) ? (string) GFCommon::maybe_sanitize_confirmation_message( $html ) : $html;
 		return $out;
@@ -292,7 +294,9 @@ function minn_admin_gfc_preview( $form, $stored, $body ) {
 	if ( ! class_exists( 'GFFormDisplay' ) ) {
 		require_once GFCommon::get_base_path() . '/form_display.php';
 	}
-	$out['url'] = (string) GFFormDisplay::get_confirmation_url( $c, $form, $entry );
+	$out['url'] = (string) minn_admin_gfn_guarded( $entry, function ( $entry ) use ( $c, $form ) {
+		return GFFormDisplay::get_confirmation_url( $c, $form, $entry );
+	} );
 	return $out;
 }
 
