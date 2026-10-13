@@ -394,7 +394,9 @@ add_action( 'rest_api_init', function () {
 				$opts = red_get_options();
 				// monitor_post is a group id when on; 0 is off.
 				$monitor_on = ! empty( $opts['monitor_post'] );
-				$ip_on      = ! empty( $opts['ip_logging'] );
+				// Redirection keeps three levels: 0 none, 1 the full address,
+				// 2 masked (its front end masks only at 2).
+				$ip_level   = isset( $opts['ip_logging'] ) ? max( 0, min( 2, (int) $opts['ip_logging'] ) ) : 0;
 				return rest_ensure_response( array(
 					'groups' => array(
 						array(
@@ -428,10 +430,15 @@ add_action( 'rest_api_init', function () {
 									'options' => minn_admin_redirection_retention_options(),
 								),
 								array(
-									'key'   => 'ip_logging',
-									'label' => __( 'Store IP addresses with logs', 'minn-admin' ),
-									'type'  => 'toggle',
-									'help'  => __( 'A privacy choice — off by default on fresh installs.', 'minn-admin' ),
+									'key'     => 'ip_logging',
+									'label'   => __( 'Store IP addresses with logs', 'minn-admin' ),
+									'type'    => 'select',
+									'options' => array(
+										array( '0', __( 'No', 'minn-admin' ) ),
+										array( '1', __( 'Full addresses', 'minn-admin' ) ),
+										array( '2', __( 'Anonymized (last part masked)', 'minn-admin' ) ),
+									),
+									'help'    => __( 'A privacy choice — off by default on fresh installs.', 'minn-admin' ),
 								),
 							),
 						),
@@ -440,7 +447,7 @@ add_action( 'rest_api_init', function () {
 						'monitor'         => $monitor_on,
 						'expire_redirect' => (string) ( isset( $opts['expire_redirect'] ) ? (int) $opts['expire_redirect'] : 7 ),
 						'expire_404'      => (string) ( isset( $opts['expire_404'] ) ? (int) $opts['expire_404'] : 7 ),
-						'ip_logging'      => $ip_on,
+						'ip_logging'      => (string) $ip_level,
 					),
 					'adminUrl' => admin_url( 'tools.php?page=redirection.php' ),
 				) );
@@ -477,7 +484,11 @@ add_action( 'rest_api_init', function () {
 					$payload[ $key ] = $days;
 				}
 				if ( array_key_exists( 'ip_logging', $vals ) ) {
-					$payload['ip_logging'] = ! empty( $vals['ip_logging'] ) ? 1 : 0;
+					$level = filter_var( $vals['ip_logging'], FILTER_VALIDATE_INT );
+					if ( false === $level || $level < 0 || $level > 2 ) {
+						return new WP_Error( 'minn_redirection_ip', __( 'Choose how IP addresses are stored.', 'minn-admin' ), array( 'status' => 400 ) );
+					}
+					$payload['ip_logging'] = $level;
 				}
 				if ( $payload ) {
 					red_set_options( $payload );

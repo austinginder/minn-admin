@@ -443,6 +443,29 @@ if ( $sc_uid ) {
 	$drop_user( $sc_uid );
 }
 
+// --- 10-02 Redirection: an anonymized IP setting survives a save ---------------
+// Redirection keeps three IP levels (none, full, masked). Minn served a
+// toggle, so a save that carried it wrote 1 over 2 and the logs started
+// recording full visitor addresses. The save sends back what the read served.
+if ( ! function_exists( 'red_get_options' ) || ! function_exists( 'red_set_options' ) ) {
+	$skip( '10-02 Redirection inactive' );
+} else {
+	$rd_prev = get_option( 'redirection_options', null );
+	red_set_options( array( 'ip_logging' => 2 ) );
+	list( , $rd_get ) = $call( 'GET', '/minn-admin/v1/redirection/settings/general' );
+	$rd_served = $rd_get['values']['ip_logging'] ?? null;
+	list( $rd_st ) = $call( 'POST', '/minn-admin/v1/redirection/settings/general', array( 'values' => array( 'ip_logging' => $rd_served ) ) );
+	$rd_now = (int) ( red_get_options()['ip_logging'] ?? -1 );
+	$check( '10-02 saving the IP setting as served keeps Anonymize', 200 === $rd_st && 2 === $rd_now, 'served ' . wp_json_encode( $rd_served ) . ", status {$rd_st}, stored {$rd_now}" );
+	list( $rd_st ) = $call( 'POST', '/minn-admin/v1/redirection/settings/general', array( 'values' => array( 'ip_logging' => '0' ) ) );
+	$check( '10-02 control: turning IP logging off still stores 0', 200 === $rd_st && 0 === (int) ( red_get_options()['ip_logging'] ?? -1 ), (string) $rd_st );
+	if ( null === $rd_prev ) {
+		delete_option( 'redirection_options' );
+	} else {
+		update_option( 'redirection_options', $rd_prev );
+	}
+}
+
 // @sections
 
 $summary();
