@@ -383,9 +383,19 @@ add_action( 'rest_api_init', function () {
 				$args[]  = (int) $request['form_post_id'];
 			}
 			if ( $request['search'] ) {
-				// Their own list screen searches the raw blob with LIKE.
-				$where[] = 'form_value LIKE %s';
-				$args[]  = '%' . $wpdb->esc_like( (string) $request['search'] ) . '%';
+				// Their own list screen searches the raw blob with LIKE. The
+				// blob holds quotes, apostrophes and slashes as the entities
+				// cfdb7_before_send_mail swapped in, so the term is matched
+				// that way too, swapped exactly as it swaps them.
+				$term    = (string) $request['search'];
+				$stored  = str_replace(
+					array( '\"', "\'", '/', '\\', '"', "'" ),
+					array( '&quot;', '&#039;', '&#047;', '&#092;', '&quot;', '&#039;' ),
+					$term
+				);
+				$where[] = '(form_value LIKE %s OR form_value LIKE %s)';
+				$args[]  = '%' . $wpdb->esc_like( $term ) . '%';
+				$args[]  = '%' . $wpdb->esc_like( $stored ) . '%';
 			}
 			// Read/unread is a fixed token inside the serialized blob.
 			if ( 'read' === $status ) {
