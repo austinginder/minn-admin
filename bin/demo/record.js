@@ -487,8 +487,16 @@ async function capture() {
 				}
 				if ( view ) await press( view );
 			};
-			const first = await groups();
-			const views = first.length && first[ 0 ].view ? first[ 0 ].tabs.map( ( t ) => t.sig ) : [ null ];
+			// On a busy box the view switcher can draw after the list: look
+			// again after a pause before walking a view without one.
+			let first = await groups();
+			if ( ! first.some( ( g ) => g.view ) ) {
+				await page.waitForTimeout( 2500 );
+				await settle();
+				first = await groups();
+			}
+			const switcher = first.find( ( g ) => g.view );
+			const views = switcher ? switcher.tabs.map( ( t ) => t.sig ) : [ null ];
 			for ( const view of views ) {
 				if ( Date.now() > until ) break;
 				const seen = new Set();
@@ -533,6 +541,7 @@ async function capture() {
 		// link). A walk cut short by the box keeps what it recorded.
 		const visit = async ( route ) => {
 			current = route;
+			const before = added;
 			let done = false;
 			for ( let attempt = 1; attempt <= 2 && ! done; attempt++ ) {
 				try {
@@ -550,7 +559,6 @@ async function capture() {
 				}
 			}
 			if ( ! done ) return false;
-			const before = added;
 			try {
 				await walk( route );
 			} catch ( e ) {
