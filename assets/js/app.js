@@ -629,6 +629,57 @@
 		return s;
 	}
 
+	// Wall-clock times print in the SITE's timezone, the zone WordPress
+	// prints them in (wp_date: a bookings status card's "Next", wp-admin),
+	// never the browser's: a 9:00 am Portland booking read 12:00 PM in an
+	// Eastern browser, beside a "Next" card saying 9:00 am. Relative times
+	// ("3h ago") are zone-free and do not come through here.
+	//
+	// B.timezone (wp_timezone_string(): an IANA name, or "+05:30" on a
+	// manual offset) is right for any date, DST included. Without it only
+	// gmtOffset is known, the offset in force NOW: a browser already on that
+	// offset keeps its own zone (DST-correct, and in practice the site's),
+	// any other prints at the site's offset.
+	let siteZoneFor = null, siteZoneVal = null;
+	function siteZone() {
+		const tz = String( B.timezone || '' );
+		const off = typeof B.gmtOffset === 'number' ? B.gmtOffset : 0;
+		const key = tz + '|' + off;
+		if ( siteZoneFor === key ) return siteZoneVal;
+		let z = null;
+		if ( tz ) {
+			try {
+				new Intl.DateTimeFormat( 'en', { timeZone: tz } );
+				z = { timeZone: tz, shift: 0 };
+			} catch ( e ) { /* a zone this browser does not know: the offset */ }
+		} else if ( -new Date().getTimezoneOffset() === Math.round( off * 60 ) ) {
+			z = { timeZone: undefined, shift: 0 };
+		}
+		siteZoneFor = key;
+		siteZoneVal = z || { timeZone: 'UTC', shift: off * 3600000 };
+		return siteZoneVal;
+	}
+
+	// An instant as toLocaleString (or the `kind` named: toLocaleDateString,
+	// toLocaleTimeString) in the reader's locale and the site's timezone.
+	function siteDateStr( d, opts, kind ) {
+		const z = siteZone();
+		const o = Object.assign( {}, opts );
+		if ( z.timeZone ) o.timeZone = z.timeZone;
+		return new Date( d.getTime() + z.shift )[ kind || 'toLocaleString' ]( uiLocale(), o );
+	}
+
+	// A detail value that is a full ISO-8601 instant (Z or an offset) as the
+	// site's clock reads it, '' for anything else: text that merely holds a
+	// date, or a bare stamp whose zone the value does not say, stays as sent.
+	const ISO_INSTANT = /^\d{4}-\d\d-\d\dT\d\d:\d\d(?::\d\d(?:\.\d+)?)?(?:Z|[+-]\d\d:?\d\d)$/;
+	function isoInstantLabel( v ) {
+		const str = String( v == null ? '' : v ).trim();
+		if ( ! ISO_INSTANT.test( str ) ) return '';
+		const d = new Date( str );
+		return isNaN( d.getTime() ) ? '' : siteDateStr( d, { dateStyle: 'medium', timeStyle: 'short' } );
+	}
+
 	// Absolute fallback for timeAgo once a date is older (or further ahead)
 	// than a week. Month + day is enough inside the current year; a yearless
 	// "Aug 17" on a long-lived site reads as this August and the list looks
@@ -636,7 +687,7 @@
 	function formatListDate( d ) {
 		const opts = { month: 'short', day: 'numeric' };
 		if ( d.getFullYear() !== new Date().getFullYear() ) opts.year = 'numeric';
-		return d.toLocaleDateString( uiLocale(), opts );
+		return siteDateStr( d, opts, 'toLocaleDateString' );
 	}
 
 	function timeAgo( dateStr, opts ) {
@@ -883,7 +934,7 @@
 		}
 		if ( /^\d{4}-\d\d-\d\d[T ]\d\d:\d\d/.test( str ) ) {
 			const d = parseWpDate( normalizeTimeInput( str, null ) || str );
-			if ( ! isNaN( d.getTime() ) ) return `${ esc( timeAgo( str ) ) } <span class="minn-surface-val-dim">· ${ esc( d.toLocaleString( undefined, { dateStyle: 'medium', timeStyle: 'short' } ) ) }</span>`;
+			if ( ! isNaN( d.getTime() ) ) return `${ esc( timeAgo( str ) ) } <span class="minn-surface-val-dim">· ${ esc( siteDateStr( d, { dateStyle: 'medium', timeStyle: 'short' } ) ) }</span>`;
 		}
 		return esc( chromeLabel( stripTags( str ) ) );
 	}
@@ -6712,7 +6763,7 @@
 					</div>
 					<div class="minn-row-status"><span class="minn-status ${ esc( p.status ) }"${ statusPillTitle( p ) ? ` title="${ esc( statusPillTitle( p ) ) }"` : '' }>${ STATUS_LABELS[ p.status ] || esc( p.status ) }${ p.unsaved ? `<span class="minn-row-modified" aria-hidden="true"></span><span class="minn-sr-only"> ${ esc( __( 'Unsaved edits' ) ) }</span>` : '' }${ p.lockedBy ? `<span class="minn-row-locked" aria-hidden="true"></span><span class="minn-sr-only"> ${ esc( sprintf( /* translators: %s: the name of the person editing. */ __( '%s is editing' ), p.lockedBy ) ) }</span>` : '' }</span></div>
 					<div class="minn-row-meta">${ esc( p.author ) }</div>
-					<div class="minn-row-meta minn-row-date" title="${ esc( parseWpDate( p.date ).toLocaleString( uiLocale() ) ) }">${ timeAgo( p.date ) }</div>
+					<div class="minn-row-meta minn-row-date" title="${ esc( siteDateStr( parseWpDate( p.date ) ) ) }">${ timeAgo( p.date ) }</div>
 					${ state.contentTrash ? `
 					<div class="minn-row-actions">
 						<button class="minn-btn-soft" data-restore="${ p.id }">${ esc( __( 'Restore' ) ) }</button>
@@ -16541,7 +16592,7 @@
 			[ __( 'Orders' ), st == null ? '…' : ( st ? String( st.orders_count ) : '—' ) ],
 			[ __( 'Total spent' ), st == null ? '…' : ( st ? orderMoney( {}, st.total_spent ) : '—' ) ],
 			[ __( 'Last order' ), ords == null ? '…' : ( last ? timeAgo( last.date_created ) : '—' ) ],
-			[ __( 'Customer since' ), since && ! isNaN( since.getTime() ) ? since.toLocaleDateString( uiLocale(), { month: 'short', year: 'numeric' } ) : '—' ],
+			[ __( 'Customer since' ), since && ! isNaN( since.getTime() ) ? siteDateStr( since, { month: 'short', year: 'numeric' }, 'toLocaleDateString' ) : '—' ],
 		];
 		const shipEmpty = ! [ 'address_1', 'address_2', 'city', 'state', 'postcode', 'country' ].some( ( k ) => sh[ k ] );
 		const relatedRows = ( list, row ) => ( list.items || [] ).map( row ).join( '' );
@@ -19216,6 +19267,8 @@
 			val = `<a class="minn-surface-val" href="${ esc( raw ) }" target="_blank" rel="noopener">${ esc( raw ) }</a>`;
 		} else if ( r.type === 'email' && raw.includes( '@' ) ) {
 			val = `<a class="minn-surface-val" href="mailto:${ esc( raw ) }">${ esc( raw ) }</a>`;
+		} else if ( isoInstantLabel( raw ) ) {
+			val = `<span class="minn-surface-val" title="${ esc( raw ) }">${ esc( isoInstantLabel( raw ) ) }</span>`;
 		} else {
 			val = `<span class="minn-surface-val${ multi ? ' multi' : '' }">${ esc( raw ) }</span>`;
 		}
@@ -20669,21 +20722,29 @@
 		if ( ! iso ) return '';
 		const d = new Date( iso );
 		if ( Number.isNaN( d.getTime() ) ) return String( iso );
-		return d.toLocaleString( uiLocale(), { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' } );
+		return siteDateStr( d, { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' } );
 	}
 
 	function bookingDayLabel( iso ) {
 		if ( ! iso ) return '';
+		// A stay's day comes as the site's midnight with that day's offset
+		// ("2027-01-15T00:00:00-05:00"): its date part IS the site's day, right
+		// across a DST change even when only today's offset is known.
+		const own = String( iso ).match( /^(\d{4})-(\d\d)-(\d\d)T[\d:.]+[+-]\d\d:?\d\d$/ );
+		if ( own ) {
+			return new Date( Date.UTC( +own[ 1 ], own[ 2 ] - 1, +own[ 3 ], 12 ) )
+				.toLocaleDateString( uiLocale(), { timeZone: 'UTC', month: 'long', day: 'numeric', year: 'numeric' } );
+		}
 		const d = new Date( iso );
 		if ( Number.isNaN( d.getTime() ) ) return String( iso );
-		return d.toLocaleDateString( uiLocale(), { month: 'long', day: 'numeric', year: 'numeric' } );
+		return siteDateStr( d, { month: 'long', day: 'numeric', year: 'numeric' }, 'toLocaleDateString' );
 	}
 
 	function bookingTimeLabel( iso ) {
 		if ( ! iso ) return '';
 		const d = new Date( iso );
 		if ( Number.isNaN( d.getTime() ) ) return '';
-		return d.toLocaleTimeString( uiLocale(), { hour: 'numeric', minute: '2-digit' } );
+		return siteDateStr( d, { hour: 'numeric', minute: '2-digit' }, 'toLocaleTimeString' );
 	}
 
 	function bookingDurationLabel( start, end ) {
@@ -20842,6 +20903,7 @@
 		}
 		if ( entryEmailish( raw ) ) return `<a href="mailto:${ esc( raw.trim() ) }">${ esc( raw ) }</a>`;
 		if ( 'phone' === r.type && /\d/.test( raw ) ) return `<a href="tel:${ esc( raw.replace( /[^\d+]/g, '' ) ) }">${ esc( raw ) }</a>`;
+		if ( isoInstantLabel( raw ) ) return `<span class="minn-ep-pre" title="${ esc( raw.trim() ) }">${ esc( isoInstantLabel( raw ) ) }</span>`;
 		return `<span class="minn-ep-pre">${ esc( raw ) }</span>`;
 	}
 
@@ -21030,7 +21092,7 @@
 					<div class="minn-modal-sub">${ [
 						formTitle ? ( sec.formRoute ? `<button type="button" class="minn-ep-formlink" data-epgo="${ esc( sec.formRoute ) }" title="${ esc( __( 'Edit the form' ) ) }">${ esc( formTitle ) }</button>` : esc( formTitle ) ) : '',
 						name || email ? esc( entryNo ) : '',
-						esc( submitted ),
+						esc( isoInstantLabel( submitted ) || submitted ),
 					].filter( Boolean ).join( ' · ' ) || esc( loading ? __( 'Loading…' ) : '' ) }</div>
 				</div>
 				<div class="minn-order-head-actions">
@@ -51377,7 +51439,7 @@
 		const d = parseWpDate( when );
 		if ( Number.isNaN( d.getTime() ) ) return timeAgo( when );
 		try {
-			return d.toLocaleString( uiLocale(), {
+			return siteDateStr( d, {
 				year: 'numeric', month: 'short', day: 'numeric',
 				hour: 'numeric', minute: '2-digit',
 			} );
@@ -52560,7 +52622,7 @@
 						<div class="minn-session-row">
 							<div class="minn-session-info">
 								<div class="minn-session-ua">${ esc( uaSummary( sess.ua ) ) }</div>
-								<div class="minn-session-meta">${ esc( sess.ip || '—' ) } · ${ esc( __( 'signed in' ) ) } ${ sess.login ? esc( new Date( sess.login * 1000 ).toLocaleString( uiLocale(), { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' } ) ) : '—' }</div>
+								<div class="minn-session-meta">${ esc( sess.ip || '—' ) } · ${ esc( __( 'signed in' ) ) } ${ sess.login ? esc( siteDateStr( new Date( sess.login * 1000 ), { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' } ) ) : '—' }</div>
 							</div>
 							<button class="minn-comment-action danger" data-ue-kill="${ esc( sess.verifier ) }">${ esc( __( 'Sign out' ) ) }</button>
 						</div>` ).join( '' ) }
@@ -53073,7 +53135,7 @@
 						<div class="minn-session-row">
 							<div class="minn-session-info">
 								<div class="minn-session-ua">${ esc( uaSummary( sess.ua ) ) }${ sess.current ? ` <span class="minn-session-current">${ esc( __( 'this session' ) ) }</span>` : '' }</div>
-								<div class="minn-session-meta">${ esc( sess.ip || '—' ) } · ${ esc( __( 'signed in' ) ) } ${ sess.login ? esc( new Date( sess.login * 1000 ).toLocaleString( uiLocale(), { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' } ) ) : '—' }</div>
+								<div class="minn-session-meta">${ esc( sess.ip || '—' ) } · ${ esc( __( 'signed in' ) ) } ${ sess.login ? esc( siteDateStr( new Date( sess.login * 1000 ), { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' } ) ) : '—' }</div>
 							</div>
 							<button class="minn-comment-action danger" data-kill="${ esc( sess.verifier ) }">${ esc( __( 'Sign out' ) ) }</button>
 						</div>` ).join( '' ) }
