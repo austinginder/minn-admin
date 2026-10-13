@@ -230,10 +230,21 @@ add_action( 'rest_api_init', function () {
 		return 'Event ' . (int) $alert_id;
 	};
 
+	// A failed login for a username that does not exist (1003) is stored with
+	// no user: the name that was tried is in the event's Users meta, a string
+	// or, from older builds, a serialized list.
+	$tried_name = function ( $value ) {
+		$value = Minn_Admin::decode_serialized( $value, $value );
+		if ( is_array( $value ) ) {
+			$value = implode( ', ', array_filter( $value, 'is_scalar' ) );
+		}
+		return is_scalar( $value ) && ! is_serialized( (string) $value ) ? trim( (string) $value ) : '';
+	};
+
 	register_rest_route( 'minn-admin/v1', '/wsal/events', array(
 		'methods'             => 'GET',
 		'permission_callback' => 'minn_admin_wsal_can_view',
-		'callback'            => function ( WP_REST_Request $request ) use ( $severity_label, $alert_title ) {
+		'callback'            => function ( WP_REST_Request $request ) use ( $severity_label, $alert_title, $tried_name ) {
 			global $wpdb;
 			$table    = $wpdb->base_prefix . 'wsal_occurrences';
 			$per_page = min( 100, max( 1, (int) ( $request['per_page'] ?: 25 ) ) );
@@ -264,6 +275,25 @@ add_action( 'rest_api_init', function () {
 				 FROM {$table} WHERE {$where_sql} ORDER BY created_on DESC LIMIT %d OFFSET %d",
 				array_merge( $args, array( $per_page, ( $page - 1 ) * $per_page ) )
 			) );
+			// The names tried on this page's 1003 rows, in one query over ids
+			// the scoped SELECT above returned.
+			$tried = array();
+			$ids   = array();
+			foreach ( (array) $rows as $r ) {
+				if ( 1003 === (int) $r->alert_id ) {
+					$ids[] = (int) $r->id;
+				}
+			}
+			if ( $ids ) {
+				$meta = $wpdb->base_prefix . 'wsal_metadata';
+				$in   = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
+				foreach ( (array) $wpdb->get_results( $wpdb->prepare(
+					"SELECT occurrence_id, value FROM {$meta} WHERE name = 'Users' AND occurrence_id IN ({$in})",
+					$ids
+				) ) as $m ) {
+					$tried[ (int) $m->occurrence_id ] = $tried_name( $m->value );
+				}
+			}
 			// phpcs:enable
 
 			$items = array();
@@ -275,6 +305,9 @@ add_action( 'rest_api_init', function () {
 				}
 				if ( 'Unknown User' === $who ) {
 					$who = ''; // WSAL's label for system/CLI actors — fall through to 'System'.
+				}
+				if ( ! empty( $tried[ (int) $r->id ] ) ) {
+					$who = $tried[ (int) $r->id ];
 				}
 				$items[] = array(
 					'id'       => (int) $r->id,
@@ -294,7 +327,7 @@ add_action( 'rest_api_init', function () {
 	register_rest_route( 'minn-admin/v1', '/wsal/events/(?P<id>\d+)', array(
 		'methods'             => 'GET',
 		'permission_callback' => 'minn_admin_wsal_can_view',
-		'callback'            => function ( WP_REST_Request $request ) use ( $severity_label, $alert_title ) {
+		'callback'            => function ( WP_REST_Request $request ) use ( $severity_label, $alert_title, $tried_name ) {
 			global $wpdb;
 			$occ   = $wpdb->base_prefix . 'wsal_occurrences';
 			$meta  = $wpdb->base_prefix . 'wsal_metadata';
@@ -320,13 +353,21 @@ add_action( 'rest_api_init', function () {
 			) );
 			// phpcs:enable
 
+			$user = $row->username;
+			if ( 1003 === (int) $row->alert_id ) {
+				foreach ( (array) $pairs as $p ) {
+					if ( 'Users' === $p->name && '' !== $tried_name( $p->value ) ) {
+						$user = $tried_name( $p->value );
+					}
+				}
+			}
 			$event = array(
 				array( 'label' => __( 'Event', 'minn-admin' ), 'value' => $alert_title( $row->alert_id ) . ' (' . (int) $row->alert_id . ')' ),
 				array( 'label' => __( 'When', 'minn-admin' ), 'value' => date_i18n( 'M j, Y g:i a', (int) $row->created_on + (int) ( get_option( 'gmt_offset' ) * HOUR_IN_SECONDS ) ) ),
 				array( 'label' => __( 'Severity', 'minn-admin' ), 'value' => $severity_label( $row->severity ) ),
 				array( 'label' => __( 'Object', 'minn-admin' ), 'value' => $row->object ),
 				array( 'label' => __( 'Type', 'minn-admin' ), 'value' => $row->event_type ),
-				array( 'label' => __( 'User', 'minn-admin' ), 'value' => $row->username ?: 'System' ),
+				array( 'label' => __( 'User', 'minn-admin' ), 'value' => $user ?: 'System' ),
 				array( 'label' => 'IP', 'value' => $row->client_ip ),
 			);
 
