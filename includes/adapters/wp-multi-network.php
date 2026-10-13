@@ -69,14 +69,33 @@ function minn_admin_wpmn_network_row( $network ) {
 		'visit'          => $visit,
 		'edit'           => minn_admin_wpmn_edit_url( $id ),
 		// Only offer the verb the route will actually accept: not the primary
-		// network, not the one being worked in, one the caller administers,
-		// and only to the install's owners.
+		// network, not the one being worked in, and one the route lets the
+		// caller delete.
 		'canDelete'      => ( ! is_main_network( $id )
 			&& $id !== (int) get_current_network_id()
-			&& current_user_can( 'delete_network', $id )
-			&& Minn_Admin::install_owner()
-			&& true === minn_admin_wpmn_network_target( $id ) ) ? '1' : '0',
+			&& minn_admin_wpmn_can_delete( $id ) ) ? '1' : '0',
 	);
+}
+
+/**
+ * Whether the current user may delete this network: the route's gate, and
+ * what a row offers. delete_network maps to the object-agnostic
+ * delete_networks, so the capability is paired with a real per-network check
+ * (minn_admin_wpmn_network_target()), and deleting a network reshapes the
+ * install, which is the main network's super admins'.
+ *
+ * @param int $id Network id.
+ * @return bool
+ */
+function minn_admin_wpmn_can_delete( $id ) {
+	return current_user_can( 'delete_network', (int) $id )
+		&& Minn_Admin::install_owner()
+		&& true === minn_admin_wpmn_network_target( (int) $id );
+}
+
+/** Whether the current user may move sites between networks (the route, and the Move action). */
+function minn_admin_wpmn_can_move() {
+	return current_user_can( 'manage_networks' ) && Minn_Admin::install_owner();
 }
 
 /**
@@ -170,10 +189,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		);
 	}
 
-	// Moving a site between networks is the install owners' (the route's gate).
-	$destinations = current_user_can( 'manage_networks' ) && Minn_Admin::install_owner()
-		? minn_admin_wpmn_network_options( get_current_network_id() )
-		: array();
+	$destinations = minn_admin_wpmn_can_move() ? minn_admin_wpmn_network_options( get_current_network_id() ) : array();
 	if ( isset( $surfaces['network-sites']['collection']['actions'] ) && $destinations ) {
 		$surfaces['network-sites']['collection']['actions'][] = array(
 			'label'   => __( 'Move to another network', 'minn-admin' ),
@@ -234,13 +250,7 @@ add_action( 'rest_api_init', function () {
 		'permission_callback' => function ( WP_REST_Request $request ) {
 			// Same source the handler acts on, so the gate and the action can
 			// never be answering about different networks.
-			// delete_network maps to the object-agnostic delete_networks, so pair the
-			// capability with a real per-network check (see
-			// minn_admin_wpmn_network_target).
-			$id = minn_admin_wpmn_path_id( $request );
-			return current_user_can( 'delete_network', $id )
-				&& Minn_Admin::install_owner()
-				&& true === minn_admin_wpmn_network_target( $id );
+			return minn_admin_wpmn_can_delete( minn_admin_wpmn_path_id( $request ) );
 		},
 		'callback'            => 'minn_admin_wpmn_network_delete',
 		'args'                => array(
@@ -250,9 +260,7 @@ add_action( 'rest_api_init', function () {
 
 	register_rest_route( 'minn-admin/v1', '/wp-multi-network/sites/(?P<id>\d+)/move', array(
 		'methods'             => 'POST',
-		'permission_callback' => function () {
-			return current_user_can( 'manage_networks' ) && Minn_Admin::install_owner();
-		},
+		'permission_callback' => 'minn_admin_wpmn_can_move',
 		'callback'            => 'minn_admin_wpmn_site_move',
 		'args'                => array(
 			'network' => array( 'type' => 'integer', 'required' => true ),

@@ -63,6 +63,41 @@ function minn_admin_network_user_can( $cap, ...$args ) {
 }
 
 /**
+ * Whether the current user may add a site. Core lets any create_sites
+ * holder add one, but a new site's roles and its first administrator are
+ * writes the write fence keeps for whoever may run that site, which only a
+ * super admin may before it exists. Anyone else would get a site with no
+ * roles and a 403, so they are refused before anything is made. The route
+ * and the Sites surface's Add site both ask this.
+ *
+ * @return bool
+ */
+function minn_admin_network_can_add_site() {
+	return minn_admin_network_can( 'create_sites' ) && Minn_Admin::network_owner();
+}
+
+/** Whether the current user may delete sites (the route, and the Delete site action). */
+function minn_admin_network_can_delete_sites() {
+	return minn_admin_network_can( 'delete_sites' );
+}
+
+/**
+ * Whether the current user may grant or revoke network administrator. Core
+ * gates the Super Admin checkbox on manage_network_options
+ * (wp-admin/user-edit.php), not on manage_network_users. The two coincide
+ * on stock multisite, where only a super admin holds either, but operators
+ * and role plugins do split them to make a "network user manager" who
+ * administers accounts without changing network configuration. That
+ * principal must not be able to POST their own id and become super admin,
+ * nor be offered the switch.
+ *
+ * @return bool
+ */
+function minn_admin_network_can_grant_super() {
+	return minn_admin_network_can( 'manage_network_options' );
+}
+
+/**
  * One site's row for the list and detail modal.
  *
  * The `can*` fields drive the descriptor's `when` gates so the SERVER decides
@@ -295,10 +330,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		),
 	);
 	// Offered only to whoever the route behind each would let through.
-	if ( ! ( minn_admin_network_can( 'create_sites' ) && Minn_Admin::network_owner() ) ) {
+	if ( ! minn_admin_network_can_add_site() ) {
 		unset( $surfaces['network-sites']['collection']['create'] );
 	}
-	if ( ! minn_admin_network_can( 'delete_sites' ) ) {
+	if ( ! minn_admin_network_can_delete_sites() ) {
 		$surfaces['network-sites']['collection']['actions'] = array_values(
 			array_filter(
 				$surfaces['network-sites']['collection']['actions'],
@@ -658,10 +693,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( $locked ) {
 		$surfaces['network-users']['sub'] = __( 'Set in wp-config', 'minn-admin' );
 	}
-	// Granting and revoking answer to manage_network_options, as core's
-	// Super Admin checkbox does; a network user manager without it is not
-	// offered them.
-	if ( ! minn_admin_network_can( 'manage_network_options' ) ) {
+	if ( ! minn_admin_network_can_grant_super() ) {
 		$surfaces['network-users']['collection']['actions'] = array_values(
 			array_filter(
 				$surfaces['network-users']['collection']['actions'],
@@ -693,16 +725,8 @@ add_action( 'rest_api_init', function () {
 
 	register_rest_route( 'minn-admin/v1', '/network/users/(?P<id>\d+)/super', array(
 		'methods'             => 'POST',
-		// NOT $users. Core gates the Super Admin checkbox on
-		// manage_network_options (wp-admin/user-edit.php), not on
-		// manage_network_users. The two coincide on stock multisite, where
-		// only a super admin holds either, but operators and role plugins do
-		// split them to make a "network user manager" who administers accounts
-		// without changing network configuration. That principal must not be
-		// able to POST their own id and become super admin.
-		'permission_callback' => function () {
-			return minn_admin_network_can( 'manage_network_options' );
-		},
+		// NOT $users: see minn_admin_network_can_grant_super().
+		'permission_callback' => 'minn_admin_network_can_grant_super',
 		'callback'            => 'minn_admin_network_user_super',
 		'args'                => array(
 			'on' => array( 'type' => 'boolean', 'required' => true ),
@@ -766,14 +790,7 @@ add_action( 'rest_api_init', function () {
 		),
 		array(
 			'methods'             => 'POST',
-			// Core lets any create_sites holder add a site, but a new site's
-			// roles and its first administrator are writes the write fence
-			// keeps for whoever may run that site, which only a super admin
-			// may before it exists. Anyone else would get a site with no
-			// roles and a 403, so they are refused before anything is made.
-			'permission_callback' => function () {
-				return minn_admin_network_can( 'create_sites' ) && Minn_Admin::network_owner();
-			},
+			'permission_callback' => 'minn_admin_network_can_add_site',
 			'callback'            => 'minn_admin_network_sites_create',
 			'args'                => array(
 				'address' => array( 'type' => 'string', 'required' => true ),
@@ -795,9 +812,7 @@ add_action( 'rest_api_init', function () {
 
 	register_rest_route( 'minn-admin/v1', '/network/sites/(?P<id>\d+)', array(
 		'methods'             => 'DELETE',
-		'permission_callback' => function () {
-			return minn_admin_network_can( 'delete_sites' );
-		},
+		'permission_callback' => 'minn_admin_network_can_delete_sites',
 		'callback'            => 'minn_admin_network_site_delete',
 	) );
 
