@@ -24,19 +24,26 @@
  *   MINN_MS_BLOG        https://blog.minnms.localhost     (pre-activation subsite)
  *   MINN_MS_SUPER_USER  admin
  *   MINN_MS_SUPER_PASS  (required to run; else SKIP)
+ *   MINN_MS_WP          the network's WordPress root, for wp-cli cleanup of the
+ *                       invitation the add-existing check sends (else a NOTE)
  */
 const { chromium } = require( 'playwright-core' );
+const { spawnSync } = require( 'child_process' );
 
 const MAIN  = process.env.MINN_MS_URL   || 'https://minnms.localhost';
 const STORE = process.env.MINN_MS_STORE || 'https://store.minnms.localhost';
 const BLOG  = process.env.MINN_MS_BLOG  || 'https://blog.minnms.localhost';
 const SUPER_USER = process.env.MINN_MS_SUPER_USER || 'admin';
 const SUPER_PASS = process.env.MINN_MS_SUPER_PASS || '';
+const MS_WP = process.env.MINN_MS_WP || '';
 const CHROME = process.env.MINN_TEST_CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 
 // Subsite role accounts seeded by the lab (see project_minn_multisite_lab).
 const SUBSITE_ADMIN = { user: 'minnsiteadmin', pass: 'minnms-siteadmin-pass-1' };
 const BLOG_EDITOR   = { user: 'minneditor', pass: 'minnms-editor-pass-1' };
+const BLOG_EDITOR_EMAIL = 'editor@minnms.localhost';
+// A plain member of the store site (Author), for the row-menu checks.
+const STORE_MEMBER  = 'minnauthor';
 
 const results = [];
 function check( label, ok, detail = '' ) {
@@ -181,16 +188,32 @@ async function gotoRoute( page, site, route ) {
 			check( 'Add existing user control is present', !! ( await page.$( '#minn-add-existing-user' ) ) );
 
 			// Add BLOG_EDITOR (a network account with no role on store) by email.
+			// A site administrator invites, as wp-admin's Add Existing User
+			// does: the account holder confirms before they join, so no row
+			// appears yet.
 			await page.click( '#minn-add-existing-user' );
 			await page.waitForSelector( '#minn-uae-who' );
-			await page.fill( '#minn-uae-who', 'editor@minnms.localhost' );
+			await page.fill( '#minn-uae-who', BLOG_EDITOR_EMAIL );
 			await page.click( '#minn-uae-add' );
 			await page.waitForTimeout( 2500 );
+			const said = await page.evaluate( () => document.body.innerText );
 			const rows1 = await page.evaluate( () => [ ...document.querySelectorAll( '[data-user]' ) ].map( ( r ) => r.dataset.uname ) );
-			check( 'adding an existing account attaches it to the site', rows1.includes( BLOG_EDITOR.user ), rows1.join( ',' ) );
+			check( 'adding an existing account sends an invitation', /Invitation sent/i.test( said ) );
+			check( 'and adds no row before the account holder confirms', ! rows1.includes( BLOG_EDITOR.user ), rows1.join( ',' ) );
+			if ( MS_WP ) {
+				const opts = spawnSync( 'wp', [ 'option', 'list', '--search=new_user_*', '--field=option_name', '--path=' + MS_WP, '--url=' + STORE ], { encoding: 'utf8' } ).stdout || '';
+				for ( const name of opts.split( '\n' ).map( ( x ) => x.trim() ).filter( Boolean ) ) {
+					const v = spawnSync( 'wp', [ 'option', 'get', name, '--format=json', '--path=' + MS_WP, '--url=' + STORE ], { encoding: 'utf8' } ).stdout || '';
+					if ( v.includes( BLOG_EDITOR_EMAIL ) ) {
+						spawnSync( 'wp', [ 'option', 'delete', name, '--path=' + MS_WP, '--url=' + STORE ], { encoding: 'utf8' } );
+					}
+				}
+			} else {
+				console.log( 'NOTE  set MINN_MS_WP to remove the invitation this run sent (a new_user_* option on the store site)' );
+			}
 
-			// Row menu on a normal user offers role + remove; the super-admin
-			// row offers neither (only Copy email).
+			// Row menu on a normal member offers role + remove; the
+			// super-admin row offers neither (only Copy email).
 			const menuFor = async ( name ) => {
 				await page.reload( { waitUntil: 'domcontentloaded' } );
 				await page.waitForSelector( '[data-user]' );
@@ -207,22 +230,13 @@ async function gotoRoute( page, site, route ) {
 				return page.evaluate( () => [ ...document.querySelectorAll( '.minn-new-menu button, .minn-menu button, [class*="minn"][class*="menu"] button' ) ]
 					.map( ( b ) => b.textContent.trim() ).filter( ( t ) => t && t.length < 45 ) );
 			};
-			const normalMenu = await menuFor( BLOG_EDITOR.user );
+			const normalMenu = await menuFor( STORE_MEMBER );
 			check( 'normal user row offers a role change', normalMenu.some( ( e ) => /Editor|Author|Administrator/.test( e ) ), normalMenu.join( ' | ' ) );
 			check( 'normal user row offers Remove from this site', normalMenu.some( ( e ) => /Remove from this site/.test( e ) ) );
 
 			const superMenu = await menuFor( SUPER_USER );
 			check( 'network-admin row offers NO role controls', ! superMenu.some( ( e ) => /^(Editor|Author|Administrator|Contributor|Subscriber)/.test( e ) ), superMenu.join( ' | ' ) );
 			check( 'network-admin row offers NO Remove', ! superMenu.some( ( e ) => /Remove from this site/.test( e ) ) );
-
-			// Clean up: remove the account we added, back to lab baseline.
-			await page.evaluate( async ( name ) => {
-				const row = [ ...document.querySelectorAll( '[data-user]' ) ].find( ( x ) => x.dataset.uname === name );
-				if ( ! row ) return;
-				await fetch( window.MINN.restUrl + 'minn-admin/v1/users/' + row.dataset.user + '/remove', {
-					method: 'POST', headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin',
-				} ).catch( () => {} );
-			}, BLOG_EDITOR.user );
 
 			allErrors.push( ...errors );
 			await ctx.close();

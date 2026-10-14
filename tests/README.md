@@ -38,7 +38,7 @@ MINN_TEST_PASS=<admin password> node seed-orders.js
 # minnadmin. SKIPs (exit 0) with no MINN_MS_SUPER_PASS or no lab, so run-all is
 # unaffected on the single-site dev box. Create the lab first:
 #   cove add minnms --multisite=subdomain   (see project_minn_multisite_lab)
-MINN_MS_SUPER_PASS=<lab super-admin password> node multisite.test.js
+MINN_MS_SUPER_PASS=<lab super-admin password> MINN_MS_WP=<the network's root path> node multisite.test.js
 MINN_MS_SUPER_PASS=<lab super-admin password> node wp-multi-network.test.js
 
 # all suites (release pre-flight / overnight): sequential, settle-guarded,
@@ -265,6 +265,7 @@ Environment (all optional except the password):
 | `MINN_TEST_PASS2` | `minn-editor-pass-1` |
 | `MINN_MS_SUPER_PASS` | — (multisite.test.js only; unset ⇒ SKIP) |
 | `MINN_MS_URL` / `MINN_MS_STORE` / `MINN_MS_BLOG` | `https://minnms.localhost` / `store.` / `blog.` |
+| `MINN_MS_WP` | — (multisite.test.js: the network's root, to remove the invitation its add-existing check sends; unset ⇒ a NOTE) |
 | `MINN_CORE_SITE` | `minnadmin-core-latest` (`core-latest.sh` only; the Cove site name) |
 | `MINN_CORE_ROOT` | `~/Cove/Sites/$MINN_CORE_SITE.localhost/public` |
 | `MINN_PHP_SITE` | the site this checkout sits in (`run-php.sh`'s single-site suites) |

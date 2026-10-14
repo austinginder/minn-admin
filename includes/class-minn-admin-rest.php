@@ -6910,8 +6910,14 @@ Please click the following link to confirm the invite:
 		foreach ( $ids as $uid ) {
 			// Match core's users collection in edit context: a delegated
 			// list_users capability does not override per-account edit_user
-			// restrictions (notably WooCommerce shop managers).
-			if ( ! current_user_can( 'edit_user', $uid ) ) {
+			// restrictions (notably WooCommerce shop managers). On a network
+			// a site's administrator edits no one else's account (edit_user
+			// maps to manage_network_users there) yet promotes and removes
+			// the site's members, so those rows stay, as wp-admin's Users
+			// screen lists them; the client offers only the role and
+			// removal controls for them.
+			if ( ! current_user_can( 'edit_user', $uid )
+				&& ! ( is_multisite() && ( current_user_can( 'promote_user', $uid ) || current_user_can( 'remove_user', $uid ) ) ) ) {
 				continue;
 			}
 			$user = get_userdata( $uid );

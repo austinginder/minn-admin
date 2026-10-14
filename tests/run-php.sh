@@ -113,6 +113,7 @@ run write-fences subsite --user=admin
 run multisite-db-redaction subsite --user=admin
 run multisite-languages subsite --user=admin
 run multisite-network-caps subsite --user=admin
+run multisite-users subsite --user=admin
 run security-v030-wsal subsite
 run security-v031-add-existing subsite --user=admin
 run security-v043-registry subsite --user=admin
