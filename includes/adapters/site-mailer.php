@@ -73,7 +73,8 @@ function minn_admin_site_mailer_status( $status ) {
 /**
  * The `to` column as a readable list. Site Mailer stores what wp_mail() got
  * through wp_json_encode(): a quoted string, or an array of addresses. Any
- * other value passes through as stored. Plain text: the client escapes it.
+ * other value, or an array with no address strings in it (a filter's shape,
+ * never wp_mail's), passes through as stored. Plain text: the client escapes it.
  */
 function minn_admin_site_mailer_recipients( $raw ) {
 	$raw     = (string) $raw;
@@ -82,7 +83,8 @@ function minn_admin_site_mailer_recipients( $raw ) {
 		return $decoded;
 	}
 	if ( is_array( $decoded ) ) {
-		return implode( ', ', array_map( 'strval', array_filter( $decoded, 'is_scalar' ) ) );
+		$list = implode( ', ', array_map( 'strval', array_filter( $decoded, 'is_scalar' ) ) );
+		return '' !== $list ? $list : $raw;
 	}
 	return $raw;
 }

@@ -333,6 +333,13 @@ try {
 				list( $st, $list ) = $call( 'GET', '/minn-admin/v1/site-mailer/emails', array( 'search' => $term, 'per_page' => 100 ) );
 				$check( "I2 Site Mailer: searching \"{$term}\" finds the recipient as the list shows it", $ml_rb && $find( $list['items'] ?? array(), $ml_rb ), $st . ' ' . count( $list['items'] ?? array() ) . ' rows' );
 			}
+
+			// I3: wp_mail() never hands over a list of maps, but a filter can,
+			// and the decoded join of its scalars was then empty: "—".
+			$ml_maps = $ml_add( array( array( 'email' => 'mapped@example.com' ) ), $ml_local );
+			list( $st, $list ) = $call( 'GET', '/minn-admin/v1/site-mailer/emails', array( 'search' => $marker, 'per_page' => 100 ) );
+			$maps = $find( $list['items'] ?? array(), $ml_maps );
+			$check( 'I3 Site Mailer: a recipient list of maps shows as stored rather than empty', $maps && false !== strpos( (string) $maps['to'], 'mapped@example.com' ), $st . ' ' . wp_json_encode( $maps['to'] ?? null ) );
 		}
 	}
 
