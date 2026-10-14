@@ -238,15 +238,20 @@ add_action( 'rest_api_init', function () {
 						);
 					}
 				}
+				// Title and body are the visitor's, stored HTML-encoded: through
+				// wp_kses on submit, esc_html with <br> line breaks on edit.
+				// Plain text, line breaks kept; the client escapes it.
+				$title_text = Minn_Admin::plain_text( $r->title );
+				$body       = Minn_Admin::plain_text( preg_replace( '/<br\s*\/?>/i', "\n", (string) $r->content ) );
 				return rest_ensure_response( array(
 					'kind'     => 'entry',
 					'status'   => $item['status'],
-					'title'    => '' !== (string) $r->title ? wp_strip_all_tags( (string) $r->title ) : __( 'Review', 'minn-admin' ),
+					'title'    => '' !== $title_text ? $title_text : __( 'Review', 'minn-admin' ),
 					'sections' => array(
 						array( 'title' => __( 'Reviewer', 'minn-admin' ), 'rows' => array(
 							array( 'label' => __( 'Name', 'minn-admin' ), 'value' => $a['name'] . ( $a['guest'] ? ' (' . __( 'guest', 'minn-admin' ) . ')' : '' ) ),
 							array( 'label' => __( 'Email', 'minn-admin' ), 'value' => '' !== $a['mail'] ? $a['mail'] : '—', 'type' => 'email' ),
-							array( 'label' => __( 'Message', 'minn-admin' ), 'value' => wp_strip_all_tags( (string) $r->content ) ),
+							array( 'label' => __( 'Message', 'minn-admin' ), 'value' => $body ),
 						) ),
 						array( 'title' => __( 'Review', 'minn-admin' ), 'rows' => $rows ),
 					),
