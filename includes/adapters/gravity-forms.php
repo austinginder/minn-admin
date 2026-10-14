@@ -572,6 +572,18 @@ function minn_admin_gf_entry_state( $entry ) {
 }
 
 /**
+ * The star column's cell. The column contract has no blank option and the
+ * default cell prints a dash for an empty value, so an unstarred row sends
+ * a space, which renders as nothing.
+ *
+ * @param array $entry Entry from GFAPI.
+ * @return string
+ */
+function minn_admin_gf_entry_star( $entry ) {
+	return empty( $entry['is_starred'] ) ? ' ' : '★';
+}
+
+/**
  * The list row's line: the first short answers, each field read whole the
  * way the entry page reads it (get_value_export), so a name reads as one
  * name and not as its parts. Null when the form is gone (the client then
@@ -878,7 +890,7 @@ add_action( 'rest_api_init', function () {
 				$entries[ $i ]['summary'] = $summary;
 			}
 			$entries[ $i ]['state']   = minn_admin_gf_entry_state( $entry );
-			$entries[ $i ]['starred'] = empty( $entry['is_starred'] ) ? '' : '★';
+			$entries[ $i ]['starred'] = minn_admin_gf_entry_star( $entry );
 		}
 		return rest_ensure_response( array(
 			'total_count' => (int) $total,
