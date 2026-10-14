@@ -537,6 +537,12 @@ add_action( 'rest_api_init', function () {
 				array( 'label' => __( 'Balance', 'minn-admin' ), 'value' => minn_admin_wcgc_money( $card->get_balance(), $currency ) ),
 				array( 'label' => __( 'Original amount', 'minn-admin' ), 'value' => minn_admin_wcgc_money( $card->get_initial_balance(), $currency ) ),
 			);
+			// Scheduled says nothing of whether the card can already be spent:
+			// their list adds Active beside it when the store switched it on
+			// before its delivery date.
+			if ( 'scheduled' === $row['status'] ) {
+				array_splice( $gift, 2, 0, array( array( 'label' => __( 'Enabled', 'minn-admin' ), 'value' => $card->is_active() ? __( 'Yes', 'minn-admin' ) : __( 'No', 'minn-admin' ) ) ) );
+			}
 			if ( (int) $card->get_expire_date() > 0 ) {
 				$gift[] = array(
 					'label' => __( 'Expires', 'minn-admin' ),
