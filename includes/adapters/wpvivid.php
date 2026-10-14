@@ -92,11 +92,13 @@ function minn_admin_wpvivid_components_label( $backup_files, $type = '' ) {
 
 /**
  * The job an archive came from, read off WPvivid's own name for it:
- * {prefix}_backup_{job}.zip, or .partNNN.zip when split. "all" is their
- * merge of several jobs into one archive, the default.
+ * {prefix}_backup_{job}.zip, or .partNNN.zip when split. The jobs are their
+ * WPVIVID_BACKUP_TYPE_* names (class-wpvivid-backup.php) and Pro's
+ * custom_other; "all" is their merge of several into one archive, the
+ * default.
  */
 function minn_admin_wpvivid_archive_job( $file_name ) {
-	return preg_match( '/_backup_(db|themes|plugin|uploads|content|core|all)(\.part\d+)?\.zip$/i', (string) $file_name, $m ) ? strtolower( $m[1] ) : '';
+	return preg_match( '/_backup_(db|themes|plugin|uploads_files|uploads|content|core|others|custom_other|all)(\.part\d+)?\.zip$/i', (string) $file_name, $m ) ? strtolower( $m[1] ) : '';
 }
 
 /**
@@ -109,7 +111,7 @@ function minn_admin_wpvivid_archive_job( $file_name ) {
  */
 function minn_admin_wpvivid_components_from_files( $backup ) {
 	$jobs      = array();
-	$file_jobs = array( 'themes', 'plugin', 'uploads', 'content', 'core' );
+	$file_jobs = array( 'themes', 'plugin', 'uploads', 'uploads_files', 'content', 'core', 'others', 'custom_other' );
 	if ( ! empty( $backup['backup']['files'] ) && is_array( $backup['backup']['files'] ) ) {
 		foreach ( $backup['backup']['files'] as $file ) {
 			// Both kinds seen: no further part can change the answer, and
