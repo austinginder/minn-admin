@@ -6,15 +6,18 @@
  *
  *   node bin/adapter-inventory.js                    # the working tree
  *   node bin/adapter-inventory.js --ref v0.45.0      # any git ref
- *   node bin/adapter-inventory.js --out <dir>        # write adapters.json there
+ *   node bin/adapter-inventory.js --out <dir>        # write adapters.json and routes.json there
  *   node bin/adapter-inventory.js --record "label"   # also append a snapshot
  *                                                    # to bin/adapter-inventory/history.json
  *
  * Per adapter: lines, hand-written REST routes, permission callbacks,
  * capability checks, raw SQL reads and writes, the screen shapes it declares,
- * and kernel resources (minn_admin_resource() calls). An adapter is "kernel"
- * when it declares resources and registers no routes of its own, "partial"
- * when it does both, and "legacy" otherwise.
+ * kernel resources (minn_admin_resource() calls) and kernel handlers
+ * (minn_admin_endpoint() calls). Each hand-written route also gets a kind and
+ * a tier: "declarable" (a list, an item, an item action, a status card) or
+ * "handler" (a job, a send, a builder, a licence flow and the like). An
+ * adapter is "kernel" when it uses the kernel and registers no routes of its
+ * own, "partial" when it does both, and "legacy" otherwise.
  *
  * The family comes from bin/demo/catalog.json (the category its plugin is
  * listed under); the catalog's shared helpers are their own family.
@@ -83,11 +86,63 @@ function familyMap() {
 
 const count = ( src, re ) => ( src.match( re ) || [] ).length;
 
+// Hand-written routes, each with its path and a kind. The kind says which
+// tier a port can reach (docs/adapter-kernel.md, "Three tiers"): the generic
+// kinds become declarations, the specialised ones kernel handlers.
+const GENERIC_KINDS = new Set( [ 'list', 'item', 'item action', 'status card' ] );
+function routePath( expr ) {
+	// A path is a literal or a concatenation ('/x/' . $slug); each variable
+	// part reads as {var}, and each named group as {id}.
+	return expr.split( /\s*\.\s*/ ).map( ( part ) => {
+		const q = part.match( /^(['"])(.*)\1$/s );
+		return q ? q[ 2 ] : '{var}';
+	} ).join( '' ).replace( /\(\?P<[^>]+>[^)]*\)/g, '{id}' );
+}
+function routeKind( p, methods ) {
+	const n = p.toLowerCase().replace( /\/+$/, '' );
+	const last = n.split( '/' ).pop();
+	if ( /(status|stats|chart|summary|overview|health|counts?|totals?)$/.test( n ) ) return 'status card';
+	if ( /settings|options|config|preferences/.test( n ) ) return 'settings tab';
+	if ( /(test|send|resend|preview|render|retry|rerun|notify|email)/.test( last ) ) return 'send, preview, retry';
+	if ( /activate|deactivate|toggle|enable|disable|license|licence|(^|\/)keys?($|\/)/.test( n ) ) return 'activate, licence';
+	if ( /export|import|download|upload|backup|restore|(^|\/)run|start|progress|job|cancel|stop|scan|clone|migrat|push|pull|regenerate|purge|flush|clear/.test( n ) ) return 'job';
+	if ( /schema|builder|layout|design|template/.test( n ) ) return 'schema, builder';
+	if ( /search|suggest|lookup|autocomplete|choices/.test( n ) && methods === 'GET' ) return 'picker';
+	if ( /bulk|batch/.test( n ) ) return 'bulk action';
+	if ( last === '{id}' || last === '{var}' ) return 'item';
+	if ( /\{(id|var)\}\//.test( n ) ) return 'item action';
+	if ( methods === 'GET' ) return 'list';
+	return 'other write';
+}
+function routesOf( src ) {
+	const out = [];
+	const re = /register_rest_route\s*\(\s*(['"])[^'"]*\1\s*,\s*([\s\S]+?)\s*,\s*(?=array\s*\(|\[|\$)/g;
+	let m;
+	while ( ( m = re.exec( src ) ) ) {
+		const p = routePath( m[ 2 ].trim() );
+		const body = src.slice( re.lastIndex, re.lastIndex + 800 );
+		const mm = body.match( /'methods'\s*=>\s*([^\n]+)/ );
+		const ms = mm ? mm[ 1 ] : '';
+		const methods = [
+			/GET|READABLE/.test( ms ) && 'GET',
+			/POST|CREATABLE|EDITABLE/.test( ms ) && 'POST',
+			/PUT/.test( ms ) && 'PUT',
+			/DELETE|DELETABLE/.test( ms ) && 'DELETE',
+		].filter( Boolean ).join( ',' ) || '?';
+		const kind = routeKind( p, methods );
+		out.push( { path: p, methods, kind, tier: GENERIC_KINDS.has( kind ) ? 'declarable' : 'handler' } );
+	}
+	return out;
+}
+
 function measure( file, src, families ) {
 	const name = path.basename( file );
 	const lines = src.split( '\n' ).length;
 	const routes = count( src, /register_rest_route\s*\(/g );
 	const resources = count( src, /minn_admin_resource\s*\(/g );
+	// Kernel-owned routes whose logic the adapter keeps (the handler tier).
+	const endpoints = count( src, /minn_admin_endpoint\s*\(/g );
+	const routeList = routesOf( src );
 	const shapes = [];
 	if ( /'collection'\s*=>/.test( src ) ) shapes.push( 'collection' );
 	if ( /'settings'\s*=>\s*array/.test( src ) ) shapes.push( 'settings' );
@@ -103,12 +158,18 @@ function measure( file, src, families ) {
 		shape: shapes.join( '+' ),
 		lines,
 		routes,
+		// Of the hand-written routes: the shapes a declaration covers, and
+		// the ones that keep their logic as a kernel handler.
+		routes_declarable: routeList.filter( ( r ) => r.tier === 'declarable' ).length,
+		routes_handler: routeList.filter( ( r ) => r.tier === 'handler' ).length,
 		permission_callbacks: count( src, /'permission_callback'/g ),
 		cap_checks: count( src, /current_user_can\s*\(/g ),
 		sql_reads: count( src, /\$wpdb->(get_results|get_var|get_row|get_col)\s*\(/g ),
 		sql_writes: count( src, /\$wpdb->(query|update|insert|delete|replace)\s*\(/g ),
 		resources,
-		status: resources && ! routes ? 'kernel' : resources ? 'partial' : 'legacy',
+		endpoints,
+		status: ( resources || endpoints ) && ! routes ? 'kernel' : ( resources || endpoints ) ? 'partial' : 'legacy',
+		route_list: routeList,
 	};
 }
 
@@ -141,7 +202,10 @@ const snapshot = {
 	cap_checks: sum( 'cap_checks' ),
 	sql_reads: sum( 'sql_reads' ),
 	sql_writes: sum( 'sql_writes' ),
+	routes_declarable: sum( 'routes_declarable' ),
+	routes_handler: sum( 'routes_handler' ),
 	resources: sum( 'resources' ),
+	endpoints: sum( 'endpoints' ),
 	kernel_adapters: rows.filter( ( r ) => r.status === 'kernel' ).length,
 	partial_adapters: rows.filter( ( r ) => r.status === 'partial' ).length,
 	kernel_core_lines: kernelLines,
@@ -152,7 +216,10 @@ const snapshot = {
 
 if ( outDir ) {
 	fs.mkdirSync( outDir, { recursive: true } );
-	fs.writeFileSync( path.join( outDir, 'adapters.json' ), JSON.stringify( rows, null, 1 ) + '\n' );
+	fs.writeFileSync( path.join( outDir, 'adapters.json' ), JSON.stringify( rows.map( ( { route_list, ...r } ) => r ), null, 1 ) + '\n' );
+	// One row per hand-written route, for the breakdown by kind and tier.
+	const routeRows = rows.flatMap( ( r ) => r.route_list.map( ( x ) => Object.assign( { adapter: r.adapter, family: r.family }, x ) ) );
+	fs.writeFileSync( path.join( outDir, 'routes.json' ), JSON.stringify( routeRows, null, 1 ) + '\n' );
 }
 if ( record ) {
 	const history = fs.existsSync( HISTORY ) ? JSON.parse( fs.readFileSync( HISTORY, 'utf8' ) ) : [];
