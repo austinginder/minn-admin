@@ -322,5 +322,32 @@
   "code_lines": 65147,
   "kernel_code_lines": 799,
   "collection_code_lines": 40023
+ },
+ {
+  "at": "2026-10-14T23:13:40.383Z",
+  "ref": "working tree",
+  "commit": "456853a6",
+  "version": "0.45.0",
+  "label": "activity logs on the kernel",
+  "adapters": 141,
+  "lines": 85545,
+  "code_lines": 64752,
+  "routes": 392,
+  "permission_callbacks": 483,
+  "cap_checks": 438,
+  "sql_reads": 354,
+  "sql_writes": 46,
+  "routes_declarable": 253,
+  "routes_handler": 135,
+  "resources": 18,
+  "endpoints": 52,
+  "kernel_adapters": 20,
+  "partial_adapters": 0,
+  "kernel_core_lines": 1868,
+  "kernel_code_lines": 1214,
+  "collection_adapters": 75,
+  "collection_lines": 51055,
+  "collection_code_lines": 39540,
+  "collection_routes": 308
  }
 ]
