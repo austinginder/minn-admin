@@ -224,11 +224,15 @@ function minn_admin_novamira_status_model() {
 	);
 	$abilities = minn_admin_novamira_abilities();
 	$disabled  = count( array_filter( $abilities, function ( $a ) { return $a['disabled']; } ) );
+	// The hint names what a Minn rule switched off; an ability that is off
+	// with its Novamira feature counts in the figure only, since no Minn
+	// setting reaches it.
+	$by_rule   = count( array_filter( $abilities, function ( $a ) { return $a['disabled'] && empty( $a['owned'] ); } ) );
 	$rows[]    = array(
 		'label' => __( 'Abilities exposed', 'minn-admin' ),
 		/* translators: 1: abilities an agent may call, 2: abilities registered. */
 		'value' => sprintf( __( '%1$d of %2$d', 'minn-admin' ), count( $abilities ) - $disabled, count( $abilities ) ),
-		'hint'  => $disabled ? sprintf( /* translators: %d: switched-off abilities. */ _n( '%d switched off in Settings', '%d switched off in Settings', $disabled, 'minn-admin' ), $disabled ) : __( 'everything registered is callable', 'minn-admin' ),
+		'hint'  => $by_rule ? sprintf( /* translators: %d: switched-off abilities. */ _n( '%d switched off in Settings', '%d switched off in Settings', $by_rule, 'minn-admin' ), $by_rule ) : ( $disabled ? '' : __( 'everything registered is callable', 'minn-admin' ) ),
 	);
 	$pro = minn_admin_novamira_pro_row();
 	if ( $pro ) {

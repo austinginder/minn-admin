@@ -618,7 +618,20 @@ if ( ! function_exists( 'minn_admin_novamira_active' ) || ! minn_admin_novamira_
 		. "\t\$out['owned']['attempt'] = isset( \$GLOBALS['minn_d26_attempt'] ) ? array_keys( (array) \$GLOBALS['minn_d26_attempt'] ) : array();\n"
 		. "}\n"
 		. "foreach ( minn_admin_novamira_abilities() as \$a ) { \$out['providers'][ sanitize_key( minn_admin_novamira_ability_group( \$a ) ) ][ \$a['provider'] ] = true; }\n"
+		. "foreach ( minn_admin_novamira_status_model()['rows'] as \$r ) { if ( __( 'Abilities exposed', 'minn-admin' ) === \$r['label'] ) { \$out['exposed'] = \$r; } }\n"
+		. "\$out['feature_off'] = count( array_filter( minn_admin_novamira_abilities(), function ( \$a ) { return ! empty( \$a['owned'] ) && ! empty( \$a['off'] ); } ) ); \$out['all'] = count( minn_admin_novamira_abilities() );\n"
 		. "echo 'MINNPROBE ' . wp_json_encode( \$out ) . \"\\n\";\n"
+	);
+	// F7: abilities on and Novamira's Design feature off. A switched-off
+	// feature's own abilities do not register on Novamira 1.12.8; a licensed
+	// Pro specialization's do, and the policy then removes them. A stand-in
+	// Design owns by name is registered for this run alone (it refuses
+	// everyone and is never run) to give that state.
+	file_put_contents(
+		$nt_base . '/design-off.php',
+		file_get_contents( $nt_base . '/on.php' )
+		. "WP_CLI::add_wp_hook( 'pre_option_novamira_feature_preferences', function () { return array( 'novamira/design' => false ); } );\n"
+		. "WP_CLI::add_wp_hook( 'wp_abilities_api_init', function () { if ( ! wp_has_ability( 'novamira/list-design-library' ) ) { wp_register_ability( 'novamira/list-design-library', array( 'label' => 'Minn F7 stand-in', 'description' => 'Never run.', 'category' => 'site', 'execute_callback' => '__return_null', 'permission_callback' => '__return_false' ) ); } }, 20 );\n"
 	);
 	$nt_run = function ( $require ) use ( $nt_base, $admin_login ) {
 		$o = WP_CLI::runcommand( 'eval-file ' . escapeshellarg( $nt_base . '/child.php' ) . ' --user=' . escapeshellarg( $admin_login ) . ' --require=' . escapeshellarg( $nt_base . '/' . $require ), array( 'launch' => true, 'return' => 'all', 'exit_error' => false ) );
@@ -705,6 +718,22 @@ if ( ! function_exists( 'minn_admin_novamira_active' ) || ! minn_admin_novamira_
 			}
 		}
 
+		// F7: the status card's hint said "switched off in Settings" for
+		// abilities that are off because their Novamira feature is off,
+		// which no Minn setting reaches. The hint counts what a Minn rule
+		// switched off (here the one rule this section wrote); the exposed
+		// figure still counts both.
+		$nt_df = $nt_run( 'design-off.php' );
+		if ( empty( $nt_df['feature_off'] ) || empty( $nt_df['exposed'] ) ) {
+			$skip( 'F7 Novamira: the Design stand-in was not listed as off with its feature in the child run — ' . substr( wp_json_encode( $nt_df ), 0, 200 ) );
+		} else {
+			/* translators: %d: switched-off abilities. */
+			$nt_hint = sprintf( _n( '%d switched off in Settings', '%d switched off in Settings', 1, 'minn-admin' ), 1 );
+			/* translators: 1: abilities an agent may call, 2: abilities registered. */
+			$nt_fig  = sprintf( __( '%1$d of %2$d', 'minn-admin' ), (int) $nt_df['all'] - 1 - (int) $nt_df['feature_off'], (int) $nt_df['all'] );
+			$check( 'F7 Novamira: with the Design feature off, the hint counts only the one ability a Minn rule switched off, and the figure still counts both', $nt_hint === $nt_df['exposed']['hint'] && $nt_fig === $nt_df['exposed']['value'], wp_json_encode( array( $nt_df['exposed'], $nt_df['feature_off'] ) ) );
+		}
+
 		// N3: Minn 0.44 drew the bundled MCP adapter's meta-abilities as
 		// switches, so a site may hold a rule switching one off. Novamira's
 		// policy honours it (the bridge breaks), Minn now hides the name as
@@ -729,7 +758,7 @@ if ( ! function_exists( 'minn_admin_novamira_active' ) || ! minn_admin_novamira_
 		} else {
 			update_option( 'novamira_ability_rules', $nt_rules_was, false );
 		}
-		foreach ( array( 'child.php', 'on.php', 'off.php' ) as $f ) {
+		foreach ( array( 'child.php', 'on.php', 'off.php', 'design-off.php' ) as $f ) {
 			if ( is_file( $nt_base . '/' . $f ) ) {
 				unlink( $nt_base . '/' . $f );
 			}
