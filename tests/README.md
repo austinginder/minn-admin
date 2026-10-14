@@ -128,6 +128,49 @@ The network snapshot comes from the lab's WooCommerce subsite (the one `run-php.
 uses, `--url=<that site>`), since accounts and routes differ from site to site. Commit
 the rewritten snapshot with the route.
 
+## Parity (`parity/`)
+
+A port to the resource kernel (`docs/adapter-kernel.md`) must keep every route, method,
+gate and response shape the app and its callers depend on. `parity/capture.js` records
+them and `parity/diff.js` compares two captures:
+
+```bash
+node tests/parity/capture.js --out tests/.parity/before.json --only everest --writes everest-forms
+# … port the adapter …
+node tests/parity/capture.js --out tests/.parity/after.json --only everest --writes everest-forms
+node tests/parity/diff.js tests/.parity/before.json tests/.parity/after.json --only everest
+```
+
+A capture runs as one fresh account per role (signed out, Subscriber through
+Administrator, a Shop Manager, and on a network a site role holding network capabilities
+and, with `--super <login>`, a super admin), each in its own WP-CLI process. It records
+every `minn-admin/v1` endpoint with its methods, declared arguments, callback file and who
+its gate admits; the surfaces each account is sent, by value; and the shape of each GET
+the account may make: every JSON path with the types and string formats seen there
+(`string:iso-local`, `string:entities`, `int`, `absent`), never a value. The requests are
+the ones the app makes from the descriptors (`surfaceRoute()`: the default filter, each
+other filter option, the first tab, a search, the first item's detail) plus a walk of
+every GET route, its path ids taken from the parent list. `--writes` also runs those
+surfaces' row and bulk actions on an item their `when` matches, chaining from a sibling
+action when no row is in that state (no spam on the lab: mark one, then "Not spam").
+
+Every request runs inside a database transaction that is rolled back, with outbound HTTP
+and mail refused, so a capture leaves the lab as it found it (a GET that marks an entry
+viewed is undone too). Statements that would end the transaction or cannot roll back
+(DDL, LOCK, a non-InnoDB table) are refused and noted on the request. Files a route
+writes are outside the transaction, which is why actions run only for the surfaces you
+name. A request that kills its process is skipped and the account's pass runs again.
+
+`diff.js` prints FAIL for anything a caller could depend on that is gone or different
+(an endpoint, an argument, a gate, a descriptor value, a status class, a JSON path, a
+type, a key now sometimes missing, a string format no longer sent) and REVIEW for what is
+new or looser; `--accept <file>` takes a list of deliberate changes with their reasons.
+Capture both sides on the same lab data, right before and right after the change: paths
+under a list that was empty on one side are counted, not judged. Captures describe a lab,
+so they stay in `tests/.parity/` (ignored). `parity/plant.php` is the tool's own check:
+captured with `--require tests/parity/plant.php`, the diff must FAIL on each planted
+change.
+
 ## The next WordPress (`core-latest.sh`)
 
 Every other run happens on minnadmin.localhost, which tracks a RELEASED

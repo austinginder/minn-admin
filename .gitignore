@@ -7,3 +7,5 @@ tests/.auth/
 tests/.release-*
 # built language packs (attached to releases, never committed)
 dist/
+# parity captures describe a lab (tests/parity/capture.js)
+tests/.parity/
