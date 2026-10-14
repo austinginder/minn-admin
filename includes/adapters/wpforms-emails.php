@@ -282,7 +282,18 @@ add_action( 'rest_api_init', function () {
 					wpforms_process_smart_tags( $message, $data, $fields, (int) $entry->entry_id ),
 				);
 			};
-			list( $subject, $html ) = Minn_Admin_Preview::own_callbacks( array( 'wpforms_process_smart_tags', 'wpforms_smart_tag_process', 'wpforms_smarttags_process_value' ), WPFORMS_PLUGIN_DIR, $render );
+			// Every hook that sees the message or a field value on its way into
+			// it: an add-on's filter on any of them could answer a tag carried
+			// in what the submitter typed.
+			$hooks = array( 'wpforms_process_smart_tags', 'wpforms_smart_tag_process', 'wpforms_smarttags_process_value', 'wpforms_emails_notifications_message', 'wpforms_emails_notifications_processed_message', 'wpforms_emails_notifications_field_message_html', 'wpforms_html_field_value', 'wpforms_emails_templates_general_build_content' );
+			$names = minn_admin_wpforms_preview_tags();
+			if ( is_object( wpforms()->obj( 'smart_tags' ) ) ) {
+				$names = array_merge( $names, array_keys( (array) wpforms()->obj( 'smart_tags' )->get_smart_tags() ) );
+			}
+			foreach ( array_unique( $names ) as $tag ) {
+				$hooks[] = 'wpforms_smarttags_process_' . $tag . '_value';
+			}
+			list( $subject, $html ) = Minn_Admin_Preview::own_callbacks( $hooks, WPFORMS_PLUGIN_DIR, $render );
 			return rest_ensure_response( array( 'entry' => (int) $entry->entry_id, 'subject' => wp_strip_all_tags( (string) $subject ), 'html' => (string) $html ) );
 		},
 	) );

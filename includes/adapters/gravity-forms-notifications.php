@@ -509,6 +509,32 @@ function minn_admin_gfn_preview_tags( $form ) {
 }
 
 /**
+ * A preview's or test send's text, ready for Gravity Forms: every tag off
+ * the allowlist a placeholder, and the submitter's allowed profile fields
+ * filled here from the entry, braces encoded. minn_admin_gfn_guarded() then
+ * hands Gravity Forms the entry with no submitter, so a {created_by:*}
+ * carried in the form title or an answer, which Gravity Forms scans again
+ * after putting them in, reads nothing (not even a column of their account).
+ *
+ * @param string $text  Subject, message, address or URL.
+ * @param array  $form  The form.
+ * @param array  $entry The entry, as stored.
+ * @return string
+ */
+function minn_admin_gfn_prepare( $text, $form, $entry ) {
+	$text = Minn_Admin_Preview::restrict( (string) $text, 'gf', minn_admin_gfn_preview_tags( $form ) );
+	$uid  = (int) rgar( (array) $entry, 'created_by' );
+	$user = $uid > 0 ? get_userdata( $uid ) : false;
+	return (string) preg_replace_callback( '/\{created_by:(ID|id|display_name|user_login|user_email|first_name|last_name|nickname|roles|user_url) ?\}/', function ( $m ) use ( $user ) {
+		if ( ! $user ) {
+			return '';
+		}
+		$v = 'roles' === $m[1] ? implode( ', ', (array) $user->roles ) : ( 'id' === $m[1] ? $user->ID : $user->get( $m[1] ) );
+		return str_replace( array( '{', '}' ), array( '&#123;', '&#125;' ), (string) $v );
+	}, $text );
+}
+
+/**
  * Merge tags that read past the entry: {created_by:<key>} reads any meta of
  * the account that submitted it (Gravity Forms answers it through
  * WP_User::get()), {custom_field:<key>} any meta of the page it was sent
@@ -570,6 +596,8 @@ function minn_admin_gfn_guarded( $entry, $render ) {
 	};
 	$entry['source_id']  = '';
 	$entry['source_url'] = '';
+	// The submitter's allowed fields are already filled (minn_admin_gfn_prepare()).
+	$entry['created_by'] = '';
 	$hook = 'gform_replace_merge_tags';
 	$held = isset( $wp_filter[ $hook ] ) && $wp_filter[ $hook ] instanceof WP_Hook ? $wp_filter[ $hook ] : null;
 	$only = new WP_Hook();
@@ -803,12 +831,13 @@ add_action( 'rest_api_init', function () {
 				) );
 			}
 			$autoformat = empty( $n['disableAutoformat'] );
-			$allow      = minn_admin_gfn_preview_tags( $form );
-			return rest_ensure_response( minn_admin_gfn_guarded( $entry, function ( $entry ) use ( $n, $form, $autoformat, $allow ) {
+			$subject    = minn_admin_gfn_prepare( $n['subject'], $form, $entry );
+			$message    = minn_admin_gfn_prepare( $n['message'], $form, $entry );
+			return rest_ensure_response( minn_admin_gfn_guarded( $entry, function ( $entry ) use ( $subject, $message, $form, $autoformat ) {
 				return array(
 					'entry'   => (int) $entry['id'],
-					'subject' => (string) GFCommon::replace_variables( Minn_Admin_Preview::restrict( (string) $n['subject'], 'gf', $allow ), $form, $entry, false, false, false, 'text' ),
-					'html'    => (string) GFCommon::replace_variables( Minn_Admin_Preview::restrict( (string) $n['message'], 'gf', $allow ), $form, $entry, false, false, $autoformat, 'html' ),
+					'subject' => (string) GFCommon::replace_variables( $subject, $form, $entry, false, false, false, 'text' ),
+					'html'    => (string) GFCommon::replace_variables( $message, $form, $entry, false, false, $autoformat, 'html' ),
 				);
 			} ) );
 		},
@@ -849,15 +878,24 @@ add_action( 'rest_api_init', function () {
 			$n['bcc']     = '';
 			$n['routing'] = null;
 
-			$allow = minn_admin_gfn_preview_tags( $form );
 			foreach ( array( 'subject', 'message', 'from', 'fromName', 'replyTo' ) as $key ) {
 				if ( isset( $n[ $key ] ) ) {
-					$n[ $key ] = Minn_Admin_Preview::restrict( (string) $n[ $key ], 'gf', $allow );
+					$n[ $key ] = minn_admin_gfn_prepare( $n[ $key ], $form, $entry );
 				}
 			}
 			$n['subject'] = '[' . __( 'Test', 'minn-admin' ) . '] ' . (string) rgar( $n, 'subject' );
+			// Gravity Forms runs shortcodes in the message as it sends; a test
+			// is a preview that lands in an inbox, and the preview runs none,
+			// so a shortcode typed here goes out as the text it is.
 			$result       = minn_admin_gfn_guarded( $entry, function ( $entry ) use ( $n, $form ) {
-				return GFCommon::send_notification( $n, $form, $entry );
+				global $shortcode_tags;
+				$held           = $shortcode_tags;
+				$shortcode_tags = array(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+				try {
+					return GFCommon::send_notification( $n, $form, $entry );
+				} finally {
+					$shortcode_tags = $held; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+				}
 			} );
 			if ( ! is_array( $result ) ) {
 				return new WP_Error( 'minn_gfn_test', __( 'Gravity Forms could not send the test. Check the site’s mail settings.', 'minn-admin' ), array( 'status' => 500 ) );

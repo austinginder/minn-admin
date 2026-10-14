@@ -38,6 +38,9 @@ class Minn_Admin_Preview {
 	 */
 	const CF7_TAG = '/\[\s*([a-zA-Z_][0-9a-zA-Z:._-]*)((?:\s+"[^"]*"|\s+\'[^\']*\')*)\s*\]/';
 
+	/** The pattern Minn's own CF7 fill reads a tag by (adapters/cf7-mail.php). */
+	const CF7_FILL = '/\[\s*([a-zA-Z_][a-zA-Z0-9_-]*)\s*\]/';
+
 	/**
 	 * Fluent Forms routes a tag to the first of these it finds anywhere in the
 	 * tag, in this order, and reads the key from the marker's length counted
@@ -61,7 +64,13 @@ class Minn_Admin_Preview {
 	public static function restrict( $text, $grammar, array $allow ) {
 		$text = (string) $text;
 		if ( 'cf7' === $grammar ) {
-			return (string) preg_replace_callback( self::CF7_TAG, function ( $m ) use ( $allow ) {
+			$text = (string) preg_replace_callback( self::CF7_TAG, function ( $m ) use ( $allow ) {
+				return self::allows( $m[1], $allow ) ? $m[0] : self::placeholder( $m[0] );
+			}, $text );
+			// Minn's fill reads bare tags with no value, so one tucked inside an
+			// allowed tag's quoted value ([your-name "[_user_email]"]) is a tag
+			// to it: the same rule again, by the fill's own pattern.
+			return (string) preg_replace_callback( self::CF7_FILL, function ( $m ) use ( $allow ) {
 				return self::allows( $m[1], $allow ) ? $m[0] : self::placeholder( $m[0] );
 			}, $text );
 		}

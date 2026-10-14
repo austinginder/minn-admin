@@ -151,9 +151,21 @@ function minn_admin_fluent_preview_tags( $form ) {
 		'user.ID', 'user.id', 'user.display_name', 'user.first_name', 'user.last_name', 'user.nickname', 'user.user_email', 'user.user_login',
 	);
 	if ( class_exists( '\FluentForm\App\Modules\Form\FormFieldsParser' ) ) {
-		foreach ( array_keys( (array) \FluentForm\App\Modules\Form\FormFieldsParser::getInputs( $form ) ) as $name ) {
+		// Each input by name, with its value, its label and the parts a
+		// compound input keeps (a name field's first_name), and nothing
+		// looser: Fluent strips ".value" and ".label" anywhere in a key, so a
+		// wildcard after an input's name reaches any submitted key that
+		// starts with it ({inputs._wp.value_http_referer}).
+		foreach ( (array) \FluentForm\App\Modules\Form\FormFieldsParser::getInputs( $form, array( 'raw' ) ) as $name => $input ) {
 			$tags[] = 'inputs.' . $name;
-			$tags[] = 'inputs.' . $name . '.*';
+			$tags[] = 'inputs.' . $name . '.value';
+			$tags[] = 'inputs.' . $name . '.label';
+			$parts  = is_array( $input ) && isset( $input['raw']['fields'] ) && is_array( $input['raw']['fields'] ) ? array_keys( $input['raw']['fields'] ) : array();
+			foreach ( $parts as $part ) {
+				if ( preg_match( '/^[A-Za-z0-9_-]+$/', (string) $part ) && false === strpos( (string) $part, 'value' ) && false === strpos( (string) $part, 'label' ) ) {
+					$tags[] = 'inputs.' . $name . '.' . $part;
+				}
+			}
 		}
 	}
 	return $tags;

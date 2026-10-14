@@ -268,9 +268,11 @@ function minn_admin_gfc_preview( $form, $stored, $body ) {
 	$entry = minn_admin_gfn_latest_entry( $form['id'] );
 	$out   = array( 'entry' => $entry ? (int) $entry['id'] : 0, 'type' => $c['type'], 'html' => '', 'url' => '' );
 	if ( $entry ) {
+		// The same policy as the notification preview: only the allowlist's
+		// tags resolve, and the submitter's allowed fields are filled first.
 		foreach ( array( 'message', 'url', 'queryString' ) as $key ) {
 			if ( isset( $c[ $key ] ) ) {
-				$c[ $key ] = minn_admin_gfn_neutral_tags( (string) $c[ $key ] );
+				$c[ $key ] = minn_admin_gfn_prepare( (string) $c[ $key ], $form, $entry );
 			}
 		}
 	}
