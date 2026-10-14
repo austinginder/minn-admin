@@ -353,6 +353,9 @@ function minn_admin_bricks_template_item( $post ) {
 	$type  = (string) \Bricks\Templates::get_template_type( $post->ID );
 	$tags  = get_the_terms( $post, BRICKS_DB_TEMPLATE_TAX_TAG );
 	$param = defined( 'BRICKS_BUILDER_PARAM' ) ? BRICKS_BUILDER_PARAM : 'bricks';
+	// post_modified_gmt is UTC; sent bare, the detail dialog read it as
+	// site-local, so it goes out with its zone.
+	$modified = '0000-00-00 00:00:00' !== $post->post_modified_gmt ? strtotime( $post->post_modified_gmt . ' UTC' ) : false;
 	return array(
 		'id'         => (int) $post->ID,
 		// The stored title, empty included: the edit form seeds from it and
@@ -365,7 +368,7 @@ function minn_admin_bricks_template_item( $post ) {
 		'tags'       => ( $tags && ! is_wp_error( $tags ) ) ? implode( ', ', wp_list_pluck( $tags, 'name' ) ) : '',
 		'status'     => (string) $post->post_status,
 		'inTrash'    => 'trash' === $post->post_status,
-		'modified'   => (string) $post->post_modified_gmt,
+		'modified'   => $modified ? gmdate( 'c', $modified ) : '',
 		'editUrl'    => add_query_arg( $param, 'run', get_permalink( $post ) ),
 	);
 }
