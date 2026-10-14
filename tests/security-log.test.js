@@ -75,7 +75,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	const all = await api( 'minn-admin/v1/wordfence/logins' );
 	t.check( 'Login log returns {items,total}', Array.isArray( all.items ) && typeof all.total === 'number' && all.total > 0, `total=${ all.total }` );
 	const row = all.items[ 0 ];
-	t.check( 'Rows carry message/who/ip/result/date', !! row && !! row.message && !! row.who && !! row.ip && ( row.result === 'failed' || row.result === 'success' ) && /Z$/.test( row.date ), JSON.stringify( row ) );
+	t.check( 'Rows carry message/who/ip/result/date', !! row && !! row.message && !! row.who && !! row.ip && [ 'failed', 'success', 'signed-out' ].includes( row.result ) && /Z$/.test( row.date ), JSON.stringify( row ) );
 	t.check( 'IPs are decoded (not binary)', all.items.every( ( r ) => r.ip === '—' || /[.:]/.test( r.ip ) ) );
 
 	const failed = await api( 'minn-admin/v1/wordfence/logins?kind=failed' );
