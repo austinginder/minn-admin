@@ -102,6 +102,16 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 	await page.waitForTimeout( 12000 );
 	t.check( 'Autosave fires after the idle window', writes.some( ( u ) => u.includes( `/posts/${ draftId }` ) ), writes.join() );
 
+	// The check above sees the autosave's request START. On a loaded lab its
+	// response lands seconds later, and until it does the post is still dirty
+	// and the indicator reads "Unsaved changes" (forensic 2026-10-13: one
+	// write, read ~2s after it started, at load 9 to 44). Settle means once the
+	// save lands; an editor that stays dirty still fails after the wait.
+	await page.waitForFunction(
+		() => /now|ago/.test( document.querySelector( '#minn-saved-state' )?.textContent || '' ),
+		null,
+		{ timeout: 20000 }
+	).catch( () => {} );
 	const savedVal = await page.textContent( '#minn-saved-state' );
 	t.check( 'Saved indicator settles', /now|ago/.test( savedVal ), savedVal );
 
