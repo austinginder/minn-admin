@@ -313,6 +313,11 @@
 
 	const decodeEntities = stripTags;
 
+	// Text of a value that may hold markup, for an escaped text sink. A
+	// recipient written "Name <address>" keeps its address: the parse would
+	// read <address> as a tag.
+	const cellText = ( v ) => stripTags( String( v == null ? '' : v ).replace( /<([^<>\s@]+@[^<>\s@]+)>/g, '&lt;$1&gt;' ) );
+
 	// A URL safe to put in an href. esc() stops attribute breakout but not a
 	// javascript: scheme, and the target="_blank" that neutralises it
 	// elsewhere is not on every anchor. Bundled page builders all return
@@ -977,7 +982,7 @@
 			const d = parseWpDate( normalizeTimeInput( str, null ) || str );
 			if ( ! isNaN( d.getTime() ) ) return `${ esc( timeAgo( str ) ) } <span class="minn-surface-val-dim">· ${ esc( siteDateStr( d, { dateStyle: 'medium', timeStyle: 'short' } ) ) }</span>`;
 		}
-		return esc( chromeLabel( stripTags( str ) ) );
+		return esc( chromeLabel( cellText( str ) ) );
 	}
 
 	// A vendor slug ("payment_pending", "no-show", "SENT") is tidied into
@@ -19740,7 +19745,7 @@
 				return `<div class="minn-row-meta minn-cell-clip" title="${ esc( raw ) }">${ esc( label ) }</div>`;
 			}
 			case 'pill': return `<div class="minn-cell-clip">${ surfacePill( v ) }</div>`;
-			case 'title': return `<div class="minn-row-title minn-cell-clip">${ esc( stripTags( String( v || '—' ) ) ) }</div>`;
+			case 'title': return `<div class="minn-row-title minn-cell-clip">${ esc( cellText( v || '—' ) ) }</div>`;
 			case 'entry-summary': return `<div class="minn-row-title minn-cell-clip">${ esc( entrySummary( item ) ) }</div>`;
 			case 'num': return `<div class="minn-row-meta minn-num">${ esc( String( v == null || v === '' ? '—' : v ) ) }</div>`;
 			case 'id': {
@@ -19748,9 +19753,7 @@
 				return `<div class="minn-row-meta minn-row-id">${ n ? '#' + esc( n ) : '—' }</div>`;
 			}
 			case 'mono': return `<div class="minn-row-meta mono minn-cell-clip">${ esc( String( v || '—' ) ) }</div>`;
-			// A recipient written "Name <address>" keeps its address: the tag
-			// parse would read <address> as markup. The cell is text either way.
-			default: return `<div class="minn-row-meta minn-cell-clip">${ esc( stripTags( String( v == null || v === '' ? '—' : v ).replace( /<([^<>\s@]+@[^<>\s@]+)>/g, '&lt;$1&gt;' ) ) ) }</div>`;
+			default: return `<div class="minn-row-meta minn-cell-clip">${ esc( cellText( v == null || v === '' ? '—' : v ) ) }</div>`;
 		}
 	}
 
