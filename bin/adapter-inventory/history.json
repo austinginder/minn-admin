@@ -262,5 +262,29 @@
   "collection_adapters": 75,
   "collection_lines": 52151,
   "collection_routes": 405
+ },
+ {
+  "at": "2026-10-14T11:32:25.797Z",
+  "ref": "working tree",
+  "commit": "f0eda6a0",
+  "version": "0.45.0",
+  "label": "forms family on the kernel",
+  "adapters": 141,
+  "lines": 85956,
+  "routes": 415,
+  "permission_callbacks": 506,
+  "cap_checks": 438,
+  "sql_reads": 431,
+  "sql_writes": 46,
+  "routes_declarable": 276,
+  "routes_handler": 135,
+  "resources": 10,
+  "endpoints": 40,
+  "kernel_adapters": 11,
+  "partial_adapters": 0,
+  "kernel_core_lines": 1244,
+  "collection_adapters": 75,
+  "collection_lines": 51657,
+  "collection_routes": 331
  }
 ]
