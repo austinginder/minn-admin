@@ -169,6 +169,16 @@ function minn_admin_backwpup_rows() {
 	return $items;
 }
 
+/**
+ * A BackWPup run stamp as a UTC epoch. lastrun is their start_time, time()
+ * shifted by gmt_offset: the site's wall clock written as an epoch. It is
+ * read back in the site's zone, the offset in force on that date included.
+ */
+function minn_admin_backwpup_utc( $stamp ) {
+	$stamp = (int) $stamp;
+	return $stamp > 0 ? (int) get_gmt_from_date( gmdate( 'Y-m-d H:i:s', $stamp ), 'U' ) : 0;
+}
+
 /** Newest lastrun across jobs (UTC epoch) for the status card. */
 function minn_admin_backwpup_last_run() {
 	$latest = 0;
@@ -178,10 +188,7 @@ function minn_admin_backwpup_last_run() {
 			$latest = $run;
 		}
 	}
-	// lastrun is their start_time, time() shifted by gmt_offset: the site's
-	// wall clock written as an epoch. Read back in the site's zone, the
-	// offset in force on that date included.
-	return $latest > 0 ? (int) get_gmt_from_date( gmdate( 'Y-m-d H:i:s', $latest ), 'U' ) : 0;
+	return minn_admin_backwpup_utc( $latest );
 }
 
 /** True when a job is currently running (their working-data transient). */
@@ -462,10 +469,8 @@ add_action( 'rest_api_init', function () {
 				// Nothing running: finished when the job's lastrun stamp
 				// moved past our start (they write it at job start, and the
 				// running file is gone only once the job ended). lastrun is
-				// their start_time = current_time( 'timestamp' ), a
-				// site-local naive epoch, so it is shifted to UTC before the
-				// compare.
-				$lastrun = (int) BackWPup_Option::get( $jobid, 'lastrun' ) - (int) ( (float) get_option( 'gmt_offset', 0 ) * HOUR_IN_SECONDS );
+				// a site-local stamp, read in its own date's offset.
+				$lastrun = minn_admin_backwpup_utc( BackWPup_Option::get( $jobid, 'lastrun' ) );
 				if ( $lastrun >= $started - 5 ) {
 					$errors = (int) BackWPup_Option::get( $jobid, 'lastrunerrors' );
 					return rest_ensure_response( array(
