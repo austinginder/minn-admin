@@ -180,16 +180,6 @@ function minn_admin_latepoint_when_label( $mysql_datetime ) {
 	return '' === $iso ? '' : wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), strtotime( $iso ) );
 }
 
-/**
- * A status as the pill reads it. The client tidies and colours hyphenated
- * slugs ('no-show' reads "No Show", as Amelia's does) but prints underscores
- * as stored, so no_show, payment_pending and checked_in showed raw. Display
- * only: the routes and the `when` gates keep LatePoint's own values.
- */
-function minn_admin_latepoint_pill( $status ) {
-	return str_replace( '_', '-', (string) $status );
-}
-
 function minn_admin_latepoint_display_name( $first, $last ) {
 	$name = trim( trim( (string) $first ) . ' ' . trim( (string) $last ) );
 	return '' !== $name ? $name : __( '(no name)', 'minn-admin' );
@@ -529,7 +519,7 @@ add_action( 'rest_api_init', function () {
 					'id'       => (int) $r->id,
 					'customer' => $email ? $customer . ' · ' . $email : $customer,
 					'service'  => $r->service_name ? (string) $r->service_name : __( '(no service)', 'minn-admin' ),
-					'status'   => minn_admin_latepoint_pill( $r->status ),
+					'status'   => (string) $r->status,
 					'date'     => minn_admin_latepoint_utc_iso( $r->start_datetime_utc ),
 					'provider' => minn_admin_latepoint_display_name( $r->agent_first, $r->agent_last ),
 				);
@@ -602,7 +592,7 @@ add_action( 'rest_api_init', function () {
 				array( 'label' => __( 'Employee', 'minn-admin' ), 'value' => minn_admin_latepoint_display_name( $row->agent_first, $row->agent_last ) ),
 				array( 'label' => __( 'Starts', 'minn-admin' ), 'value' => minn_admin_latepoint_utc_iso( $row->start_datetime_utc ) ),
 				array( 'label' => __( 'Ends', 'minn-admin' ), 'value' => minn_admin_latepoint_utc_iso( $row->end_datetime_utc ) ),
-				array( 'label' => __( 'Status', 'minn-admin' ), 'value' => minn_admin_latepoint_pill( $row->status ) ),
+				array( 'label' => __( 'Status', 'minn-admin' ), 'value' => (string) $row->status ),
 			);
 			if ( $row->booking_code ) {
 				$when[] = array( 'label' => __( 'Code', 'minn-admin' ), 'value' => (string) $row->booking_code );
@@ -628,7 +618,7 @@ add_action( 'rest_api_init', function () {
 			$service = $row->service_name ? (string) $row->service_name : '';
 			return rest_ensure_response( array(
 				'kind'     => 'booking',
-				'status'   => minn_admin_latepoint_pill( $row->status ),
+				'status'   => (string) $row->status,
 				'title'    => $service ? $service : __( 'Appointment', 'minn-admin' ),
 				'customer' => array(
 					'name'  => minn_admin_latepoint_display_name( $row->customer_first, $row->customer_last ),
@@ -754,7 +744,7 @@ add_action( 'rest_api_init', function () {
 					'customer' => minn_admin_latepoint_display_name( $row->first_name, $row->last_name ) . ( $row->email ? ' · ' . $row->email : '' ),
 					'event'    => (string) $row->event_name,
 					'quantity' => (int) $row->quantity,
-					'status'   => minn_admin_latepoint_pill( $row->status ),
+					'status'   => (string) $row->status,
 					'starts'   => minn_admin_latepoint_utc_iso( $row->start_datetime_utc ),
 				);
 			}
@@ -779,9 +769,9 @@ add_action( 'rest_api_init', function () {
 						'title' => __( 'Registration', 'minn-admin' ),
 						'rows'  => array_values( array_filter( array(
 							array( 'label' => __( 'Code', 'minn-admin' ), 'value' => (string) $row->registration_code, 'type' => 'code' ),
-							array( 'label' => __( 'Status', 'minn-admin' ), 'value' => minn_admin_latepoint_pill( $row->status ), 'type' => 'pill' ),
+							array( 'label' => __( 'Status', 'minn-admin' ), 'value' => (string) $row->status, 'type' => 'pill' ),
 							array( 'label' => __( 'Seats', 'minn-admin' ), 'value' => (string) (int) $row->quantity ),
-							'' !== (string) $row->payment_status ? array( 'label' => __( 'Payment', 'minn-admin' ), 'value' => minn_admin_latepoint_pill( $row->payment_status ), 'type' => 'pill' ) : null,
+							'' !== (string) $row->payment_status ? array( 'label' => __( 'Payment', 'minn-admin' ), 'value' => (string) $row->payment_status, 'type' => 'pill' ) : null,
 							'' !== $registered ? array( 'label' => __( 'Registered', 'minn-admin' ), 'value' => $registered ) : null,
 							'' !== trim( (string) $row->notes ) ? array( 'label' => __( 'Notes', 'minn-admin' ), 'value' => (string) $row->notes ) : null,
 						) ) ),
