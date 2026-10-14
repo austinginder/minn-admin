@@ -552,14 +552,19 @@ add_action( 'rest_api_init', function () {
 				$params    = array_merge( $params, $scope['params'] );
 			}
 			// LatePoint 5 keeps the customer's comment on the booking's order
-			// (booking -> order item -> order); the admin-only note is on the
-			// customer.
+			// (booking -> order item -> order); LatePoint 4 kept it on the
+			// booking, a column dbDelta leaves in place after their migration
+			// copies it to the order. The admin-only note is on the customer.
 			$comment_sql = "'' AS customer_comment";
 			$orders_join = '';
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$on_booking  = (bool) $wpdb->get_var( $wpdb->prepare( "SHOW COLUMNS FROM {$bookings} LIKE %s", 'customer_comment' ) );
 			if ( minn_admin_latepoint_has_orders() ) {
-				$comment_sql = 'o.customer_comment';
+				$comment_sql = $on_booking ? "COALESCE( NULLIF( o.customer_comment, '' ), b.customer_comment ) AS customer_comment" : 'o.customer_comment';
 				$orders_join = 'LEFT JOIN ' . minn_admin_latepoint_table( 'order_items' ) . ' oi ON oi.id = b.order_item_id
 				LEFT JOIN ' . minn_admin_latepoint_table( 'orders' ) . ' o ON o.id = oi.order_id';
+			} elseif ( $on_booking ) {
+				$comment_sql = 'b.customer_comment';
 			}
 			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			$row = $wpdb->get_row( $wpdb->prepare(
