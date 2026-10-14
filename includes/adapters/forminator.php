@@ -4,13 +4,14 @@
  *
  * Forminator stores submissions in {prefix}frmt_form_entry (+ per-answer
  * rows in frmt_form_entry_meta), with complex answers (name fields,
- * checkboxes, uploads) as arrays under one meta key. Reads are
- * prefix-scoped SQL over the entry table (the shim convention) with
- * answers hydrated through Forminator's OWN entry model (its meta layer
- * owns the array shapes), labels from its form models at runtime, and
- * delete through Forminator_API::delete_entry — its complete cleanup
- * (meta rows go with the entry). Forminator has no entry trash: delete is
- * permanent and the confirm says so.
+ * checkboxes, uploads) as arrays under one meta key. The entries are a
+ * kernel resource (docs/adapter-kernel.md): the kernel reads the entry
+ * table and owns the routes, gates and errors, answers are hydrated through
+ * Forminator's OWN entry model (its meta layer owns the array shapes),
+ * labels come from its form models at runtime, and delete goes through
+ * Forminator_API::delete_entry — its complete cleanup (meta rows go with
+ * the entry). Forminator has no entry trash: delete is permanent and the
+ * confirm says so.
  *
  * Clock: entries stamp date_i18n() — SITE-LOCAL, emitted naked (the
  * client parses zoneless datetimes as local).
@@ -149,7 +150,7 @@ function minn_admin_forminator_answers( $entry_id ) {
 }
 
 /**
- * SQL condition (over alias e) for one of the list's two buckets.
+ * Conditions for one of the list's two buckets, over custom-form entries.
  *
  * Received is what Forminator itself counts as a form's entries
  * (count_entries, its Forms list, Minn's Manage view): active plus pending,
@@ -159,58 +160,344 @@ function minn_admin_forminator_answers( $entry_id ) {
  * older than its status column).
  *
  * @param string $bucket 'received' or 'spam'.
- * @return string
+ * @return array
  */
-function minn_admin_forminator_bucket_sql( $bucket ) {
+function minn_admin_forminator_bucket( $bucket ) {
 	return 'spam' === $bucket
-		? "e.is_spam = 1 AND e.status IN ('active','spam')"
-		: "e.is_spam = 0 AND e.status IN ('active','pending')";
+		? array( 'entry_type' => 'custom-forms', 'is_spam' => 1, 'status' => array( 'active', 'spam' ) )
+		: array( 'entry_type' => 'custom-forms', 'is_spam' => 0, 'status' => array( 'active', 'pending' ) );
+}
+
+/** Whether a stored row meets a set of column conditions (value or list of values). */
+function minn_admin_forminator_matches( array $row, array $conds ) {
+	foreach ( $conds as $col => $values ) {
+		if ( ! in_array( (string) ( $row[ $col ] ?? '' ), array_map( 'strval', (array) $values ), true ) ) {
+			return false;
+		}
+	}
+	return true;
+}
+
+/**
+ * One entry row, or null. The table also holds quiz and poll entries, which
+ * are not this resource's and answer not found.
+ *
+ * @param int $id Entry id.
+ * @return array|null
+ */
+function minn_admin_forminator_entry( $id ) {
+	$row = Minn_Admin_Kernel_SQL::row( 'frmt_form_entry', 'entry_id', (int) $id, array( 'entry_id', 'form_id', 'entry_type', 'status', 'is_spam', 'date_created' ) );
+	return $row && 'custom-forms' === (string) $row['entry_type'] ? $row : null;
+}
+
+/** Whether an entry row is still in the table, whatever its type. */
+function minn_admin_forminator_exists( $id ) {
+	return null !== Minn_Admin_Kernel_SQL::row( 'frmt_form_entry', 'entry_id', (int) $id, array( 'entry_id' ) );
 }
 
 /**
  * Server-built model for the surface status card (SureForms parity).
  * Counts mirror the entries list's scope exactly: custom-form entries in
- * the received and spam buckets (minn_admin_forminator_bucket_sql()).
+ * the received and spam buckets (minn_admin_forminator_bucket()).
  */
 function minn_admin_forminator_status_model() {
-	global $wpdb;
-	$entry    = $wpdb->prefix . 'frmt_form_entry';
-	$received = minn_admin_forminator_bucket_sql( 'received' );
-	$spammed  = minn_admin_forminator_bucket_sql( 'spam' );
-	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-	$received_n = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$entry} e WHERE e.entry_type = 'custom-forms' AND {$received}" );
-	$spam       = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$entry} e WHERE e.entry_type = 'custom-forms' AND {$spammed}" );
-	// phpcs:enable
-	$forms = count( minn_admin_forminator_titles() );
-	// date_created is date_i18n (site-local), so DATE() groups on the site's days.
-	$chart = minn_admin_chart_days();
-	$chart_rows = $wpdb->get_results( $wpdb->prepare(
-		"SELECT DATE(e.date_created) AS d, e.is_spam, COUNT(*) AS c FROM {$entry} e WHERE e.entry_type = 'custom-forms' AND ( ( {$received} ) OR ( {$spammed} ) ) AND e.date_created >= %s GROUP BY DATE(e.date_created), e.is_spam", // phpcs:ignore
-		minn_admin_chart_local_since()
+	// date_created is date_i18n (site-local), so the chart groups on the
+	// site's days. The two buckets are counted apart (their conditions do not
+	// join with AND) and their days added together.
+	$chart    = array( 'column' => 'date_created', 'clock' => 'local', 'split' => 'is_spam', 'secondary' => array( 1 ) );
+	$received = Minn_Admin_Kernel::inbox_counts( array(
+		'table'    => 'frmt_form_entry',
+		'received' => minn_admin_forminator_bucket( 'received' ),
+		'chart'    => $chart + array( 'where' => minn_admin_forminator_bucket( 'received' ) ),
 	) );
-	foreach ( (array) $chart_rows as $cr ) {
-		minn_admin_chart_bump( $chart, (string) $cr->d, (int) $cr->is_spam === 1, (int) $cr->c );
+	$spammed  = Minn_Admin_Kernel::inbox_counts( array(
+		'table' => 'frmt_form_entry',
+		'spam'  => minn_admin_forminator_bucket( 'spam' ),
+		'chart' => $chart + array( 'where' => minn_admin_forminator_bucket( 'spam' ) ),
+	) );
+	$days = $received['days'];
+	foreach ( $spammed['days'] as $d => $p ) {
+		$days[ $d ]['value']     += $p['value'];
+		$days[ $d ]['secondary'] += $p['secondary'];
 	}
+	$spam = $spammed['spam'];
 	return array(
 		'rows'    => array(
 			array(
 				'label' => __( 'Entries', 'minn-admin' ),
-				'value' => number_format_i18n( $received_n ),
+				'value' => number_format_i18n( $received['received'] ),
 				'hint'  => $spam ? number_format_i18n( $spam ) . ' spam' : __( 'All received entries', 'minn-admin' ),
 			),
-			array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => number_format_i18n( $forms ) ),
+			array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => number_format_i18n( count( minn_admin_forminator_titles() ) ) ),
 		),
-		'chart'   => minn_admin_chart_build( $chart, __( 'Entries', 'minn-admin' ), __( 'Spam', 'minn-admin' ) ),
+		'chart'   => minn_admin_chart_build( $days, __( 'Entries', 'minn-admin' ), __( 'Spam', 'minn-admin' ) ),
 		'actions' => array(
 			array( 'label' => __( 'Open Forminator ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=forminator-entries' ) ),
 		),
 	);
 }
 
+/** An entry's list row: its first answers as the summary. */
+function minn_admin_forminator_row( array $row ) {
+	$form_id = (int) $row['form_id'];
+	$titles  = minn_admin_forminator_titles();
+	$answers = minn_admin_forminator_answers( (int) $row['entry_id'] );
+	$parts   = array();
+	foreach ( minn_admin_forminator_fields( $form_id ) as $slug => $label ) {
+		if ( isset( $answers[ $slug ] ) && '' !== $answers[ $slug ] ) {
+			$parts[] = $answers[ $slug ];
+		}
+		if ( count( $parts ) >= 3 ) {
+			break;
+		}
+	}
+	return array(
+		'id'         => (int) $row['entry_id'],
+		'summary'    => $parts ? implode( ' · ', $parts ) : __( '(empty entry)', 'minn-admin' ),
+		'form_title' => isset( $titles[ $form_id ] ) ? $titles[ $form_id ] : '#' . $form_id,
+		// A pending entry reads as pending, which also keeps the spam actions
+		// (offered on `received` only) off it.
+		'status'     => ! empty( $row['is_spam'] ) ? 'spam' : ( 'pending' === (string) $row['status'] ? 'pending' : 'received' ),
+		'date'       => $row['date_created'],
+	);
+}
+
+/** An entry's detail: every answer, then the submission's own facts. */
+function minn_admin_forminator_view( array $row ) {
+	$id      = (int) $row['entry_id'];
+	$form_id = (int) $row['form_id'];
+	$fields  = minn_admin_forminator_fields( $form_id );
+	$answers = minn_admin_forminator_answers( $id );
+	$titles  = minn_admin_forminator_titles();
+	$rows    = array();
+	foreach ( $fields as $slug => $label ) {
+		$rows[] = array(
+			'label' => $label,
+			'value' => isset( $answers[ $slug ] ) && '' !== $answers[ $slug ] ? $answers[ $slug ] : '—',
+		);
+	}
+	// Answers whose field no longer exists on the form still show.
+	foreach ( $answers as $slug => $value ) {
+		if ( ! isset( $fields[ $slug ] ) && '' !== $value ) {
+			$rows[] = array(
+				'label' => ucfirst( str_replace( '-', ' ', $slug ) ),
+				'value' => $value,
+			);
+		}
+	}
+	$meta = array(
+		array( 'label' => __( 'Form', 'minn-admin' ), 'value' => isset( $titles[ $form_id ] ) ? $titles[ $form_id ] : '#' . $form_id ),
+		array( 'label' => __( 'Entry', 'minn-admin' ), 'value' => '#' . $id ),
+		array( 'label' => __( 'Submitted', 'minn-admin' ), 'value' => date_i18n( 'M j, Y g:i a', strtotime( $row['date_created'] ) ) ),
+	);
+	return array(
+		'kind'     => 'entry',
+		'sections' => array(
+			array( 'title' => __( 'Answers', 'minn-admin' ), 'rows' => $rows ),
+			array( 'title' => __( 'Submission', 'minn-admin' ), 'rows' => $meta ),
+		),
+		'adminUrl' => admin_url( 'admin.php?page=forminator-entries&form_type=forminator_forms&form_id=' . $form_id ),
+	);
+}
+
+/**
+ * Move an entry between a completed submission and spam. Their entry table
+ * owns is_spam + status (the same columns their model writes). The source
+ * state rides the UPDATE itself, so a payment webhook moving the entry
+ * between the kernel's state check and this write is not overwritten.
+ *
+ * @param int    $id      Entry id.
+ * @param int    $form_id Form id (for their cache).
+ * @param array  $from    Conditions the row must still meet.
+ * @param array  $to      is_spam and status to write.
+ * @param string $refusal The 400 when the row has moved on.
+ * @return true|WP_Error
+ */
+function minn_admin_forminator_move( $id, $form_id, array $from, array $to, $refusal ) {
+	global $wpdb;
+	list( $where, $args ) = Minn_Admin_Kernel_SQL::where( array_merge( array( 'entry_id' => (int) $id ), $from ) );
+	$changed              = $wpdb->query( Minn_Admin_Kernel_SQL::prepare( // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		'UPDATE ' . Minn_Admin_Kernel_SQL::table( 'frmt_form_entry' ) . ' SET is_spam = %d, status = %s WHERE ' . implode( ' AND ', $where ),
+		array_merge( array( (int) $to['is_spam'], (string) $to['status'] ), $args )
+	) );
+	if ( ! $changed ) {
+		return new WP_Error( 'bad_status', $refusal, array( 'status' => 400 ) );
+	}
+	if ( class_exists( 'Forminator_Form_Entry_Model' ) ) {
+		if ( method_exists( 'Forminator_Form_Entry_Model', 'delete_form_entry_cache' ) ) {
+			Forminator_Form_Entry_Model::delete_form_entry_cache( (int) $form_id );
+		}
+		// Their entry model caches the loaded row (status included) per
+		// entry id; their own status writes drop it too.
+		if ( defined( 'Forminator_Form_Entry_Model::FORM_ENTRY_CACHE_GROUP' ) ) {
+			wp_cache_delete( (int) $id, Forminator_Form_Entry_Model::FORM_ENTRY_CACHE_GROUP );
+		}
+	}
+	return true;
+}
+
+/**
+ * The spam and not-spam actions.
+ *
+ * Forminator's own screen has no spam toggle; spam is decided at submit,
+ * when it stores is_spam = 1 with status spam. Minn's toggle only moves an
+ * entry between a completed submission and that pair. Pending and failed
+ * are payment states its Stripe lookups match on, and spam keeps no record
+ * of the status it replaced, so marking one as spam (and back) would land
+ * it on active and orphan its payment: those, drafts, and anything already
+ * where the action would put it are refused, never rewritten. The list shows
+ * a derived status (received, pending, spam), so the state check reads the
+ * stored columns.
+ */
+function minn_admin_forminator_spam_actions() {
+	$out = array();
+	foreach ( array(
+		'spam'   => array(
+			array( 'entry_type' => 'custom-forms', 'is_spam' => 0, 'status' => 'active' ),
+			array( 'is_spam' => 1, 'status' => 'spam' ),
+			'spam',
+			__( 'Marked as spam.', 'minn-admin' ),
+			__( 'Only a completed entry can be marked as spam. Pending and failed payment entries stay as they are so Forminator can still match them to their payments.', 'minn-admin' ),
+		),
+		'unspam' => array(
+			minn_admin_forminator_bucket( 'spam' ),
+			array( 'is_spam' => 0, 'status' => 'active' ),
+			'received',
+			__( 'Marked not spam.', 'minn-admin' ),
+			__( 'Only a spam entry can be marked not spam.', 'minn-admin' ),
+		),
+	) as $slug => $cfg ) {
+		list( $from, $to, $shown, $done, $refusal ) = $cfg;
+		$out[ $slug ] = array(
+			'gate'   => 'manage',
+			'when'   => function ( $row ) use ( $from ) {
+				return minn_admin_forminator_matches( $row, $from );
+			},
+			'refuse' => $refusal,
+			'run'    => function ( $id, $row ) use ( $from, $to, $refusal ) {
+				return minn_admin_forminator_move( $id, (int) $row['form_id'], $from, $to, $refusal );
+			},
+			'expect' => $to,
+			'reply'  => function () use ( $shown ) {
+				return array( 'status' => $shown );
+			},
+			'done'   => $done,
+		);
+	}
+	return $out;
+}
+
+minn_admin_resource( 'forminator/entries', array(
+	'active'  => 'minn_admin_forminator_active',
+	'gates'   => array(
+		'view'   => 'minn_admin_forminator_can',
+		'manage' => 'minn_admin_forminator_can',
+	),
+	'labels'  => array(
+		'not_found' => __( 'Entry not found', 'minn-admin' ),
+	),
+	// The list reads the table; a single row goes through `get`, which
+	// answers only for custom-form entries, and `exists` asks the table
+	// whether a deleted row is really gone.
+	'source'  => array(
+		'table'   => 'frmt_form_entry',
+		'key'     => 'entry_id',
+		'columns' => array( 'entry_id', 'form_id', 'date_created', 'is_spam', 'status' ),
+		'get'     => 'minn_admin_forminator_entry',
+		'exists'  => 'minn_admin_forminator_exists',
+	),
+	'list'    => array(
+		// Received vs Spam (no trash in free).
+		'filter' => array(
+			'param'   => 'status',
+			'values'  => array(
+				'received' => minn_admin_forminator_bucket( 'received' ),
+				'spam'     => minn_admin_forminator_bucket( 'spam' ),
+			),
+			'default' => 'received',
+		),
+		'tab'    => array( 'param' => 'form_id', 'column' => 'form_id' ),
+		// Same shape as Forminator's own entries search: a LIKE over answer
+		// meta, excluding its addon bookkeeping rows.
+		'search' => array( 'param' => 'search', 'meta' => array( 'table' => 'frmt_form_entry_meta', 'key' => 'entry_id', 'name' => 'meta_key', 'value' => 'meta_value', 'skip' => 'forminator_addon_' ) ),
+		// A status-chart bar narrows the list to that day; date_created is
+		// SITE-LOCAL, the same clock the bounds arrive on.
+		'range'  => array( 'column' => 'date_created', 'clock' => 'local' ),
+		// Newest submission first by the date Forminator stored, so an entry
+		// added out of order (an import) lands where it belongs.
+		'order'  => array( 'column' => 'date_created', 'dir' => 'DESC' ),
+		'row'    => 'minn_admin_forminator_row',
+		'fields' => array(
+			'id'         => 'int',
+			'summary'    => 'text',
+			'form_title' => 'text',
+			'status'     => 'text',
+			'date'       => array( 'type' => 'datetime', 'stored' => 'site', 'wire' => 'naked' ),
+		),
+	),
+	'item'    => array( 'view' => 'minn_admin_forminator_view' ),
+	'actions' => array_merge( minn_admin_forminator_spam_actions(), array(
+		'delete' => array(
+			'method'    => 'DELETE',
+			'gate'      => 'manage',
+			'run'       => function ( $id, $row ) {
+				// Their complete cleanup (meta and upload bookkeeping go too).
+				// The module type is their own check that the entry belongs to
+				// a form (1.58+; earlier versions ignore the extra argument).
+				$result = Forminator_API::delete_entry( (int) $row['form_id'], $id, 'custom-forms' );
+				if ( is_wp_error( $result ) ) {
+					$result->add_data( array( 'status' => 400 ) );
+				}
+				return $result;
+			},
+			'expect'    => 'gone',
+			'fail_code' => 'delete_failed',
+			'fail'      => __( 'Forminator reported success but the entry still exists.', 'minn-admin' ),
+			'done'      => __( 'Entry deleted permanently.', 'minn-admin' ),
+		),
+	) ),
+) );
+
+minn_admin_endpoint( 'forminator/status', array(
+	'active' => 'minn_admin_forminator_active',
+	'gate'   => 'minn_admin_forminator_can',
+	'run'    => 'minn_admin_forminator_status_model',
+) );
+
+minn_admin_endpoint( 'forminator/forms', array(
+	'active' => 'minn_admin_forminator_active',
+	'gate'   => 'minn_admin_forminator_can',
+	'run'    => function ( WP_REST_Request $request ) {
+		$manage = ! empty( $request['manage'] );
+		$out    = array();
+		try {
+			foreach ( (array) Forminator_API::get_forms( null, 1, 100 ) as $f ) {
+				$row = array(
+					'id'    => (int) $f->id,
+					'title' => isset( $f->settings['formName'] ) && '' !== $f->settings['formName']
+						? (string) $f->settings['formName']
+						: (string) $f->name,
+				);
+				if ( $manage ) {
+					$row['entries'] = (int) Forminator_Form_Entry_Model::count_entries( (int) $f->id );
+					$row['status']  = 'publish' === (string) $f->status ? 'active' : (string) $f->status;
+				}
+				$out[] = $row;
+			}
+		} catch ( \Throwable $e ) {
+			$out = array();
+		}
+		return $out;
+	},
+) );
+
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! minn_admin_forminator_active() || ! minn_admin_forminator_can() ) {
 		return $surfaces;
 	}
+	$ui = function ( $slug, $ui ) {
+		return Minn_Admin_Kernel::ui( 'forminator/entries', $slug, $ui );
+	};
 
 	$surfaces['forminator'] = array(
 		'label'      => __( 'Forms', 'minn-admin' ),
@@ -221,16 +508,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'icon'       => 'inbox',
 		'status'     => array( 'route' => 'minn-admin/v1/forminator/status' ),
 		'cap'        => 'read', // real gate is the filter above (their permission model)
-		'collection' => array(
+		// Route, paging, search, the status-chart day range and the filter
+		// query come from the resource, so they cannot drift from it.
+		'collection' => Minn_Admin_Kernel::collection( 'forminator/entries', array(
 			'viewLabel' => __( 'Entries', 'minn-admin' ),
-			'route'     => 'minn-admin/v1/forminator/entries',
-			// A status-chart bar narrows the list to that day (the chart's
-			// points carry from/to; the route reads after/before).
-			'dateQuery' => 'after={from}&before={to}',
-			'pageQuery' => 'per_page=25&page={page}',
-			'search'    => 'search={q}',
-			'itemsKey'  => 'items',
-			'totalKey'  => 'total',
 			'tabs'      => array(
 				'route'    => 'minn-admin/v1/forminator/forms',
 				'valueKey' => 'id',
@@ -238,14 +519,12 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'param'    => 'form_id',
 				'allLabel' => __( 'All entries', 'minn-admin' ),
 			),
-			// is_spam column + status field — Received vs Spam (no trash in free).
 			'filter'    => array(
 				'label'   => __( 'Status', 'minn-admin' ),
 				'options' => array(
 					array( 'received', 'Received' ),
 					array( 'spam', 'Spam' ),
 				),
-				'query'   => 'status={v}',
 			),
 			'columns'   => array(
 				array( 'key' => 'summary', 'label' => __( 'Entry', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
@@ -257,46 +536,15 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'sectionsRoute' => 'minn-admin/v1/forminator/entries/{id}',
 			),
 			'actions'   => array(
-				array(
-					'label'   => __( 'Mark as spam', 'minn-admin' ),
-					'method'  => 'POST',
-					'route'   => 'minn-admin/v1/forminator/entries/{id}/spam',
-					'confirm' => __( 'Mark this entry as spam? Find it under the Spam filter.', 'minn-admin' ),
-					'danger'  => true,
-					'when'    => array( 'key' => 'status', 'equals' => 'received' ),
-				),
-				array(
-					'label'  => __( 'Not spam', 'minn-admin' ),
-					'method' => 'POST',
-					'route'  => 'minn-admin/v1/forminator/entries/{id}/unspam',
-					'when'   => array( 'key' => 'status', 'equals' => 'spam' ),
-				),
-				array(
-					'label'   => __( 'Delete permanently', 'minn-admin' ),
-					'method'  => 'DELETE',
-					'route'   => 'minn-admin/v1/forminator/entries/{id}',
-					'confirm' => __( 'Delete this entry permanently? Forminator has no entry trash — there is no undo.', 'minn-admin' ),
-					'danger'  => true,
-				),
+				$ui( 'spam', array( 'label' => __( 'Mark as spam', 'minn-admin' ), 'confirm' => __( 'Mark this entry as spam? Find it under the Spam filter.', 'minn-admin' ), 'danger' => true, 'when' => 'received' ) ),
+				$ui( 'unspam', array( 'label' => __( 'Not spam', 'minn-admin' ), 'when' => 'spam' ) ),
+				$ui( 'delete', array( 'label' => __( 'Delete permanently', 'minn-admin' ), 'confirm' => __( 'Delete this entry permanently? Forminator has no entry trash — there is no undo.', 'minn-admin' ), 'danger' => true ) ),
 			),
 			'bulk'      => array(
-				array(
-					'label'   => __( 'Mark as spam', 'minn-admin' ),
-					'method'  => 'POST',
-					'route'   => 'minn-admin/v1/forminator/entries/{id}/spam',
-					'confirm' => __( 'Mark the selected entries as spam?', 'minn-admin' ),
-					'danger'  => true,
-					'when'    => array( 'key' => 'status', 'equals' => 'received' ),
-				),
-				array(
-					'label'   => __( 'Delete permanently', 'minn-admin' ),
-					'method'  => 'DELETE',
-					'route'   => 'minn-admin/v1/forminator/entries/{id}',
-					'confirm' => __( 'Delete the selected entries permanently? There is no undo.', 'minn-admin' ),
-					'danger'  => true,
-				),
+				$ui( 'spam', array( 'label' => __( 'Mark as spam', 'minn-admin' ), 'confirm' => __( 'Mark the selected entries as spam?', 'minn-admin' ), 'danger' => true, 'when' => 'received' ) ),
+				$ui( 'delete', array( 'label' => __( 'Delete permanently', 'minn-admin' ), 'confirm' => __( 'Delete the selected entries permanently? There is no undo.', 'minn-admin' ), 'danger' => true ) ),
 			),
-		),
+		) ),
 		'manage'     => array(
 			'viewLabel' => __( 'Forms', 'minn-admin' ),
 			'route'     => 'minn-admin/v1/forminator/forms?manage=1',
@@ -315,258 +563,4 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		),
 	);
 	return $surfaces;
-} );
-
-add_action( 'rest_api_init', function () {
-	if ( ! minn_admin_forminator_active() ) {
-		return;
-	}
-
-	register_rest_route( 'minn-admin/v1', '/forminator/status', array(
-		'methods'             => 'GET',
-		'permission_callback' => 'minn_admin_forminator_can',
-		'callback'            => function () {
-			return rest_ensure_response( minn_admin_forminator_status_model() );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/forminator/forms', array(
-		'methods'             => 'GET',
-		'permission_callback' => 'minn_admin_forminator_can',
-		'callback'            => function ( WP_REST_Request $request ) {
-			$manage = ! empty( $request['manage'] );
-			$out    = array();
-			try {
-				foreach ( (array) Forminator_API::get_forms( null, 1, 100 ) as $f ) {
-					$row = array(
-						'id'    => (int) $f->id,
-						'title' => isset( $f->settings['formName'] ) && '' !== $f->settings['formName']
-							? (string) $f->settings['formName']
-							: (string) $f->name,
-					);
-					if ( $manage ) {
-						$row['entries'] = (int) Forminator_Form_Entry_Model::count_entries( (int) $f->id );
-						$row['status']  = 'publish' === (string) $f->status ? 'active' : (string) $f->status;
-					}
-					$out[] = $row;
-				}
-			} catch ( \Throwable $e ) {
-				$out = array();
-			}
-			return rest_ensure_response( $out );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/forminator/entries', array(
-		'methods'             => 'GET',
-		'permission_callback' => 'minn_admin_forminator_can',
-		'callback'            => function ( WP_REST_Request $request ) {
-			global $wpdb;
-			$per_page = min( 100, max( 1, (int) ( $request['per_page'] ?: 25 ) ) );
-			$page     = max( 1, (int) ( $request['page'] ?: 1 ) );
-			$entry    = $wpdb->prefix . 'frmt_form_entry';
-			$meta     = $wpdb->prefix . 'frmt_form_entry_meta';
-
-			// Custom-form entries; spam is a separate bucket (is_spam column).
-			// Failed, drafts and abandoned stay on Forminator's own screen.
-			$bucket = sanitize_key( (string) ( $request['status'] ?: 'received' ) );
-			if ( ! in_array( $bucket, array( 'received', 'spam' ), true ) ) {
-				$bucket = 'received';
-			}
-			$where = "WHERE e.entry_type = 'custom-forms' AND " . minn_admin_forminator_bucket_sql( $bucket );
-			$args = array();
-			if ( $request['form_id'] ) {
-				$where .= ' AND e.form_id = %d';
-				$args[] = (int) $request['form_id'];
-			}
-			if ( $request['search'] ) {
-				// Same shape as Forminator's own entries search: a LIKE over
-				// answer meta, excluding its addon bookkeeping rows.
-				$where .= " AND EXISTS ( SELECT 1 FROM {$meta} m WHERE m.entry_id = e.entry_id AND m.meta_key NOT LIKE %s AND m.meta_value LIKE %s )";
-				$args[] = $wpdb->esc_like( 'forminator_addon_' ) . '%';
-				$args[] = '%' . $wpdb->esc_like( (string) $request['search'] ) . '%';
-			}
-			// A status-chart bar narrows the list to that day. date_created is
-			// date_i18n, i.e. SITE-LOCAL, the same clock the bounds arrive on.
-			list( $range_sql, $range_args ) = minn_admin_chart_range_clause( $request, 'e.date_created', 'local' );
-			foreach ( $range_sql as $clause ) {
-				$where .= ' AND ' . $clause;
-			}
-			$args = array_merge( $args, $range_args );
-			$total = (int) $wpdb->get_var( $args
-				? $wpdb->prepare( "SELECT COUNT(*) FROM {$entry} e {$where}", ...$args ) // phpcs:ignore
-				: "SELECT COUNT(*) FROM {$entry} e {$where}" ); // phpcs:ignore
-			// Newest submission first by the date Forminator stored, so an
-			// entry added out of order (an import) lands where it belongs; the
-			// id breaks ties so pages never overlap.
-			$rows  = $wpdb->get_results( $wpdb->prepare(
-				"SELECT e.entry_id, e.form_id, e.date_created, e.is_spam, e.status FROM {$entry} e {$where} ORDER BY e.date_created DESC, e.entry_id DESC LIMIT %d OFFSET %d", // phpcs:ignore
-				...array_merge( $args, array( $per_page, ( $page - 1 ) * $per_page ) )
-			) );
-
-			$titles = minn_admin_forminator_titles();
-			$items  = array();
-			foreach ( (array) $rows as $row ) {
-				$form_id = (int) $row->form_id;
-				$fields  = minn_admin_forminator_fields( $form_id );
-				$answers = minn_admin_forminator_answers( (int) $row->entry_id );
-				$parts   = array();
-				foreach ( $fields as $slug => $label ) {
-					if ( isset( $answers[ $slug ] ) && '' !== $answers[ $slug ] ) {
-						$parts[] = $answers[ $slug ];
-					}
-					if ( count( $parts ) >= 3 ) {
-						break;
-					}
-				}
-				$items[] = array(
-					'id'         => (int) $row->entry_id,
-					'summary'    => $parts ? implode( ' · ', $parts ) : __( '(empty entry)', 'minn-admin' ),
-					'form_title' => isset( $titles[ $form_id ] ) ? $titles[ $form_id ] : '#' . $form_id,
-					// A pending entry reads as pending, which also keeps the
-					// spam actions (offered on `received` only) off it.
-					'status'     => ! empty( $row->is_spam ) ? 'spam' : ( 'pending' === (string) $row->status ? 'pending' : 'received' ),
-					// date_i18n stamp — site-local, emitted naked.
-					'date'       => str_replace( ' ', 'T', (string) $row->date_created ),
-				);
-			}
-			return rest_ensure_response( array( 'items' => $items, 'total' => $total ) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/forminator/entries/(?P<id>\d+)', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => 'minn_admin_forminator_can',
-			'callback'            => function ( WP_REST_Request $request ) {
-				global $wpdb;
-				$row = $wpdb->get_row( $wpdb->prepare(
-					"SELECT entry_id, form_id, date_created FROM {$wpdb->prefix}frmt_form_entry WHERE entry_id = %d AND entry_type = 'custom-forms'", // phpcs:ignore
-					(int) Minn_Admin::path_param( $request )
-				) );
-				if ( ! $row ) {
-					return new WP_Error( 'not_found', __( 'Entry not found', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				$form_id = (int) $row->form_id;
-				$fields  = minn_admin_forminator_fields( $form_id );
-				$answers = minn_admin_forminator_answers( (int) $row->entry_id );
-				$titles  = minn_admin_forminator_titles();
-
-				$rows = array();
-				foreach ( $fields as $slug => $label ) {
-					$rows[] = array(
-						'label' => $label,
-						'value' => isset( $answers[ $slug ] ) && '' !== $answers[ $slug ] ? $answers[ $slug ] : '—',
-					);
-				}
-				// Answers whose field no longer exists on the form still show.
-				foreach ( $answers as $slug => $value ) {
-					if ( ! isset( $fields[ $slug ] ) && '' !== $value ) {
-						$rows[] = array(
-							'label' => ucfirst( str_replace( '-', ' ', $slug ) ),
-							'value' => $value,
-						);
-					}
-				}
-				$meta = array(
-					array( 'label' => __( 'Form', 'minn-admin' ), 'value' => isset( $titles[ $form_id ] ) ? $titles[ $form_id ] : '#' . $form_id ),
-					array( 'label' => __( 'Entry', 'minn-admin' ), 'value' => '#' . (int) $row->entry_id ),
-					array( 'label' => __( 'Submitted', 'minn-admin' ), 'value' => date_i18n( 'M j, Y g:i a', strtotime( $row->date_created ) ) ),
-				);
-				return rest_ensure_response( array(
-					'kind'     => 'entry',
-					'sections' => array(
-						array( 'title' => __( 'Answers', 'minn-admin' ), 'rows' => $rows ),
-						array( 'title' => __( 'Submission', 'minn-admin' ), 'rows' => $meta ),
-					),
-					'adminUrl' => admin_url( 'admin.php?page=forminator-entries&form_type=forminator_forms&form_id=' . $form_id ),
-				) );
-			},
-		),
-		array(
-			'methods'             => 'DELETE',
-			'permission_callback' => 'minn_admin_forminator_can',
-			'callback'            => function ( WP_REST_Request $request ) {
-				global $wpdb;
-				$id  = (int) Minn_Admin::path_param( $request );
-				$row = $wpdb->get_row( $wpdb->prepare(
-					"SELECT entry_id, form_id FROM {$wpdb->prefix}frmt_form_entry WHERE entry_id = %d AND entry_type = 'custom-forms'", // phpcs:ignore
-					$id
-				) );
-				if ( ! $row ) {
-					return new WP_Error( 'not_found', __( 'Entry not found', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				// Their complete cleanup (meta and upload bookkeeping go too).
-				// The module type is their own check that the entry belongs to
-				// a form (1.58+; earlier versions ignore the extra argument).
-				$result = Forminator_API::delete_entry( (int) $row->form_id, $id, 'custom-forms' );
-				if ( is_wp_error( $result ) ) {
-					$result->add_data( array( 'status' => 400 ) );
-					return $result;
-				}
-				$still = $wpdb->get_var( $wpdb->prepare( "SELECT entry_id FROM {$wpdb->prefix}frmt_form_entry WHERE entry_id = %d", $id ) ); // phpcs:ignore
-				if ( $still ) {
-					return new WP_Error( 'delete_failed', __( 'Forminator reported success but the entry still exists.', 'minn-admin' ), array( 'status' => 500 ) );
-				}
-				return rest_ensure_response( array( 'ok' => true, 'message' => __( 'Entry deleted permanently.', 'minn-admin' ) ) );
-			},
-		),
-	) );
-
-	// Forminator's own screen has no spam toggle; spam is decided at submit,
-	// when it stores is_spam = 1 with status spam. Minn's toggle only moves an
-	// entry between a completed submission and that pair. Pending and failed
-	// are payment states its Stripe lookups match on, and spam keeps no record
-	// of the status it replaced, so marking one as spam (and back) would land
-	// it on active and orphan its payment: those, drafts, and anything already
-	// where the action would put it are refused, never rewritten.
-	foreach ( array(
-		'spam'   => array( 1, 'spam', "e.is_spam = 0 AND e.status = 'active'", __( 'Marked as spam.', 'minn-admin' ), __( 'Only a completed entry can be marked as spam. Pending and failed payment entries stay as they are so Forminator can still match them to their payments.', 'minn-admin' ) ),
-		'unspam' => array( 0, 'active', minn_admin_forminator_bucket_sql( 'spam' ), __( 'Marked not spam.', 'minn-admin' ), __( 'Only a spam entry can be marked not spam.', 'minn-admin' ) ),
-	) as $slug => $cfg ) {
-		list( $is_spam, $status, $from, $msg, $refusal ) = $cfg;
-		register_rest_route( 'minn-admin/v1', '/forminator/entries/(?P<id>\d+)/' . $slug, array(
-			'methods'             => 'POST',
-			'permission_callback' => 'minn_admin_forminator_can',
-			'callback'            => function ( WP_REST_Request $request ) use ( $is_spam, $status, $from, $msg, $refusal ) {
-				global $wpdb;
-				$id  = (int) Minn_Admin::path_param( $request );
-				$row = $wpdb->get_row( $wpdb->prepare(
-					"SELECT entry_id, form_id FROM {$wpdb->prefix}frmt_form_entry WHERE entry_id = %d AND entry_type = 'custom-forms'", // phpcs:ignore
-					$id
-				) );
-				if ( ! $row ) {
-					return new WP_Error( 'not_found', __( 'Entry not found', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				// Their entry table owns is_spam + status (same columns their
-				// model writes). The source state rides the UPDATE itself, so a
-				// payment webhook moving the entry between the read above and
-				// this write is not overwritten.
-				$changed = $wpdb->query( $wpdb->prepare(
-					"UPDATE {$wpdb->prefix}frmt_form_entry e SET e.is_spam = %d, e.status = %s WHERE e.entry_id = %d AND e.entry_type = 'custom-forms' AND {$from}", // phpcs:ignore
-					(int) $is_spam,
-					$status,
-					$id
-				) );
-				if ( ! $changed ) {
-					return new WP_Error( 'bad_status', $refusal, array( 'status' => 400 ) );
-				}
-				if ( class_exists( 'Forminator_Form_Entry_Model' ) ) {
-					if ( method_exists( 'Forminator_Form_Entry_Model', 'delete_form_entry_cache' ) ) {
-						Forminator_Form_Entry_Model::delete_form_entry_cache( (int) $row->form_id );
-					}
-					// Their entry model caches the loaded row (status included)
-					// per entry id; their own status writes drop it too.
-					if ( defined( 'Forminator_Form_Entry_Model::FORM_ENTRY_CACHE_GROUP' ) ) {
-						wp_cache_delete( $id, Forminator_Form_Entry_Model::FORM_ENTRY_CACHE_GROUP );
-					}
-				}
-				return rest_ensure_response( array(
-					'ok'      => true,
-					'status'  => $is_spam ? 'spam' : 'received',
-					'message' => $msg,
-				) );
-			},
-		) );
-	}
 } );

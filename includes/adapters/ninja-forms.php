@@ -4,13 +4,15 @@
  *
  * Ninja Forms keeps form definitions in {prefix}nf3_forms / nf3_fields but
  * stores every submission as an `nf_sub` post with plain postmeta
- * (`_form_id`, `_seq_num`, `_field_{id}` per answer), so the entries shim
- * is WP_Query + postmeta reads: no custom-table SQL and nothing serialized.
- * Field labels come from Ninja Forms' own field models at runtime, so a
- * form edit updates the entry cards with no adapter change. Trash routes
- * through their own Submission model; restore uses wp_untrash_post (Ninja
- * has no restore helper of its own). Received / Trash status filter keeps
- * trashed rows visible and restorable inside Minn.
+ * (`_form_id`, `_seq_num`, `_field_{id}` per answer). The entries are a
+ * kernel resource (docs/adapter-kernel.md) over a callable source: the
+ * list is core's WP_Query and a row is get_post(), so no custom-table SQL
+ * and nothing serialized, while the kernel owns the routes, gates, state
+ * checks and errors. Field labels come from Ninja Forms' own field models
+ * at runtime, so a form edit updates the entry cards with no adapter
+ * change. Trash routes through their own Submission model; restore uses
+ * wp_untrash_post (Ninja has no restore helper of its own). Received /
+ * Trash status filter keeps trashed rows visible and restorable inside Minn.
  *
  * Caps mirror the plugin: everything gates through its own
  * `ninja_forms_admin_submissions_capabilities` filter (default
@@ -163,6 +165,267 @@ function minn_admin_ninja_forms_answers( $post_id ) {
 	return $out;
 }
 
+/** A submission post as the resource's row: the post's own status and date. */
+function minn_admin_ninja_forms_sub_row( WP_Post $post ) {
+	return array(
+		'id'      => (int) $post->ID,
+		'status'  => (string) $post->post_status,
+		'date'    => (string) $post->post_date,
+		'form_id' => (int) get_post_meta( $post->ID, '_form_id', true ),
+	);
+}
+
+/**
+ * One submission, or null for anything that is not an nf_sub post.
+ *
+ * @param int $id Post id.
+ * @return array|null
+ */
+function minn_admin_ninja_forms_get( $id ) {
+	$post = get_post( (int) $id );
+	return $post && 'nf_sub' === $post->post_type ? minn_admin_ninja_forms_sub_row( $post ) : null;
+}
+
+/** Whether the post is still in the posts table (read past the object cache). */
+function minn_admin_ninja_forms_exists( $id ) {
+	return null !== Minn_Admin_Kernel_SQL::row( 'posts', 'ID', (int) $id, array( 'ID' ) );
+}
+
+/**
+ * A page of submissions through core's WP_Query.
+ *
+ * @param array $q The kernel's list query (page, size, filter, tab, search, request).
+ * @return array [ rows, total ]
+ */
+function minn_admin_ninja_forms_list( array $q ) {
+	$meta_query = array();
+	if ( $q['tab'] ) {
+		$meta_query[] = array(
+			'key'   => '_form_id',
+			'value' => (string) (int) $q['tab'],
+		);
+	}
+	if ( '' !== $q['search'] ) {
+		// Answers live in per-field postmeta; a keyless LIKE clause
+		// searches across all of a submission's values.
+		$meta_query[] = array(
+			'value'   => $q['search'],
+			'compare' => 'LIKE',
+		);
+	}
+	// A status-chart bar narrows the list to that day. Submissions are
+	// nf_sub POSTS, so this is core's own date_query on post_date, which is
+	// the site's clock: the same clock the bounds arrive on and the same one
+	// the chart buckets in. inclusive keeps both edges of the day.
+	$date_query = array();
+	$after      = (string) $q['request']->get_param( 'after' );
+	$before     = (string) $q['request']->get_param( 'before' );
+	if ( '' !== $after || '' !== $before ) {
+		$date_query = array( array( 'inclusive' => true ) );
+		if ( '' !== $after ) {
+			$date_query[0]['after'] = $after;
+		}
+		if ( '' !== $before ) {
+			$date_query[0]['before'] = $before;
+		}
+	}
+	$wq   = new WP_Query( array(
+		'post_type'      => 'nf_sub',
+		'post_status'    => $q['filter'],
+		'date_query'     => $date_query,
+		'posts_per_page' => $q['per_page'],
+		'paged'          => $q['page'],
+		// Newest submission first by its post date, so an entry added out of
+		// order (an import) lands where it belongs; the id breaks ties so
+		// pages never overlap.
+		'orderby'        => array(
+			'date' => 'DESC',
+			'ID'   => 'DESC',
+		),
+		'meta_query'     => $meta_query, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+		'no_found_rows'  => false,
+	) );
+	$rows = array();
+	foreach ( $wq->posts as $post ) {
+		$rows[] = minn_admin_ninja_forms_sub_row( $post );
+	}
+	return array( $rows, (int) $wq->found_posts );
+}
+
+/** A submission's list row: its first answers as the summary. */
+function minn_admin_ninja_forms_row( array $row ) {
+	$form_id = (int) $row['form_id'];
+	$titles  = minn_admin_ninja_forms_titles();
+	$answers = minn_admin_ninja_forms_answers( $row['id'] );
+	$parts   = array();
+	foreach ( minn_admin_ninja_forms_fields( $form_id ) as $fid => $label ) {
+		if ( isset( $answers[ $fid ] ) && '' !== $answers[ $fid ] ) {
+			$parts[] = $answers[ $fid ];
+		}
+		if ( count( $parts ) >= 3 ) {
+			break;
+		}
+	}
+	return array(
+		'id'         => (int) $row['id'],
+		'summary'    => $parts ? implode( ' · ', $parts ) : __( '(empty entry)', 'minn-admin' ),
+		'form_title' => isset( $titles[ $form_id ] ) ? $titles[ $form_id ] : '#' . $form_id,
+		'status'     => (string) $row['status'],
+		'state'      => minn_admin_ninja_forms_state( $row['status'] ),
+		'seq'        => (int) get_post_meta( $row['id'], '_seq_num', true ),
+		'date'       => $row['date'],
+	);
+}
+
+/** A submission's detail: every answer, then the submission's own facts. */
+function minn_admin_ninja_forms_view( array $row ) {
+	$post    = get_post( (int) $row['id'] );
+	$form_id = (int) $row['form_id'];
+	$fields  = minn_admin_ninja_forms_fields( $form_id );
+	$answers = minn_admin_ninja_forms_answers( $post->ID );
+	$titles  = minn_admin_ninja_forms_titles();
+	$rows    = array();
+	foreach ( $fields as $fid => $label ) {
+		$rows[] = array(
+			'label' => $label,
+			'value' => isset( $answers[ $fid ] ) && '' !== $answers[ $fid ] ? $answers[ $fid ] : '—',
+		);
+	}
+	// Answers whose field no longer exists on the form still show.
+	foreach ( $answers as $fid => $value ) {
+		if ( ! isset( $fields[ $fid ] ) && '' !== $value ) {
+			$rows[] = array(
+				'label' => __( 'Field ', 'minn-admin' ) . $fid,
+				'value' => $value,
+			);
+		}
+	}
+	$meta = array(
+		array( 'label' => __( 'Form', 'minn-admin' ), 'value' => isset( $titles[ $form_id ] ) ? $titles[ $form_id ] : '#' . $form_id ),
+		array( 'label' => __( 'Entry', 'minn-admin' ), 'value' => '#' . (int) get_post_meta( $post->ID, '_seq_num', true ) ),
+		array( 'label' => __( 'Submitted', 'minn-admin' ), 'value' => date_i18n( 'M j, Y g:i a', strtotime( $post->post_date ) ) ),
+	);
+	return array(
+		'kind'     => 'entry',
+		// The page's pill; a raw "publish" read as a published post.
+		'status'   => minn_admin_ninja_forms_state( $post->post_status ),
+		'sections' => array(
+			array( 'title' => __( 'Answers', 'minn-admin' ), 'rows' => $rows ),
+			array( 'title' => __( 'Submission', 'minn-admin' ), 'rows' => $meta ),
+		),
+		'adminUrl' => admin_url( 'admin.php?page=nf-submissions&form_id=' . $form_id ),
+		// Editable answers (adapters/ninja-forms-entry-edit.php).
+		'edit'     => function_exists( 'minn_admin_ninja_forms_edit_block' ) ? minn_admin_ninja_forms_edit_block( $post, $form_id ) : null,
+	);
+}
+
+/**
+ * Restore a trashed submission. Ninja has no restore helper, so this is
+ * wp_untrash_post, as core trash works. Core restores to draft since 5.6
+ * unless told otherwise; a draft submission shows in neither Minn's list nor
+ * Ninja's, so restore to the status the entry held when it was trashed,
+ * publish by default, the way Ninja's own submissions screen expects.
+ *
+ * @param int $id Post id.
+ * @return true|WP_Error
+ */
+function minn_admin_ninja_forms_restore( $id ) {
+	$to_status = function ( $new_status, $post_id, $previous_status ) use ( $id ) {
+		if ( (int) $post_id !== (int) $id ) {
+			return $new_status;
+		}
+		return in_array( $previous_status, array( 'publish', 'draft', 'pending', 'private' ), true ) ? $previous_status : 'publish';
+	};
+	add_filter( 'wp_untrash_post_status', $to_status, 10, 3 );
+	$result = wp_untrash_post( $id );
+	remove_filter( 'wp_untrash_post_status', $to_status, 10 );
+	return $result ? true : new WP_Error( 'restore_failed', __( 'Could not restore the entry.', 'minn-admin' ), array( 'status' => 500 ) );
+}
+
+minn_admin_resource( 'ninja-forms/entries', array(
+	'active'  => 'minn_admin_ninja_forms_active',
+	'gates'   => array(
+		'view'   => 'minn_admin_ninja_forms_can',
+		'manage' => 'minn_admin_ninja_forms_can',
+	),
+	'labels'  => array(
+		'not_found' => __( 'Entry not found', 'minn-admin' ),
+	),
+	'source'  => array(
+		'list'   => 'minn_admin_ninja_forms_list',
+		'get'    => 'minn_admin_ninja_forms_get',
+		'exists' => 'minn_admin_ninja_forms_exists',
+	),
+	'list'    => array(
+		'filter' => array( 'param' => 'status', 'column' => 'post_status', 'values' => array( 'publish', 'trash' ), 'default' => 'publish' ),
+		'tab'    => array( 'param' => 'form_id', 'column' => '_form_id' ),
+		'search' => array( 'param' => 'search' ),
+		// The source reads after/before into its date_query; this gives the
+		// descriptor its day range.
+		'range'  => array( 'column' => 'post_date', 'clock' => 'local' ),
+		'row'    => 'minn_admin_ninja_forms_row',
+		'fields' => array(
+			'id'         => 'int',
+			'summary'    => 'text',
+			'form_title' => 'text',
+			'status'     => 'text',
+			'state'      => 'text',
+			'seq'        => 'int',
+			// post_date is site-local; emitted naked (the client parses local).
+			'date'       => array( 'type' => 'datetime', 'stored' => 'site', 'wire' => 'naked' ),
+		),
+	),
+	'item'    => array( 'view' => 'minn_admin_ninja_forms_view' ),
+	'actions' => array(
+		// Their own model's trash (their screen's semantics).
+		'trash'   => array(
+			'gate'      => 'manage',
+			'run'       => function ( $id ) {
+				Ninja_Forms()->form()->sub( $id )->get()->trash();
+				return true;
+			},
+			'expect'    => array( 'status' => 'trash' ),
+			'fail_code' => 'trash_failed',
+			'fail'      => __( 'Ninja Forms reported success but the entry is not in the trash.', 'minn-admin' ),
+			'reply'     => function () {
+				return array( 'status' => 'trash' );
+			},
+			'done'      => __( 'Moved to trash.', 'minn-admin' ),
+		),
+		'restore' => array(
+			'gate'      => 'manage',
+			'when'      => array( 'status' => array( 'trash' ) ),
+			'code'      => 'not_trashed',
+			'refuse'    => __( 'Only trashed entries can be restored.', 'minn-admin' ),
+			'run'       => 'minn_admin_ninja_forms_restore',
+			'expect'    => function ( $id, $fresh ) {
+				return is_array( $fresh ) && 'trash' !== $fresh['status'];
+			},
+			'fail_code' => 'restore_failed',
+			'fail'      => __( 'Could not restore the entry.', 'minn-admin' ),
+			'reply'     => function () {
+				return array( 'status' => 'publish' );
+			},
+			'done'      => __( 'Entry restored.', 'minn-admin' ),
+		),
+		'delete'  => array(
+			'method'    => 'DELETE',
+			'gate'      => 'manage',
+			'when'      => array( 'status' => array( 'trash' ) ),
+			'code'      => 'not_trashed',
+			'refuse'    => __( 'Move the entry to trash before deleting permanently.', 'minn-admin' ),
+			'run'       => function ( $id ) {
+				Ninja_Forms()->form()->sub( $id )->get()->delete();
+				return true;
+			},
+			'expect'    => 'gone',
+			'fail_code' => 'delete_failed',
+			'fail'      => __( 'Entry still exists after delete.', 'minn-admin' ),
+			'done'      => __( 'Entry deleted permanently.', 'minn-admin' ),
+		),
+	),
+) );
+
 /**
  * Server-built model for the surface status card (SureForms parity).
  * Ninja Forms tracks no read state, so the headline is the live
@@ -170,42 +433,75 @@ function minn_admin_ninja_forms_answers( $post_id ) {
  * view uses, not nf3_forms.subs which survives deletes).
  */
 function minn_admin_ninja_forms_status_model() {
-	global $wpdb;
-	$subs  = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = 'nf_sub' AND post_status = 'publish'" );
-	$trash = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = 'nf_sub' AND post_status = 'trash'" );
-	$forms = count( minn_admin_ninja_forms_titles() );
-	// nf_sub post_date is site-local, so DATE() groups on the site's days.
-	$chart = minn_admin_chart_days();
-	$chart_rows = $wpdb->get_results( $wpdb->prepare(
-		"SELECT DATE(post_date) AS d, COUNT(*) AS c FROM {$wpdb->posts} WHERE post_type = 'nf_sub' AND post_status = 'publish' AND post_date >= %s GROUP BY DATE(post_date)",
-		minn_admin_chart_local_since()
+	$live = array( 'post_type' => 'nf_sub', 'post_status' => 'publish' );
+	// nf_sub post_date is site-local, so the chart groups on the site's days.
+	$n     = Minn_Admin_Kernel::inbox_counts( array(
+		'table'    => 'posts',
+		'received' => $live,
+		'chart'    => array( 'column' => 'post_date', 'clock' => 'local', 'where' => $live, 'split' => 'post_status' ),
 	) );
-	foreach ( (array) $chart_rows as $cr ) {
-		minn_admin_chart_bump( $chart, (string) $cr->d, false, (int) $cr->c );
-	}
+	$trash = Minn_Admin_Kernel_SQL::count( 'posts', array( 'post_type' => 'nf_sub', 'post_status' => 'trash' ) );
 	return array(
 		'rows'    => array(
 			array(
 				'label' => __( 'Submissions', 'minn-admin' ),
-				'value' => number_format_i18n( $subs ),
+				'value' => number_format_i18n( $n['received'] ),
 				'hint'  => $trash
 					/* translators: %s: number of trashed submissions. */
 					? sprintf( _n( '%s in trash', '%s in trash', $trash, 'minn-admin' ), number_format_i18n( $trash ) )
 					: __( 'All stored submissions', 'minn-admin' ),
 			),
-			array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => number_format_i18n( $forms ) ),
+			array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => number_format_i18n( count( minn_admin_ninja_forms_titles() ) ) ),
 		),
-		'chart'   => minn_admin_chart_build( $chart, __( 'Submissions', 'minn-admin' ) ),
+		'chart'   => minn_admin_chart_build( $n['days'], __( 'Submissions', 'minn-admin' ) ),
 		'actions' => array(
 			array( 'label' => __( 'Open Ninja Forms ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=nf-submissions' ) ),
 		),
 	);
 }
 
+minn_admin_endpoint( 'ninja-forms/status', array(
+	'active' => 'minn_admin_ninja_forms_active',
+	'gate'   => 'minn_admin_ninja_forms_can',
+	'run'    => 'minn_admin_ninja_forms_status_model',
+) );
+
+minn_admin_endpoint( 'ninja-forms/forms', array(
+	'active' => 'minn_admin_ninja_forms_active',
+	'gate'   => 'minn_admin_ninja_forms_can',
+	'run'    => function ( WP_REST_Request $request ) {
+		global $wpdb;
+		$rows   = $wpdb->get_results( "SELECT id, title, created_at FROM {$wpdb->prefix}nf3_forms ORDER BY title ASC" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$manage = ! empty( $request['manage'] );
+		$out    = array();
+		foreach ( (array) $rows as $r ) {
+			$row = array(
+				'id'    => (int) $r->id,
+				'title' => (string) $r->title,
+			);
+			if ( $manage ) {
+				// Live count, not the plugin's all-time `subs` counter
+				// (which keeps counting after entries are deleted).
+				$row['entries'] = (int) $wpdb->get_var( $wpdb->prepare(
+					"SELECT COUNT(*) FROM {$wpdb->posts} p INNER JOIN {$wpdb->postmeta} m ON m.post_id = p.ID
+					 WHERE p.post_type = 'nf_sub' AND p.post_status = 'publish' AND m.meta_key = '_form_id' AND m.meta_value = %s",
+					(string) $r->id
+				) );
+				$row['date']    = $r->created_at ? str_replace( ' ', 'T', (string) $r->created_at ) : '';
+			}
+			$out[] = $row;
+		}
+		return $out;
+	},
+) );
+
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! minn_admin_ninja_forms_active() || ! minn_admin_ninja_forms_can() ) {
 		return $surfaces;
 	}
+	$ui = function ( $slug, $ui ) {
+		return Minn_Admin_Kernel::ui( 'ninja-forms/entries', $slug, $ui );
+	};
 
 	$surfaces['ninja-forms'] = array(
 		'label'      => __( 'Forms', 'minn-admin' ),
@@ -216,16 +512,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'icon'       => 'inbox',
 		'status'     => array( 'route' => 'minn-admin/v1/ninja-forms/status' ),
 		'cap'        => 'read', // real gate is the filter above (their cap filter)
-		'collection' => array(
+		// Route, paging, search, the status-chart day range and the filter
+		// query come from the resource, so they cannot drift from it.
+		'collection' => Minn_Admin_Kernel::collection( 'ninja-forms/entries', array(
 			'viewLabel' => __( 'Entries', 'minn-admin' ),
-			'route'     => 'minn-admin/v1/ninja-forms/entries',
-			// A status-chart bar narrows the list to that day (the chart's
-			// points carry from/to; the route reads after/before).
-			'dateQuery' => 'after={from}&before={to}',
-			'pageQuery' => 'per_page=25&page={page}',
-			'search'    => 'search={q}',
-			'itemsKey'  => 'items',
-			'totalKey'  => 'total',
 			'tabs'      => array(
 				'route'    => 'minn-admin/v1/ninja-forms/forms',
 				'valueKey' => 'id',
@@ -239,7 +529,6 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					array( 'publish', 'Received' ),
 					array( 'trash', 'Trash' ),
 				),
-				'query'   => 'status={v}',
 			),
 			'columns'   => array(
 				array( 'key' => 'summary', 'label' => __( 'Entry', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
@@ -254,54 +543,16 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'sectionsRoute' => 'minn-admin/v1/ninja-forms/entries/{id}',
 			),
 			'actions'   => array(
-				array(
-					'label'   => __( 'Trash entry', 'minn-admin' ),
-					'method'  => 'POST',
-					'route'   => 'minn-admin/v1/ninja-forms/entries/{id}/trash',
-					'confirm' => __( 'Move this entry to trash?', 'minn-admin' ),
-					'danger'  => true,
-					'when'    => array( 'key' => 'status', 'equals' => 'publish' ),
-				),
-				array(
-					'label'  => __( 'Restore', 'minn-admin' ),
-					'method' => 'POST',
-					'route'  => 'minn-admin/v1/ninja-forms/entries/{id}/restore',
-					'when'   => array( 'key' => 'status', 'equals' => 'trash' ),
-				),
-				array(
-					'label'   => __( 'Delete permanently', 'minn-admin' ),
-					'method'  => 'DELETE',
-					'route'   => 'minn-admin/v1/ninja-forms/entries/{id}',
-					'confirm' => __( 'Delete this entry permanently? There is no undo.', 'minn-admin' ),
-					'danger'  => true,
-					'when'    => array( 'key' => 'status', 'equals' => 'trash' ),
-				),
+				$ui( 'trash', array( 'label' => __( 'Trash entry', 'minn-admin' ), 'confirm' => __( 'Move this entry to trash?', 'minn-admin' ), 'danger' => true, 'when' => 'publish' ) ),
+				$ui( 'restore', array( 'label' => __( 'Restore', 'minn-admin' ), 'when' => 'trash' ) ),
+				$ui( 'delete', array( 'label' => __( 'Delete permanently', 'minn-admin' ), 'confirm' => __( 'Delete this entry permanently? There is no undo.', 'minn-admin' ), 'danger' => true, 'when' => 'trash' ) ),
 			),
 			'bulk'      => array(
-				array(
-					'label'   => __( 'Trash', 'minn-admin' ),
-					'method'  => 'POST',
-					'route'   => 'minn-admin/v1/ninja-forms/entries/{id}/trash',
-					'confirm' => __( 'Move the selected entries to trash?', 'minn-admin' ),
-					'danger'  => true,
-					'when'    => array( 'key' => 'status', 'equals' => 'publish' ),
-				),
-				array(
-					'label'  => __( 'Restore', 'minn-admin' ),
-					'method' => 'POST',
-					'route'  => 'minn-admin/v1/ninja-forms/entries/{id}/restore',
-					'when'   => array( 'key' => 'status', 'equals' => 'trash' ),
-				),
-				array(
-					'label'   => __( 'Delete permanently', 'minn-admin' ),
-					'method'  => 'DELETE',
-					'route'   => 'minn-admin/v1/ninja-forms/entries/{id}',
-					'confirm' => __( 'Delete the selected entries permanently?', 'minn-admin' ),
-					'danger'  => true,
-					'when'    => array( 'key' => 'status', 'equals' => 'trash' ),
-				),
+				$ui( 'trash', array( 'label' => __( 'Trash', 'minn-admin' ), 'confirm' => __( 'Move the selected entries to trash?', 'minn-admin' ), 'danger' => true, 'when' => 'publish' ) ),
+				$ui( 'restore', array( 'label' => __( 'Restore', 'minn-admin' ), 'when' => 'trash' ) ),
+				$ui( 'delete', array( 'label' => __( 'Delete permanently', 'minn-admin' ), 'confirm' => __( 'Delete the selected entries permanently?', 'minn-admin' ), 'danger' => true, 'when' => 'trash' ) ),
 			),
-		),
+		) ),
 		'manage'     => array(
 			'viewLabel' => __( 'Forms', 'minn-admin' ),
 			'route'     => 'minn-admin/v1/ninja-forms/forms?manage=1',
@@ -320,262 +571,4 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		),
 	);
 	return $surfaces;
-} );
-
-add_action( 'rest_api_init', function () {
-	if ( ! minn_admin_ninja_forms_active() ) {
-		return;
-	}
-
-	register_rest_route( 'minn-admin/v1', '/ninja-forms/status', array(
-		'methods'             => 'GET',
-		'permission_callback' => 'minn_admin_ninja_forms_can',
-		'callback'            => function () {
-			return rest_ensure_response( minn_admin_ninja_forms_status_model() );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/ninja-forms/forms', array(
-		'methods'             => 'GET',
-		'permission_callback' => 'minn_admin_ninja_forms_can',
-		'callback'            => function ( WP_REST_Request $request ) {
-			global $wpdb;
-			$rows   = $wpdb->get_results( "SELECT id, title, created_at FROM {$wpdb->prefix}nf3_forms ORDER BY title ASC" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			$manage = ! empty( $request['manage'] );
-			$out    = array();
-			foreach ( (array) $rows as $r ) {
-				$row = array(
-					'id'    => (int) $r->id,
-					'title' => (string) $r->title,
-				);
-				if ( $manage ) {
-					// Live count, not the plugin's all-time `subs` counter
-					// (which keeps counting after entries are deleted).
-					$row['entries'] = (int) $wpdb->get_var( $wpdb->prepare(
-						"SELECT COUNT(*) FROM {$wpdb->posts} p INNER JOIN {$wpdb->postmeta} m ON m.post_id = p.ID
-						 WHERE p.post_type = 'nf_sub' AND p.post_status = 'publish' AND m.meta_key = '_form_id' AND m.meta_value = %s",
-						(string) $r->id
-					) );
-					$row['date'] = $r->created_at ? str_replace( ' ', 'T', (string) $r->created_at ) : '';
-				}
-				$out[] = $row;
-			}
-			return rest_ensure_response( $out );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/ninja-forms/entries', array(
-		'methods'             => 'GET',
-		'permission_callback' => 'minn_admin_ninja_forms_can',
-		'callback'            => function ( WP_REST_Request $request ) {
-			$per_page = min( 100, max( 1, (int) ( $request['per_page'] ?: 25 ) ) );
-			$page     = max( 1, (int) ( $request['page'] ?: 1 ) );
-
-			$meta_query = array();
-			if ( $request['form_id'] ) {
-				$meta_query[] = array(
-					'key'   => '_form_id',
-					'value' => (string) (int) $request['form_id'],
-				);
-			}
-			if ( $request['search'] ) {
-				// Answers live in per-field postmeta; a keyless LIKE clause
-				// searches across all of a submission's values.
-				$meta_query[] = array(
-					'value'   => (string) $request['search'],
-					'compare' => 'LIKE',
-				);
-			}
-			$status = sanitize_key( (string) ( $request['status'] ?: 'publish' ) );
-			if ( ! in_array( $status, array( 'publish', 'trash' ), true ) ) {
-				$status = 'publish';
-			}
-			// A status-chart bar narrows the list to that day. Submissions are
-			// nf_sub POSTS, so this is core's own date_query on post_date,
-			// which is the site's clock: the same clock the bounds arrive on
-			// and the same one the chart buckets in. inclusive keeps both
-			// edges of the day.
-			$date_query = array();
-			$after      = (string) $request->get_param( 'after' );
-			$before     = (string) $request->get_param( 'before' );
-			if ( '' !== $after || '' !== $before ) {
-				$date_query = array( array( 'inclusive' => true ) );
-				if ( '' !== $after ) {
-					$date_query[0]['after'] = $after;
-				}
-				if ( '' !== $before ) {
-					$date_query[0]['before'] = $before;
-				}
-			}
-			$q = new WP_Query( array(
-				'post_type'      => 'nf_sub',
-				'post_status'    => $status,
-				'date_query'     => $date_query,
-				'posts_per_page' => $per_page,
-				'paged'          => $page,
-				// Newest submission first by its post date, so an entry added
-				// out of order (an import) lands where it belongs; the id breaks
-				// ties so pages never overlap.
-				'orderby'        => array(
-					'date' => 'DESC',
-					'ID'   => 'DESC',
-				),
-				'meta_query'     => $meta_query, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
-				'no_found_rows'  => false,
-			) );
-
-			$titles = minn_admin_ninja_forms_titles();
-			$items  = array();
-			foreach ( $q->posts as $post ) {
-				$form_id = (int) get_post_meta( $post->ID, '_form_id', true );
-				$fields  = minn_admin_ninja_forms_fields( $form_id );
-				$answers = minn_admin_ninja_forms_answers( $post->ID );
-				$parts   = array();
-				foreach ( $fields as $fid => $label ) {
-					if ( isset( $answers[ $fid ] ) && '' !== $answers[ $fid ] ) {
-						$parts[] = $answers[ $fid ];
-					}
-					if ( count( $parts ) >= 3 ) {
-						break;
-					}
-				}
-				$items[] = array(
-					'id'         => (int) $post->ID,
-					'summary'    => $parts ? implode( ' · ', $parts ) : __( '(empty entry)', 'minn-admin' ),
-					'form_title' => isset( $titles[ $form_id ] ) ? $titles[ $form_id ] : '#' . $form_id,
-					'status'     => (string) $post->post_status,
-					'state'      => minn_admin_ninja_forms_state( $post->post_status ),
-					'seq'        => (int) get_post_meta( $post->ID, '_seq_num', true ),
-					// post_date is site-local; emit naked (client parses local).
-					'date'       => str_replace( ' ', 'T', (string) $post->post_date ),
-				);
-			}
-			return rest_ensure_response( array( 'items' => $items, 'total' => (int) $q->found_posts ) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/ninja-forms/entries/(?P<id>\d+)', array(
-		'methods'             => 'GET',
-		'permission_callback' => 'minn_admin_ninja_forms_can',
-		'callback'            => function ( WP_REST_Request $request ) {
-			$post = get_post( (int) Minn_Admin::path_param( $request ) );
-			if ( ! $post || 'nf_sub' !== $post->post_type ) {
-				return new WP_Error( 'not_found', __( 'Entry not found', 'minn-admin' ), array( 'status' => 404 ) );
-			}
-			$form_id = (int) get_post_meta( $post->ID, '_form_id', true );
-			$fields  = minn_admin_ninja_forms_fields( $form_id );
-			$answers = minn_admin_ninja_forms_answers( $post->ID );
-			$titles  = minn_admin_ninja_forms_titles();
-
-			$rows = array();
-			foreach ( $fields as $fid => $label ) {
-				$rows[] = array(
-					'label' => $label,
-					'value' => isset( $answers[ $fid ] ) && '' !== $answers[ $fid ] ? $answers[ $fid ] : '—',
-				);
-			}
-			// Answers whose field no longer exists on the form still show.
-			foreach ( $answers as $fid => $value ) {
-				if ( ! isset( $fields[ $fid ] ) && '' !== $value ) {
-					$rows[] = array(
-						'label' => __( 'Field ', 'minn-admin' ) . $fid,
-						'value' => $value,
-					);
-				}
-			}
-			$meta = array(
-				array( 'label' => __( 'Form', 'minn-admin' ), 'value' => isset( $titles[ $form_id ] ) ? $titles[ $form_id ] : '#' . $form_id ),
-				array( 'label' => __( 'Entry', 'minn-admin' ), 'value' => '#' . (int) get_post_meta( $post->ID, '_seq_num', true ) ),
-				array( 'label' => __( 'Submitted', 'minn-admin' ), 'value' => date_i18n( 'M j, Y g:i a', strtotime( $post->post_date ) ) ),
-			);
-			return rest_ensure_response( array(
-				'kind'     => 'entry',
-				// The page's pill; a raw "publish" read as a published post.
-				'status'   => minn_admin_ninja_forms_state( $post->post_status ),
-				'sections' => array(
-					array( 'title' => __( 'Answers', 'minn-admin' ), 'rows' => $rows ),
-					array( 'title' => __( 'Submission', 'minn-admin' ), 'rows' => $meta ),
-				),
-				'adminUrl' => admin_url( 'admin.php?page=nf-submissions&form_id=' . $form_id ),
-				// Editable answers (adapters/ninja-forms-entry-edit.php).
-				'edit'     => function_exists( 'minn_admin_ninja_forms_edit_block' ) ? minn_admin_ninja_forms_edit_block( $post, $form_id ) : null,
-			) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/ninja-forms/entries/(?P<id>\d+)/trash', array(
-		'methods'             => 'POST',
-		'permission_callback' => 'minn_admin_ninja_forms_can',
-		'callback'            => function ( WP_REST_Request $request ) {
-			$post = get_post( (int) Minn_Admin::path_param( $request ) );
-			if ( ! $post || 'nf_sub' !== $post->post_type ) {
-				return new WP_Error( 'not_found', __( 'Entry not found', 'minn-admin' ), array( 'status' => 404 ) );
-			}
-			// Their own model's trash (their screen's semantics).
-			try {
-				Ninja_Forms()->form()->sub( $post->ID )->get()->trash();
-			} catch ( \Throwable $e ) {
-				return new WP_Error( 'trash_failed', __( 'Ninja Forms could not trash: ', 'minn-admin' ) . $e->getMessage(), array( 'status' => 500 ) );
-			}
-			if ( 'trash' !== get_post_status( $post->ID ) ) {
-				return new WP_Error( 'trash_failed', __( 'Ninja Forms reported success but the entry is not in the trash.', 'minn-admin' ), array( 'status' => 500 ) );
-			}
-			return rest_ensure_response( array( 'ok' => true, 'status' => 'trash', 'message' => __( 'Moved to trash.', 'minn-admin' ) ) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/ninja-forms/entries/(?P<id>\d+)/restore', array(
-		'methods'             => 'POST',
-		'permission_callback' => 'minn_admin_ninja_forms_can',
-		'callback'            => function ( WP_REST_Request $request ) {
-			$post = get_post( (int) Minn_Admin::path_param( $request ) );
-			if ( ! $post || 'nf_sub' !== $post->post_type ) {
-				return new WP_Error( 'not_found', __( 'Entry not found', 'minn-admin' ), array( 'status' => 404 ) );
-			}
-			if ( 'trash' !== $post->post_status ) {
-				return new WP_Error( 'not_trashed', __( 'Only trashed entries can be restored.', 'minn-admin' ), array( 'status' => 400 ) );
-			}
-			// Ninja has no restore helper — wp_untrash_post matches core trash.
-			// Core restores to draft since 5.6 unless told otherwise; a draft
-			// submission shows in neither Minn's list nor Ninja's, so restore
-			// to the status the entry held when it was trashed, publish by
-			// default, the way Ninja's own submissions screen expects.
-			$to_status = function ( $new_status, $post_id, $previous_status ) use ( $post ) {
-				if ( (int) $post_id !== (int) $post->ID ) {
-					return $new_status;
-				}
-				return in_array( $previous_status, array( 'publish', 'draft', 'pending', 'private' ), true ) ? $previous_status : 'publish';
-			};
-			add_filter( 'wp_untrash_post_status', $to_status, 10, 3 );
-			$result = wp_untrash_post( $post->ID );
-			remove_filter( 'wp_untrash_post_status', $to_status, 10 );
-			if ( ! $result ) {
-				return new WP_Error( 'restore_failed', __( 'Could not restore the entry.', 'minn-admin' ), array( 'status' => 500 ) );
-			}
-			return rest_ensure_response( array( 'ok' => true, 'status' => 'publish', 'message' => __( 'Entry restored.', 'minn-admin' ) ) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/ninja-forms/entries/(?P<id>\d+)', array(
-		'methods'             => 'DELETE',
-		'permission_callback' => 'minn_admin_ninja_forms_can',
-		'callback'            => function ( WP_REST_Request $request ) {
-			$post = get_post( (int) Minn_Admin::path_param( $request ) );
-			if ( ! $post || 'nf_sub' !== $post->post_type ) {
-				return new WP_Error( 'not_found', __( 'Entry not found', 'minn-admin' ), array( 'status' => 404 ) );
-			}
-			if ( 'trash' !== $post->post_status ) {
-				return new WP_Error( 'not_trashed', __( 'Move the entry to trash before deleting permanently.', 'minn-admin' ), array( 'status' => 400 ) );
-			}
-			try {
-				Ninja_Forms()->form()->sub( $post->ID )->get()->delete();
-			} catch ( \Throwable $e ) {
-				return new WP_Error( 'delete_failed', __( 'Ninja Forms could not delete: ', 'minn-admin' ) . $e->getMessage(), array( 'status' => 500 ) );
-			}
-			if ( get_post( $post->ID ) ) {
-				return new WP_Error( 'delete_failed', __( 'Entry still exists after delete.', 'minn-admin' ), array( 'status' => 500 ) );
-			}
-			return rest_ensure_response( array( 'ok' => true, 'message' => __( 'Entry deleted permanently.', 'minn-admin' ) ) );
-		},
-	) );
 } );
