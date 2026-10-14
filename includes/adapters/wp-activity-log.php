@@ -258,9 +258,13 @@ add_action( 'rest_api_init', function () {
 				$args[]  = (string) ( $sev_map[ $request['severity'] ] ?? $request['severity'] );
 			}
 			if ( $request['search'] ) {
-				$like    = '%' . $wpdb->esc_like( $request['search'] ) . '%';
-				$where[] = '(username LIKE %s OR object LIKE %s OR event_type LIKE %s)';
-				array_push( $args, $like, $like, $like );
+				$like       = '%' . $wpdb->esc_like( $request['search'] ) . '%';
+				$meta_table = $wpdb->base_prefix . 'wsal_metadata';
+				// Also the username a failed login tried, which the Who column
+				// shows for event 1003 (its Users meta). The site scope above
+				// still applies to every row this matches.
+				$where[] = "(username LIKE %s OR object LIKE %s OR event_type LIKE %s OR id IN (SELECT occurrence_id FROM {$meta_table} WHERE name = 'Users' AND value LIKE %s))";
+				array_push( $args, $like, $like, $like, $like );
 			}
 			// A clicked chart bar: site-local bounds onto the UTC epoch column.
 			list( $range_sql, $range_args ) = minn_admin_chart_range_clause( $request, 'created_on', 'epoch' );

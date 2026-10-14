@@ -819,6 +819,56 @@ if ( ! defined( 'WSAL_VERSION' ) || ! function_exists( 'minn_admin_wsal_can_view
 	}
 }
 
+// --- I21 Search follows what the lists show ---------------------------------
+// Aryo's pill says "Failed Login" for the stored failed_login, and WP Activity
+// Log's Who column names the username a 1003 event tried (its Users meta).
+if ( ! class_exists( 'AAL_Main' ) || $aal_table !== $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $aal_table ) ) ) {
+	$skip( 'I21 Activity Log (Aryo) is not installed' );
+} else {
+	$i21_aal = 0;
+	try {
+		$wpdb->insert( $aal_table, array( 'user_caps' => 'guest', 'action' => 'failed_login', 'object_type' => 'Users', 'object_subtype' => '', 'object_name' => $marker . 'srch', 'object_id' => 0, 'user_id' => 0, 'hist_ip' => '203.0.113.7', 'hist_time' => (int) current_time( 'timestamp' ) ) ); // phpcs:ignore WordPress.DateTime.CurrentTimeTimestamp.Requested -- their clock
+		$i21_aal = (int) $wpdb->insert_id;
+		$i21_find = function ( $q ) use ( $call, $i21_aal ) {
+			list( $st, $d ) = $call( 'GET', '/minn-admin/v1/aryo/events', null, array( 'search' => $q, 'per_page' => 100, 'page' => 1 ) );
+			foreach ( (array) ( $d['items'] ?? array() ) as $it ) {
+				if ( (int) $it['id'] === $i21_aal ) {
+					return array( $st, true, (int) ( $d['total'] ?? 0 ) );
+				}
+			}
+			return array( $st, false, (int) ( $d['total'] ?? 0 ) );
+		};
+		$i21_words = strtolower( minn_admin_aryo_action_label( 'failed_login' ) );
+		list( $st, $found ) = $i21_find( $i21_words );
+		$check( 'I21 searching Aryo for the pill\'s words finds the row', 200 === $st && $found, $i21_words . ' ' . $st );
+		list( $st, $found ) = $i21_find( 'ailed log' );
+		$check( 'I21 and part of them', 200 === $st && $found, (string) $st );
+		list( $st, $found, $n ) = $i21_find( $marker . 'nomatch' );
+		$check( 'I21 control: a term nothing carries finds nothing', 200 === $st && ! $found && 0 === $n, (string) $n );
+	} finally {
+		if ( is_int( $i21_aal ) && $i21_aal > 1 ) {
+			$wpdb->delete( $aal_table, array( 'histid' => $i21_aal ) );
+		}
+	}
+}
+if ( ! defined( 'WSAL_VERSION' ) || ! function_exists( 'minn_admin_wsal_can_view' ) || ! minn_admin_wsal_can_view() ) {
+	$skip( 'I21 WP Activity Log is not installed' );
+} else {
+	$i21_wsal = 0;
+	try {
+		$i21_wsal = $wsal_put( 1003, 'Unknown User', 0, microtime( true ), array( 'Users' => $marker . 'tried', 'Attempts' => '1' ) );
+		list( $st, $d ) = $call( 'GET', '/minn-admin/v1/wsal/events', null, array( 'search' => $marker . 'tri', 'per_page' => 25, 'page' => 1 ) );
+		$ids = array_map( function ( $it ) {
+			return (int) $it['id'];
+		}, (array) ( $d['items'] ?? array() ) );
+		$check( 'I21 searching WP Activity Log for a tried username finds its event', 200 === $st && in_array( $i21_wsal, $ids, true ) && 1 === (int) ( $d['total'] ?? 0 ), $st . ' ' . wp_json_encode( $ids ) );
+		list( $st, $d ) = $call( 'GET', '/minn-admin/v1/wsal/events', null, array( 'search' => $marker . 'nomatch', 'per_page' => 25, 'page' => 1 ) );
+		$check( 'I21 control: a term nothing carries finds nothing', 200 === $st && 0 === (int) ( $d['total'] ?? -1 ), (string) ( $d['total'] ?? '' ) );
+	} finally {
+		$wsal_drop( $i21_wsal );
+	}
+}
+
 // --- S10 All-In-One Security: an event's When keeps its own offset ----------
 // Runs last: All-In-One Security is not loaded here (its bundled task manager
 // re-runs its table migration on every load of an inactive copy), so a

@@ -468,9 +468,30 @@ add_action( 'rest_api_init', function () {
 				$args[]  = $wpdb->esc_like( $source ) . '|%';
 			}
 			if ( $request['search'] ) {
-				$like    = '%' . $wpdb->esc_like( $request['search'] ) . '%';
-				$where[] = '(object_name LIKE %s OR action LIKE %s OR object_type LIKE %s)';
+				$q     = (string) $request['search'];
+				$like  = '%' . $wpdb->esc_like( $q ) . '%';
+				$match = '(object_name LIKE %s OR action LIKE %s OR object_type LIKE %s';
 				array_push( $args, $like, $like, $like );
+				// The pill shows an action in words ("Failed Login" for
+				// failed_login), so the words find it too: every action, among
+				// the rows this viewer may read, whose label carries the term.
+				// The row query below keeps the same scope.
+				if ( false !== $scope ) {
+					$in_scope = '' === $scope ? '' : ' AND ' . str_replace( '%%', '%', $scope );
+					$named    = array();
+					// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- prefix-derived table, Aryo's own scope clause.
+					foreach ( (array) $wpdb->get_col( "SELECT DISTINCT action FROM {$table} WHERE action != ''{$in_scope}" ) as $a ) {
+						$label = minn_admin_aryo_action_label( $a );
+						if ( false !== ( function_exists( 'mb_stripos' ) ? mb_stripos( $label, $q ) : stripos( $label, $q ) ) ) {
+							$named[] = (string) $a;
+						}
+					}
+					if ( $named ) {
+						$match .= ' OR action IN (' . implode( ', ', array_fill( 0, count( $named ), '%s' ) ) . ')';
+						$args   = array_merge( $args, $named );
+					}
+				}
+				$where[] = $match . ')';
 			}
 			// A clicked chart bar: site-local bounds onto the local-epoch column.
 			list( $range_sql, $range_args ) = minn_admin_chart_range_clause( $request, 'hist_time', 'local-epoch' );
