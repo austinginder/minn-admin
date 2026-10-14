@@ -18,8 +18,8 @@
  * Services, providers, schedules and the booking form stay in the plugin.
  *
  * Epochs are stored the way the plugin formats them, date_i18n() on the
- * raw value: WP-local naive timestamps, never UTC, so they are shifted by
- * the site offset before an ISO Z leaves this adapter. Statuses are theirs
+ * raw value: WP-local naive timestamps, never UTC, so they leave this
+ * adapter as that site-local time with its own offset. Statuses are theirs
  * (pending, processing, on-hold, completed, cancelled, refunded, failed),
  * read live from their Statuses class. Caps are theirs: every screen and
  * endpoint resolves through Plugin::current_user_can( $context ) over the
@@ -106,14 +106,21 @@ function minn_admin_jet_apb_status_set( $which ) {
 	return array();
 }
 
-/** WP-local naive epoch (their date_i18n convention) → ISO-8601 Z. */
+/**
+ * WP-local naive epoch (their date_i18n convention) → ISO-8601 with the
+ * site's offset at that time. Today's gmt_offset put a slot in the other
+ * half of the year an hour off.
+ */
 function minn_admin_jet_apb_iso( $naive ) {
 	$naive = (int) $naive;
 	if ( $naive <= 0 ) {
 		return '';
 	}
-	$offset = (int) ( (float) get_option( 'gmt_offset', 0 ) * HOUR_IN_SECONDS );
-	return gmdate( 'Y-m-d\TH:i:s\Z', $naive - $offset );
+	try {
+		return ( new DateTimeImmutable( gmdate( 'Y-m-d H:i:s', $naive ), wp_timezone() ) )->format( 'c' );
+	} catch ( \Exception $e ) {
+		return '';
+	}
 }
 
 /** The label their screen shows for a slot: site date + time formats over the naive epoch. */
