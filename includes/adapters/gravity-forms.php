@@ -620,12 +620,12 @@ add_action( 'rest_api_init', function () {
 		return;
 	}
 
-	register_rest_route( 'minn-admin/v1', '/gf/entries/(?P<id>\d+)', array(
+	minn_admin_endpoint( 'gf/entries/(?P<id>\d+)', array(
 		'methods'             => 'GET',
-		'permission_callback' => function () {
+		'gate'                => function () {
 			return GFCommon::current_user_can_any( array( 'gravityforms_view_entries', 'gform_full_access' ) );
 		},
-		'callback'            => function ( WP_REST_Request $request ) {
+		'run'                 => function ( WP_REST_Request $request ) {
 			$entry = GFAPI::get_entry( (int) Minn_Admin::path_param( $request ) );
 			if ( is_wp_error( $entry ) ) {
 				return new WP_Error( 'not_found', __( 'Entry not found.', 'minn-admin' ), array( 'status' => 404 ) );
@@ -758,14 +758,14 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/gf/entries/(?P<id>\d+)/notes', array(
+	minn_admin_endpoint( 'gf/entries/(?P<id>\d+)/notes', array(
 		'methods'             => 'POST',
-		'permission_callback' => function () {
+		'gate'                => function () {
 			// Writing into the notes trail is its own GF capability, the same one the
 			// vendor requires at both of its own write sites.
 			return GFCommon::current_user_can_any( array( 'gravityforms_edit_entry_notes', 'gform_full_access' ) );
 		},
-		'callback'            => function ( WP_REST_Request $request ) {
+		'run'                 => function ( WP_REST_Request $request ) {
 			$entry = GFAPI::get_entry( (int) Minn_Admin::path_param( $request ) );
 			if ( is_wp_error( $entry ) ) {
 				return new WP_Error( 'not_found', __( 'Entry not found.', 'minn-admin' ), array( 'status' => 404 ) );
@@ -904,27 +904,27 @@ add_action( 'rest_api_init', function () {
 	$can_view_entries = function () {
 		return GFCommon::current_user_can_any( array( 'gravityforms_view_entries', 'gform_full_access' ) );
 	};
-	register_rest_route( 'minn-admin/v1', '/gf/entries', array(
+	minn_admin_endpoint( 'gf/entries', array(
 		'methods'             => 'GET',
-		'permission_callback' => $can_view_entries,
-		'callback'            => $list_entries,
+		'gate'                => $can_view_entries,
+		'run'                 => $list_entries,
 	) );
-	register_rest_route( 'minn-admin/v1', '/gf/forms/(?P<form>\d+)/entries', array(
+	minn_admin_endpoint( 'gf/forms/(?P<form>\d+)/entries', array(
 		'methods'             => 'GET',
-		'permission_callback' => $can_view_entries,
-		'callback'            => $list_entries,
+		'gate'                => $can_view_entries,
+		'run'                 => $list_entries,
 	) );
 
 	// Entry workflow properties. gf/v2's own route forwards ANY key to
 	// update_entry_property; this shim deliberately whitelists the three
 	// the surface uses — read state, star state and status — so an
 	// edit-entries user cannot write arbitrary entry columns through it.
-	register_rest_route( 'minn-admin/v1', '/gf/entries/(?P<id>\d+)/properties', array(
+	minn_admin_endpoint( 'gf/entries/(?P<id>\d+)/properties', array(
 		'methods'             => 'PUT',
-		'permission_callback' => function () {
+		'gate'                => function () {
 			return GFCommon::current_user_can_any( array( 'gravityforms_edit_entries', 'gform_full_access' ) );
 		},
-		'callback'            => function ( WP_REST_Request $request ) {
+		'run'                 => function ( WP_REST_Request $request ) {
 			$entry = GFAPI::get_entry( (int) Minn_Admin::path_param( $request ) );
 			if ( is_wp_error( $entry ) ) {
 				return new WP_Error( 'not_found', __( 'Entry not found.', 'minn-admin' ), array( 'status' => 404 ) );
@@ -969,12 +969,12 @@ add_action( 'rest_api_init', function () {
 
 	// Trash / permanent delete, gf/v2 semantics: no force means trash (410
 	// when already trashed), force means GFAPI::delete_entry for good.
-	register_rest_route( 'minn-admin/v1', '/gf/entries/(?P<id>\d+)', array(
+	minn_admin_endpoint( 'gf/entries/(?P<id>\d+)', array(
 		'methods'             => 'DELETE',
-		'permission_callback' => function () {
+		'gate'                => function () {
 			return GFCommon::current_user_can_any( array( 'gravityforms_delete_entries', 'gform_full_access' ) );
 		},
-		'callback'            => function ( WP_REST_Request $request ) {
+		'run'                 => function ( WP_REST_Request $request ) {
 			$entry = GFAPI::get_entry( (int) Minn_Admin::path_param( $request ) );
 			if ( is_wp_error( $entry ) ) {
 				return new WP_Error( 'not_found', __( 'Entry not found.', 'minn-admin' ), array( 'status' => 404 ) );
@@ -996,12 +996,12 @@ add_action( 'rest_api_init', function () {
 
 	// Resend every active notification for the entry's form, exactly what
 	// gf/v2's notifications POST does with no _notifications filter.
-	register_rest_route( 'minn-admin/v1', '/gf/entries/(?P<id>\d+)/notifications', array(
+	minn_admin_endpoint( 'gf/entries/(?P<id>\d+)/notifications', array(
 		'methods'             => 'POST',
-		'permission_callback' => function () {
+		'gate'                => function () {
 			return GFCommon::current_user_can_any( array( 'gravityforms_edit_entries', 'gform_full_access' ) );
 		},
-		'callback'            => function ( WP_REST_Request $request ) {
+		'run'                 => function ( WP_REST_Request $request ) {
 			$entry = GFAPI::get_entry( (int) Minn_Admin::path_param( $request ) );
 			if ( is_wp_error( $entry ) ) {
 				return new WP_Error( 'not_found', __( 'Entry not found.', 'minn-admin' ), array( 'status' => 404 ) );
@@ -1014,13 +1014,13 @@ add_action( 'rest_api_init', function () {
 			return rest_ensure_response( array( 'notifications' => is_array( $sent ) ? array_values( $sent ) : array() ) );
 		},
 	) );
-	register_rest_route( 'minn-admin/v1', '/gf/forms', array(
+	minn_admin_endpoint( 'gf/forms', array(
 		'methods'             => 'GET',
-		'permission_callback' => function () {
+		'gate'                => function () {
 			// Their Forms screen is registered at gravityforms_edit_forms.
 			return GFCommon::current_user_can_any( array( 'gravityforms_edit_forms', 'gform_full_access' ) );
 		},
-		'callback'            => function ( WP_REST_Request $request ) {
+		'run'                 => function ( WP_REST_Request $request ) {
 			// ?active=1 lists active forms only — the entry/notification
 			// tab semantics gf/v2/forms had (inactive forms' rows appear
 			// only under All). The manage view keeps the full list.
@@ -1116,26 +1116,26 @@ add_action( 'rest_api_init', function () {
 		) );
 	};
 
-	register_rest_route( 'minn-admin/v1', '/gf/notifications', array(
+	minn_admin_endpoint( 'gf/notifications', array(
 		'methods'             => 'GET',
-		'permission_callback' => $can_edit_forms,
-		'callback'            => $list_notifications,
+		'gate'                => $can_edit_forms,
+		'run'                 => $list_notifications,
 	) );
-	register_rest_route( 'minn-admin/v1', '/gf/forms/(?P<form>\d+)/notifications', array(
+	minn_admin_endpoint( 'gf/forms/(?P<form>\d+)/notifications', array(
 		'methods'             => 'GET',
-		'permission_callback' => $can_edit_forms,
-		'callback'            => $list_notifications,
+		'gate'                => $can_edit_forms,
+		'run'                 => $list_notifications,
 	) );
 
 	// Activate/deactivate through GF's own toggle (it fires their
 	// gform_pre_notification_(de)activated hooks and writes their column).
-	register_rest_route( 'minn-admin/v1', '/gf/notifications/(?P<form>\d+):(?P<nid>[a-zA-Z0-9_.-]+)/active', array(
+	minn_admin_endpoint( 'gf/notifications/(?P<form>\d+):(?P<nid>[a-zA-Z0-9_.-]+)/active', array(
 		'methods'             => 'POST',
-		'permission_callback' => $can_edit_forms,
+		'gate'                => $can_edit_forms,
 		'args'                => array(
 			'active' => array( 'type' => 'boolean', 'required' => true ),
 		),
-		'callback'            => function ( WP_REST_Request $request ) {
+		'run'                 => function ( WP_REST_Request $request ) {
 			$result = GFFormsModel::update_notification_active( (int) Minn_Admin::path_param( $request, 'form' ), (string) Minn_Admin::path_param( $request, 'nid' ), (bool) $request['active'] );
 			if ( is_wp_error( $result ) ) {
 				$result->add_data( array( 'status' => 404 ) );
@@ -1149,34 +1149,33 @@ add_action( 'rest_api_init', function () {
 	// Per-form settings — the GF Settings-framework mapper (schema read from
 	// GFFormSettings::form_settings_fields() at request time; save is a
 	// read-modify-write of the mapped keys through GFAPI::update_form).
-	register_rest_route( 'minn-admin/v1', '/gf/forms/(?P<id>\d+)/settings/(?P<tab>[a-z_-]+)', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => $can_edit_forms,
-			'callback'            => function ( WP_REST_Request $request ) {
-				$form = GFAPI::get_form( (int) Minn_Admin::path_param( $request ) );
-				if ( ! $form ) {
-					return new WP_Error( 'not_found', __( 'Form not found.', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				return rest_ensure_response( minn_admin_gf_form_settings_shape( $form ) );
-			},
-		),
-		array(
-			'methods'             => 'POST',
-			'permission_callback' => $can_edit_forms,
-			'callback'            => 'minn_admin_gf_form_settings_save',
-		),
+	minn_admin_endpoint( 'gf/forms/(?P<id>\d+)/settings/(?P<tab>[a-z_-]+)', array(
+		'methods'             => 'GET',
+		'gate'                => $can_edit_forms,
+		'run'                 => function ( WP_REST_Request $request ) {
+			$form = GFAPI::get_form( (int) Minn_Admin::path_param( $request ) );
+			if ( ! $form ) {
+				return new WP_Error( 'not_found', __( 'Form not found.', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			return rest_ensure_response( minn_admin_gf_form_settings_shape( $form ) );
+		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/gf/forms/(?P<id>\d+)/active', array(
+	minn_admin_endpoint( 'gf/forms/(?P<id>\d+)/settings/(?P<tab>[a-z_-]+)', array(
 		'methods'             => 'POST',
-		'permission_callback' => function () {
+		'gate'                => $can_edit_forms,
+		'run'                 => 'minn_admin_gf_form_settings_save',
+	) );
+
+	minn_admin_endpoint( 'gf/forms/(?P<id>\d+)/active', array(
+		'methods'             => 'POST',
+		'gate'                => function () {
 			return GFCommon::current_user_can_any( array( 'gravityforms_edit_forms', 'gform_full_access' ) );
 		},
 		'args'                => array(
 			'active' => array( 'type' => 'boolean', 'required' => true ),
 		),
-		'callback'            => function ( WP_REST_Request $request ) {
+		'run'                 => function ( WP_REST_Request $request ) {
 			$id = (int) Minn_Admin::path_param( $request );
 			if ( ! GFAPI::form_id_exists( $id ) ) {
 				return new WP_Error( 'not_found', __( 'Form not found.', 'minn-admin' ), array( 'status' => 404 ) );
@@ -1253,23 +1252,23 @@ add_action( 'rest_api_init', function () {
 			'total' => count( $rows ),
 		) );
 	};
-	register_rest_route( 'minn-admin/v1', '/gf/feeds', array(
+	minn_admin_endpoint( 'gf/feeds', array(
 		'methods'             => 'GET',
-		'permission_callback' => $can_edit_forms,
-		'callback'            => $list_feeds,
+		'gate'                => $can_edit_forms,
+		'run'                 => $list_feeds,
 	) );
-	register_rest_route( 'minn-admin/v1', '/gf/forms/(?P<form>\d+)/feeds', array(
+	minn_admin_endpoint( 'gf/forms/(?P<form>\d+)/feeds', array(
 		'methods'             => 'GET',
-		'permission_callback' => $can_edit_forms,
-		'callback'            => $list_feeds,
+		'gate'                => $can_edit_forms,
+		'run'                 => $list_feeds,
 	) );
-	register_rest_route( 'minn-admin/v1', '/gf/feeds/(?P<id>\d+)/active', array(
+	minn_admin_endpoint( 'gf/feeds/(?P<id>\d+)/active', array(
 		'methods'             => 'POST',
-		'permission_callback' => $can_edit_forms,
+		'gate'                => $can_edit_forms,
 		'args'                => array(
 			'active' => array( 'type' => 'boolean', 'required' => true ),
 		),
-		'callback'            => function ( WP_REST_Request $request ) {
+		'run'                 => function ( WP_REST_Request $request ) {
 			$id    = (int) Minn_Admin::path_param( $request );
 			$feeds = GFAPI::get_feeds( array( $id ), null, null, null );
 			if ( is_wp_error( $feeds ) || empty( $feeds ) ) {
@@ -1286,10 +1285,10 @@ add_action( 'rest_api_init', function () {
 			return rest_ensure_response( array( 'id' => $id, 'status' => $request['active'] ? 'active' : 'inactive' ) );
 		},
 	) );
-	register_rest_route( 'minn-admin/v1', '/gf/feeds/(?P<id>\d+)', array(
+	minn_admin_endpoint( 'gf/feeds/(?P<id>\d+)', array(
 		'methods'             => 'DELETE',
-		'permission_callback' => $can_edit_forms,
-		'callback'            => function ( WP_REST_Request $request ) {
+		'gate'                => $can_edit_forms,
+		'run'                 => function ( WP_REST_Request $request ) {
 			$id    = (int) Minn_Admin::path_param( $request );
 			$feeds = GFAPI::get_feeds( array( $id ), null, null, null );
 			if ( is_wp_error( $feeds ) || empty( $feeds ) ) {
