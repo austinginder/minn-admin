@@ -164,8 +164,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'detail'    => array(
 				'sectionsRoute' => 'minn-admin/v1/ottokit/requests/{id}/view',
 			),
-			// Retry re-fires the webhook, so it is offered where their own
-			// screen offers it: on a request that failed.
+			// Both re-fire the webhook through their retry, and are offered
+			// as their own screen offers them: Retry on a request that
+			// failed, Rerun on one that was delivered.
 			'actions'   => array(
 				array(
 					'label'   => __( 'Retry', 'minn-admin' ),
@@ -173,6 +174,13 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'method'  => 'POST',
 					'confirm' => __( 'Send this request to OttoKit again?', 'minn-admin' ),
 					'when'    => array( 'key' => 'status', 'equals' => 'failed' ),
+				),
+				array(
+					'label'   => __( 'Rerun', 'minn-admin' ),
+					'route'   => 'minn-admin/v1/ottokit/requests/{id}/retry',
+					'method'  => 'POST',
+					'confirm' => __( 'This request was delivered. Send it to OttoKit again, so its automation runs a second time?', 'minn-admin' ),
+					'when'    => array( 'key' => 'status', 'equals' => 'success' ),
 				),
 			),
 			'bulk'      => array(
