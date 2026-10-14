@@ -20708,6 +20708,7 @@
 			);
 		};
 		if ( ! data ) {
+			const forItem = itemScoped ? ss.settingsItem : null;
 			view.innerHTML = head + `<div class="minn-loading">${ esc( __( 'Loading…' ) ) }</div>`;
 			bindChrome();
 			Promise.resolve().then( () => api( routeFor( tab ) ) )
@@ -20720,7 +20721,8 @@
 				// again on every return until a reload. Nothing is cached, so
 				// coming back to it tries again.
 				.catch( ( e ) => {
-					if ( state.route !== s.id || ss.settingsTab !== tab || ! ( ss.view === 'settings' || ! s.collection ) ) return;
+					// Nor over another item's settings opened meanwhile.
+					if ( state.route !== s.id || ss.settingsTab !== tab || ! ( ss.view === 'settings' || ! s.collection ) || ( itemScoped && ss.settingsItem !== forItem ) ) return;
 					view.innerHTML = head + `<div class="minn-card minn-empty">${ sprintf( esc( /* translators: %s: the error message. */ __( 'Something went wrong: %s' ) ), esc( e.message ) ) }</div>`;
 					bindChrome();
 				} );
