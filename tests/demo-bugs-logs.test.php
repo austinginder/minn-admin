@@ -14,8 +14,11 @@
  * A vendor that is installed but inactive here is loaded for one child
  * process only. The suite runs itself again with --require pointing at this
  * same file, which, before WordPress loads, filters active_plugins for that
- * process (nothing is written; a write that carries the added plugins has
- * them taken out again). Run with --require yourself and no child is used.
+ * process (a write that carries the added plugins has them taken out again)
+ * and puts back, at shutdown, every option the process wrote: a vendor's
+ * start-up code runs as if it were active. Single site only (site options on
+ * a network are not tracked). Run with --require yourself and no child is
+ * used.
  *
  * Run: wp eval-file tests/demo-bugs-logs.test.php --user=admin --path=<site>
  *
@@ -27,26 +30,70 @@
 if ( ! function_exists( 'add_filter' ) ) {
 	if ( class_exists( 'WP_CLI' ) && ! defined( 'MINN_DBL_PRELOAD' ) ) {
 		define( 'MINN_DBL_PRELOAD', true );
-		$GLOBALS['minn_dbl_added'] = array();
+		$GLOBALS['minn_dbl'] = array( 'added' => array(), 'before' => array(), 'wrote' => array() );
 		WP_CLI::add_wp_hook( 'option_active_plugins', function ( $plugins ) {
 			$plugins = (array) $plugins;
-			foreach ( array( 'simple-history/index.php', 'wordfence/wordfence.php', 'aryo-activity-log/aryo-activity-log.php', 'sucuri-scanner/sucuri.php', 'wp-security-audit-log/wp-security-audit-log.php' ) as $file ) {
+			foreach ( array( 'simple-history/index.php', 'wordfence/wordfence.php', 'aryo-activity-log/aryo-activity-log.php', 'sucuri-scanner/sucuri.php', 'wp-security-audit-log/wp-security-audit-log.php', 'stream/stream.php', 'better-wp-security/better-wp-security.php' ) as $file ) {
 				$on = false;
 				foreach ( $plugins as $p ) {
 					$on = $on || 0 === strpos( (string) $p, dirname( $file ) . '/' );
 				}
 				if ( ! $on && defined( 'WP_PLUGIN_DIR' ) && is_file( WP_PLUGIN_DIR . '/' . $file ) ) {
 					$plugins[] = $file;
-					if ( ! in_array( $file, $GLOBALS['minn_dbl_added'], true ) ) {
-						$GLOBALS['minn_dbl_added'][] = $file;
+					if ( ! in_array( $file, $GLOBALS['minn_dbl']['added'], true ) ) {
+						$GLOBALS['minn_dbl']['added'][] = $file;
 					}
 				}
 			}
 			return $plugins;
 		} );
 		WP_CLI::add_wp_hook( 'pre_update_option_active_plugins', function ( $value ) {
-			return array_values( array_diff( (array) $value, (array) $GLOBALS['minn_dbl_added'] ) );
+			return array_values( array_diff( (array) $value, $GLOBALS['minn_dbl']['added'] ) );
 		} );
+		// A plugin loaded while it is not active still runs its start-up code:
+		// it schedules its cron events, whitelists the caller's address, warms
+		// its transients. Every option this process writes goes back to what
+		// it was at shutdown, unless another process has written it since.
+		$raw = function ( $name ) {
+			global $wpdb;
+			$row = $wpdb->get_row( $wpdb->prepare( "SELECT option_value, autoload FROM {$wpdb->options} WHERE option_name = %s", $name ) );
+			return $row ? array( (string) $row->option_value, (string) $row->autoload ) : null;
+		};
+		foreach ( array( 'add_option', 'update_option', 'delete_option' ) as $hook ) {
+			WP_CLI::add_wp_hook( $hook, function ( $name ) use ( $raw ) {
+				if ( ! array_key_exists( $name, $GLOBALS['minn_dbl']['before'] ) ) {
+					$GLOBALS['minn_dbl']['before'][ $name ] = $raw( $name );
+				}
+			}, 1, 1 );
+		}
+		foreach ( array( 'added_option', 'updated_option', 'deleted_option' ) as $hook ) {
+			WP_CLI::add_wp_hook( $hook, function ( $name ) use ( $raw ) {
+				$GLOBALS['minn_dbl']['wrote'][ $name ] = $raw( $name );
+			}, PHP_INT_MAX, 1 );
+		}
+		WP_CLI::add_wp_hook( 'shutdown', function () use ( $raw ) {
+			global $wpdb;
+			foreach ( $GLOBALS['minn_dbl']['before'] as $name => $was ) {
+				$now = $raw( $name );
+				if ( $now === $was ) {
+					continue;
+				}
+				if ( ! array_key_exists( $name, $GLOBALS['minn_dbl']['wrote'] ) || $now !== $GLOBALS['minn_dbl']['wrote'][ $name ] ) {
+					printf( "NOTE  option %s was changed by another process meanwhile; left as it is\n", $name );
+					continue;
+				}
+				if ( null === $was ) {
+					$wpdb->delete( $wpdb->options, array( 'option_name' => $name ) );
+				} elseif ( null === $now ) {
+					$wpdb->insert( $wpdb->options, array( 'option_name' => $name, 'option_value' => $was[0], 'autoload' => $was[1] ) );
+				} else {
+					$wpdb->update( $wpdb->options, array( 'option_value' => $was[0], 'autoload' => $was[1] ), array( 'option_name' => $name ) );
+				}
+				wp_cache_delete( $name, 'options' );
+			}
+			wp_cache_delete( 'alloptions', 'options' );
+			wp_cache_delete( 'notoptions', 'options' );
+		}, PHP_INT_MAX );
 	}
 	return;
 }
@@ -91,6 +138,8 @@ $dbl_files    = array(
 	'aryo-activity-log'     => 'aryo-activity-log/aryo-activity-log.php',
 	'sucuri-scanner'        => 'sucuri-scanner/sucuri.php',
 	'wp-security-audit-log' => 'wp-security-audit-log/wp-security-audit-log.php',
+	'stream'                => 'stream/stream.php',
+	'better-wp-security'    => 'better-wp-security/better-wp-security.php',
 );
 $dbl_inactive = array();
 foreach ( $dbl_files as $slug => $file ) {
