@@ -171,6 +171,20 @@ An estimate, to be replaced by measurement:
 - hand-written routes and permission callbacks in ported families close to
   zero, replaced by a few gate declarations per resource.
 
+## Measuring progress
+
+After each port, and at each release:
+
+```bash
+node bin/adapter-inventory.js --record "forms ported"   # appends a snapshot to bin/adapter-inventory/history.json
+node bin/adapter-inventory.js --out /tmp/minn-inventory  # adapters.json for the current tree
+```
+
+Commit the history with the port, then upload `history.json` and
+`adapters.json` to the rollout dashboard. The v0.45.0 adapter list is the
+fixed baseline every change is measured against
+(`node bin/adapter-inventory.js --ref v0.45.0 --out <dir>`).
+
 ## Later
 
 - **v0.47:** port activity logs, mail, bookings and backups; publish the kernel
