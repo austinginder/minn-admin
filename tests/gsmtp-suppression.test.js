@@ -40,7 +40,9 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		} ) );
 		const listText = await page.$eval( '.minn-table', ( el ) => el.textContent );
 		t.check( 'standing suppressions list', /bounce@example\.com/.test( listText ) && /unsubscribed@example\.com/.test( listText ) );
-		t.check( 'reason renders as a pill', /manually added/i.test( listText ) );
+		// Gravity SMTP's own label when its Suppression_Reason_Enum is loaded
+		// ("Manually Suppressed"), else the slug tidied into words (ea9055be).
+		t.check( 'reason renders as a pill', /manually suppressed|manually added/i.test( listText ) );
 
 		/* ===== Suppress a new address through the create form ===== */
 		await page.click( '#minn-surface-add' );
