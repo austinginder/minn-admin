@@ -76,7 +76,10 @@ function git( args ) {
 }
 
 const tmp = fs.mkdtempSync( path.join( os.tmpdir(), 'minn-parity-' ) );
-const made = wp( [ 'eval-file', 'tests/parity/principals.php', 'create' ] );
+// This run's accounts carry its id, so captures running at once never
+// remove each other's.
+const run = { MINN_PARITY_RUN: Date.now().toString( 36 ).slice( -6 ) + Math.random().toString( 36 ).slice( 2, 6 ) };
+const made = wp( [ 'eval-file', 'tests/parity/principals.php', 'create' ], run );
 const line = made.out.split( '\n' ).find( ( l ) => l.startsWith( 'PRINCIPALS ' ) );
 if ( ! line ) {
 	console.error( 'could not create the accounts:\n' + made.out );
@@ -128,7 +131,7 @@ try {
 		}
 	}
 } finally {
-	const gone = wp( [ 'eval-file', 'tests/parity/principals.php', 'delete' ] );
+	const gone = wp( [ 'eval-file', 'tests/parity/principals.php', 'delete' ], run );
 	console.log( gone.out.split( '\n' ).filter( ( l ) => l.startsWith( 'removed' ) ).join( '\n' ) );
 	fs.rmSync( tmp, { recursive: true, force: true } );
 }

@@ -96,7 +96,10 @@ add_filter( 'query', function ( $q ) use ( &$guard, $soft_tables ) {
 $server = rest_get_server();
 $routes = $server->get_routes();
 
-$file_of = function ( $cb ) use ( $plugin, $wp_root ) {
+$file_of = function ( $cb, $known = '' ) use ( $plugin, $wp_root ) {
+	if ( '' !== $known ) {
+		return $known;
+	}
 	try {
 		if ( $cb instanceof Closure || ( is_string( $cb ) && false === strpos( $cb, '::' ) && function_exists( $cb ) ) ) {
 			$ref = new ReflectionFunction( $cb );
@@ -153,7 +156,8 @@ foreach ( $routes as $route => $handlers ) {
 		$methods = array_keys( array_filter( (array) $ep['methods'] ) );
 		sort( $methods );
 		$key  = implode( '|', $methods ) . ' ' . $route;
-		$file = $file_of( $ep['callback'] ?? null );
+		// A kernel route names the adapter that declared it.
+		$file = ! empty( $ep['minn_file'] ) ? $file_of( null, (string) $ep['minn_file'] ) : $file_of( $ep['callback'] ?? null );
 		$cb   = $ep['permission_callback'] ?? null;
 		$gate = true; // core serves a missing callback publicly, with a notice
 		if ( null !== $cb ) {
@@ -191,7 +195,7 @@ $wanted = function ( $file, $surface = '' ) use ( $only ) {
 		return true;
 	}
 	foreach ( $only as $o ) {
-		if ( ( '' !== $file && false !== strpos( $file, $o ) ) || ( '' !== $surface && $surface === $o ) ) {
+		if ( ( '' !== $file && false !== strpos( $file, $o ) ) || ( '' !== $surface && false !== strpos( $surface, $o ) ) ) {
 			return true;
 		}
 	}
@@ -461,6 +465,7 @@ $me    = wp_get_current_user();
 $stamp = function ( $v ) use ( &$stamp, $me ) {
 	if ( is_string( $v ) ) {
 		$v = preg_replace( '/((?:_wpnonce|nonce)=)[0-9a-f]{10}\b/i', '$1<nonce>', $v );
+		$v = preg_replace( '/minn_parity_netrole_[a-z0-9]+/', '<netrole>', $v );
 		return $me->ID ? str_replace( array( $me->user_login, $me->user_email ), array( '<self>', '<self-email>' ), $v ) : $v;
 	}
 	if ( is_array( $v ) ) {

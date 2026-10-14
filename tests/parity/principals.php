@@ -3,12 +3,15 @@
  * The accounts a parity capture runs as: one per role route-gates asks,
  * created for the run and removed after it.
  *
- *   wp eval-file tests/parity/principals.php create   prints "PRINCIPALS {json}"
- *   wp eval-file tests/parity/principals.php delete   removes every minn-parity- account
+ *   MINN_PARITY_RUN=<id> wp eval-file tests/parity/principals.php create   prints "PRINCIPALS {json}"
+ *   MINN_PARITY_RUN=<id> wp eval-file tests/parity/principals.php delete
  *
- * Both first remove accounts an interrupted run left behind. Only accounts
- * whose login starts with "minn-parity-" are ever removed, and only by an id
- * that is a real one (a WP_Error cast to int names user 1).
+ * Accounts are named for their run ("minn-parity-<run>-editor-1234"), so two
+ * captures at once never remove each other's. Delete removes this run's
+ * accounts and any parity account older than two hours (an interrupted
+ * run's). Only accounts whose login starts with "minn-parity-" are ever
+ * removed, and only by an id that is a real one (a WP_Error cast to int
+ * names user 1).
  *
  * @package minn-admin
  */
@@ -18,30 +21,42 @@ if ( is_multisite() ) {
 	require_once ABSPATH . 'wp-admin/includes/ms.php';
 }
 
-$minn_parity_role = 'minn_parity_netrole';
+$minn_parity_run  = preg_replace( '/[^a-z0-9]/', '', strtolower( (string) getenv( 'MINN_PARITY_RUN' ) ) );
+$minn_parity_run  = '' === $minn_parity_run ? 'x' . wp_rand( 1000, 9999 ) : substr( $minn_parity_run, 0, 12 );
+$minn_parity_role = 'minn_parity_netrole_' . $minn_parity_run;
 
-$minn_parity_sweep = function () use ( $minn_parity_role ) {
+$minn_parity_sweep = function () use ( $minn_parity_run, $minn_parity_role ) {
 	global $wpdb;
-	$ids = $wpdb->get_col( $wpdb->prepare( "SELECT ID FROM {$wpdb->users} WHERE user_login LIKE %s", $wpdb->esc_like( 'minn-parity-' ) . '%' ) );
-	foreach ( $ids as $id ) {
-		$id   = (int) $id;
-		$user = get_userdata( $id );
-		if ( $id > 1 && $user && 0 === strpos( $user->user_login, 'minn-parity-' ) ) {
-			is_multisite() ? wpmu_delete_user( $id ) : wp_delete_user( $id );
+	$mine  = $wpdb->esc_like( 'minn-parity-' . $minn_parity_run . '-' ) . '%';
+	$stale = gmdate( 'Y-m-d H:i:s', time() - 2 * HOUR_IN_SECONDS );
+	$rows  = $wpdb->get_results( $wpdb->prepare(
+		"SELECT ID, user_login FROM {$wpdb->users} WHERE user_login LIKE %s OR ( user_login LIKE %s AND user_registered < %s )",
+		$mine,
+		$wpdb->esc_like( 'minn-parity-' ) . '%',
+		$stale
+	) );
+	$gone = 0;
+	foreach ( (array) $rows as $row ) {
+		$id    = (int) $row->ID;
+		$login = (string) $row->user_login;
+		if ( $id <= 1 || 0 !== strpos( $login, 'minn-parity-' ) ) {
+			continue;
 		}
+		// Posts a plugin made for the new account (Flamingo keeps a contact
+		// per user), found by the account's address in their title.
+		$posts = $wpdb->get_col( $wpdb->prepare( "SELECT ID FROM {$wpdb->posts} WHERE post_title LIKE %s", '%' . $wpdb->esc_like( $login . '@example.com' ) . '%' ) );
+		foreach ( $posts as $pid ) {
+			if ( (int) $pid > 0 ) {
+				wp_delete_post( (int) $pid, true );
+			}
+		}
+		is_multisite() ? wpmu_delete_user( $id ) : wp_delete_user( $id );
+		++$gone;
 	}
 	if ( get_role( $minn_parity_role ) ) {
 		remove_role( $minn_parity_role );
 	}
-	// Posts a plugin made for a new account (Flamingo keeps a contact per
-	// user), found by the account's address in their title.
-	$posts = $wpdb->get_col( $wpdb->prepare( "SELECT ID FROM {$wpdb->posts} WHERE post_title LIKE %s", '%' . $wpdb->esc_like( 'minn-parity-' ) . '%' . $wpdb->esc_like( '@example.com' ) . '%' ) );
-	foreach ( $posts as $pid ) {
-		if ( (int) $pid > 0 ) {
-			wp_delete_post( (int) $pid, true );
-		}
-	}
-	return count( $ids );
+	return $gone;
 };
 
 $mode = $args[0] ?? '';
@@ -50,7 +65,7 @@ if ( 'delete' === $mode ) {
 	return;
 }
 if ( 'create' !== $mode ) {
-	fwrite( STDERR, "usage: wp eval-file tests/parity/principals.php create|delete\n" );
+	fwrite( STDERR, "usage: MINN_PARITY_RUN=<id> wp eval-file tests/parity/principals.php create|delete\n" );
 	exit( 2 );
 }
 
@@ -68,7 +83,7 @@ foreach ( $roles as $role ) {
 		continue;
 	}
 	$label = $minn_parity_role === $role ? 'site_network_role' : $role;
-	$login = 'minn-parity-' . str_replace( '_', '-', $label ) . '-' . wp_rand( 1000, 9999 );
+	$login = 'minn-parity-' . $minn_parity_run . '-' . str_replace( '_', '-', $label ) . '-' . wp_rand( 1000, 9999 );
 	$id    = wp_insert_user( array( 'user_login' => $login, 'user_email' => $login . '@example.com', 'user_pass' => wp_generate_password( 24 ), 'role' => $role ) );
 	if ( is_int( $id ) && $id > 1 ) {
 		$made[ $label ] = $id;
