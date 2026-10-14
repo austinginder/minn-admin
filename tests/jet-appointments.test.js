@@ -1,7 +1,7 @@
 /**
  * JetAppointments bookings adapter. Appointments live in
  * {prefix}jet_appointments (WP-local naive epochs for date / slot / slot_end,
- * emitted as UTC ISO after the site-offset shift) with phone and comments
+ * emitted as that site-local time with its own offset) with phone and comments
  * in the meta table; status writes go through the plugin's own
  * Appointment_Model so its update hook and excluded-dates bookkeeping run.
  *
@@ -71,7 +71,7 @@ const CLEANUP = `if ( ! class_exists( '\\\\JET_APB\\\\Plugin' ) ) return;
 			 };
 			 $pending = $mk( 'pending', 2, 10, 'suite-priya@jet-apb.minn.test', 'Priya Suite' );
 			 $canceled = $mk( 'cancelled', -2, 14, 'suite-sam@jet-apb.minn.test', 'Sam Suite' );
-			 echo wp_json_encode( array( 'pending' => $pending, 'canceled' => $canceled ) );`
+			 echo wp_json_encode( array( 'pending' => $pending, 'canceled' => $canceled, 'in_day' => gmdate( 'Y-m-d', $day + 2 * DAY_IN_SECONDS ) ) );`
 		);
 		try { seed = JSON.parse( ( seedOut.match( /\{.*\}/ ) || [ '{}' ] )[ 0 ] ); } catch ( e ) { seed = {}; }
 		t.check( 'pending + cancelled suite appointments seeded through Appointment_Model', seed.pending > 0 && seed.canceled > 0, seedOut.slice( 0, 160 ) );
@@ -79,8 +79,10 @@ const CLEANUP = `if ( ! class_exists( '\\\\JET_APB\\\\Plugin' ) ) return;
 		const list = await api( 'minn-admin/v1/jet-appointments/appointments' );
 		t.check( 'upcoming list answers', list.status === 200 && ( list.body.total || 0 ) >= 1, JSON.stringify( { s: list.status, total: list.body && list.body.total } ) );
 		const priya = ( list.body.items || [] ).find( ( i ) => i.id === seed.pending );
-		t.check( 'upcoming includes the pending suite row with a UTC slot, service, provider and pill status',
-			!! priya && priya.status === 'pending' && /Z$/.test( priya.date || '' ) && priya.service === 'Consultation' && priya.provider === 'Dana Provider' && /Priya Suite/.test( priya.customer || '' ),
+		// The seeded slot is 10:00 site time on its day, with the site's
+		// offset on that day.
+		t.check( 'upcoming includes the pending suite row with its 10:00 local slot, service, provider and pill status',
+			!! priya && priya.status === 'pending' && !! seed.in_day && new RegExp( '^' + seed.in_day + 'T10:00:00(Z|[+-]\\d\\d:\\d\\d)$' ).test( priya.date || '' ) && priya.service === 'Consultation' && priya.provider === 'Dana Provider' && /Priya Suite/.test( priya.customer || '' ),
 			JSON.stringify( priya ) );
 
 		const pending = await api( 'minn-admin/v1/jet-appointments/appointments?range=pending' );
