@@ -69,8 +69,8 @@ function minn_admin_updraft_history() {
 			'components' => $what,
 			'size'       => $bytes ? size_format( $bytes ) : '—',
 			'where'      => $service ? $service : 'local',
-			// What the detail dialog shows for where; `where` keeps their
-			// service ids for the list's pill.
+			// What the list and the detail dialog show for where; `where`
+			// keeps their service ids.
 			'stored'     => $stored ? implode( ', ', $stored ) : __( 'Local', 'minn-admin' ),
 			'label'      => isset( $set['label'] ) ? (string) $set['label'] : '',
 		);
@@ -313,7 +313,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'columns'   => array(
 				array( 'key' => 'components', 'label' => __( 'Backup', 'minn-admin' ), 'format' => 'title' ),
 				array( 'key' => 'size', 'label' => __( 'Size', 'minn-admin' ), 'format' => 'text' ),
-				array( 'key' => 'where', 'label' => __( 'Stored', 'minn-admin' ), 'format' => 'pill' ),
+				// The label, as text: no gate reads where, and a pill would
+				// recase storage names ("Sftp / Scp").
+				array( 'key' => 'stored', 'label' => __( 'Stored', 'minn-admin' ), 'format' => 'text' ),
 				array( 'key' => 'date', 'label' => __( 'Date', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
 			),
 			'detail'    => array( 'skip' => array( 'name', 'components', 'where' ) ),
