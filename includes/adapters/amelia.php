@@ -376,7 +376,7 @@ add_action( 'rest_api_init', function () {
 				"SELECT a.id, a.status, a.bookingStart, a.bookingEnd, a.internalNotes, a.serviceId, a.providerId,
 					s.name AS service_name,
 					c.id AS customer_id, c.firstName AS customer_first, c.lastName AS customer_last,
-					c.email AS customer_email, c.phone AS customer_phone,
+					c.email AS customer_email, c.phone AS customer_phone, c.note AS customer_note,
 					p.firstName AS provider_first, p.lastName AS provider_last,
 					b.persons, b.price, b.customFields, b.info
 				FROM {$appts} a
@@ -473,6 +473,13 @@ add_action( 'rest_api_init', function () {
 			if ( $extra ) {
 				$sections[] = array( 'title' => __( 'Answers', 'minn-admin' ), 'rows' => $extra );
 			}
+			// The note on the customer's Amelia profile. The page's Notes card
+			// holds one note: the appointment's internal one, else this; with
+			// both, this gets a card of its own. Text the client escapes.
+			$profile = trim( (string) $row->customer_note );
+			if ( '' !== $profile && '' !== $notes ) {
+				$sections[] = array( 'title' => __( 'Customer profile', 'minn-admin' ), 'rows' => array( array( 'label' => __( 'Notes', 'minn-admin' ), 'value' => $profile ) ) );
+			}
 			$service = $row->service_name ? (string) $row->service_name : '';
 			return rest_ensure_response( array(
 				'kind'     => 'booking',
@@ -490,7 +497,7 @@ add_action( 'rest_api_init', function () {
 					'ends'     => minn_admin_amelia_utc_iso( $row->bookingEnd ),
 					'people'   => max( 1, (int) $row->persons ),
 					'price'    => ( null !== $row->price && '' !== (string) $row->price ) ? (string) $row->price : '',
-					'notes'    => $notes,
+					'notes'    => '' !== $notes ? $notes : $profile,
 				),
 				'sections' => $sections,
 				'adminUrl' => minn_admin_amelia_admin_url(),
