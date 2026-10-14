@@ -220,6 +220,46 @@ An estimate, to be replaced by measurement:
 - hand-written routes in ported families at zero: each becomes a declaration
   or a kernel handler, with a gate declared once per verb.
 
+## Porting an adapter
+
+The kernel lives in `includes/kernel/`; `class-minn-admin-kernel.php` opens with the
+declaration keys, and `includes/adapters/everest-forms.php` is the worked example (902
+lines to 717, no hand-written route left, parity empty). A port, one adapter at a time:
+
+1. **Read the adapter whole** and sort its routes: a list, an item and item actions
+   become `minn_admin_resource()`; a status card, a forms tab list, a send, a job or an
+   action with a body that picks its own capability becomes `minn_admin_endpoint()` and
+   keeps its logic, using `Minn_Admin_Kernel::load( $resource, $id, $gate )` for the
+   not-found and row-gate checks.
+2. **Keep everything observable.** Same route paths and methods, same gates per role
+   (the gate callables are called with no arguments, so wrap a parameterised one in a
+   closure), the same row-level check through `item_gate`, the same response keys and
+   string formats (`'wire' => 'naked'` keeps a column's clock as it was sent), the same
+   descriptor values. A status card's counts go through `Minn_Admin_Kernel::inbox_counts()`.
+3. **Every action declares** a gate, the state it accepts (`when`), what must hold after
+   it runs (`expect`), and its messages. The kernel then answers not found, forbidden and
+   wrong state in that order, and never reports success when the expectation fails.
+4. **Generate the plumbing parts of the descriptor** with `Minn_Admin_Kernel::collection()`
+   (route, paging, search, keys, the day range, the filter query) and each row or bulk
+   action with `Minn_Admin_Kernel::ui()`, so the client can never ask for something the
+   routes do not serve. Presentation (columns, labels, tabs, confirms) stays in the adapter.
+5. **Prove it:**
+   ```bash
+   node tests/parity/capture.js --out tests/.parity/<adapter>-after.json --only <adapter> --writes <surface id>
+   node tests/parity/diff.js tests/.parity/v0.45.0-single.json tests/.parity/<adapter>-after.json --only <adapter>
+   wp eval-file tests/kernel-conformance.test.php --user=admin --path=<absolute site path>
+   MINN_RATCHET=write node tests/route-ratchet.test.js
+   ```
+   then the adapter's browser and PHP suites. The diff must show no FAIL. A deliberate
+   change goes in an accept file with its reason; a REVIEW line (a key added, a format
+   gained) is read and either fixed or explained in the commit.
+6. **Delete what the kernel replaced:** the adapter's guard helpers, its hand-built SQL
+   for lists and rows, its error plumbing.
+
+What the kernel does not have yet: the save path for edit forms (changed fields only, a
+base stamp and a 409 on a stale copy), which the entry-edit adapters will need when they
+port, and secret-value redaction beyond the `secret` field type.
+
 ## Measuring progress
 
 After each port, and at each release:

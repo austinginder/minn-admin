@@ -128,6 +128,26 @@ The network snapshot comes from the lab's WooCommerce subsite (the one `run-php.
 uses, `--url=<that site>`), since accounts and routes differ from site to site. Commit
 the rewritten snapshot with the route.
 
+## The kernel (`kernel-conformance.test.php`, `route-ratchet.test.js`)
+
+Adapters ported to the resource kernel (`docs/adapter-kernel.md`) get their routes, gates,
+SQL, output and write path from it, so its checks scale with the kernel, not with
+adapters. `kernel-conformance.test.php` (in `run-php.sh`) drives a synthetic resource over
+a temporary table through every mechanism: no gate means no route; not found, then
+forbidden, then wrong state, in that order; ids, page sizes and filters from a fixed set;
+an empty scope that never widens; search and filter values that never reach SQL
+unprepared; only declared fields leaving and a secret never; each field type on awkward
+stored values; a write whose effect is not there never reporting success; a throw that
+answers in one shape with nothing of the exception in it. It then checks every real
+declaration: each action names a declared gate and a post-condition, each descriptor
+action pointing at a kernel route names a declared action with its method and a state the
+action accepts, and each collection agrees with the resource it reads.
+
+`route-ratchet.test.js` holds the number of hand-written `register_rest_route` calls in
+`includes/adapters/` (489 at v0.45.0) to `tests/fixtures/route-ratchet.json`: more fails,
+and fewer fails until the ceiling is lowered in the same commit as the port
+(`MINN_RATCHET=write node tests/route-ratchet.test.js`).
+
 ## Parity (`parity/`)
 
 A port to the resource kernel (`docs/adapter-kernel.md`) must keep every route, method,
