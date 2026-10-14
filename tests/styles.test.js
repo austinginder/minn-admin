@@ -341,6 +341,9 @@ const { launch, login, reporter, BASE, autoConfirm, activateClassicTheme } = req
 		const defaultMenu = await menuOf( 'default' );
 		t.check( 'the Default card’s menu offers per-slice resets', defaultMenu.some( ( x ) => /Reset colors/.test( x ) ) && defaultMenu.some( ( x ) => /Reset type/.test( x ) ), JSON.stringify( defaultMenu ) );
 		await page.evaluate( () => [ ...document.querySelectorAll( '[data-mi]' ) ].find( ( b ) => /Reset colors/.test( b.textContent ) ).click() );
+		// The change list can already read colorless before the reset lands;
+		// its own toast says the write answered.
+		await page.waitForFunction( () => [ ...document.querySelectorAll( '.minn-toast' ) ].some( ( x ) => /Colors reset to the theme/.test( x.textContent ) ), null, { timeout: 20000 } );
 		await page.waitForFunction( () => {
 			const lis = [ ...document.querySelectorAll( '#minn-look-changes li' ) ].map( ( li ) => li.textContent );
 			return lis.length && ! lis.some( ( w ) => /Background color|Theme palette|Custom colors/.test( w ) );
