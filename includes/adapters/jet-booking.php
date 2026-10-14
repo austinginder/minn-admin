@@ -212,6 +212,20 @@ function minn_admin_jet_booking_note( $row ) {
 	return $staff;
 }
 
+/**
+ * The guest's phone, from the first extra column named or labelled as one.
+ * The booking page only found a row labelled exactly "Phone" on its own.
+ */
+function minn_admin_jet_booking_phone( $row ) {
+	foreach ( minn_admin_jet_booking_extra_columns() as $col => $label ) {
+		$v = isset( $row->$col ) ? trim( (string) $row->$col ) : '';
+		if ( '' !== $v && preg_match( '/phone|mobile|\btel\b/i', $col . ' ' . $label ) ) {
+			return $v;
+		}
+	}
+	return '';
+}
+
 /** The site's extra booking columns, name => label. */
 function minn_admin_jet_booking_extra_columns() {
 	$out = array();
@@ -515,7 +529,7 @@ add_action( 'rest_api_init', function () {
 					'kind'     => 'booking',
 					'status'   => (string) $row->status,
 					'title'    => $title,
-					'customer' => array( 'name' => $customer['name'], 'email' => $customer['email'], 'phone' => '' ),
+					'customer' => array( 'name' => $customer['name'], 'email' => $customer['email'], 'phone' => minn_admin_jet_booking_phone( $row ) ),
 					// allDay + nights tell the shared booking page this is a
 					// stay: check-in / check-out dates and a nights count, not
 					// a slot with an employee and a duration.
