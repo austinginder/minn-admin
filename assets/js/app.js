@@ -952,8 +952,6 @@
 			Administrator: __( 'Administrator' ), Editor: __( 'Editor' ), Author: __( 'Author' ),
 			Contributor: __( 'Contributor' ), Subscriber: __( 'Subscriber' ), Customer: __( 'Customer' ),
 			Available: __( 'Available' ), Installed: __( 'Installed' ), Manual: __( 'Manual' ),
-			'No Show': __( 'No show' ), 'Payment Pending': __( 'Payment pending' ), 'Checked In': __( 'Checked in' ),
-			'Fully Paid': __( 'Fully paid' ), 'Failed Login': __( 'Failed login' ), 'On Demand': __( 'On demand' ),
 		};
 		return Object.prototype.hasOwnProperty.call( labels, raw ) ? labels[ raw ] : raw;
 	}
@@ -1000,7 +998,15 @@
 	function statusLabel( value ) {
 		const raw = String( value == null ? '' : value ).trim();
 		if ( ! /^[A-Za-z0-9_-]+$/.test( raw ) ) return chromeLabel( raw );
-		return chromeLabel( raw.toLowerCase().replace( /[-_]/g, ' ' ).replace( /(^|\s)\S/g, ( c ) => c.toUpperCase() ) );
+		const words = raw.toLowerCase().replace( /[-_]/g, ' ' ).replace( /(^|\s)\S/g, ( c ) => c.toUpperCase() );
+		// Minn's words for a tidied slug. Only a slug looks here: a label the
+		// vendor wrote keeps its own ("Failed Login" on Aryo's pill and tab).
+		const slugWords = {
+			'No Show': __( 'No show' ), 'Payment Pending': __( 'Payment pending' ), 'Checked In': __( 'Checked in' ),
+			'Fully Paid': __( 'Fully paid' ), 'Failed Login': __( 'Failed login' ), 'On Demand': __( 'On demand' ),
+			'Signed Out': __( 'Signed out' ),
+		};
+		return Object.prototype.hasOwnProperty.call( slugWords, words ) ? slugWords[ words ] : chromeLabel( words );
 	}
 
 	// ‹ 1 … 4 [5] 6 … 20 › — first, last and a window around the current page.
