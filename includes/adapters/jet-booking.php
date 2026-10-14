@@ -193,16 +193,23 @@ function minn_admin_jet_booking_customer_label( $row ) {
 /**
  * The booking's note. JetBooking has none of its own: a site adds one as an
  * extra booking column, so it is the first of those named or labelled as a
- * note or comment. It is the guest's own text, which the client escapes.
+ * note or comment. One named or labelled as staff-only (internal, staff,
+ * admin, private) is the note only when no other note column has a value.
+ * It is text, which the client escapes.
  */
 function minn_admin_jet_booking_note( $row ) {
+	$staff = '';
 	foreach ( minn_admin_jet_booking_extra_columns() as $col => $label ) {
 		$v = isset( $row->$col ) ? trim( (string) $row->$col ) : '';
-		if ( '' !== $v && preg_match( '/note|comment/i', $col . ' ' . $label ) ) {
+		if ( '' === $v || ! preg_match( '/note|comment/i', $col . ' ' . $label ) ) {
+			continue;
+		}
+		if ( ! preg_match( '/internal|staff|admin|private/i', $col . ' ' . $label ) ) {
 			return $v;
 		}
+		$staff = '' !== $staff ? $staff : $v;
 	}
-	return '';
+	return $staff;
 }
 
 /** The site's extra booking columns, name => label. */
