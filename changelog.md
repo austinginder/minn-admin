@@ -1,6 +1,6 @@
 # Changelog
 
-## **v0.45.0** - Unreleased
+## **v0.45.0** - October 14 2026
 
 The safety-net release. Whatever a screen in Minn saves, it can no longer change who runs your site unless your own account could make that change in WordPress: switching plugins on or off, the theme, the admin email, a powerful role, or a more powerful account's login. Adding a user, coupons, customers, new orders and new products each get a page of their own, and plugins White Label CMS hides from your clients leave Minn for them too. The full review of the release candidate found one medium and thirty-two low issues, and three more reviews of the fixes found two medium ACF saves that could lose data and a way for a forms editor to get a password-reset link from a Gravity Forms User Registration preview. All of it is fixed before release, each fix with a test that fails without it.
 
