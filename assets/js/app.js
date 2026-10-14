@@ -601,6 +601,18 @@
 		if ( dateStr == null || dateStr === '' ) return new Date( NaN );
 		const s = String( dateStr );
 		if ( /Z|[+-]\d\d:?\d\d$/.test( s ) ) return new Date( s );
+		// With the zone's name, a bare stamp is read at the offset the zone
+		// keeps on ITS date: today's offset put a January post an hour early
+		// when read in October. A first guess, then one correction pass.
+		const z = siteZone();
+		if ( z.timeZone && ! z.shift ) {
+			const wall = Date.parse( s.replace( ' ', 'T' ) + 'Z' );
+			const first = isNaN( wall ) ? null : zoneOffsetMin( z.timeZone, wall );
+			if ( null !== first ) {
+				const again = zoneOffsetMin( z.timeZone, wall - first * 60000 );
+				return new Date( wall - ( null === again ? first : again ) * 60000 );
+			}
+		}
 		const off = ( typeof B.gmtOffset === 'number' ) ? B.gmtOffset : 0;
 		const sign = off >= 0 ? '+' : '-';
 		const abs = Math.abs( off );
@@ -658,6 +670,20 @@
 		siteZoneFor = key;
 		siteZoneVal = z || { timeZone: 'UTC', shift: off * 3600000 };
 		return siteZoneVal;
+	}
+
+	// Minutes east of UTC that a zone keeps at an instant ("GMT-05:00");
+	// null for a zone this browser does not know.
+	const zoneOffsetFmts = {};
+	function zoneOffsetMin( tz, ms ) {
+		try {
+			const f = zoneOffsetFmts[ tz ] || ( zoneOffsetFmts[ tz ] = new Intl.DateTimeFormat( 'en-US', { timeZone: tz, timeZoneName: 'longOffset' } ) );
+			const name = ( f.formatToParts( new Date( ms ) ).find( ( p ) => 'timeZoneName' === p.type ) || {} ).value || '';
+			const m = name.match( /([+-])(\d{1,2})(?::?(\d\d))?/ );
+			return m ? ( '-' === m[ 1 ] ? -1 : 1 ) * ( +m[ 2 ] * 60 + +( m[ 3 ] || 0 ) ) : 0;
+		} catch ( e ) {
+			return null;
+		}
 	}
 
 	// An instant as toLocaleString (or the `kind` named: toLocaleDateString,

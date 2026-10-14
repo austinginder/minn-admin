@@ -26,6 +26,14 @@
  *         that stays, and another tab still opens.
  *   labels  A detail dialog's display keys (UpdraftPlus and WPvivid send
  *         stored and lock) take Minn's translated labels.
+ *   entry  (N2) Back from an opened entry shows its row as the page left it.
+ *   year  (I4) A list date names the year the site counts.
+ *   heat  (I5) A revision's heatmap day is the site's.
+ *   itemsettings  (I7) A late settings failure for one form stays off the
+ *         next form's settings.
+ *   dot   (I8) A content row's unsaved dot survives the pill clip on a phone.
+ *   report  (S15) The copied system report carries the site name as text.
+ *   tzsave  (S19) A timezone saved in Settings moves the app's clock.
  *
  * Fixtures: two Amelia appointments and their customer (Amelia's own
  * tables), a PNG attachment, and a product, customer, parent order,
@@ -40,8 +48,12 @@
  * settings tab's GET with a 404 (any other request to those routes is
  * aborted).
  *
- * MINN_DEMO_ONLY=labels|tz|busy|rows|day|ip|settings|media|subs|members runs
- * those sections
+ * The entry, year, itemsettings and tzsave sections answer their routes
+ * with mocks as well (an entry list and page, one event, one form's
+ * settings held then refused, the settings save), so nothing is written.
+ *
+ * MINN_DEMO_ONLY=labels|tz|busy|rows|day|ip|settings|entry|year|heat|
+ * itemsettings|dot|report|tzsave|media|subs|members runs those sections
  * (comma-separated).
  */
 const fs = require( 'fs' );
@@ -301,14 +313,18 @@ const id = ( v ) => ( Number.isInteger( v ) && v > 1 ? v : null );
 		if ( want( 'rows' ) && surfaces.includes( 'wp-crontrol' ) ) {
 			// Mocked events, list and detail, carrying the shapes the mail, form,
 			// booking and log adapters send: an ISO instant, a "Name <address>"
-			// recipient, markup that must stay text, underscored and
-			// parenthesized statuses, and an on/off boolean with no status.
+			// recipient, markup that must stay text, underscored statuses and
+			// labels the server already wrote, an on/off boolean with no
+			// status, and a bare site-local time from the other DST half.
+			const janNext = ( new Date().getFullYear() + 1 ) + '-01-15T09:00:00';
 			const base = { schedule: 'once', interval: '—', date: '2026-10-09T19:44:00Z', can_run: false, can_pause: false, can_resume: false, can_delete: false };
 			const items = [
 				Object.assign( {}, base, { id: 'demo-bugs-probe', hook: 'demo_bugs_probe', schedule: 'Nadia Petrov <nadia@example.com>', interval: '<img src=x onerror="window.__minnCellXss=1">plain', status: 'payment_pending' } ),
-				Object.assign( {}, base, { id: 'demo-bugs-probe-2', hook: 'demo_bugs_probe_2', status: 'failed_login (unknown user)' } ),
-				Object.assign( {}, base, { id: 'demo-bugs-probe-3', hook: 'demo_bugs_probe_3', enabled: true } ),
+				Object.assign( {}, base, { id: 'demo-bugs-probe-2', hook: 'demo_bugs_probe_2', status: 'Failed login (unknown user)' } ),
+				Object.assign( {}, base, { id: 'demo-bugs-probe-3', hook: 'demo_bugs_probe_3', enabled: true, starts: janNext, recipient: 'Nadia Petrov <nadia@example.com>' } ),
 				Object.assign( {}, base, { id: 'demo-bugs-probe-4', hook: 'demo_bugs_probe_4', status: 'awaiting_customer_confirmation' } ),
+				Object.assign( {}, base, { id: 'demo-bugs-probe-5', hook: 'demo_bugs_probe_5', status: 'Signed in' } ),
+				Object.assign( {}, base, { id: 'demo-bugs-probe-6', hook: 'Ops desk <ops@example.com>', status: 'sent' } ),
 			];
 			const detail = { sections: [ { title: 'Event', rows: [
 				{ label: 'Sent', value: '2026-10-09T19:44:00Z' },
@@ -329,7 +345,7 @@ const id = ( v ) => ( Number.isInteger( v ) && v > 1 ? v : null );
 			await page.route( isMock, onMock );
 			try {
 				await page.goto( BASE + '/minn-admin/wp-crontrol', { waitUntil: 'domcontentloaded', timeout: 90000 } );
-				await page.waitForFunction( () => [ ...document.querySelectorAll( '.minn-table-row' ) ].some( ( r ) => r.textContent.includes( 'demo_bugs_probe_4' ) ), null, { timeout: 60000 } );
+				await page.waitForFunction( () => [ ...document.querySelectorAll( '.minn-table-row' ) ].some( ( r ) => r.textContent.includes( 'demo_bugs_probe_5' ) ), null, { timeout: 60000 } );
 				const cells = await page.evaluate( () => {
 					const rows = [ ...document.querySelectorAll( '.minn-table-row' ) ];
 					const row = ( h ) => rows.find( ( r ) => r.querySelector( '.minn-row-title' ) && r.querySelector( '.minn-row-title' ).textContent.trim() === h );
@@ -343,13 +359,16 @@ const id = ( v ) => ( Number.isInteger( v ) && v > 1 ? v : null );
 						xss: !! window.__minnCellXss,
 						pill1: one.querySelector( '.minn-status' ).textContent.trim(),
 						pill2: two.querySelector( '.minn-status' ).textContent.trim(),
+						pill5: row( 'demo_bugs_probe_5' ).querySelector( '.minn-status' ).textContent.trim(),
+						title6: !! row( 'Ops desk <ops@example.com>' ),
 						spill: Math.round( pill.getBoundingClientRect().right - cell.getBoundingClientRect().right ),
 					};
 				} );
 				t.check( 'A text cell keeps the address of a recipient written Name <address>', cells.cells.includes( 'Nadia Petrov <nadia@example.com>' ), JSON.stringify( cells.cells ) );
 				t.check( 'control: a text cell still renders markup as text', ! cells.img && ! cells.xss && cells.cells.includes( 'plain' ), JSON.stringify( cells ) );
 				t.check( 'An underscored vendor status reads as words', 'Payment pending' === cells.pill1, cells.pill1 );
-				t.check( 'A status\'s parenthetical keeps its words as they came', 'Failed Login (unknown user)' === cells.pill2, cells.pill2 );
+				t.check( 'A label the server already wrote shows as sent, not re-cased', 'Failed login (unknown user)' === cells.pill2 && 'Signed in' === cells.pill5, JSON.stringify( [ cells.pill2, cells.pill5 ] ) );
+				t.check( 'A title cell keeps the address of a "Name <address>" value', cells.title6, String( cells.title6 ) );
 				t.check( 'A long status pill stays inside its column', cells.spill <= 1, JSON.stringify( { spill: cells.spill } ) );
 
 				await page.click( rowOf( 'demo_bugs_probe' ) );
@@ -379,9 +398,18 @@ const id = ( v ) => ( Number.isInteger( v ) && v > 1 ? v : null );
 					const m = document.querySelector( '#minn-overlays .minn-modal' );
 					const head = m.querySelector( '.minn-modal-head' );
 					const keys = [ ...m.querySelectorAll( '.minn-side-key' ) ].map( ( k ) => k.textContent.trim() );
-					return { pill: ( ( head && head.querySelector( '.minn-status' ) ) || {} ).textContent || '', keys };
+					const val = ( label ) => {
+						const k = [ ...m.querySelectorAll( '.minn-side-key' ) ].find( ( x ) => x.textContent.trim() === label );
+						return k ? k.parentElement.textContent.replace( k.textContent, '' ).trim() : null;
+					};
+					return { pill: ( ( head && head.querySelector( '.minn-status' ) ) || {} ).textContent || '', keys, starts: val( 'Starts' ), recipient: val( 'Recipient' ), tz: window.MINN.timezone || '' };
 				} );
 				t.check( 'An on/off boolean with no status is the dialog\'s pill, not an "Enabled: true" row', 'Active' === onoff.pill.trim() && ! onoff.keys.includes( 'Enabled' ), JSON.stringify( onoff ) );
+				t.check( 'A detail value keeps the address of a "Name <address>" recipient', 'Nadia Petrov <nadia@example.com>' === onoff.recipient, String( onoff.recipient ) );
+				// A bare stamp is the site's wall clock, whatever the offset that day.
+				if ( onoff.tz ) {
+					t.check( 'A bare site-local time from the other DST half reads as stored', /·.*9:00\s*AM/.test( onoff.starts || '' ) && ! /8:00\s*AM/.test( onoff.starts || '' ), String( onoff.starts ) );
+				}
 				await page.keyboard.press( 'Escape' );
 			} finally {
 				await page.unroute( isMock, onMock ).catch( () => {} );
@@ -514,6 +542,201 @@ const id = ( v ) => ( Number.isInteger( v ) && v > 1 ? v : null );
 			}
 		}
 
+		/* ===== N2 · an opened entry's list row follows the page ===== */
+		if ( want( 'entry' ) ) {
+			const pick = await page.evaluate( () => {
+				const s = ( window.MINN.surfaces || [] ).find( ( x ) => x.family === 'forms' && x.collection && x.collection.open
+					&& /\/entry\/\{id\}$/.test( x.collection.open.route || '' ) && ( x.collection.detail || {} ).sectionsRoute
+					&& ( x.collection.columns || [] ).some( ( c ) => 'pill' === c.format && 'is_read' !== c.key ) );
+				if ( ! s ) return null;
+				const c = s.collection;
+				return { id: s.id, route: c.route, allRoute: c.allRoute || '', itemsKey: c.itemsKey || '', totalKey: c.totalKey || '', detail: c.detail.sectionsRoute, pill: c.columns.find( ( x ) => 'pill' === x.format && 'is_read' !== x.key ).key };
+			} );
+			if ( pick ) {
+				const fakeId = 990000 + Math.floor( Math.random() * 9000 );
+				const reEsc = ( x ) => x.replace( /[.*+?^${}()|[\]\\]/g, '\\$&' );
+				// The All tab may read its own route (Gravity Forms' gf/entries).
+				const listRe = new RegExp( '(?:' + [ pick.route, pick.allRoute ].filter( Boolean ).map( ( r ) => reEsc( r ).replace( /\\\{tab\\\}/g, '[^/?&]+' ) ).join( '|' ) + ')(?:[?&]|$)' );
+				const detailRe = new RegExp( reEsc( pick.detail.replace( '{id}', String( fakeId ) ) ) + '(?:[?&]|$)' );
+				const row = { id: fakeId, form_id: 1, date_created: '2026-10-09 19:44:00', 1: 'Entry Probe', summary: 'Entry Probe', is_read: 0, status: 'unread', [ pick.pill ]: 'unread' };
+				const listBody = pick.itemsKey ? { [ pick.itemsKey ]: [ row ], [ pick.totalKey || 'total' ]: 1 } : [ row ];
+				const detailBody = { kind: 'entry', title: 'Probe form', status: 'read', sections: [
+					{ title: 'Response', rows: [ { label: 'Name', value: 'Entry Probe' } ] },
+					{ title: 'Submission', rows: [] },
+				], item: { [ pick.pill ]: 'read', is_read: 1, status: 'read' } };
+				const isMine = ( u ) => listRe.test( decodeURIComponent( u.href ) ) || detailRe.test( decodeURIComponent( u.href ) );
+				const onMine = ( route ) => {
+					if ( 'GET' !== route.request().method() ) return route.abort();
+					const u = decodeURIComponent( route.request().url() );
+					if ( detailRe.test( u ) ) return route.fulfill( { status: 200, contentType: 'application/json', body: JSON.stringify( detailBody ) } );
+					return route.fulfill( { status: 200, contentType: 'application/json', headers: { 'X-WP-Total': '1', 'X-WP-TotalPages': '1' }, body: JSON.stringify( listBody ) } );
+				};
+				await page.route( isMine, onMine );
+				try {
+					await page.goto( `${ BASE }/minn-admin/${ pick.id }`, { waitUntil: 'domcontentloaded', timeout: 90000 } );
+					await page.waitForFunction( () => [ ...document.querySelectorAll( '.minn-table-row' ) ].some( ( r ) => /Entry Probe/.test( r.textContent ) ), null, { timeout: 120000 } );
+					const pillOf = () => page.evaluate( () => {
+						const r = [ ...document.querySelectorAll( '.minn-table-row' ) ].find( ( x ) => /Entry Probe/.test( x.textContent ) );
+						return r && r.querySelector( '.minn-status' ) ? r.querySelector( '.minn-status' ).textContent.trim() : null;
+					} );
+					const before = await pillOf();
+					await page.evaluate( () => [ ...document.querySelectorAll( '.minn-table-row' ) ].find( ( x ) => /Entry Probe/.test( x.textContent ) ).click() );
+					await page.waitForSelector( '.minn-entry-page .minn-order-main', { timeout: 120000 } );
+					await page.click( '#minn-ep-back' );
+					await page.waitForFunction( () => [ ...document.querySelectorAll( '.minn-table-row' ) ].some( ( r ) => /Entry Probe/.test( r.textContent ) ), null, { timeout: 120000 } );
+					const after = await pillOf();
+					t.check( `N2: Back from an opened entry (${ pick.id }) shows its row as the page left it`, 'Unread' === before && 'Read' === after, JSON.stringify( { pill: pick.pill, before, after } ) );
+				} finally {
+					await page.unroute( isMine, onMine ).catch( () => {} );
+				}
+			} else {
+				console.log( 'SKIP  entry: no forms surface here opens entries on their own page' );
+			}
+		}
+
+		/* ===== I4 · a list date names the year the site counts ===== */
+		if ( want( 'year' ) && surfaces.includes( 'wp-crontrol' ) ) {
+			const tz = await page.evaluate( () => window.MINN.timezone || '' );
+			const siteOff = await page.evaluate( () => window.MINN.gmtOffset );
+			if ( tz && siteOff < 0 ) {
+				// 10 pm on the site's last day of last year: already next year in Tokyo.
+				const y = new Date().getFullYear() - 1;
+				const off = ( new Intl.DateTimeFormat( 'en-US', { timeZone: tz, timeZoneName: 'longOffset' } ).formatToParts( new Date( `${ y }-12-31T12:00:00Z` ) ).find( ( x ) => 'timeZoneName' === x.type ).value.match( /[+-]\d\d:\d\d/ ) || [ '+00:00' ] )[ 0 ];
+				const ev = { id: 'demo-bugs-year', hook: 'demo_bugs_year', schedule: 'once', interval: '—', status: 'scheduled', date: `${ y }-12-31T22:00:00${ off }` };
+				const yCtx = await browser.newContext( { ignoreHTTPSErrors: true, storageState: loadAuthState() || undefined, timezoneId: 'Asia/Tokyo' } );
+				try {
+					const yp = await yCtx.newPage();
+					yp.on( 'pageerror', ( e ) => errors.push( 'pageerror (year): ' + e.message ) );
+					await yp.route( ( u ) => /crontrol\/events/.test( decodeURIComponent( u.href ) ), ( route ) => ( 'GET' === route.request().method()
+						? route.fulfill( { status: 200, contentType: 'application/json', body: JSON.stringify( { items: [ ev ], total: 1 } ) } )
+						: route.abort() ) );
+					await yp.goto( BASE + '/minn-admin/wp-crontrol', { waitUntil: 'domcontentloaded', timeout: 90000 } );
+					await yp.waitForFunction( () => [ ...document.querySelectorAll( '.minn-table-row' ) ].some( ( r ) => r.textContent.includes( 'demo_bugs_year' ) ), null, { timeout: 60000 } );
+					const cell = await yp.evaluate( ( iso ) => ( ( document.querySelector( `.minn-table-row [title="${ iso }"]` ) || {} ).textContent || '' ).trim(), ev.date );
+					t.check( 'I4: a list date from the site\'s last year names that year, read from a browser already in the next', cell === `Dec 31, ${ y }`, cell );
+				} finally {
+					await yCtx.close().catch( () => {} );
+				}
+			} else {
+				console.log( 'SKIP  year: the site has no zone name, or sits east of UTC' );
+			}
+		}
+
+		/* ===== I5 · revision heatmap days are the site's ===== */
+		if ( want( 'heat' ) ) {
+			// The shipped functions, run with the browser clock in Tokyo and the
+			// site in New York: a 10:30 pm revision belongs to that site day.
+			const probe = `
+				const fs = require( 'fs' ), vm = require( 'vm' );
+				const src = fs.readFileSync( process.env.MINN_APP_JS, 'utf8' );
+				const fn = ( n ) => { const a = src.indexOf( '\\tfunction ' + n + '(' ); return a < 0 ? '' : src.slice( a, src.indexOf( '\\n\\t}', a ) + 3 ); };
+				const region = src.slice( src.indexOf( '\\tlet siteZoneFor' ), src.indexOf( '\\t// Absolute fallback for timeAgo' ) );
+				const f = vm.runInNewContext( region + fn( 'parseWpDate' ) + fn( 'revisionDayKey' ) + '\\nrevisionDayKey;',
+					{ B: { timezone: 'America/New_York', gmtOffset: -4 }, uiLocale: () => 'en-US', Intl, Date, String, Math, Object, Number, isNaN } );
+				process.stdout.write( f( '2026-10-12T22:30:00' ) + '|' + f( '2026-10-13T02:30:00Z' ) );`;
+			let got = '';
+			try {
+				got = execFileSync( process.execPath, [ '-e', probe ], { encoding: 'utf8', env: Object.assign( {}, process.env, { TZ: 'Asia/Tokyo', MINN_APP_JS: path.resolve( __dirname, '../assets/js/app.js' ) } ) } ).trim();
+			} catch ( e ) {
+				got = 'error: ' + String( e.stderr || e.message ).slice( 0, 160 );
+			}
+			t.check( 'I5: a late-evening revision sits in the site\'s day, not the browser\'s', '2026-10-12|2026-10-12' === got, got );
+		}
+
+		/* ===== I7 · a late settings failure for one item stays off another's ===== */
+		if ( want( 'itemsettings' ) && surfaces.includes( 'gravity-forms' ) ) {
+			const forms = await api( 'minn-admin/v1/gf/forms' );
+			const list = Array.isArray( forms.body ) ? forms.body : ( ( forms.body || {} ).items || ( forms.body || {} ).forms || [] );
+			// Two forms whose titles can't be mistaken for each other in a row.
+			const named = list.filter( ( f ) => f && f.id && f.title );
+			const a = named[ 0 ];
+			const b = a && named.find( ( f ) => f !== a && ! f.title.includes( a.title ) && ! a.title.includes( f.title ) );
+			if ( a && b ) {
+				let release = null;
+				const held = new Promise( ( r ) => { release = r; } );
+				const aRe = new RegExp( `gf/forms/${ a.id }/settings/` );
+				const isA = ( u ) => aRe.test( decodeURIComponent( u.href ) );
+				const onA = async ( route ) => {
+					if ( 'GET' !== route.request().method() ) return route.abort();
+					await held;
+					return route.fulfill( { status: 404, contentType: 'application/json', body: JSON.stringify( { code: 'rest_no_route', message: 'No route was found matching the URL and request method.', data: { status: 404 } } ) } );
+				};
+				const openSettings = async ( title ) => {
+					await page.waitForFunction( ( x ) => [ ...document.querySelectorAll( '.minn-table-row' ) ].some( ( r ) => r.textContent.includes( x ) ), title, { timeout: 60000 } );
+					await page.waitForFunction( () => { const t2 = document.querySelector( '.minn-table' ); return t2 && ! t2.classList.contains( 'minn-busy' ); }, null, { timeout: 60000 } );
+					await page.evaluate( ( x ) => [ ...document.querySelectorAll( '.minn-table-row' ) ].find( ( r ) => r.textContent.includes( x ) )
+						.dispatchEvent( new MouseEvent( 'contextmenu', { bubbles: true, clientX: 300, clientY: 300 } ) ), title );
+					await page.waitForSelector( '.minn-ctx-menu', { timeout: 15000 } );
+					await page.evaluate( () => [ ...document.querySelectorAll( '.minn-ctx-menu button' ) ].find( ( x ) => 'Form settings' === x.textContent.trim() ).click() );
+				};
+				await page.route( isA, onA );
+				try {
+					await page.goto( BASE + '/minn-admin/gravity-forms', { waitUntil: 'domcontentloaded', timeout: 90000 } );
+					await page.waitForSelector( '[data-sview="manage"]', { timeout: 60000 } );
+					await page.click( '[data-sview="manage"]' );
+					await openSettings( a.title );
+					await page.waitForSelector( '#minn-view .minn-loading', { timeout: 20000 } );
+					await page.click( '[data-sview="manage"]' );
+					await openSettings( b.title );
+					await page.waitForSelector( '[data-sset]', { timeout: 60000 } );
+					release();
+					await page.waitForTimeout( 2500 );
+					const now = await page.evaluate( () => ( {
+						form: !! document.querySelector( '#minn-view [data-sset]' ),
+						error: !! document.querySelector( '#minn-view .minn-empty' ),
+						meta: ( ( document.querySelector( '#minn-view .minn-toolbar-meta' ) || {} ).textContent || '' ).trim(),
+					} ) );
+					t.check( 'I7: a late failure for one form\'s settings leaves the next form\'s settings in place', now.form && ! now.error && now.meta.includes( b.title ), JSON.stringify( now ) );
+				} finally {
+					release();
+					await page.unroute( isA, onA ).catch( () => {} );
+				}
+			} else {
+				console.log( 'SKIP  itemsettings: fewer than two Gravity Forms forms here' );
+			}
+		}
+
+		/* ===== I8 · a content row's dot survives the pill clip on a phone ===== */
+		if ( want( 'dot' ) ) {
+			await page.setViewportSize( { width: 390, height: 844 } );
+			try {
+				await page.goto( BASE + '/minn-admin/content', { waitUntil: 'domcontentloaded', timeout: 90000 } );
+				await page.waitForSelector( '.minn-table-row .minn-row-status .minn-status', { timeout: 60000 } );
+				// A row's pill with the unsaved dot as the row renders it, and a
+				// label as long as a translation's ("Veröffentlicht").
+				const fit = await page.evaluate( () => {
+					const pill = document.querySelector( '.minn-table-row .minn-row-status .minn-status' );
+					const words = pill.querySelector( '.minn-status-text' ) || [ ...pill.childNodes ].find( ( n ) => 3 === n.nodeType && n.textContent.trim() );
+					words.textContent = 'Veröffentlicht';
+					if ( ! pill.querySelector( '.minn-row-modified' ) ) pill.insertAdjacentHTML( 'beforeend', '<span class="minn-row-modified" aria-hidden="true"></span>' );
+					const dot = pill.querySelector( '.minn-row-modified' ).getBoundingClientRect();
+					const box = pill.getBoundingClientRect();
+					const cell = pill.closest( '.minn-row-status' ).getBoundingClientRect();
+					return { label: pill.textContent.trim(), dotRight: Math.round( dot.right ), pillRight: Math.round( box.right ), cellRight: Math.round( cell.right ), cellWidth: Math.round( cell.width ) };
+				} );
+				t.check( 'I8: on a phone the unsaved dot stays inside its pill, and the pill inside its column', fit.dotRight <= fit.pillRight && fit.pillRight <= fit.cellRight + 1, JSON.stringify( fit ) );
+			} finally {
+				await page.setViewportSize( { width: 1280, height: 720 } );
+			}
+		}
+
+		/* ===== S15 · the copied system report carries the site name as text ===== */
+		if ( want( 'report' ) ) {
+			await page.goto( BASE + '/minn-admin/system', { waitUntil: 'domcontentloaded', timeout: 90000 } );
+			await page.waitForSelector( '#minn-sys-copy', { timeout: 90000 } );
+			const copied = await page.evaluate( async () => {
+				const was = window.MINN.site.name;
+				window.MINN.site.name = 'Larkspur & Fern';
+				let text = '';
+				Object.defineProperty( navigator.clipboard, 'writeText', { configurable: true, value: async ( v ) => { text = v; } } );
+				document.querySelector( '#minn-sys-copy' ).click();
+				await new Promise( ( r ) => setTimeout( r, 400 ) );
+				window.MINN.site.name = was;
+				return text.split( '\n' )[ 0 ];
+			} );
+			t.check( 'S15: the copied system report names the site as text, not HTML', '# System report — Larkspur & Fern' === copied, copied );
+		}
+
 		/* ===== D-06 · the media preview is a dialog ===== */
 		if ( want( 'media' ) ) {
 			const made = await page.evaluate( async ( name ) => {
@@ -636,6 +859,44 @@ const id = ( v ) => ( Number.isInteger( v ) && v > 1 ? v : null );
 		} else if ( want( 'members' ) ) {
 			console.log( 'SKIP  D-21: WooCommerce Memberships is not active on this site' );
 		}
+
+		/* ===== S19 · a timezone saved in Settings moves the app's clock ===== */
+		if ( want( 'tzsave' ) ) {
+			const vals = await api( 'wp/v2/settings' );
+			const was = vals.body && vals.body.timezone;
+			// Zones every browser lists by this name, with no DST to shift them.
+			const pickZone = 'Asia/Tokyo' === was ? 'Asia/Seoul' : 'Asia/Tokyo';
+			const wantOff = 9;
+			// The save is answered here: the site's own timezone never changes.
+			const isSave = ( u ) => /wp\/v2\/settings(?:[?&]|$)/.test( decodeURIComponent( u.href ) );
+			const onSave = ( route ) => {
+				if ( 'POST' !== route.request().method() ) return route.continue();
+				let sent = {};
+				try { sent = JSON.parse( route.request().postData() || '{}' ); } catch ( e ) {}
+				return route.fulfill( { status: 200, contentType: 'application/json', body: JSON.stringify( Object.assign( {}, vals.body, sent ) ) } );
+			};
+			if ( vals.status === 200 && was !== undefined ) {
+				await page.route( isSave, onSave );
+				try {
+					await page.goto( BASE + '/minn-admin/settings', { waitUntil: 'domcontentloaded', timeout: 90000 } );
+					await page.waitForSelector( '[data-key="timezone"]', { timeout: 120000 } );
+					await page.fill( '[data-key="timezone"]', pickZone );
+					const posted = page.waitForResponse( ( r ) => 'POST' === r.request().method() && isSave( new URL( r.url() ) ), { timeout: 30000 } );
+					await page.click( '#minn-save-settings' );
+					const res = await posted;
+					let sent = {};
+					try { sent = JSON.parse( res.request().postData() || '{}' ); } catch ( e ) {}
+					await page.waitForTimeout( 600 );
+					const boot = await page.evaluate( () => ( { tz: window.MINN.timezone, off: window.MINN.gmtOffset } ) );
+					t.check( 'S19: saving a new timezone moves the app\'s clock without a reload', sent.timezone === pickZone && boot.tz === pickZone && boot.off === wantOff, JSON.stringify( { sent: sent.timezone, boot } ) );
+				} finally {
+					await page.unroute( isSave, onSave ).catch( () => {} );
+				}
+			} else {
+				console.log( 'SKIP  tzsave: this account cannot read the site settings' );
+			}
+		}
+
 	} catch ( e ) {
 		t.check( 'suite ran without throwing', false, e.message );
 	} finally {
