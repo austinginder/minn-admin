@@ -363,7 +363,8 @@ add_action( 'rest_api_init', function () {
 			}
 			$event = array(
 				array( 'label' => __( 'Event', 'minn-admin' ), 'value' => $alert_title( $row->alert_id ) . ' (' . (int) $row->alert_id . ')' ),
-				array( 'label' => __( 'When', 'minn-admin' ), 'value' => date_i18n( 'M j, Y g:i a', (int) $row->created_on + (int) ( get_option( 'gmt_offset' ) * HOUR_IN_SECONDS ) ) ),
+				// created_on is a UTC epoch; wp_date() prints it at the offset that date had.
+				array( 'label' => __( 'When', 'minn-admin' ), 'value' => wp_date( 'M j, Y g:i a', (int) $row->created_on ) ),
 				array( 'label' => __( 'Severity', 'minn-admin' ), 'value' => $severity_label( $row->severity ) ),
 				array( 'label' => __( 'Object', 'minn-admin' ), 'value' => $row->object ),
 				array( 'label' => __( 'Type', 'minn-admin' ), 'value' => $row->event_type ),

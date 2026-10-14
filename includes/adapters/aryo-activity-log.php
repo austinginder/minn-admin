@@ -493,6 +493,8 @@ add_action( 'rest_api_init', function () {
 			$labels = $source_ready ? minn_admin_aryo_channel_labels() : array();
 			$users  = array();
 			$items  = array();
+			$zone   = wp_timezone();
+			$utc    = new DateTimeZone( 'UTC' );
 			foreach ( (array) $rows as $r ) {
 				$uid = (int) $r->user_id;
 				if ( $uid && ! isset( $users[ $uid ] ) ) {
@@ -507,10 +509,11 @@ add_action( 'rest_api_init', function () {
 					'action'  => minn_admin_aryo_action_label( $r->action ),
 					'type'    => $r->object_type . ( $r->object_subtype ? ' / ' . $r->object_subtype : '' ),
 					'ip'      => $r->hist_ip,
-					// Aryo stores current_time('timestamp') — WP's LOCAL epoch,
-					// not UTC — so shift back before emitting an ISO-UTC shape.
-					// UTC with Z (hist_time is WP local epoch — shift back first).
-					'date'    => gmdate( 'Y-m-d\TH:i:s\Z', (int) $r->hist_time - (int) ( get_option( 'gmt_offset' ) * HOUR_IN_SECONDS ) ),
+					// Aryo stores current_time('timestamp'): the site's wall clock
+					// read as an epoch. Read it back in the site's zone, at the
+					// offset that date had (today's is an hour off for a stamp
+					// from the other side of a DST change), and send UTC with Z.
+					'date'    => ( new DateTimeImmutable( gmdate( 'Y-m-d H:i:s', (int) $r->hist_time ), $zone ) )->setTimezone( $utc )->format( 'Y-m-d\TH:i:s\Z' ),
 				);
 				if ( $source_ready ) {
 					list( $channel, $app ) = minn_admin_aryo_parse_source( isset( $r->request_source ) ? $r->request_source : '' );

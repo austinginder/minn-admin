@@ -334,7 +334,8 @@ add_action( 'rest_api_init', function () {
 			$who   = (string) $row->username;
 			$event = array(
 				array( 'label' => __( 'Event', 'minn-admin' ), 'value' => minn_admin_aios_event_label( $row->event_type ) ),
-				array( 'label' => __( 'When', 'minn-admin' ), 'value' => date_i18n( 'M j, Y g:i a', (int) $row->created + (int) ( get_option( 'gmt_offset' ) * HOUR_IN_SECONDS ) ) ),
+				// created is a UTC epoch; wp_date() prints it at the offset that date had.
+				array( 'label' => __( 'When', 'minn-admin' ), 'value' => wp_date( 'M j, Y g:i a', (int) $row->created ) ),
 				array( 'label' => __( 'Level', 'minn-admin' ), 'value' => minn_admin_aios_level( $row->level ), 'type' => 'pill' ),
 				array( 'label' => __( 'User', 'minn-admin' ), 'value' => '' !== $who ? $who : 'System' ),
 				array( 'label' => 'IP', 'value' => (string) $row->ip ),

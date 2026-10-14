@@ -608,4 +608,136 @@ if ( ! function_exists( 'minn_admin_wordfence_active' ) || ! class_exists( 'wfUt
 	}
 }
 
+// --- S10 Times from the other half of the year keep their own offset --------
+// A stamp from January on a site in summer time is an hour off when it is
+// shifted by today's gmt_offset. The noon picked here is in the half of the
+// year whose offset is not today's.
+$s10_zone  = wp_timezone();
+$s10_noon  = null;
+$s10_today = ( new DateTimeImmutable( 'now', $s10_zone ) )->getOffset();
+foreach ( array( '-01-15 12:00:00', '-07-15 12:00:00' ) as $s10_md ) {
+	$s10_try = new DateTimeImmutable( gmdate( 'Y' ) . $s10_md, $s10_zone );
+	if ( $s10_try->getOffset() !== $s10_today ) {
+		$s10_noon = $s10_try;
+		break;
+	}
+}
+// The event row the WP Activity Log sections write, the shape its own
+// database logger stores (one occurrence row plus its meta).
+$wsal_put = function ( $alert, $username, $user_id, $created, array $meta = array() ) use ( $wpdb ) {
+	$wpdb->insert( $wpdb->base_prefix . 'wsal_occurrences', array(
+		'site_id' => is_multisite() ? get_current_blog_id() : 0, 'alert_id' => $alert, 'created_on' => $created, 'client_ip' => '203.0.113.29',
+		'severity' => 200, 'object' => 'user', 'event_type' => 'login', 'user_agent' => 'Minn probe', 'user_roles' => '', 'username' => $username,
+		'user_id' => $user_id, 'session_id' => '', 'post_status' => '', 'post_type' => '', 'post_id' => 0,
+	) );
+	$id = (int) $wpdb->insert_id;
+	if ( ! ( is_int( $id ) && $id > 1 ) ) {
+		return 0;
+	}
+	foreach ( $meta as $name => $value ) {
+		$wpdb->insert( $wpdb->base_prefix . 'wsal_metadata', array( 'occurrence_id' => $id, 'name' => $name, 'value' => $value ) );
+	}
+	return $id;
+};
+$wsal_drop = function ( $id ) use ( $wpdb ) {
+	if ( is_int( $id ) && $id > 1 ) {
+		$wpdb->delete( $wpdb->base_prefix . 'wsal_metadata', array( 'occurrence_id' => $id ) );
+		$wpdb->delete( $wpdb->base_prefix . 'wsal_occurrences', array( 'id' => $id ) );
+	}
+};
+if ( ! $s10_noon ) {
+	$skip( 'S10 this site\'s zone keeps one offset all year' );
+} else {
+	$s10_utc = gmdate( 'Y-m-d\TH:i:s\Z', $s10_noon->getTimestamp() );
+	// Aryo stores current_time( 'timestamp' ): the wall clock read as an epoch.
+	if ( ! class_exists( 'AAL_Main' ) || $aal_table !== $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $aal_table ) ) ) {
+		$skip( 'S10 Activity Log (Aryo) is not installed' );
+	} else {
+		$s10_aal = 0;
+		try {
+			$wpdb->insert( $aal_table, array( 'user_caps' => 'guest', 'action' => 'failed_login', 'object_type' => 'Users', 'object_subtype' => '', 'object_name' => $marker . 'tz', 'object_id' => 0, 'user_id' => 0, 'hist_ip' => '203.0.113.7', 'hist_time' => $s10_noon->getTimestamp() + $s10_noon->getOffset() ) );
+			$s10_aal = (int) $wpdb->insert_id;
+			list( $st, $d ) = $call( 'GET', '/minn-admin/v1/aryo/events', null, array( 'search' => $marker . 'tz', 'per_page' => 25, 'page' => 1 ) );
+			$s10_item = null;
+			foreach ( (array) ( $d['items'] ?? array() ) as $it ) {
+				if ( (int) $it['id'] === $s10_aal ) {
+					$s10_item = $it;
+				}
+			}
+			$check( 'S10 an Aryo row from the other half of the year is sent at its own offset', $s10_item && $s10_utc === $s10_item['date'], wp_json_encode( array( $s10_item['date'] ?? null, $s10_utc ) ) );
+		} finally {
+			if ( is_int( $s10_aal ) && $s10_aal > 1 ) {
+				$wpdb->delete( $aal_table, array( 'histid' => $s10_aal ) );
+			}
+		}
+	}
+	// WP Activity Log's created_on is a UTC epoch; the event page's When row
+	// prints it in site time.
+	if ( ! defined( 'WSAL_VERSION' ) || ! function_exists( 'minn_admin_wsal_can_view' ) || ! minn_admin_wsal_can_view() ) {
+		$skip( 'S10 WP Activity Log is not installed' );
+	} else {
+		$s10_wsal = 0;
+		try {
+			$s10_wsal = $wsal_put( 1000, 'admin', $admin, (float) $s10_noon->getTimestamp() );
+			list( $st, $d ) = $call( 'GET', '/minn-admin/v1/wsal/events/' . $s10_wsal );
+			$s10_when = null;
+			foreach ( (array) ( $d['sections'] ?? array() ) as $g ) {
+				foreach ( (array) ( $g['rows'] ?? array() ) as $r ) {
+					if ( 'When' === ( $r['label'] ?? '' ) ) {
+						$s10_when = (string) $r['value'];
+					}
+				}
+			}
+			$want = wp_date( 'M j, Y g:i a', $s10_noon->getTimestamp() );
+			$check( 'S10 a WP Activity Log event from the other half of the year shows its own site time', 200 === $st && $want === $s10_when, wp_json_encode( array( $s10_when, $want ) ) );
+		} finally {
+			$wsal_drop( $s10_wsal );
+		}
+	}
+}
+
+// --- S10 All-In-One Security: an event's When keeps its own offset ----------
+// Runs last: All-In-One Security is not loaded here (its bundled task manager
+// re-runs its table migration on every load of an inactive copy), so a
+// stand-in AIO_WP_Security class gives this request the adapter's routes,
+// which read only the audit table. The class cannot be undone in this process.
+$s10_aios_table = function_exists( 'minn_admin_aios_table' ) ? minn_admin_aios_table() : '';
+if ( ! $s10_noon ) {
+	$skip( 'S10 (All-In-One Security) this site\'s zone keeps one offset all year' );
+} elseif ( '' === $s10_aios_table || $s10_aios_table !== $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $s10_aios_table ) ) ) {
+	$skip( 'S10 no All-In-One Security audit table on this site' );
+} else {
+	if ( ! function_exists( 'minn_admin_aios_active' ) || ! minn_admin_aios_active() ) {
+		// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a stand-in class for this request only.
+		eval( 'class AIO_WP_Security {}' );
+		foreach ( $GLOBALS['wp_filter']['rest_api_init']->callbacks as $aios_prio ) {
+			foreach ( $aios_prio as $aios_cb ) {
+				if ( $aios_cb['function'] instanceof Closure && 'all-in-one-security.php' === basename( ( new ReflectionFunction( $aios_cb['function'] ) )->getFileName() ) ) {
+					call_user_func( $aios_cb['function'] );
+				}
+			}
+		}
+	}
+	$s10_aios = 0;
+	try {
+		$wpdb->insert( $s10_aios_table, array( 'network_id' => get_current_network_id(), 'site_id' => get_current_blog_id(), 'username' => 'admin', 'ip' => '203.0.113.39', 'level' => 'info', 'event_type' => 'successful_login', 'details' => '{}', 'stacktrace' => '', 'created' => $s10_noon->getTimestamp() ) );
+		$s10_aios = (int) $wpdb->insert_id;
+		list( $st, $d ) = $call( 'GET', '/minn-admin/v1/aios/events/' . $s10_aios );
+		$s10_when = null;
+		foreach ( (array) ( $d['sections'] ?? array() ) as $g ) {
+			foreach ( (array) ( $g['rows'] ?? array() ) as $r ) {
+				if ( 'When' === ( $r['label'] ?? '' ) ) {
+					$s10_when = (string) $r['value'];
+				}
+			}
+		}
+		$want = wp_date( 'M j, Y g:i a', $s10_noon->getTimestamp() );
+		$check( 'S10 an All-In-One Security event from the other half of the year shows its own site time', 200 === $st && $want === $s10_when, $st . ' ' . wp_json_encode( array( $s10_when, $want ) ) );
+	} finally {
+		if ( is_int( $s10_aios ) && $s10_aios > 1 ) {
+			$wpdb->delete( $s10_aios_table, array( 'id' => $s10_aios ) );
+		}
+	}
+}
+
 $summary();
