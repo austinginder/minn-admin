@@ -108,7 +108,23 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		// Restore the dev-site baseline: Wordfence stays deactivated so WSAL
 		// remains the resident activity-log provider.
 		if ( ! wasActive ) {
-			await setWordfence( 'inactive' ).catch( () => {} );
+			// A restore that failed under load used to pass silently and leave
+			// Wordfence on, and with it Wordfence's default of refusing
+			// application passwords, which turned later suites red (2026-10-13).
+			// Re-send until it reads inactive (a toggle can recycle the worker),
+			// and fail the run if it never does.
+			let still = 'unknown';
+			for ( let i = 0; i < 3 && 'inactive' !== still; i++ ) {
+				if ( i ) await page.waitForTimeout( 3000 );
+				await setWordfence( 'inactive' ).catch( () => {} );
+				still = await page.evaluate( async () => {
+					const r = await fetch( window.MINN.restUrl + 'wp/v2/plugins/wordfence/wordfence?_fields=status', {
+						headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin',
+					} );
+					return r.ok ? ( await r.json() ).status : 'unknown';
+				} ).catch( () => 'unknown' );
+			}
+			t.check( 'Wordfence restored to inactive (else: wp plugin deactivate wordfence)', 'inactive' === still, still );
 		}
 	}
 
