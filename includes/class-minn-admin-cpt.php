@@ -697,7 +697,8 @@ class Minn_Admin_CPT {
 		// sends everything.
 		foreach ( array( 'singular', 'plural', 'description', 'public', 'hierarchical', 'has_archive', 'show_in_rest' ) as $k ) {
 			if ( ! $request->has_param( $k ) ) {
-				$def[ $k ] = $now[ $k ];
+				// Through the same cleaning as a sent value.
+				$def[ $k ] = is_bool( $now[ $k ] ) ? $now[ $k ] : sanitize_text_field( (string) $now[ $k ] );
 			}
 		}
 		if ( ! $request->has_param( 'supports' ) ) {
@@ -931,7 +932,7 @@ class Minn_Admin_CPT {
 		// A field the save leaves out keeps what the modal showed for it.
 		foreach ( array( 'singular', 'plural', 'public', 'hierarchical', 'show_in_rest' ) as $k ) {
 			if ( ! $request->has_param( $k ) ) {
-				$def[ $k ] = $now[ $k ];
+				$def[ $k ] = is_bool( $now[ $k ] ) ? $now[ $k ] : sanitize_text_field( (string) $now[ $k ] );
 			}
 		}
 		if ( ! $request->has_param( 'object_types' ) ) {

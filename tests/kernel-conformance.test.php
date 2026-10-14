@@ -224,6 +224,19 @@ Minn_Admin_Kernel::resource( 'minn-conformance/callable', array_merge( $no_row_g
 		},
 	),
 ) ) );
+// A declaration built by a function when first needed: a closure, or a
+// static method named as array( 'Class', 'method' ).
+class Minn_Conformance_Lazy {
+	public static $def = array();
+	public static function def() {
+		return self::$def;
+	}
+}
+Minn_Conformance_Lazy::$def = $def;
+Minn_Admin_Kernel::resource( 'minn-conformance/lazy-fn', function () use ( $def ) {
+	return $def;
+} );
+Minn_Admin_Kernel::resource( 'minn-conformance/lazy-static', array( 'Minn_Conformance_Lazy', 'def' ) );
 // The item route answers to the gate the item names.
 Minn_Admin_Kernel::resource( 'minn-conformance/itemgate', array_merge( $def, array(
 	'gates' => array( 'view' => '__return_true', 'manage' => function () use ( &$gate_on ) {
@@ -409,6 +422,13 @@ list( $st ) = $call( 'POST', '/minn-admin/v1/minn-conformance/norowgate/1/close'
 $check( 'without a row gate, an action on a row outside the scope is refused', 403 === $st, (string) $st );
 list( , $d ) = $call( 'GET', '/minn-admin/v1/minn-conformance/callable' );
 $check( "a callable source's rows outside the scope never leave", array( 5 ) === array_column( (array) ( $d['items'] ?? array() ), 'id' ), wp_json_encode( $d ) );
+
+// Lazy declarations.
+list( , $want ) = $call( 'GET', '/minn-admin/v1/minn-conformance/things' );
+foreach ( array( 'lazy-fn' => 'a closure', 'lazy-static' => "array( 'Class', 'method' )" ) as $slug => $what ) {
+	list( $st, $d ) = $call( 'GET', "/minn-admin/v1/minn-conformance/{$slug}" );
+	$check( "a declaration from {$what} registers and lists as the array would", 200 === $st && ( $want['total'] ?? -1 ) === ( $d['total'] ?? -2 ), $st . ' ' . wp_json_encode( $d ) );
+}
 
 // The item's own gate.
 $gate_on     = false;

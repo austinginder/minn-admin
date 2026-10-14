@@ -120,7 +120,8 @@ class Minn_Admin_Kernel {
 			if ( ! did_action( 'init' ) ) {
 				_doing_it_wrong( __METHOD__, esc_html( "{$id} was needed before init, so its labels are not yet in the reader's language." ), 'Minn Admin 0.46.0' );
 			}
-			$def = is_callable( $slot['lazy'] ) && ! is_array( $slot['lazy'] ) ? call_user_func( $slot['lazy'] ) : $slot['lazy'];
+			// A declaration array is never callable; array( 'Class', 'method' ) is.
+			$def = is_callable( $slot['lazy'] ) ? call_user_func( $slot['lazy'] ) : $slot['lazy'];
 			$def = is_array( $def ) ? $def : array();
 			$def['id']              = $slot['id'];
 			$def['file']            = $slot['file'];

@@ -22710,11 +22710,12 @@
 		const r = await api( `wp/v2/global-styles/${ id }?context=edit` );
 		return { settings: ( r && r.settings ) || {}, styles: ( r && r.styles ) || {} };
 	}
+	// Null when the look cannot be read: then there is no exact Undo to offer.
 	async function lookBefore( d ) {
 		try {
 			return await readLook( d.userStylesId );
 		} catch ( e ) {
-			return d.current || { settings: {}, styles: {} };
+			return null;
 		}
 	}
 	async function lookAfter( d ) {
@@ -22725,13 +22726,16 @@
 		}
 	}
 	// Resolves true when the look before is back, false when Undo refused.
+	// Without both reads there is nothing exact to put back, so it refuses.
 	async function undoLook( d, before, after ) {
-		if ( after ) {
-			const now = await readLook( d.userStylesId );
-			if ( stableLookJson( now ) !== stableLookJson( after ) ) {
-				toast( __( 'The site’s look changed after this, so Undo would remove that change too. Nothing was changed.' ), true );
-				return false;
-			}
+		if ( ! before || ! after ) {
+			toast( __( 'Undo is not available: the site’s look could not be read around this change. Nothing was changed.' ), true );
+			return false;
+		}
+		const now = await readLook( d.userStylesId );
+		if ( stableLookJson( now ) !== stableLookJson( after ) ) {
+			toast( __( 'The site’s look changed after this, so Undo would remove that change too. Nothing was changed.' ), true );
+			return false;
 		}
 		await api( `wp/v2/global-styles/${ d.userStylesId }`, { method: 'POST', body: JSON.stringify( before ) } );
 		return true;
