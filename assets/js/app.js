@@ -712,7 +712,9 @@
 	// out of order. Full year only when the calendar year differs.
 	function formatListDate( d ) {
 		const opts = { month: 'short', day: 'numeric' };
-		if ( d.getFullYear() !== new Date().getFullYear() ) opts.year = 'numeric';
+		// The year as the site counts it, as the day is.
+		const yearOf = ( x ) => siteDateStr( x, { year: 'numeric' }, 'toLocaleDateString' );
+		if ( yearOf( d ) !== yearOf( new Date() ) ) opts.year = 'numeric';
 		return siteDateStr( d, opts, 'toLocaleDateString' );
 	}
 
