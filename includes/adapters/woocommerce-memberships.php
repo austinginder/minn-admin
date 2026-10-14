@@ -788,15 +788,17 @@ function minn_admin_wcm_rule_objects( $content_type, $name, $ids ) {
 		if ( $id <= 0 ) {
 			continue;
 		}
+		// Term names and get_the_title() are HTML (&amp;, a texturized
+		// &#8216;); the chips print plain text through esc().
 		$label = '';
 		if ( 'taxonomy' === $content_type ) {
 			$term  = get_term( $id, $name );
-			$label = $term && ! is_wp_error( $term ) ? $term->name : '';
+			$label = $term && ! is_wp_error( $term ) ? Minn_Admin::plain_text( $term->name ) : '';
 		} else {
 			$post  = get_post( $id );
 			// Only name posts of the rule's own type the caller may read;
 			// anything else shows as a bare id rather than leaking a title.
-			$label = $post && $post->post_type === $name && current_user_can( 'read_post', $post->ID ) ? get_the_title( $post ) : '';
+			$label = $post && $post->post_type === $name && current_user_can( 'read_post', $post->ID ) ? Minn_Admin::plain_text( get_the_title( $post ) ) : '';
 		}
 		$out[] = array( 'id' => $id, 'label' => '' !== $label ? $label : '#' . $id );
 	}
@@ -2525,13 +2527,14 @@ add_action( 'rest_api_init', function () {
 			if ( 'taxonomy' === $kind ) {
 				$terms = get_terms( array( 'taxonomy' => $name, 'hide_empty' => false, 'number' => 20, 'search' => $q ) );
 				foreach ( is_wp_error( $terms ) ? array() : (array) $terms as $term ) {
-					$items[] = array( 'id' => (int) $term->term_id, 'label' => (string) $term->name );
+					// Plain text, as the rule chips name them.
+					$items[] = array( 'id' => (int) $term->term_id, 'label' => Minn_Admin::plain_text( $term->name ) );
 				}
 			} else {
 				// The plugin's own picker offers published content only.
 				$posts = get_posts( array( 'post_type' => $name, 'post_status' => 'publish', 'numberposts' => 20, 's' => $q, 'orderby' => 'title', 'order' => 'ASC' ) );
 				foreach ( (array) $posts as $post ) {
-					$items[] = array( 'id' => (int) $post->ID, 'label' => (string) get_the_title( $post ) );
+					$items[] = array( 'id' => (int) $post->ID, 'label' => Minn_Admin::plain_text( get_the_title( $post ) ) );
 				}
 			}
 			return rest_ensure_response( array( 'items' => $items ) );

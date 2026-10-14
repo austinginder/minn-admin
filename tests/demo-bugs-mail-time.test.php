@@ -516,6 +516,67 @@ try {
 		$check( 'F2 Gravity SMTP: a manual suppression\'s Reason is Gravity SMTP\'s own label', $own && $want === $own['reason'], $st . ' ' . wp_json_encode( $own['reason'] ?? null ) . ' want ' . wp_json_encode( $want ) );
 		$check( 'F2 Gravity SMTP: a reason it has no label for goes out as the slug, for the pill to tidy', $new && 'hard_bounce' === $new['reason'], wp_json_encode( $new['reason'] ?? null ) );
 	}
+
+	// --- S5 WooCommerce Memberships rule labels --------------------------------
+	// The plan-rule picker and the saved rules' chips named posts through
+	// get_the_title() and terms by their stored name, both HTML: a curly
+	// quote read &#8216; and an ampersand &amp;. They go out as plain text,
+	// which every chip and picker row prints through esc().
+	if ( ! function_exists( 'minn_admin_wcm_rule_objects' ) || ! function_exists( 'wc_memberships' ) ) {
+		$skip( 'S5 WooCommerce Memberships inactive' );
+	} else {
+		$s5_title = $marker . " Lupine 'Gallery Blue' & Co";
+		$s5_term  = $marker . ' Tom & Jerry';
+		// Leftovers from an interrupted run, by their marked names.
+		foreach ( get_posts( array( 'post_type' => 'post', 'post_status' => 'any', 'numberposts' => 20, 's' => $marker, 'fields' => 'ids' ) ) as $s5_old ) {
+			if ( (int) $s5_old > 1 && 0 === strpos( get_post_field( 'post_title', $s5_old ), $marker ) ) {
+				wp_delete_post( (int) $s5_old, true );
+			}
+		}
+		foreach ( get_terms( array( 'taxonomy' => 'category', 'hide_empty' => false, 'search' => $marker, 'fields' => 'ids' ) ) as $s5_old ) {
+			if ( (int) $s5_old > 1 ) {
+				wp_delete_term( (int) $s5_old, 'category' );
+			}
+		}
+		$s5_pid = wp_insert_post( array( 'post_type' => 'post', 'post_status' => 'publish', 'post_title' => $s5_title, 'post_content' => '' ) );
+		$s5_pid = is_int( $s5_pid ) && $s5_pid > 1 ? $s5_pid : 0;
+		$s5_tid = wp_insert_term( $s5_term, 'category' );
+		$s5_tid = is_array( $s5_tid ) && isset( $s5_tid['term_id'] ) && (int) $s5_tid['term_id'] > 1 ? (int) $s5_tid['term_id'] : 0;
+		// Plain text: no entity left, the characters themselves kept.
+		$s5_plain = function ( $label, $must ) {
+			return is_string( $label ) && false === strpos( $label, '&#' ) && false === strpos( $label, '&amp;' ) && false !== strpos( $label, $must );
+		};
+		try {
+			if ( ! $s5_pid || ! $s5_tid ) {
+				$check( 'S5 fixture post and term insert', false, wp_json_encode( array( $s5_pid, $s5_tid ) ) );
+			} else {
+				$s5_obj = minn_admin_wcm_rule_objects( 'post_type', 'post', array( $s5_pid ) );
+				$check( 'S5 Memberships: a rule\'s post chip names it in plain text', $s5_plain( $s5_obj[0]['label'] ?? null, 'Gallery Blue' ) && $s5_plain( $s5_obj[0]['label'] ?? null, '& Co' ), wp_json_encode( $s5_obj[0]['label'] ?? null ) );
+				$s5_obj = minn_admin_wcm_rule_objects( 'taxonomy', 'category', array( $s5_tid ) );
+				$check( 'S5 Memberships: a rule\'s term chip names it in plain text', $s5_term === ( $s5_obj[0]['label'] ?? null ), wp_json_encode( $s5_obj[0]['label'] ?? null ) );
+				$s5_targets = array_map( function ( $t ) {
+					return $t[0];
+				}, minn_admin_wcm_rule_targets( 'content_restriction' ) );
+				if ( ! in_array( 'post_type:post', $s5_targets, true ) || ! in_array( 'taxonomy:category', $s5_targets, true ) ) {
+					$skip( 'S5 picker: Posts or Categories is not a rule target here' );
+				} else {
+					list( $st, $look ) = $call( 'GET', '/minn-admin/v1/wcm/lookup', array( 'target' => 'post_type:post', 'q' => $marker ) );
+					$hit = $find( $look['items'] ?? array(), $s5_pid );
+					$check( 'S5 Memberships: the rule picker names a post in plain text', $hit && $s5_plain( $hit['label'], 'Gallery Blue' ) && $s5_plain( $hit['label'], '& Co' ), $st . ' ' . wp_json_encode( $hit['label'] ?? null ) );
+					list( $st, $look ) = $call( 'GET', '/minn-admin/v1/wcm/lookup', array( 'target' => 'taxonomy:category', 'q' => $marker ) );
+					$hit = $find( $look['items'] ?? array(), $s5_tid );
+					$check( 'S5 Memberships: the rule picker names a term in plain text', $hit && $s5_term === $hit['label'], $st . ' ' . wp_json_encode( $hit['label'] ?? null ) );
+				}
+			}
+		} finally {
+			if ( $s5_pid > 1 ) {
+				wp_delete_post( $s5_pid, true );
+			}
+			if ( $s5_tid > 1 ) {
+				wp_delete_term( $s5_tid, 'category' );
+			}
+		}
+	}
 } finally {
 	$wipe();
 	remove_filter( 'pre_option_timezone_string', $tz_string, 99 );
