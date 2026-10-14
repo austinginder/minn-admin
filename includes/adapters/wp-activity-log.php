@@ -298,13 +298,16 @@ add_action( 'rest_api_init', function () {
 
 			$items = array();
 			foreach ( (array) $rows as $r ) {
-				$who = $r->username;
-				if ( ( ! $who || 'Unknown User' === $who ) && $r->user_id ) {
+				// WSAL writes "Unknown User" for system and CLI actors, and
+				// "Unknown user" for a login event with no user id or name.
+				$who     = $r->username;
+				$unknown = 0 === strcasecmp( (string) $who, 'Unknown User' );
+				if ( ( ! $who || $unknown ) && $r->user_id ) {
 					$u   = get_userdata( (int) $r->user_id );
 					$who = $u ? $u->user_login : '#' . $r->user_id;
 				}
-				if ( 'Unknown User' === $who ) {
-					$who = ''; // WSAL's label for system/CLI actors — fall through to 'System'.
+				if ( 0 === strcasecmp( (string) $who, 'Unknown User' ) ) {
+					$who = ''; // Falls through to 'System'.
 				}
 				if ( ! empty( $tried[ (int) $r->id ] ) ) {
 					$who = $tried[ (int) $r->id ];
@@ -353,7 +356,7 @@ add_action( 'rest_api_init', function () {
 			) );
 			// phpcs:enable
 
-			$user = $row->username;
+			$user = 0 === strcasecmp( (string) $row->username, 'Unknown User' ) ? '' : $row->username;
 			if ( 1003 === (int) $row->alert_id ) {
 				foreach ( (array) $pairs as $p ) {
 					if ( 'Users' === $p->name && '' !== $tried_name( $p->value ) ) {

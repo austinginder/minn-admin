@@ -787,6 +787,38 @@ if ( ! function_exists( 'minn_admin_solid_security_active' ) || ! minn_admin_sol
 	}
 }
 
+// --- S17 WP Activity Log's lower-case "Unknown user" reads as System --------
+// Its occurrence store writes "Unknown user" for a login event with neither
+// a user id nor a username, and "Unknown User" elsewhere.
+if ( ! defined( 'WSAL_VERSION' ) || ! function_exists( 'minn_admin_wsal_can_view' ) || ! minn_admin_wsal_can_view() ) {
+	$skip( 'S17 WP Activity Log is not installed' );
+} else {
+	$s17_id = 0;
+	try {
+		$s17_id = $wsal_put( 1000, 'Unknown user', 0, microtime( true ) );
+		list( $st, $d ) = $call( 'GET', '/minn-admin/v1/wsal/events', null, array( 'per_page' => 100, 'page' => 1 ) );
+		$s17_item = null;
+		foreach ( (array) ( $d['items'] ?? array() ) as $it ) {
+			if ( (int) $it['id'] === $s17_id ) {
+				$s17_item = $it;
+			}
+		}
+		$check( 'S17 a row stored as "Unknown user" shows System', $s17_item && 'System' === $s17_item['username'], wp_json_encode( $s17_item['username'] ?? null ) );
+		list( $dst, $dd ) = $call( 'GET', '/minn-admin/v1/wsal/events/' . $s17_id );
+		$s17_user = null;
+		foreach ( (array) ( $dd['sections'] ?? array() ) as $g ) {
+			foreach ( (array) ( $g['rows'] ?? array() ) as $r ) {
+				if ( 'User' === ( $r['label'] ?? '' ) ) {
+					$s17_user = (string) $r['value'];
+				}
+			}
+		}
+		$check( 'S17 and so does its event\'s User row', 200 === $dst && 'System' === $s17_user, $dst . ' ' . wp_json_encode( $s17_user ) );
+	} finally {
+		$wsal_drop( $s17_id );
+	}
+}
+
 // --- S10 All-In-One Security: an event's When keeps its own offset ----------
 // Runs last: All-In-One Security is not loaded here (its bundled task manager
 // re-runs its table migration on every load of an inactive copy), so a
