@@ -96,6 +96,15 @@ none has shipped.
   normalizes several plugins behind one interface, exposes a judgment Minn owns,
   or produces state worth reading across many sites. Anything core WP-CLI already
   does stays core WP-CLI's.
+- **Adapters as declarations: the resource kernel.** Adapter code grew 62% in
+  seven weeks (53,329 lines at v0.35.0, 86,450 at v0.45.0), and the security
+  findings and display bugs live in the plumbing each adapter re-implements:
+  routes, parameters, gates, queries, saves, dates and entities. The unlock is
+  adapters that declare a resource (its vendor source, gate, fields and actions)
+  while Minn owns the routes, the one safe write path, the field types, the
+  descriptor and one conformance runner. Every write stays. Plan, scope and
+  measurement in [adapter-kernel.md](adapter-kernel.md); progress is the
+  inventory in `bin/adapter-inventory.js`.
 - **An active-sites estimate that survives a burst.** The current formula trusts
   the largest recent cohort, which a single scraper or a link on an aggregator
   can inflate by an order of magnitude. Until it is robust, the number on the
