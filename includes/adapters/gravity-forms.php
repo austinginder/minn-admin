@@ -711,8 +711,9 @@ add_action( 'rest_api_init', function () {
 
 			// Opening the entry in Minn marks it read, exactly like opening it
 			// in GF's own entries screen (same view capability gates both).
-			if ( empty( $entry['is_read'] ) ) {
-				GFAPI::update_entry_property( $entry['id'], 'is_read', 1 );
+			// The entry counts as read only when GF's update landed: the item
+			// below carries that state to the page's gates and the list row.
+			if ( empty( $entry['is_read'] ) && GFAPI::update_entry_property( $entry['id'], 'is_read', 1 ) ) {
 				$entry['is_read'] = 1;
 			}
 
@@ -735,13 +736,16 @@ add_action( 'rest_api_init', function () {
 				'sections' => $sections,
 				'adminUrl' => admin_url( 'admin.php?page=gf_entries&view=entry&id=' . $entry['form_id'] . '&lid=' . $entry['id'] ),
 				// The row as the list carries it, so the entry page reached by
-				// a link (no list loaded) still knows which actions apply.
+				// a link (no list loaded) still knows which actions apply, and
+				// the cached list row takes the pill and star as they now stand.
 				'item'     => array(
 					'id'         => (int) $entry['id'],
 					'form_id'    => (int) $entry['form_id'],
 					'status'     => (string) $entry['status'],
 					'is_starred' => empty( $entry['is_starred'] ) ? '0' : '1',
 					'is_read'    => empty( $entry['is_read'] ) ? '0' : '1',
+					'state'      => minn_admin_gf_entry_state( $entry ),
+					'starred'    => minn_admin_gf_entry_star( $entry ),
 				),
 				// Editable answers (adapters/gravity-forms-entry-edit.php), for
 				// the people who may edit entries.
