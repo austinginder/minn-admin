@@ -133,7 +133,9 @@ if ( ! function_exists( 'minn_admin_latepoint_active' ) || ! minn_admin_latepoin
 			}
 		}
 
-		// D-15: the pill value is a slug the client tidies.
+		// I12: `status` is what the `when` gates read, on the list and (copied
+		// from the detail) on the booking page, so it carries LatePoint's own
+		// value. The client reads underscored slugs as words.
 		list( , $list ) = $call( 'GET', '/minn-admin/v1/latepoint/bookings', array( 'range' => 'all', 'search' => 'minn-d45-lp' ) );
 		$by_id = array();
 		foreach ( (array) ( $list['items'] ?? array() ) as $it ) {
@@ -141,8 +143,8 @@ if ( ! function_exists( 'minn_admin_latepoint_active' ) || ! minn_admin_latepoin
 		}
 		$a_status = (string) ( $by_id[ $made['booking_a'] ]['status'] ?? '' );
 		$b_status = (string) ( $by_id[ $made['booking_b'] ]['status'] ?? '' );
-		$check( 'D-15 LatePoint list: payment_pending reaches the pill as a tidy slug', 'payment-pending' === $a_status, $a_status );
-		$check( 'D-15 LatePoint list: no_show reaches the pill as a tidy slug', 'no-show' === $b_status, $b_status );
+		$check( "I12 LatePoint list: status keeps LatePoint's own payment_pending", 'payment_pending' === $a_status, $a_status );
+		$check( "I12 LatePoint list: status keeps LatePoint's own no_show", 'no_show' === $b_status, $b_status );
 		$cols = $surfaces['latepoint']['collection']['columns'] ?? array();
 		$wide = 0;
 		foreach ( $cols as $c ) {
@@ -164,9 +166,19 @@ if ( ! function_exists( 'minn_admin_latepoint_active' ) || ! minn_admin_latepoin
 		}
 		$check( 'D-16 LatePoint page: Notes carries the internal note', 200 === $st && 'Prefers morning visits.' === ( $d['booking']['notes'] ?? '' ), (string) ( $d['booking']['notes'] ?? '' ) );
 		$check( "D-16 LatePoint page: the customer's comment shows, as typed", in_array( $comment, $shown, true ), implode( ' | ', $shown ) );
-		$check( 'D-15 LatePoint page: the status reaches the pill as a tidy slug', 'payment-pending' === ( $d['status'] ?? '' ), (string) ( $d['status'] ?? '' ) );
+		$check( "I12 LatePoint page: the status the gates copy is LatePoint's own", 'payment_pending' === ( $d['status'] ?? '' ) && 'payment_pending' === $row_value( $rows, 'Status' ), (string) ( $d['status'] ?? '' ) . ' / ' . (string) $row_value( $rows, 'Status' ) );
 		list( , $d ) = $call( 'GET', '/minn-admin/v1/latepoint/bookings/' . $made['booking_b'] );
 		$check( 'D-16 LatePoint page: a booking with no order still shows the internal note', 'Prefers morning visits.' === ( $d['booking']['notes'] ?? '' ), (string) ( $d['booking']['notes'] ?? '' ) );
+
+		// S18: LatePoint 4 kept the customer's comment on the booking row,
+		// a column dbDelta never drops once LatePoint 5 moves it to orders.
+		if ( ! $wpdb->get_var( $wpdb->prepare( "SHOW COLUMNS FROM {$lp( 'bookings' )} LIKE %s", 'customer_comment' ) ) ) {
+			$wpdb->query( "ALTER TABLE {$lp( 'bookings' )} ADD COLUMN customer_comment text" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$made['lp4_column'] = true;
+		}
+		$wpdb->update( $lp( 'bookings' ), array( 'customer_comment' => 'Key is under the mat.' ), array( 'id' => $made['booking_b'] ) );
+		list( , $d ) = $call( 'GET', '/minn-admin/v1/latepoint/bookings/' . $made['booking_b'] );
+		$check( "S18 LatePoint page: a comment LatePoint 4 kept on the booking shows", 'Key is under the mat.' === $row_value( $rows_of( $d ), 'Booking note' ), (string) $row_value( $rows_of( $d ), 'Booking note' ) );
 
 		// D-04: the registration dialog's times read as dates, in the site's zone.
 		if ( ! class_exists( 'OsSettingsHelper' ) || ! class_exists( 'OsEventRegistrationModel' ) ) {
@@ -199,9 +211,9 @@ if ( ! function_exists( 'minn_admin_latepoint_active' ) || ! minn_admin_latepoin
 				$check( 'D-04 LatePoint registration: Registered reads as a date, not ISO', 200 === $st && null !== $reg && ! $is_iso( $reg ) && wp_date( $fmt_when, time() - DAY_IN_SECONDS ) === $reg, (string) $reg );
 				$check( 'D-04 LatePoint registration: Starts reads as a date in the site zone', null !== $starts && wp_date( $fmt_when, $ev_start ) === $starts, (string) $starts );
 				$check( 'D-04 LatePoint registration: Ends reads as a date in the site zone', null !== $ends && wp_date( $fmt_when, $ev_start + 90 * MINUTE_IN_SECONDS ) === $ends, (string) $ends );
-				$check( 'D-15 LatePoint registration: checked_in and fully_paid reach their pills tidy', 'checked-in' === $row_value( $rows, 'Status' ) && 'fully-paid' === $row_value( $rows, 'Payment' ), $row_value( $rows, 'Status' ) . ' / ' . $row_value( $rows, 'Payment' ) );
+				$check( "I12 LatePoint registration: Status and Payment keep LatePoint's own values", 'checked_in' === $row_value( $rows, 'Status' ) && 'fully_paid' === $row_value( $rows, 'Payment' ), $row_value( $rows, 'Status' ) . ' / ' . $row_value( $rows, 'Payment' ) );
 				list( , $rl ) = $call( 'GET', '/minn-admin/v1/latepoint/event-registrations', array( 'range' => 'all', 'search' => 'MD45REG' ) );
-				$check( 'D-15 LatePoint registrations list: the status reaches the pill tidy', 'checked-in' === ( $rl['items'][0]['status'] ?? '' ), (string) ( $rl['items'][0]['status'] ?? '' ) );
+				$check( "I12 LatePoint registrations list: status keeps LatePoint's own value for the Cancel gate", 'checked_in' === ( $rl['items'][0]['status'] ?? '' ), (string) ( $rl['items'][0]['status'] ?? '' ) );
 				$check( 'LatePoint registrations list: Starts stays an ISO time with an offset', (bool) preg_match( '/(Z|[+-]\d\d:\d\d)$/', (string) ( $rl['items'][0]['starts'] ?? '' ) ) );
 			}
 		}
@@ -227,6 +239,9 @@ if ( ! function_exists( 'minn_admin_latepoint_active' ) || ! minn_admin_latepoin
 		}
 		if ( ! empty( $made['customer'] ) && $valid_id( $made['customer'] ) ) {
 			$wpdb->delete( $lp( 'customers' ), array( 'id' => $made['customer'] ) );
+		}
+		if ( ! empty( $made['lp4_column'] ) ) {
+			$wpdb->query( "ALTER TABLE {$lp( 'bookings' )} DROP COLUMN customer_comment" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		}
 		if ( $setting ) {
 			if ( ! empty( $setting['added'] ) && $valid_id( $setting['added'] ) ) {
@@ -326,14 +341,19 @@ if ( ! function_exists( 'minn_admin_jet_booking_active' ) || ! minn_admin_jet_bo
 	$made  = array();
 	// The site's extra booking columns, as their settings name them. A filter,
 	// so nothing is written to their settings option.
+	// A staff-only note comes first, so the note guess has to pass it over
+	// (I17); the phone's label is not the plain "Phone" the client's own
+	// fallback would match (S18).
 	$extra = function () {
 		return array(
 			array( 'column' => 'guest_name', 'column_label' => 'Name' ),
+			array( 'column' => 'staff_note', 'column_label' => 'Internal note' ),
 			array( 'column' => 'guest_note', 'column_label' => 'Note' ),
+			array( 'column' => 'guest_phone', 'column_label' => 'Guest phone' ),
 		);
 	};
 	try {
-		foreach ( array( 'guest_name', 'guest_note' ) as $col ) {
+		foreach ( array( 'guest_name', 'staff_note', 'guest_note', 'guest_phone' ) as $col ) {
 			if ( ! $wpdb->get_var( $wpdb->prepare( "SHOW COLUMNS FROM {$jt} LIKE %s", $col ) ) ) {
 				$wpdb->query( "ALTER TABLE {$jt} ADD COLUMN {$col} text" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$added[] = $col;
@@ -347,7 +367,7 @@ if ( ! function_exists( 'minn_admin_jet_booking_active' ) || ! minn_admin_jet_bo
 		$in_n    = strtotime( $in_day . ' 00:00:00 UTC' ) + 1;
 		$out_n   = $in_n - 1 + 2 * DAY_IN_SECONDS;
 		$note    = 'Six pots & <b>two</b> big ones. Water every other day.';
-		$wpdb->insert( $jt, array( 'status' => 'pending', 'apartment_id' => 0, 'check_in_date' => $in_n, 'check_out_date' => $out_n, 'user_id' => 0, 'user_email' => 'minn-d45-guest@example.com', 'guest_name' => 'Minn D45 Guest', 'guest_note' => $note ) );
+		$wpdb->insert( $jt, array( 'status' => 'pending', 'apartment_id' => 0, 'check_in_date' => $in_n, 'check_out_date' => $out_n, 'user_id' => 0, 'user_email' => 'minn-d45-guest@example.com', 'guest_name' => 'Minn D45 Guest', 'staff_note' => 'Deposit taken by card.', 'guest_note' => $note, 'guest_phone' => '+15035550196' ) );
 		$made['booking'] = (int) $wpdb->insert_id;
 		if ( ! $valid_id( $made['booking'] ) ) {
 			throw new RuntimeException( 'booking insert failed' );
@@ -372,7 +392,9 @@ if ( ! function_exists( 'minn_admin_jet_booking_active' ) || ! minn_admin_jet_bo
 		$check( 'D-17 JetBooking list: Check-in shows the day as their screen does', is_array( $col ) && is_array( $item ) && date_i18n( get_option( 'date_format' ), $in_n ) === (string) ( $item[ $col['key'] ] ?? '' ), (string) ( $item[ $col['key'] ?? '' ] ?? '' ) );
 
 		list( $st, $d ) = $call( 'GET', '/minn-admin/v1/jet-booking/bookings/' . $made['booking'] );
-		$check( "D-17 JetBooking page: the booking's note reaches Notes, as typed", 200 === $st && $note === ( $d['booking']['notes'] ?? '' ), (string) ( $d['booking']['notes'] ?? '' ) );
+		$check( "D-17 JetBooking page: a note column reaches Notes, as typed", 200 === $st && in_array( $d['booking']['notes'] ?? '', array( $note, 'Deposit taken by card.' ), true ), (string) ( $d['booking']['notes'] ?? '' ) );
+		$check( "I17 JetBooking page: the guest's note is preferred over a staff-only one listed first", $note === ( $d['booking']['notes'] ?? '' ), (string) ( $d['booking']['notes'] ?? '' ) );
+		$check( "S18 JetBooking page: the site-added phone column reaches the customer card", '+15035550196' === ( $d['customer']['phone'] ?? '' ), (string) ( $d['customer']['phone'] ?? '' ) );
 		$starts = (string) ( $d['booking']['starts'] ?? '' );
 		$local  = '';
 		try {
@@ -394,6 +416,52 @@ if ( ! function_exists( 'minn_admin_jet_booking_active' ) || ! minn_admin_jet_bo
 	}
 }
 
+/* ===== JetAppointments: S6 ===== */
+if ( ! function_exists( 'minn_admin_jet_apb_active' ) || ! minn_admin_jet_apb_active() || ! minn_admin_jet_apb_has_tables() ) {
+	$skip( 'JetAppointments: not active' );
+} else {
+	$at   = minn_admin_jet_apb_table();
+	$made = array();
+	try {
+		$wpdb->delete( $at, array( 'user_email' => 'minn-d45-apb@example.com' ) );
+		// A 10:00 slot in the other DST half from today. Epochs are naive:
+		// the site-local wall time read as UTC.
+		$day  = ( (int) gmdate( 'Y' ) + 1 ) . '-01-15';
+		$date = strtotime( $day . ' 00:00:00 UTC' );
+		$slot = strtotime( $day . ' 10:00:00 UTC' );
+		$wpdb->insert( $at, array( 'status' => 'pending', 'service' => '0', 'provider' => '0', 'user_id' => 0, 'user_name' => 'Minn D45 Apb', 'user_email' => 'minn-d45-apb@example.com', 'date' => $date, 'date_end' => $date, 'slot' => $slot, 'slot_end' => $slot + HOUR_IN_SECONDS, 'type' => '', 'appointment_date' => $day . ' 10:00:00' ) );
+		$made['appt'] = (int) $wpdb->insert_id;
+		if ( ! $valid_id( $made['appt'] ) ) {
+			throw new RuntimeException( 'appointment insert failed' );
+		}
+		$local = function ( $iso ) {
+			try {
+				return ( new DateTime( (string) $iso ) )->setTimezone( wp_timezone() )->format( 'Y-m-d H:i' );
+			} catch ( \Exception $e ) {
+				return 'unparsable';
+			}
+		};
+		list( $st, $d ) = $call( 'GET', '/minn-admin/v1/jet-appointments/appointments/' . $made['appt'] );
+		$starts = (string) ( $d['booking']['starts'] ?? '' );
+		$check( 'S6 JetAppointments page: a January 10:00 slot is 10:00 site time, with its own offset', 200 === $st && $day . ' 10:00' === $local( $starts ) && (bool) preg_match( '/(Z|[+-]\d\d:\d\d)$/', $starts ), $starts );
+		$check( 'S6 JetAppointments page: it ends at 11:00 site time', $day . ' 11:00' === $local( $d['booking']['ends'] ?? '' ), (string) ( $d['booking']['ends'] ?? '' ) );
+		list( , $list ) = $call( 'GET', '/minn-admin/v1/jet-appointments/appointments', array( 'range' => 'all', 'search' => 'minn-d45-apb' ) );
+		$item = null;
+		foreach ( (array) ( $list['items'] ?? array() ) as $it ) {
+			if ( (int) $it['id'] === $made['appt'] ) {
+				$item = $it;
+			}
+		}
+		$check( 'S6 JetAppointments list: When is the same 10:00 site time', is_array( $item ) && $day . ' 10:00' === $local( $item['date'] ?? '' ), (string) ( $item['date'] ?? '' ) );
+	} catch ( \Throwable $e ) {
+		$check( 'JetAppointments section ran', false, $e->getMessage() );
+	} finally {
+		if ( ! empty( $made['appt'] ) && $valid_id( $made['appt'] ) ) {
+			$wpdb->delete( $at, array( 'ID' => $made['appt'] ) );
+		}
+	}
+}
+
 /* ===== Amelia: D-18 ===== */
 if ( ! function_exists( 'minn_admin_amelia_active' ) || ! minn_admin_amelia_active() || ! minn_admin_amelia_has_tables() ) {
 	$skip( 'Amelia: not active' );
@@ -410,14 +478,14 @@ if ( ! function_exists( 'minn_admin_amelia_active' ) || ! minn_admin_amelia_acti
 			$wpdb->delete( $am( 'customer_bookings' ), array( 'customerId' => (int) $old ) );
 			$wpdb->delete( $am( 'users' ), array( 'id' => (int) $old ) );
 		}
-		$wpdb->insert( $am( 'users' ), array( 'status' => 'visible', 'type' => 'customer', 'firstName' => 'Minn', 'lastName' => 'D45', 'email' => 'minn-d45-amelia@example.com', 'phone' => '' ) );
+		$wpdb->insert( $am( 'users' ), array( 'status' => 'visible', 'type' => 'customer', 'firstName' => 'Minn', 'lastName' => 'D45', 'email' => 'minn-d45-amelia@example.com', 'phone' => '', 'note' => 'Allergic to lilies.' ) );
 		$made['customer'] = (int) $wpdb->insert_id;
 		if ( ! $valid_id( $made['customer'] ) ) {
 			throw new RuntimeException( 'customer insert failed' );
 		}
 		$start = time() + 5 * DAY_IN_SECONDS;
-		$book  = function ( $info, $fields ) use ( $wpdb, $am, $made, $start ) {
-			$wpdb->insert( $am( 'appointments' ), array( 'status' => 'approved', 'bookingStart' => gmdate( 'Y-m-d H:i:s', $start ), 'bookingEnd' => gmdate( 'Y-m-d H:i:s', $start + HOUR_IN_SECONDS ), 'notifyParticipants' => 0, 'serviceId' => 0, 'providerId' => 0, 'internalNotes' => '' ) );
+		$book  = function ( $info, $fields, $internal = '' ) use ( $wpdb, $am, $made, $start ) {
+			$wpdb->insert( $am( 'appointments' ), array( 'status' => 'approved', 'bookingStart' => gmdate( 'Y-m-d H:i:s', $start ), 'bookingEnd' => gmdate( 'Y-m-d H:i:s', $start + HOUR_IN_SECONDS ), 'notifyParticipants' => 0, 'serviceId' => 0, 'providerId' => 0, 'internalNotes' => $internal ) );
 			$appt = (int) $wpdb->insert_id;
 			if ( $appt > 1 ) {
 				$wpdb->insert( $am( 'customer_bookings' ), array( 'appointmentId' => $appt, 'customerId' => $made['customer'], 'status' => 'approved', 'price' => 0, 'persons' => 1, 'info' => $info, 'customFields' => $fields ) );
@@ -431,7 +499,7 @@ if ( ! function_exists( 'minn_admin_amelia_active' ) || ! minn_admin_amelia_acti
 			'1' => array( 'label' => 'Anything we should know?', 'value' => 'Ring twice & <b>wait</b>.', 'type' => 'text-area' ),
 			'2' => array( 'label' => 'Photos of the plant', 'value' => array( array( 'name' => 'fig.jpg', 'fileName' => 'a1b2c3.jpg' ) ), 'type' => 'file' ),
 		) );
-		$made['appt_form']  = $book( $info, $fields );
+		$made['appt_form']  = $book( $info, $fields, 'Paid at the door.' );
 		$made['appt_plain'] = $book( 'Please call before you come.', '' );
 		foreach ( array( 'appt_form', 'appt_plain' ) as $k ) {
 			if ( ! $valid_id( $made[ $k ] ) ) {
@@ -449,11 +517,19 @@ if ( ! function_exists( 'minn_admin_amelia_active' ) || ! minn_admin_amelia_acti
 			}
 		}
 		$check( 'D-18 Amelia page: no row prints the form JSON raw', 200 === $st && ! $raw, implode( ' | ', $raw ) );
-		$check( 'D-18 Amelia page: the form JSON is not a "Booking note"', null === $row_value( $rows, 'Booking note' ) && '' === ( $d['booking']['notes'] ?? '' ), (string) $row_value( $rows, 'Booking note' ) );
+		$check( 'D-18 Amelia page: the form JSON is not a "Booking note"', null === $row_value( $rows, 'Booking note' ) && false === strpos( (string) ( $d['booking']['notes'] ?? '' ), '{' ), (string) $row_value( $rows, 'Booking note' ) );
+		$shown = array();
+		foreach ( $rows as $r ) {
+			if ( ! in_array( strtolower( $r['section'] ), array( 'customer', 'appointment' ), true ) ) {
+				$shown[] = (string) $r['value'];
+			}
+		}
+		$check( "S18 Amelia page: with an internal note in Notes, the customer profile's note gets a card", 'Paid at the door.' === ( $d['booking']['notes'] ?? '' ) && in_array( 'Allergic to lilies.', $shown, true ), implode( ' | ', $shown ) );
 		$check( "D-18 Amelia page: the form's details read as label and value", 'America/Los_Angeles' === $row_value( $rows, 'Time zone' ) && '+15035550197' === $row_value( $rows, 'Phone at booking' ), (string) $row_value( $rows, 'Time zone' ) . ' / ' . (string) $row_value( $rows, 'Phone at booking' ) );
 		$check( 'D-18 Amelia page: the answers read as label and value, as typed', 'Ring twice & <b>wait</b>.' === $row_value( $rows, 'Anything we should know?' ) && 'fig.jpg' === $row_value( $rows, 'Photos of the plant' ), (string) $row_value( $rows, 'Photos of the plant' ) );
 		list( , $d ) = $call( 'GET', '/minn-admin/v1/amelia/appointments/' . $made['appt_plain'] );
 		$check( 'D-18 Amelia page: a plain-text booking note still shows as one', 'Please call before you come.' === $row_value( $rows_of( $d ), 'Booking note' ) );
+		$check( "S18 Amelia page: with no internal note, Notes carries the customer profile's note", 'Allergic to lilies.' === ( $d['booking']['notes'] ?? '' ), (string) ( $d['booking']['notes'] ?? '' ) );
 	} catch ( \Throwable $e ) {
 		$check( 'Amelia section ran', false, $e->getMessage() );
 	} finally {
@@ -505,6 +581,8 @@ if ( ! function_exists( 'minn_admin_wcgc_active' ) || ! minn_admin_wcgc_active()
 		$made['sent']      = $card( 'MD45-TEST-SENT-0002', 'on', time() - DAY_IN_SECONDS, '0' );
 		// Sent, then disabled by the store.
 		$made['disabled']  = $card( 'MD45-TEST-DSBL-0003', 'off', time() - DAY_IN_SECONDS, '0' );
+		// Waiting for its date, but switched on by the store already.
+		$made['early']     = $card( 'MD45-TEST-EARL-0004', 'on', time() + 3 * DAY_IN_SECONDS, 'no' );
 		foreach ( $made as $k => $id ) {
 			if ( ! $valid_id( $id ) ) {
 				throw new RuntimeException( "{$k} insert failed" );
@@ -522,7 +600,16 @@ if ( ! function_exists( 'minn_admin_wcgc_active' ) || ! minn_admin_wcgc_active()
 		$check( 'D-19 Gift cards list: the Disabled filter leaves out a scheduled card', ! in_array( $made['scheduled'], $ids, true ) && in_array( $made['disabled'], $ids, true ), wp_json_encode( $ids ) );
 		list( , $sl ) = $call( 'GET', '/minn-admin/v1/wcgc/gift-cards', array( 'status' => 'scheduled', 'search' => 'MD45-TEST' ) );
 		$ids = array_map( 'intval', wp_list_pluck( (array) ( $sl['items'] ?? array() ), 'id' ) );
-		$check( 'D-19 Gift cards list: the Scheduled filter finds it', array( $made['scheduled'] ) === $ids, wp_json_encode( $ids ) );
+		sort( $ids );
+		$want = array( $made['scheduled'], $made['early'] );
+		sort( $want );
+		$check( 'D-19 Gift cards list: the Scheduled filter finds it', $want === $ids, wp_json_encode( $ids ) );
+		$enabled_of = function ( $id ) use ( $call, $rows_of, $row_value ) {
+			list( , $d ) = $call( 'GET', '/minn-admin/v1/wcgc/gift-cards/' . $id . '/view' );
+			return $row_value( $rows_of( $d ), 'Enabled' );
+		};
+		$check( 'S18 Gift card: a scheduled card says whether it is enabled, as their list does', 'scheduled' === $status_of( $made['early'] ) && 'Yes' === $enabled_of( $made['early'] ) && 'No' === $enabled_of( $made['scheduled'] ), $enabled_of( $made['early'] ) . ' / ' . $enabled_of( $made['scheduled'] ) );
+		$check( 'S18 Gift card: a card that is not scheduled has no Enabled row beside its pill', null === $enabled_of( $made['sent'] ), (string) $enabled_of( $made['sent'] ) );
 	} catch ( \Throwable $e ) {
 		$check( 'Gift cards section ran', false, $e->getMessage() );
 	} finally {
@@ -541,7 +628,7 @@ if ( ! function_exists( 'minn_admin_jet_reviews_active' ) || ! minn_admin_jet_re
 	$rt   = minn_admin_jet_reviews_table();
 	$made = array();
 	try {
-		$wpdb->delete( $rt, array( 'title' => 'Minn D45 review' ) );
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$rt} WHERE title LIKE %s", 'Minn D45 review%' ) );
 		$post = wp_insert_post( array( 'post_title' => "Lupine 'Gallery Blue'", 'post_status' => 'publish', 'post_type' => 'post' ), true );
 		$made['post'] = is_wp_error( $post ) ? 0 : (int) $post;
 		if ( ! $valid_id( $made['post'] ) ) {
@@ -553,7 +640,11 @@ if ( ! function_exists( 'minn_admin_jet_reviews_active' ) || ! minn_admin_jet_re
 			array( 'field_label' => 'Quality', 'field_value' => 4, 'field_step' => 1, 'field_max' => 5 ),
 			array( 'field_label' => 'Value &amp; price', 'field_value' => 3, 'field_step' => 1, 'field_max' => 5 ),
 		) );
-		$wpdb->insert( $rt, array( 'source' => 'post', 'post_id' => $made['post'], 'post_type' => 'post', 'author' => (string) get_current_user_id(), 'date' => current_time( 'mysql' ), 'title' => 'Minn D45 review', 'content' => 'Healthy.', 'type_slug' => 'default', 'rating_data' => $ratings, 'rating' => 70, 'likes' => 0, 'dislikes' => 0, 'approved' => 0, 'pinned' => 0 ) );
+		// Title and body as JetReviews stores them: through wp_kses on submit,
+		// and esc_html with <br> for line breaks on edit, so entities arrive.
+		$stored_title = 'Minn D45 review: Tom &amp; Jerry&#039;s pick';
+		$stored_body  = 'It&#039;s healthy &amp; tall.<br>It came well packed.';
+		$wpdb->insert( $rt, array( 'source' => 'post', 'post_id' => $made['post'], 'post_type' => 'post', 'author' => (string) get_current_user_id(), 'date' => current_time( 'mysql' ), 'title' => $stored_title, 'content' => $stored_body, 'type_slug' => 'default', 'rating_data' => $ratings, 'rating' => 70, 'likes' => 0, 'dislikes' => 0, 'approved' => 0, 'pinned' => 0 ) );
 		$made['review'] = (int) $wpdb->insert_id;
 		if ( ! $valid_id( $made['review'] ) ) {
 			throw new RuntimeException( 'review insert failed' );
@@ -564,6 +655,8 @@ if ( ! function_exists( 'minn_admin_jet_reviews_active' ) || ! minn_admin_jet_re
 		$check( "D-24 JetReviews review: the product's name is plain text", 200 === $st && $curly === $row_value( $rows, 'Reviewed' ), (string) $row_value( $rows, 'Reviewed' ) );
 		$check( 'D-24 JetReviews review: per-question ratings show from the stored shape', '4/5' === $row_value( $rows, 'Quality' ) && '3/5' === $row_value( $rows, 'Value & price' ), (string) $row_value( $rows, 'Quality' ) );
 		list( , $list ) = $call( 'GET', '/minn-admin/v1/jet-reviews/reviews', array( 'status' => 'pending', 'search' => 'Minn D45 review' ) );
+		$check( "S4 JetReviews review: the title is plain text", "Minn D45 review: Tom & Jerry's pick" === ( $d['title'] ?? '' ), (string) ( $d['title'] ?? '' ) );
+		$check( "S4 JetReviews review: the message is plain text, its line break kept", "It's healthy & tall.\nIt came well packed." === $row_value( $rows, 'Message' ), (string) $row_value( $rows, 'Message' ) );
 		$check( "D-24 JetReviews list: the product's name is plain text", $curly === ( $list['items'][0]['item'] ?? '' ), (string) ( $list['items'][0]['item'] ?? '' ) );
 	} catch ( \Throwable $e ) {
 		$check( 'JetReviews section ran', false, $e->getMessage() );
