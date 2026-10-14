@@ -323,6 +323,16 @@ try {
 			$bar = $point( $ml_after, $today );
 			list( , $list ) = $call( 'GET', '/minn-admin/v1/site-mailer/emails', array( 'search' => $marker, 'per_page' => 100, 'after' => $bar['from'] ?? '', 'before' => $bar['to'] ?? '' ) );
 			$check( 'D-40 Site Mailer: today\'s bar lists the sends', $bar && $find( $list['items'] ?? array(), $ml_one ) && $find( $list['items'] ?? array(), $ml_many ), count( $list['items'] ?? array() ) . ' rows' );
+
+			// I2: the list now shows a recipient decoded, but search still
+			// matched the stored JSON, where wp_json_encode() writes "Brontë"
+			// as Brontë and a slash as \/. (The address carries neither
+			// word, since the column's collation also folds accents.)
+			$ml_rb = $ml_add( 'Renée Brontë, Ops/Support <rb@example.com>', $ml_local );
+			foreach ( array( 'Brontë', 'Ops/Support' ) as $term ) {
+				list( $st, $list ) = $call( 'GET', '/minn-admin/v1/site-mailer/emails', array( 'search' => $term, 'per_page' => 100 ) );
+				$check( "I2 Site Mailer: searching \"{$term}\" finds the recipient as the list shows it", $ml_rb && $find( $list['items'] ?? array(), $ml_rb ), $st . ' ' . count( $list['items'] ?? array() ) . ' rows' );
+			}
 		}
 	}
 

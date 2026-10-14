@@ -184,9 +184,13 @@ add_action( 'rest_api_init', function () {
 				$where[] = "status IN ('failed','bounce','dropped')";
 			}
 			if ( '' !== $search ) {
+				// `to` holds wp_json_encode() output, which writes a non-ASCII
+				// letter as \uXXXX and a slash as \/, so the term is matched in
+				// that form too: the list shows the address decoded.
 				$like    = '%' . $wpdb->esc_like( $search ) . '%';
-				$where[] = '( subject LIKE %s OR `to` LIKE %s )';
-				array_push( $params, $like, $like );
+				$json    = '%' . $wpdb->esc_like( substr( (string) wp_json_encode( $search ), 1, -1 ) ) . '%';
+				$where[] = '( subject LIKE %s OR `to` LIKE %s OR `to` LIKE %s )';
+				array_push( $params, $like, $like, $json );
 			}
 			// A status-chart bar narrows the list to that day. The bounds are
 			// minted on the site's clock (the same one the chart buckets in
