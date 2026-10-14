@@ -14,8 +14,9 @@
  *                            'wire' => naked ("Y-m-d\TH:i:s" on the stored clock
  *                            for a datetime column, which the descriptor marks
  *                            utc or not; on the site's clock for an epoch),
- *                            iso (ISO-8601 with the site's offset) or iso-utc
- *                            (ISO-8601 in UTC, "+00:00")
+ *                            iso (ISO-8601 with the site's offset), iso-utc
+ *                            (ISO-8601 in UTC, "+00:00") or z (UTC with a
+ *                            trailing Z, "Y-m-d\TH:i:s\Z"; '' for a zero date)
  *   'raw'                    as built (nested sections, an edit block)
  *   'secret'                 never sent
  *
@@ -104,13 +105,17 @@ class Minn_Admin_Kernel_Fields {
 	 *
 	 * @param mixed  $v      Stored value.
 	 * @param string $stored utc | site | epoch | local-epoch.
-	 * @param string $wire   naked | iso.
+	 * @param string $wire   naked | iso | iso-utc | z.
 	 * @return string '' when there is no date.
 	 */
 	public static function datetime( $v, $stored, $wire ) {
 		$v = is_scalar( $v ) ? trim( (string) $v ) : '';
-		if ( '' === $v ) {
+		if ( '' === $v || ( 'z' === $wire && 0 === strpos( $v, '0000-00-00' ) ) ) {
 			return '';
+		}
+		if ( 'z' === $wire ) {
+			$iso = self::datetime( $v, $stored, 'iso-utc' );
+			return '' === $iso ? '' : gmdate( 'Y-m-d\TH:i:s\Z', (int) strtotime( $iso ) );
 		}
 		if ( 'epoch' === $stored || 'local-epoch' === $stored ) {
 			if ( ! is_numeric( $v ) ) {

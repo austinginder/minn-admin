@@ -8,8 +8,20 @@
  *   'status' => array( 'publish', 'spam' )      column IN (…)
  *   'status' => array( 'not' => array( … ) )    column NOT IN (…)
  *   'viewed' => array( 'op' => '>', 'value' => 0 )
+ *   'source' => array( 'starts' => 'rest|' )    LIKE, the value escaped: 'starts',
+ *                                               'contains' or 'ends'
+ *   'source' => array( 'any' => array( '', null, array( 'starts' => 'app:' ) ) )
+ *                                               any of these rules (OR)
+ *   'blog_id' => null                           column IS NULL
+ * A list (integer keys) is always an IN list and a keyed array always a rule,
+ * one this layer does not know being refused.
  * An empty IN list matches nothing, and an empty NOT IN list everything, so a
- * scope that resolved to no ids can never widen into all of them.
+ * scope that resolved to no ids can never widen into all of them; an empty
+ * 'any' matches nothing too.
+ *
+ * A table is named without its prefix: 'evf_entries' for the site's table,
+ * or array( 'table' => 'stream', 'network' => true ) for one the whole
+ * network shares on the base prefix.
  *
  * @package minn-admin
  */
@@ -35,18 +47,20 @@ class Minn_Admin_Kernel_SQL {
 	/**
 	 * The prefixed table a declaration names.
 	 *
-	 * @param string $table Table without the prefix.
+	 * @param string|array $table Table without the prefix, or table + network.
 	 * @return string
 	 */
 	public static function table( $table ) {
 		global $wpdb;
-		return self::ident( $wpdb->prefix . self::ident( $table ) );
+		$network = is_array( $table ) && ! empty( $table['network'] );
+		$name    = is_array( $table ) ? (string) ( $table['table'] ?? '' ) : (string) $table;
+		return self::ident( ( $network ? $wpdb->base_prefix : $wpdb->prefix ) . self::ident( $name ) );
 	}
 
 	/**
 	 * Whether a table exists on this site.
 	 *
-	 * @param string $table Table without the prefix.
+	 * @param string|array $table Table without the prefix, or table + network.
 	 * @return bool
 	 */
 	public static function exists( $table ) {
@@ -58,6 +72,24 @@ class Minn_Admin_Kernel_SQL {
 			$seen[ $name ] = $found && 0 === strcasecmp( (string) $found, $name );
 		}
 		return $seen[ $name ];
+	}
+
+	/**
+	 * Whether a table that exists has a column (a vendor's later migration).
+	 *
+	 * @param string|array $table  Table without the prefix, or table + network.
+	 * @param string       $column Column.
+	 * @return bool
+	 */
+	public static function has_column( $table, $column ) {
+		global $wpdb;
+		static $seen = array();
+		$name = self::table( $table );
+		$col  = self::ident( $column );
+		if ( ! isset( $seen[ $name . '.' . $col ] ) ) {
+			$seen[ $name . '.' . $col ] = self::exists( $table ) && (bool) $wpdb->get_var( $wpdb->prepare( "SHOW COLUMNS FROM `{$name}` LIKE %s", $wpdb->esc_like( $col ) ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- identifier from ident().
+		}
+		return $seen[ $name . '.' . $col ];
 	}
 
 	/**
@@ -76,7 +108,8 @@ class Minn_Admin_Kernel_SQL {
 	/**
 	 * Conditions to [ sql fragments, args ].
 	 *
-	 * @param array  $where Column => rule.
+	 * @param array  $where Column => rule. A key may carry a tag after a NUL
+	 *                      ("site_id\0fixed"), so two rules on one column both apply.
 	 * @param string $alias Table alias to qualify columns with ('' for none).
 	 * @return array
 	 */
@@ -85,36 +118,179 @@ class Minn_Admin_Kernel_SQL {
 		$args = array();
 		$pre  = '' === $alias ? '' : self::ident( $alias ) . '.';
 		foreach ( $where as $col => $rule ) {
-			$c = $pre . self::ident( $col );
-			if ( is_array( $rule ) && array_key_exists( 'op', $rule ) ) {
-				$op = (string) $rule['op'];
-				if ( ! in_array( $op, array( '=', '!=', '<', '<=', '>', '>=' ), true ) ) {
-					throw new InvalidArgumentException( 'minn_kernel_operator=' . $op );
-				}
-				$sql[]  = "{$c} {$op} " . self::ph( $rule['value'] );
-				$args[] = $rule['value'];
-			} elseif ( is_array( $rule ) && array_key_exists( 'not', $rule ) ) {
-				$vals = array_values( (array) $rule['not'] );
-				if ( $vals ) {
-					$sql[] = "{$c} NOT IN (" . implode( ',', array_map( array( __CLASS__, 'ph' ), $vals ) ) . ')';
-					$args  = array_merge( $args, $vals );
-				}
-			} elseif ( is_array( $rule ) ) {
-				$vals = array_values( $rule );
-				if ( ! $vals ) {
-					$sql[] = '1 = 0';
-					continue;
-				}
-				$sql[] = "{$c} IN (" . implode( ',', array_map( array( __CLASS__, 'ph' ), $vals ) ) . ')';
-				$args  = array_merge( $args, $vals );
-			} elseif ( null === $rule ) {
-				$sql[] = "{$c} IS NULL";
-			} else {
-				$sql[]  = "{$c} = " . self::ph( $rule );
-				$args[] = $rule;
-			}
+			list( $s, $a ) = self::rule( $pre . self::ident( explode( "\0", (string) $col, 2 )[0] ), $rule );
+			$sql[]         = $s;
+			$args          = array_merge( $args, $a );
 		}
 		return array( $sql, $args );
+	}
+
+	/**
+	 * One column's rule to [ sql, args ].
+	 *
+	 * @param string $c    Qualified column.
+	 * @param mixed  $rule Rule (see the class header).
+	 * @return array
+	 */
+	private static function rule( $c, $rule ) {
+		global $wpdb;
+		if ( null === $rule ) {
+			return array( "{$c} IS NULL", array() );
+		}
+		if ( ! is_array( $rule ) ) {
+			return array( "{$c} = " . self::ph( $rule ), array( $rule ) );
+		}
+		// Integer keys only: a list of values, whatever its keys' order.
+		if ( self::is_list( $rule ) ) {
+			$vals = array_values( $rule );
+			return $vals ? array( "{$c} IN (" . implode( ',', array_map( array( __CLASS__, 'ph' ), $vals ) ) . ')', $vals ) : array( '1 = 0', array() );
+		}
+		foreach ( array( 'starts' => array( '', '%' ), 'contains' => array( '%', '%' ), 'ends' => array( '%', '' ) ) as $how => $wild ) {
+			if ( array_key_exists( $how, $rule ) ) {
+				return array( "{$c} LIKE %s", array( $wild[0] . $wpdb->esc_like( (string) $rule[ $how ] ) . $wild[1] ) );
+			}
+		}
+		if ( array_key_exists( 'any', $rule ) ) {
+			$parts = array();
+			$args  = array();
+			foreach ( (array) $rule['any'] as $one ) {
+				list( $s, $a ) = self::rule( $c, $one );
+				$parts[]       = $s;
+				$args          = array_merge( $args, $a );
+			}
+			return array( $parts ? '( ' . implode( ' OR ', $parts ) . ' )' : '1 = 0', $args );
+		}
+		if ( array_key_exists( 'op', $rule ) ) {
+			$op = (string) $rule['op'];
+			if ( ! in_array( $op, array( '=', '!=', '<', '<=', '>', '>=' ), true ) ) {
+				throw new InvalidArgumentException( 'minn_kernel_operator=' . $op );
+			}
+			return array( "{$c} {$op} " . self::ph( $rule['value'] ), array( $rule['value'] ) );
+		}
+		if ( array_key_exists( 'not', $rule ) ) {
+			$vals = array_values( (array) $rule['not'] );
+			return $vals ? array( "{$c} NOT IN (" . implode( ',', array_map( array( __CLASS__, 'ph' ), $vals ) ) . ')', $vals ) : array( '1 = 1', array() );
+		}
+		// A keyed array that is no rule this layer knows is a mistake, not a list.
+		throw new InvalidArgumentException( 'minn_kernel_rule=' . implode( ',', array_keys( $rule ) ) );
+	}
+
+	/** Whether an array is a list of values (integer keys only), not a keyed rule. */
+	private static function is_list( array $a ) {
+		foreach ( array_keys( $a ) as $k ) {
+			if ( ! is_int( $k ) ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Whether an in-memory row meets conditions, by the same rules as
+	 * where(): equality as strings (a boolean as a boolean), lists, NOT,
+	 * operators, LIKE (case-insensitive), any, IS NULL.
+	 *
+	 * @param array $row   Row.
+	 * @param array $where Conditions (keys may carry a tag after a NUL).
+	 * @return bool
+	 */
+	public static function matches( array $row, array $where ) {
+		foreach ( $where as $col => $rule ) {
+			$col = explode( "\0", (string) $col, 2 )[0];
+			if ( ! self::holds( array_key_exists( $col, $row ) ? $row[ $col ] : null, $rule ) ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * One value against one rule (see matches()). Where PHP and MySQL could
+	 * differ it is the narrower: equality is exact (no collation folding
+	 * case or trailing spaces), a boolean equals only a boolean or 1 and 0,
+	 * and <, <=, > and >= hold only between two numbers (MySQL would cast
+	 * text to a number; this matches nothing instead).
+	 */
+	private static function holds( $v, $rule ) {
+		if ( is_array( $rule ) && ! self::is_list( $rule ) && array_key_exists( 'any', $rule ) ) {
+			foreach ( (array) $rule['any'] as $one ) {
+				if ( self::holds( $v, $one ) ) {
+					return true;
+				}
+			}
+			return false;
+		}
+		if ( is_array( $rule ) && ! self::is_list( $rule ) && array_key_exists( 'not', $rule ) && ! $rule['not'] ) {
+			return true; // where() writes 1 = 1.
+		}
+		if ( null === $rule ) {
+			return null === $v;
+		}
+		if ( null === $v ) {
+			return false; // NULL meets no comparison in SQL either.
+		}
+		$same = function ( $v, $want ) {
+			if ( is_bool( $want ) ) {
+				return is_bool( $v ) ? $v === $want : ( is_numeric( $v ) && (int) $v === (int) $want );
+			}
+			return is_scalar( $v ) && ! is_bool( $v ) && (string) $v === (string) $want;
+		};
+		if ( ! is_array( $rule ) ) {
+			return $same( $v, $rule );
+		}
+		if ( self::is_list( $rule ) ) {
+			foreach ( $rule as $one ) {
+				if ( $same( $v, $one ) ) {
+					return true;
+				}
+			}
+			return false;
+		}
+		$text = is_scalar( $v ) ? strtolower( (string) $v ) : '';
+		if ( array_key_exists( 'starts', $rule ) ) {
+			return 0 === strpos( $text, strtolower( (string) $rule['starts'] ) );
+		}
+		if ( array_key_exists( 'contains', $rule ) ) {
+			return false !== strpos( $text, strtolower( (string) $rule['contains'] ) );
+		}
+		if ( array_key_exists( 'ends', $rule ) ) {
+			$end = strtolower( (string) $rule['ends'] );
+			return '' === $end || substr( $text, -strlen( $end ) ) === $end;
+		}
+		if ( array_key_exists( 'op', $rule ) ) {
+			$want = $rule['value'];
+			$op   = (string) $rule['op'];
+			if ( '=' === $op || '!=' === $op ) {
+				return ( '=' === $op ) === $same( $v, $want );
+			}
+			if ( ! is_numeric( $v ) || ! is_numeric( $want ) ) {
+				if ( in_array( $op, array( '<', '<=', '>', '>=' ), true ) ) {
+					return false;
+				}
+				throw new InvalidArgumentException( 'minn_kernel_operator=' . $op );
+			}
+			$cmp = (float) $v <=> (float) $want;
+			switch ( $op ) {
+				case '<':
+					return $cmp < 0;
+				case '<=':
+					return $cmp <= 0;
+				case '>':
+					return $cmp > 0;
+				case '>=':
+					return $cmp >= 0;
+			}
+			throw new InvalidArgumentException( 'minn_kernel_operator=' . $op );
+		}
+		if ( array_key_exists( 'not', $rule ) ) {
+			foreach ( (array) $rule['not'] as $one ) {
+				if ( $same( $v, $one ) ) {
+					return false;
+				}
+			}
+			return true;
+		}
+		throw new InvalidArgumentException( 'minn_kernel_rule=' . implode( ',', array_keys( $rule ) ) );
 	}
 
 	/**
@@ -139,6 +315,9 @@ class Minn_Admin_Kernel_SQL {
 	 */
 	public static function count( $table, array $where = array() ) {
 		global $wpdb;
+		if ( ! self::exists( $table ) ) {
+			return 0;
+		}
 		list( $sql, $args ) = self::where( $where );
 		$q                  = 'SELECT COUNT(*) FROM ' . self::table( $table ) . ( $sql ? ' WHERE ' . implode( ' AND ', $sql ) : '' );
 		return (int) $wpdb->get_var( self::prepare( $q, $args ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
@@ -147,18 +326,102 @@ class Minn_Admin_Kernel_SQL {
 	/**
 	 * One row by key, as an associative array, or null.
 	 *
-	 * @param string   $table   Table without the prefix.
-	 * @param string   $key     Key column.
-	 * @param int      $id      Key value.
-	 * @param string[] $columns Columns to read ([] for all).
+	 * @param string|array $table   Table without the prefix.
+	 * @param string       $key     Key column.
+	 * @param int          $id      Key value.
+	 * @param string[]     $columns Columns to read ([] for all).
+	 * @param array        $where   Conditions the row must also meet (a site column).
 	 * @return array|null
 	 */
-	public static function row( $table, $key, $id, array $columns = array() ) {
+	public static function row( $table, $key, $id, array $columns = array(), array $where = array() ) {
 		global $wpdb;
-		$cols = $columns ? implode( ', ', array_map( array( __CLASS__, 'ident' ), $columns ) ) : '*';
-		$q    = 'SELECT ' . $cols . ' FROM ' . self::table( $table ) . ' WHERE ' . self::ident( $key ) . ' = %d LIMIT 1';
-		$row  = $wpdb->get_row( $wpdb->prepare( $q, (int) $id ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		list( $sql, $args ) = self::where( $where );
+		$cols               = $columns ? implode( ', ', array_map( array( __CLASS__, 'ident' ), $columns ) ) : '*';
+		$q                  = 'SELECT ' . $cols . ' FROM ' . self::table( $table ) . ' WHERE ' . implode( ' AND ', array_merge( array( self::ident( $key ) . ' = %d' ), $sql ) ) . ' LIMIT 1';
+		$row                = $wpdb->get_row( $wpdb->prepare( $q, array_merge( array( (int) $id ), $args ) ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		return is_array( $row ) ? $row : null;
+	}
+
+	/**
+	 * Rows of a table under conditions, as associative arrays.
+	 *
+	 * @param string|array $table   Table without the prefix.
+	 * @param string[]     $columns Columns to read.
+	 * @param array        $where   Conditions.
+	 * @param array        $order   Column => ASC|DESC.
+	 * @param int          $limit   At most this many (0 for no limit).
+	 * @return array[]
+	 */
+	public static function select( $table, array $columns, array $where = array(), array $order = array(), $limit = 0 ) {
+		global $wpdb;
+		if ( ! self::exists( $table ) ) {
+			return array();
+		}
+		list( $sql, $args ) = self::where( $where );
+		$by                 = array();
+		foreach ( $order as $col => $dir ) {
+			$by[] = self::ident( $col ) . ( 'DESC' === strtoupper( (string) $dir ) ? ' DESC' : ' ASC' );
+		}
+		$q = 'SELECT ' . implode( ', ', array_map( array( __CLASS__, 'ident' ), $columns ) ) . ' FROM ' . self::table( $table )
+			. ( $sql ? ' WHERE ' . implode( ' AND ', $sql ) : '' )
+			. ( $by ? ' ORDER BY ' . implode( ', ', $by ) : '' )
+			. ( $limit > 0 ? ' LIMIT ' . (int) $limit : '' );
+		$rows = $wpdb->get_results( self::prepare( $q, $args ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		return is_array( $rows ) ? $rows : array();
+	}
+
+	/**
+	 * One column of the newest row under conditions (by the key), or null.
+	 *
+	 * @param string|array $table  Table without the prefix.
+	 * @param string       $column Column to read.
+	 * @param array        $where  Conditions.
+	 * @param string       $key    The key that orders rows by age.
+	 * @return string|null
+	 */
+	public static function latest( $table, $column, array $where, $key ) {
+		$rows = self::select( $table, array( $column ), $where, array( $key => 'DESC' ), 1 );
+		return $rows ? (string) reset( $rows[0] ) : null;
+	}
+
+	/**
+	 * The most frequent value of a column under conditions, with its count,
+	 * ties broken by the value; null when no row matches.
+	 *
+	 * @param string|array $table  Table without the prefix.
+	 * @param string       $column Column to group by.
+	 * @param array        $where  Conditions.
+	 * @return array|null array( 'value' => string, 'count' => int )
+	 */
+	public static function top( $table, $column, array $where ) {
+		global $wpdb;
+		if ( ! self::exists( $table ) ) {
+			return null;
+		}
+		list( $sql, $args ) = self::where( $where );
+		$col                = self::ident( $column );
+		$q                  = "SELECT {$col} AS v, COUNT(*) AS n FROM " . self::table( $table ) . ( $sql ? ' WHERE ' . implode( ' AND ', $sql ) : '' ) . " GROUP BY {$col} ORDER BY n DESC, {$col} ASC LIMIT 1";
+		$row                = $wpdb->get_row( self::prepare( $q, $args ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		return is_array( $row ) ? array( 'value' => (string) $row['v'], 'count' => (int) $row['n'] ) : null;
+	}
+
+	/**
+	 * The distinct values of a column under conditions, sorted, at most 1,000.
+	 *
+	 * @param string|array $table  Table without the prefix.
+	 * @param string       $column Column.
+	 * @param array        $where  Conditions.
+	 * @return string[]
+	 */
+	public static function distinct( $table, $column, array $where ) {
+		global $wpdb;
+		if ( ! self::exists( $table ) ) {
+			return array();
+		}
+		list( $sql, $args ) = self::where( $where );
+		$col                = self::ident( $column );
+		$q                  = "SELECT DISTINCT {$col} FROM " . self::table( $table ) . ( $sql ? ' WHERE ' . implode( ' AND ', $sql ) : '' ) . " ORDER BY {$col} ASC LIMIT 1000";
+		return array_map( 'strval', (array) $wpdb->get_col( self::prepare( $q, $args ) ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 	}
 
 	/**
@@ -192,11 +455,12 @@ class Minn_Admin_Kernel_SQL {
 
 	/**
 	 * Rows per site day for the status chart, split into primary and
-	 * secondary (spam) series by a condition on one column.
+	 * secondary (spam) series by a condition on one column, or one series
+	 * when no split is declared.
 	 *
 	 * @param array $c table, column (the date), clock (utc|local|epoch|local-epoch),
-	 *                 where (conditions for every counted row), split (column),
-	 *                 secondary (values of split that count as secondary).
+	 *                 where (conditions for every counted row), split (column,
+	 *                 optional), secondary (values of split that count as secondary).
 	 * @return array Days from minn_admin_chart_days(), bumped.
 	 */
 	public static function chart_days( array $c ) {
@@ -217,14 +481,14 @@ class Minn_Admin_Kernel_SQL {
 		list( $sql, $args ) = self::where( (array) ( $c['where'] ?? array() ) );
 		$sql[]              = $since[0];
 		$args[]             = $since[1];
-		$split              = self::ident( $c['split'] );
+		$split              = empty( $c['split'] ) ? "''" : self::ident( $c['split'] );
 		$q                  = "SELECT {$day} AS d, {$split} AS s, COUNT(*) AS n FROM " . self::table( $c['table'] ) . ' WHERE ' . implode( ' AND ', $sql ) . ' GROUP BY d, s';
 		foreach ( (array) $wpdb->get_results( self::prepare( $q, $args ) ) as $r ) { // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 			$d = (string) $r->d;
 			if ( 'epoch' === $clock || 'local-epoch' === $clock ) {
 				$d = minn_admin_chart_epoch_bucket_day( $d );
 			}
-			minn_admin_chart_bump( $days, $d, in_array( (string) $r->s, array_map( 'strval', (array) ( $c['secondary'] ?? array() ) ), true ), (int) $r->n );
+			minn_admin_chart_bump( $days, $d, ! empty( $c['split'] ) && in_array( (string) $r->s, array_map( 'strval', (array) ( $c['secondary'] ?? array() ) ), true ), (int) $r->n );
 		}
 		return $days;
 	}

@@ -1,9 +1,8 @@
 # The resource kernel: adapters as declarations
 
-*Plan for v0.46 onward. Status: proposed 2026-10-14, nothing built yet.
-Progress is measured, not described: `node bin/adapter-inventory.js` and its
-history in `bin/adapter-inventory/history.json`, charted on the rollout
-dashboard.*
+*Plan for v0.46 onward. Progress is measured, not described here: every figure
+lives in `node bin/adapter-inventory.js` and its history in
+`bin/adapter-inventory/history.json`, charted on the rollout dashboard.*
 
 ## Why
 
@@ -11,25 +10,24 @@ Every adapter re-implements the same plumbing around a small core of vendor
 knowledge, and the plumbing is where the security findings and the display
 bugs come from.
 
-- **The adapters are the biggest part of Minn.** 141 files and 86,450 lines at
-  v0.45.0, against 26,406 lines of core PHP and 59,327 of `app.js`.
-- **They grow faster than anything else.** 53,329 lines at v0.35.0
-  (2026-08-25), 86,450 at v0.45.0 seven weeks later: up 62%. Hand-written REST
-  routes went from 325 to 489.
-- **One shape dominates.** 75 adapters (52,151 lines) are list, detail and
-  actions screens over a vendor's data. Between them they hand-write 405 routes
-  and 486 permission callbacks.
-- **Each one repeats the same decisions.** Everest Forms is 902 lines. What
-  only Everest Forms knows (its table, field list, status meanings, per-form
-  access rule and status call) is about 300 of them. The rest is routes,
-  parameters, paging, search, sorting, counts, date and entity handling, error
-  shapes, and actions written twice, once for the row and once for the detail.
-- **The findings follow the plumbing.** The v0.45.0 release candidate's 33
-  findings were 13 integrity (a save changed what nobody touched), 11
-  disclosure, 8 gate and 1 mechanical (path parameters read from the body).
-  The 41 demo-site bugs were mostly times in the wrong zone, stored entities
-  printed raw, raw status slugs and sort defaults. Each was the same mistake in
-  another adapter, which is why fixing them one at a time never ends.
+- **The adapters are the biggest part of Minn,** larger than the core PHP and
+  the app together.
+- **They grow faster than anything else.** Every release adds adapters, and
+  each brings its own hand-written routes.
+- **One shape dominates.** Most adapters are list, detail and actions screens
+  over a vendor's data, and they hold most of the hand-written routes and
+  permission callbacks.
+- **Each one repeats the same decisions.** What only a vendor's adapter knows
+  (its table, field list, status meanings, per-form access rule and status
+  call) is a minority of its lines. The rest is routes, parameters, paging,
+  search, sorting, counts, date and entity handling, error shapes, and actions
+  written twice, once for the row and once for the detail.
+- **The findings follow the plumbing.** The v0.45.0 release candidate's
+  findings were integrity (a save changed what nobody touched), disclosure,
+  gate and mechanical ones (path parameters read from the body), and the
+  demo-site bugs were mostly times in the wrong zone, stored entities printed
+  raw, raw status slugs and sort defaults. Each was the same mistake in another
+  adapter, which is why fixing them one at a time never ends.
 
 Guards catch these classes (the route-gates snapshot, value redaction, the write
 fence, the round-trip suites), but every guard is more security code and more
@@ -76,13 +74,13 @@ minn_admin_resource( 'everest/entries', array(
 
 Many hand-written routes exist because nothing generic could do the job. The
 kernel keeps every one of them, in one of three tiers. The inventory sorts
-the 489 routes at v0.45.0 by what they do (485 parse; 4 build their namespace
-in code and show as unclassified):
+every hand-written route by what it does (a route that builds its namespace in
+code shows as unclassified):
 
-| Tier | Routes | Kinds |
-|---|---|---|
-| **Declared** | 345 (71%) | 112 lists, 82 status cards and charts, 78 single items (read, save, delete), 73 item actions (spam, trash, approve, mark read, recheck) |
-| **Kernel handler** | 140 (29%) | 36 jobs (run, backup, import, export, purge), 30 schema and builder, 25 send, preview and retry, 20 other writes (create, reorder, cleanup), 13 settings tabs, 11 activate, toggle and licence, 5 pickers |
+| Tier | Kinds |
+|---|---|
+| **Declared** | lists, status cards and charts, single items (read, save, delete), item actions (spam, trash, approve, mark read, recheck) |
+| **Kernel handler** | jobs (run, backup, import, export, purge), schema and builder, send, preview and retry, other writes (create, reorder, cleanup), settings tabs, activate, toggle and licence, pickers |
 
 1. **Declared.** The generic shapes. Even here the vendor-specific part stays
    in the adapter as a small callback: a status card's numbers, the call that
@@ -176,8 +174,8 @@ promised:
 
 ### A ratchet
 
-The number of hand-written REST routes in `includes/adapters/` (489 at
-v0.45.0) may only go down. The inventory measures it; a suite fails when it
+The number of hand-written REST routes in `includes/adapters/` may only go
+down. The inventory measures it; a suite fails when it
 rises.
 
 ## v0.46 scope
@@ -186,11 +184,11 @@ rises.
    current behaviour of every adapter is on record. It also captures the
    whole lab once as the v0.45.0 reference.
 2. **The kernel and the conformance runner,** with both the declared and the
-   handler tier. Roughly 2,000 to 3,000 lines of PHP. It gets the release's
+   handler tier. It gets the release's
    full audit attention: a kernel bug would reach every ported adapter at once.
 3. **Port form entries first.** The densest bug family in both the audit and
    the demo. Keep route paths and descriptor shapes, so the forms suites
-   (about 300 checks) are the regression net with no rewrites. Delete the code
+   are the regression net with no rewrites. Delete the code
    and per-adapter security checks the kernel replaces, prove parity, and
    record the net line change in the inventory.
 4. **Turn on the ratchet.**
@@ -202,37 +200,33 @@ rises.
    defaults, the global-styles Undo), and the multisite subsite Users list.
 7. **Keep the kernel API internal** until a second family ports cleanly.
 
-Out of scope for v0.46: the licence manager (7,060 lines), the editor field
+Out of scope for v0.46: the licence manager, the editor field
 panels (ACF, ACPT, Meta Box), the settings mappers, network and WooCommerce
 settings. Their shapes differ; the field types still remove their date and
 entity handling.
 
 ## What to expect
 
-The first estimate was collection adapters 40 to 55% smaller. The forms family,
-ported first, measured otherwise:
+The first estimate was that collection adapters would about halve. They shrink
+by less: most of a form adapter is the vendor's own shape (how answers are stored
+and decoded, which buckets an entry moves between, what the status card counts,
+the descriptor's labels and confirms), and that stays. A family whose adapters
+repeat the same plumbing (status cards that run the same queries, lists over a
+table) shrinks more. The dashboard has each pass's measured change.
 
-| | v0.45.0 | ported |
-|---|---|---|
-| Ten form-entry adapters and Gravity Forms | 8,289 lines | 7,808 lines (−6%) |
-| Hand-written routes in them | 84 | 0 |
-| Kernel | — | 1,227 lines |
-
-Most of a form adapter is the vendor's own shape: how answers are stored and
-decoded, which buckets an entry moves between, what the status card counts, the
-descriptor's labels and confirms. That stays. What the routes repeated is what
-went, and it is where the bugs were: each forms route now passes the same gate
-check (a strict yes, so a WP_Error or a truthy number never opens it), the same
-row scope on lists, items and actions alike, the same not found, forbidden and
-wrong-state answers in that order, the same post-condition on every write, and the
-same error shape. The case for the kernel is that, not size; expect later families
-to shrink by a similar few percent.
+What goes is what the routes repeated, and it is where the bugs were: every
+ported route passes the same gate check (a strict yes, so a WP_Error or a truthy
+number never opens it), the same row scope on lists, items, actions and status
+cards alike, the same not found, forbidden and wrong-state answers in that order,
+the same post-condition on every write, and the same error shape. The case for the
+kernel is that, not size.
 
 ## Porting an adapter
 
 The kernel lives in `includes/kernel/`; `class-minn-admin-kernel.php` opens with the
-declaration keys, and `includes/adapters/everest-forms.php` is the worked example (902
-lines to 725, no hand-written route left, parity empty). A port, one adapter at a time:
+declaration keys, and `includes/adapters/everest-forms.php` is the worked example (no
+hand-written route left, parity empty); `includes/adapters/stream.php` is the smallest
+activity-log one. A port, one adapter at a time:
 
 1. **Read the adapter whole** and sort its routes: a list, an item and item actions
    become `minn_admin_resource()`; a status card, a forms tab list, a send, a job or an
@@ -270,14 +264,23 @@ after Minn's translations load at `init` in the reader's language. A callable so
 that proves deletion (`'expect' => 'gone'`) declares `exists`, asked of the store
 directly, since its own read may hide a row from the caller.
 
+The activity-log port (nine adapters) added what the forms ports had worked around:
+a table the network shares (`'network' => true`), a fixed condition every read meets,
+the list, an item, a status card and a tab list alike (`source.where`, matching nothing
+when its function cannot answer), LIKE rules (`starts`, `contains`, `ends`) and `any`
+(OR on one column), string and mapped narrowings (`facets`), a search that also matches
+a meta table or the declaration's own conditions, a UTC wire format ending in `Z`, a
+status card without a secondary series, and an array source for a vendor that keeps its
+list in an option or a queue. A status card counts through its resource
+(`Minn_Admin_Kernel::log_counts()`), so it can never count a row the list would hide.
+
 What the kernel does not have yet: the save path for edit forms (changed fields only,
 a base stamp and a 409 on a stale copy), which the entry-edit adapters will need when
 they port (the post type and taxonomy definitions use the same stamp and partial save
-in `class-minn-admin-cpt.php`); and what the forms
-ports worked around: a fixed condition for every read of a table (Forminator's
-`entry_type`), OR between condition sets, a LIKE condition (a token in a serialized
-blob, cfdb7), string tab values (Elementor), a UTC wire format ending in `Z`, and a
-status card without a secondary series.
+in `class-minn-admin-cpt.php`), and OR between condition sets on different columns
+(Wordfence's chart says it as one condition because its data allows it). The forms
+adapters still carry their own workarounds for the shapes above; moving them onto the
+new primitives is a pass of its own.
 
 ## Measuring progress
 
@@ -295,10 +298,10 @@ fixed baseline every change is measured against
 
 ## Later
 
-- **v0.47:** port activity logs, mail, bookings and backups; publish the kernel
-  API for third-party authors. A kernel-only adapter shows as such on the
-  Integrations card, and one with its own routes is flagged, which is what the
-  site-owner extension policy acts on.
+- **Next:** mail, bookings, redirects and backups, after forms and activity logs.
+  In v0.47, publish the kernel API for third-party authors. A kernel-only
+  adapter shows as such on the Integrations card, and one with its own routes
+  is flagged, which is what the site-owner extension policy acts on.
 - **Batteries.** A Minn-native forms, redirects or snippets feature is just a
   resource over Minn's own table, so the kernel makes the 2026-09-04 audit's
   "batteries included" idea cheap. Whether Minn should ship its own instead of
@@ -316,7 +319,7 @@ fixed baseline every change is measured against
   table read.
 - **Scope.** The failure mode is a kernel that tries to cover every shape on
   day one. It covers list, detail, actions and status first, because that is
-  where 60% of the adapter code lives.
+  where most of the adapter code lives.
 
 ## Decisions
 

@@ -25,7 +25,17 @@
  *                                            // called with no arguments; 'view' is required
  *     'item_gate' => callable( int $id, string $gate ): bool   // the row-level check
  *     'labels'    => array( 'not_found' => …, 'forbidden' => … ),
- *     'source'    => array( 'table' => 'evf_entries', 'key' => 'entry_id', 'columns' => [ … ], 'detail' => [ … ] )
+ *     'source'    => array( 'table' => 'evf_entries', 'key' => 'entry_id', 'columns' => [ … ], 'detail' => [ … ],
+ *                 //           'network' => true,   // a table the network shares, on the base prefix
+ *                 //           'columns' may be a callable, asked when a read runs, never at declaration
+ *                 //           'where'   => conditions | callable(): conditions )
+ *                 // 'where' holds for every read of the source: the list, an item, a status
+ *                 // card's counts (a site column, a vendor's own row scope); an array source
+ *                 // is held to it in PHP. A callable that answers anything but an array
+ *                 // matches nothing. A missing table is an empty list and a 404.
+ *                 // or array( 'rows' => callable(): array[] )   // a vendor's list in memory (an option, an
+ *                 //    API's queue), in the order to show it: the kernel applies the facets, search
+ *                 //    (any declared column contains the term), range and page to it in PHP
  *                 // or array( 'list' => callable( array $q ): array( rows, total ), 'get' => callable( int $id ): ?array,
  *                 //           'exists' => callable( int $id ): bool )  // asked straight from the store, for 'gone'
  *     'list'      => array(
@@ -35,12 +45,23 @@
  *       'tab'      => array( 'param' => 'form_id', 'column' => 'form_id', 'gate' => callable( int $tab ): bool, 'refuse' => … ),
  *                  // the gate, when declared, is asked before the scope (a per-form capability)
  *       'scope'    => array( 'column' => 'form_id', 'allowed' => callable(): ?int[], 'refuse' => … ),
+ *       'facets'   => array( array( 'param' => 'connector', 'column' => 'connector', 'type' => 'key' ),
+ *                             array( 'param' => 'severity', 'values' => array( 'high' => array( 'severity' => 400 ) ) ) ),
+ *                  // optional narrowings: a 'key' facet matches its column to the value as
+ *                  // sanitize_key() leaves it; 'values' maps each value to conditions (or to
+ *                  // a callable answering them), or is a callable( string ): ?conditions.
+ *                  // An absent or unknown value narrows nothing. A callable source reads
+ *                  // them in $q['facets'].
  *       'search'   => array( 'param' => 'search', 'columns' => [ … ] )
- *                  // or 'meta' => array( 'table', 'key', 'name', 'value', 'skip' => prefix )
+ *                  // and/or 'meta' => array( 'table', 'key', 'name', 'value', 'skip' => prefix,
+ *                  //                         'only' => name, 'network' => bool ),
+ *                  // and/or 'also' => callable( string $term ): ?conditions; a row matches any of them
  *       'range'    => array( 'column' => 'date_created', 'clock' => 'utc' ),
  *       'order'    => array( 'column' => 'entry_id', 'dir' => 'DESC' ),
  *       'keys'     => array( 'items' => 'items', 'total' => 'total' ),
- *       'row'      => callable( array $row ): array,
+ *       'batch'    => callable( array $rows ): mixed,   // once per page, before 'row' (a batched
+ *                                                     // lookup); its answer rides in $q['batch']
+ *       'row'      => callable( array $row, array $q ): array,   // optional: the row as it is
  *       'fields'   => array( name => type ),      // Minn_Admin_Kernel_Fields
  *     ),
  *     'item'      => array( 'view' => callable( array $row, WP_REST_Request $r ): array|WP_Error, 'fields' => … ),
@@ -347,12 +368,16 @@ class Minn_Admin_Kernel {
 			},
 			'callback'            => self::guarded( function ( WP_REST_Request $r ) use ( $run, $ep ) {
 				$ctx = array();
-				if ( false !== strpos( $ep['path'], '(?P<id>' ) ) {
+				// A numeric id is an int above zero; an id of another shape
+				// (an md5) is the string its own route pattern already held.
+				if ( false !== strpos( $ep['path'], '(?P<id>\d+)' ) ) {
 					$id = (int) Minn_Admin::path_param( $r );
 					if ( $id <= 0 ) {
 						return Minn_Admin_Kernel::fail( 'not_found', $ep['labels']['not_found'] ?? __( 'Not found.', 'minn-admin' ), 404 );
 					}
 					$ctx['id'] = $id;
+				} elseif ( false !== strpos( $ep['path'], '(?P<id>' ) ) {
+					$ctx['id'] = (string) Minn_Admin::path_param( $r );
 				}
 				return call_user_func( $run, $r, $ctx );
 			} ),
@@ -482,11 +507,59 @@ class Minn_Admin_Kernel {
 			$row = call_user_func( $src['get'], (int) $id );
 			return is_array( $row ) ? $row : null;
 		}
-		if ( empty( $src['table'] ) ) {
+		if ( empty( $src['table'] ) || ! Minn_Admin_Kernel_SQL::exists( self::table_of( $src ) ) ) {
 			return null;
 		}
-		$cols = (array) ( $src[ $which ] ?? $src['columns'] ?? array() );
-		return Minn_Admin_Kernel_SQL::row( $src['table'], $src['key'], (int) $id, $cols );
+		$fixed = self::fixed( $src );
+		if ( null === $fixed ) {
+			return null;
+		}
+		$cols = self::cols( $src[ $which ] ?? $src['columns'] ?? array() );
+		return Minn_Admin_Kernel_SQL::row( self::table_of( $src ), $src['key'], (int) $id, $cols, $fixed );
+	}
+
+	/**
+	 * Columns as declared, or as a function answers them when the read runs
+	 * (a column a vendor's migration adds). An array is always the list
+	 * itself, never read as array( 'Class', 'method' ).
+	 */
+	private static function cols( $cols ) {
+		if ( ! is_array( $cols ) ) {
+			$cols = is_callable( $cols ) ? call_user_func( $cols ) : array();
+		}
+		return array_values( (array) $cols );
+	}
+
+	/** A request value as text: '' for an array or an object, never a notice. */
+	private static function param( WP_REST_Request $r, $name ) {
+		$v = $r->get_param( (string) $name );
+		return is_scalar( $v ) ? trim( (string) $v ) : '';
+	}
+
+	/** A table source's table, as the SQL layer names it. */
+	private static function table_of( array $src ) {
+		return array( 'table' => (string) $src['table'], 'network' => ! empty( $src['network'] ) );
+	}
+
+	/**
+	 * The conditions every read of a table source meets: array() for none,
+	 * null when its function answers anything but an array (match nothing).
+	 *
+	 * @return array|null
+	 */
+	private static function fixed( array $src ) {
+		if ( ! isset( $src['where'] ) ) {
+			return array();
+		}
+		if ( is_array( $src['where'] ) ) {
+			return $src['where'];
+		}
+		try {
+			$w = is_callable( $src['where'] ) ? call_user_func( $src['where'] ) : null;
+		} catch ( \Throwable $e ) {
+			$w = null;
+		}
+		return is_array( $w ) ? $w : null;
 	}
 
 	/**
@@ -515,7 +588,7 @@ class Minn_Admin_Kernel {
 			$values = (array) $f['values'];
 			$mapped = array_keys( $values ) !== range( 0, count( $values ) - 1 );
 			$names  = $mapped ? array_map( 'strval', array_keys( $values ) ) : array_map( 'strval', $values );
-			$v      = (string) $r->get_param( $f['param'] ?? 'status' );
+			$v      = self::param( $r, $f['param'] ?? 'status' );
 			if ( '' === $v || ! in_array( $v, $names, true ) ) {
 				$v = (string) ( $f['default'] ?? $names[0] );
 			}
@@ -534,7 +607,7 @@ class Minn_Admin_Kernel {
 			}
 		}
 		if ( ! empty( $l['tab'] ) ) {
-			$tab = (int) $r->get_param( $l['tab']['param'] );
+			$tab = (int) self::param( $r, $l['tab']['param'] );
 			if ( $tab && ! empty( $l['tab']['gate'] ) && ! self::yes( $l['tab']['gate'], $tab ) ) {
 				return self::fail( 'forbidden', $l['tab']['refuse'] ?? self::label( $res, 'forbidden', __( 'You cannot access that item.', 'minn-admin' ) ), 403 );
 			}
@@ -548,9 +621,46 @@ class Minn_Admin_Kernel {
 				$q['where'][ $l['tab']['column'] . "\0tab" ] = $tab;
 			}
 		}
-		if ( ! empty( $l['search'] ) ) {
-			$q['search'] = trim( (string) $r->get_param( $l['search']['param'] ?? 'search' ) );
+		$q['facets'] = array();
+		foreach ( (array) ( $l['facets'] ?? array() ) as $i => $f ) {
+			$v = self::param( $r, (string) $f['param'] );
+			if ( '' === $v ) {
+				continue;
+			}
+			$conds = null;
+			if ( 'key' === ( $f['type'] ?? '' ) ) {
+				$v     = sanitize_key( $v );
+				$conds = '' === $v ? null : array( $f['column'] => $v );
+			} elseif ( isset( $f['values'] ) && is_array( $f['values'] ) ) {
+				$conds = $f['values'][ $v ] ?? null;
+				$conds = is_callable( $conds ) ? call_user_func( $conds ) : $conds;
+			} elseif ( isset( $f['values'] ) && is_callable( $f['values'] ) ) {
+				$conds = call_user_func( $f['values'], $v );
+			}
+			if ( ! is_array( $conds ) ) {
+				continue;
+			}
+			$q['facets'][ (string) $f['param'] ] = $v;
+			foreach ( $conds as $col => $rule ) {
+				$q['where'][ $col . "\0facet{$i}" ] = $rule;
+			}
 		}
+		if ( ! empty( $l['search'] ) ) {
+			$q['search'] = self::param( $r, $l['search']['param'] ?? 'search' );
+		}
+		// What every read of the source meets (a site column), first; an
+		// array source is held to it in PHP, a callable one reads it in
+		// list_where().
+		$fixed = self::fixed( $res['source'] ?? array() );
+		if ( null === $fixed ) {
+			$q['none'] = true;
+			return $q;
+		}
+		$own = array();
+		foreach ( $fixed as $col => $rule ) {
+			$own[ $col . "\0fixed" ] = $rule;
+		}
+		$q['where'] = array_merge( $own, $q['where'] );
 		return $q;
 	}
 
@@ -569,14 +679,7 @@ class Minn_Admin_Kernel {
 
 	/** Conditions keyed "column\0why" (so a scope and a tab on one column both apply). */
 	private static function where_sql( array $where, $alias ) {
-		$sql  = array();
-		$args = array();
-		foreach ( $where as $key => $rule ) {
-			list( $s, $a ) = Minn_Admin_Kernel_SQL::where( array( explode( "\0", (string) $key )[0] => $rule ), $alias );
-			$sql           = array_merge( $sql, $s );
-			$args          = array_merge( $args, $a );
-		}
-		return array( $sql, $args );
+		return Minn_Admin_Kernel_SQL::where( $where, $alias );
 	}
 
 	public static function handle_list( array $res, WP_REST_Request $r ) {
@@ -586,11 +689,14 @@ class Minn_Admin_Kernel {
 		if ( is_wp_error( $q ) ) {
 			return $q;
 		}
-		if ( isset( $q['allowed'] ) && ! $q['allowed'] ) {
+		$src = $res['source'];
+		if ( ( isset( $q['allowed'] ) && ! $q['allowed'] ) || ! empty( $q['none'] )
+			|| ( ! empty( $src['table'] ) && ! Minn_Admin_Kernel_SQL::exists( self::table_of( $src ) ) ) ) {
 			return array( $keys['items'] => array(), $keys['total'] => 0 );
 		}
-		$src = $res['source'];
-		if ( ! empty( $src['list'] ) ) {
+		if ( ! empty( $src['rows'] ) ) {
+			list( $rows, $total ) = self::array_page( $l, $q, (array) call_user_func( $src['rows'] ) );
+		} elseif ( ! empty( $src['list'] ) ) {
 			list( $rows, $total ) = call_user_func( $src['list'], $q );
 			// A callable source is handed the scope in $q['allowed']; its rows
 			// are held to it here as well, and a row without the scope column
@@ -621,9 +727,9 @@ class Minn_Admin_Kernel {
 				$args            = array_merge( $args, $ra );
 			}
 			list( $rows, $total ) = Minn_Admin_Kernel_SQL::page( array(
-				'table'   => $src['table'],
+				'table'   => self::table_of( $src ),
 				'key'     => $src['key'],
-				'columns' => (array) $src['columns'],
+				'columns' => self::cols( $src['columns'] ),
 				'sql'     => $sql,
 				'args'    => $args,
 				'order'   => $l['order']['column'] ?? $src['key'],
@@ -633,34 +739,87 @@ class Minn_Admin_Kernel {
 			) );
 		}
 		$items = array();
+		if ( ! empty( $l['batch'] ) ) {
+			$q['batch'] = call_user_func( $l['batch'], array_map( function ( $row ) {
+				return (array) $row;
+			}, (array) $rows ) );
+		}
 		foreach ( (array) $rows as $row ) {
-			$built   = call_user_func( $l['row'], (array) $row, $q );
+			$built   = empty( $l['row'] ) ? (array) $row : call_user_func( $l['row'], (array) $row, $q );
 			$items[] = empty( $l['fields'] ) ? $built : Minn_Admin_Kernel_Fields::out( $l['fields'], (array) $built );
 		}
 		return array( $keys['items'] => $items, $keys['total'] => (int) $total );
 	}
 
-	/** A search clause: LIKE over declared columns, or EXISTS over a meta table. */
+	/**
+	 * A page of an array source: the list's conditions, search and range
+	 * applied in PHP, the source's order kept.
+	 *
+	 * @return array [ rows, total ]
+	 */
+	private static function array_page( array $l, array $q, array $rows ) {
+		$term  = '' === $q['search'] ? '' : $q['search'];
+		$clock = (string) ( $l['range']['clock'] ?? 'epoch' );
+		$from  = empty( $l['range']['column'] ) ? null : minn_admin_chart_bound_epoch( self::param( $q['request'], 'after' ), $clock );
+		$to    = empty( $l['range']['column'] ) ? null : minn_admin_chart_bound_epoch( self::param( $q['request'], 'before' ), $clock );
+		$kept  = array();
+		foreach ( $rows as $row ) {
+			$row = (array) $row;
+			if ( ! Minn_Admin_Kernel_SQL::matches( $row, $q['where'] ) ) {
+				continue;
+			}
+			if ( '' !== $term ) {
+				$hit = false;
+				foreach ( (array) ( $l['search']['columns'] ?? array() ) as $c ) {
+					$v   = isset( $row[ $c ] ) && is_scalar( $row[ $c ] ) ? (string) $row[ $c ] : '';
+					$hit = $hit || false !== ( function_exists( 'mb_stripos' ) ? mb_stripos( $v, $term ) : stripos( $v, $term ) );
+				}
+				if ( ! $hit ) {
+					continue;
+				}
+			}
+			if ( null !== $from || null !== $to ) {
+				$v  = $row[ $l['range']['column'] ] ?? '';
+				$ts = is_numeric( $v ) ? (int) $v : ( '' === (string) $v ? false : strtotime( (string) $v ) );
+				if ( false === $ts || ( null !== $from && $ts < $from ) || ( null !== $to && $ts > $to ) ) {
+					continue;
+				}
+			}
+			$kept[] = $row;
+		}
+		return array( array_slice( $kept, ( $q['page'] - 1 ) * $q['per_page'], $q['per_page'] ), count( $kept ) );
+	}
+
+	/** A search clause: LIKE over declared columns, EXISTS over a meta table, or the declaration's own conditions; any of them. */
 	private static function search_sql( array $s, array $src, $term ) {
 		global $wpdb;
-		$like = '%' . $wpdb->esc_like( $term ) . '%';
-		if ( ! empty( $s['meta'] ) ) {
-			$m    = $s['meta'];
-			$sql  = 'EXISTS ( SELECT 1 FROM ' . Minn_Admin_Kernel_SQL::table( $m['table'] ) . ' m WHERE m.' . Minn_Admin_Kernel_SQL::ident( $m['key'] ) . ' = e.' . Minn_Admin_Kernel_SQL::ident( $src['key'] );
-			$args = array();
+		$like  = '%' . $wpdb->esc_like( $term ) . '%';
+		$parts = array();
+		$args  = array();
+		foreach ( (array) ( $s['columns'] ?? array() ) as $c ) {
+			$parts[] = 'e.' . Minn_Admin_Kernel_SQL::ident( $c ) . ' LIKE %s';
+			$args[]  = $like;
+		}
+		$mt = empty( $s['meta'] ) ? null : array( 'table' => $s['meta']['table'], 'network' => ! empty( $s['meta']['network'] ) );
+		if ( $mt && Minn_Admin_Kernel_SQL::exists( $mt ) ) {
+			$m   = $s['meta'];
+			$sql = 'EXISTS ( SELECT 1 FROM ' . Minn_Admin_Kernel_SQL::table( $mt ) . ' m WHERE m.' . Minn_Admin_Kernel_SQL::ident( $m['key'] ) . ' = e.' . Minn_Admin_Kernel_SQL::ident( $src['key'] );
+			if ( isset( $m['only'] ) ) {
+				$sql   .= ' AND m.' . Minn_Admin_Kernel_SQL::ident( $m['name'] ) . ' = %s';
+				$args[] = (string) $m['only'];
+			}
 			if ( ! empty( $m['skip'] ) ) {
 				$sql   .= ' AND m.' . Minn_Admin_Kernel_SQL::ident( $m['name'] ) . ' NOT LIKE %s';
 				$args[] = $wpdb->esc_like( (string) $m['skip'] ) . '%';
 			}
-			$sql   .= ' AND m.' . Minn_Admin_Kernel_SQL::ident( $m['value'] ) . ' LIKE %s )';
-			$args[] = $like;
-			return array( $sql, $args );
-		}
-		$parts = array();
-		$args  = array();
-		foreach ( (array) $s['columns'] as $c ) {
-			$parts[] = 'e.' . Minn_Admin_Kernel_SQL::ident( $c ) . ' LIKE %s';
+			$parts[] = $sql . ' AND m.' . Minn_Admin_Kernel_SQL::ident( $m['value'] ) . ' LIKE %s )';
 			$args[]  = $like;
+		}
+		$also = isset( $s['also'] ) && is_callable( $s['also'] ) ? call_user_func( $s['also'], $term ) : null;
+		if ( is_array( $also ) && $also ) {
+			list( $as, $aa ) = Minn_Admin_Kernel_SQL::where( $also, 'e' );
+			$parts[]         = '( ' . implode( ' AND ', $as ) . ' )';
+			$args            = array_merge( $args, $aa );
 		}
 		return array( $parts ? '( ' . implode( ' OR ', $parts ) . ' )' : '1 = 1', $args );
 	}
@@ -835,5 +994,198 @@ class Minn_Admin_Kernel {
 			) ) );
 		}
 		return $out;
+	}
+
+	/**
+	 * What every count over a table resource's rows meets: its fixed
+	 * conditions and the list's scope, keyed so neither replaces the other.
+	 * null when the caller may see none of its rows or the table is missing.
+	 *
+	 * @param array $res Resource.
+	 * @return array|null
+	 */
+	private static function base_where( array $res ) {
+		$src = $res['source'] ?? array();
+		if ( empty( $src['table'] ) || ! Minn_Admin_Kernel_SQL::exists( self::table_of( $src ) ) ) {
+			return null;
+		}
+		$fixed   = self::fixed( $src );
+		$allowed = self::scope( $res );
+		if ( null === $fixed || ( is_array( $allowed ) && ! $allowed ) ) {
+			return null;
+		}
+		$where = array();
+		foreach ( $fixed as $col => $rule ) {
+			$where[ $col . "\0fixed" ] = $rule;
+		}
+		if ( is_array( $allowed ) ) {
+			$where[ $res['list']['scope']['column'] . "\0scope" ] = $allowed;
+		}
+		return $where;
+	}
+
+	/**
+	 * The rule a date column on its clock needs for "within the last N seconds".
+	 *
+	 * @param string $clock   utc | local | epoch | local-epoch.
+	 * @param int    $seconds The window.
+	 * @return array
+	 */
+	public static function since( $clock, $seconds ) {
+		$seconds = (int) $seconds;
+		switch ( (string) $clock ) {
+			case 'epoch':
+				return array( 'op' => '>=', 'value' => time() - $seconds );
+			case 'local-epoch':
+				return array( 'op' => '>=', 'value' => (int) current_time( 'timestamp' ) - $seconds ); // phpcs:ignore WordPress.DateTime.CurrentTimeTimestamp.Requested -- the column holds this clock.
+			case 'local':
+				return array( 'op' => '>=', 'value' => gmdate( 'Y-m-d H:i:s', (int) current_time( 'timestamp' ) - $seconds ) ); // phpcs:ignore WordPress.DateTime.CurrentTimeTimestamp.Requested
+			default:
+				return array( 'op' => '>=', 'value' => gmdate( 'Y-m-d H:i:s', time() - $seconds ) );
+		}
+	}
+
+	/**
+	 * "5 mins ago" for a date as a column on its clock stores it, or a dash.
+	 *
+	 * @param mixed  $stored Stored value.
+	 * @param string $clock  utc | local | epoch | local-epoch.
+	 * @return string
+	 */
+	public static function ago( $stored, $clock ) {
+		if ( null === $stored || ! is_scalar( $stored ) || '' === (string) $stored ) {
+			return '—';
+		}
+		$now = time();
+		if ( 'epoch' === $clock ) {
+			$ts = (int) floatval( $stored );
+		} elseif ( 'local-epoch' === $clock || 'local' === $clock ) {
+			$ts  = 'local' === $clock ? (int) strtotime( (string) $stored ) : (int) $stored;
+			$now = (int) current_time( 'timestamp' ); // phpcs:ignore WordPress.DateTime.CurrentTimeTimestamp.Requested -- the same clock as the column.
+		} else {
+			$ts = (int) strtotime( (string) $stored . ' UTC' );
+		}
+		if ( $ts <= 0 ) {
+			return '—';
+		}
+		/* translators: %s: human-readable time since the last event. */
+		return sprintf( __( '%s ago', 'minn-admin' ), human_time_diff( $ts, $now ) );
+	}
+
+	/**
+	 * Counts for an activity log's status card, over exactly the rows its
+	 * list may show: the resource's table, fixed conditions and scope, on
+	 * the date column and clock its list's range declares.
+	 *
+	 * @param string|array $id Resource id, or a bare source (table, network, key,
+	 *                         where, and date: column + clock) for a card whose
+	 *                         list Minn does not serve.
+	 * @param array        $c  top (column, where, window: the most frequent value,
+	 *                   seven days by default), counts (name => where + window,
+	 *                   0 for all time), chart (split, secondary, where; false
+	 *                   for none).
+	 * @return array|null null when the table is missing; otherwise day, week,
+	 *                    total, last (the newest row's stored date or null),
+	 *                    ago, top (value + count, or null), counts and days.
+	 */
+	public static function log_counts( $id, array $c = array() ) {
+		$res = is_array( $id ) ? array( 'source' => $id, 'list' => array( 'range' => (array) ( $id['date'] ?? array() ) ) ) : self::def( $id );
+		if ( ! is_array( $res ) || empty( $res['source']['table'] ) || empty( $res['list']['range']['column'] ) ) {
+			return null;
+		}
+		$src   = $res['source'];
+		$table = self::table_of( $src );
+		if ( ! Minn_Admin_Kernel_SQL::exists( $table ) ) {
+			return null;
+		}
+		$col   = (string) $res['list']['range']['column'];
+		$clock = (string) ( $res['list']['range']['clock'] ?? 'local' );
+		$base  = self::base_where( $res );
+		$out   = array( 'day' => 0, 'week' => 0, 'total' => 0, 'last' => null, 'ago' => '—', 'top' => null, 'counts' => array(), 'days' => minn_admin_chart_days() );
+		foreach ( array_keys( (array) ( $c['counts'] ?? array() ) ) as $k ) {
+			$out['counts'][ $k ] = 0;
+		}
+		if ( null === $base ) {
+			return $out;
+		}
+		$w = function ( array $extra = array(), $window = 0 ) use ( $base, $col, $clock ) {
+			foreach ( $extra as $k => $rule ) {
+				$base[ $k . "\0extra" ] = $rule;
+			}
+			if ( $window > 0 ) {
+				$base[ $col . "\0since" ] = Minn_Admin_Kernel::since( $clock, $window );
+			}
+			return $base;
+		};
+		$out['total'] = Minn_Admin_Kernel_SQL::count( $table, $w() );
+		$out['day']   = Minn_Admin_Kernel_SQL::count( $table, $w( array(), DAY_IN_SECONDS ) );
+		$out['week']  = Minn_Admin_Kernel_SQL::count( $table, $w( array(), 7 * DAY_IN_SECONDS ) );
+		$out['last']  = Minn_Admin_Kernel_SQL::latest( $table, $col, $w(), $src['key'] );
+		$out['ago']   = self::ago( $out['last'], $clock );
+		if ( ! empty( $c['top']['column'] ) ) {
+			$out['top'] = Minn_Admin_Kernel_SQL::top( $table, $c['top']['column'], $w( (array) ( $c['top']['where'] ?? array() ), (int) ( $c['top']['window'] ?? 7 * DAY_IN_SECONDS ) ) );
+		}
+		foreach ( (array) ( $c['counts'] ?? array() ) as $k => $spec ) {
+			$out['counts'][ $k ] = Minn_Admin_Kernel_SQL::count( $table, $w( (array) ( $spec['where'] ?? array() ), (int) ( $spec['window'] ?? 0 ) ) );
+		}
+		if ( false !== ( $c['chart'] ?? array() ) ) {
+			$ch          = (array) ( $c['chart'] ?? array() );
+			$out['days'] = Minn_Admin_Kernel_SQL::chart_days( array(
+				'table'     => $table,
+				'column'    => $col,
+				'clock'     => $clock,
+				'where'     => $w( (array) ( $ch['where'] ?? array() ) ),
+				'split'     => $ch['split'] ?? '',
+				'secondary' => $ch['secondary'] ?? array(),
+			) );
+		}
+		return $out;
+	}
+
+	/**
+	 * The rows every activity card opens with, by name: the last day (the
+	 * week as its hint), all time, and the last event.
+	 *
+	 * @param array $n log_counts().
+	 * @return array
+	 */
+	public static function event_rows( array $n ) {
+		return array(
+			'day'   => array(
+				'label' => __( 'Events (24h)', 'minn-admin' ),
+				'value' => number_format_i18n( (int) $n['day'] ),
+				/* translators: %s: number of events recorded in the last 7 days. */
+				'hint'  => sprintf( __( '%s in the last 7 days', 'minn-admin' ), number_format_i18n( (int) $n['week'] ) ),
+			),
+			'total' => array(
+				'label' => __( 'Events all-time', 'minn-admin' ),
+				'value' => number_format_i18n( (int) $n['total'] ),
+			),
+			'last'  => array(
+				'label' => __( 'Last event', 'minn-admin' ),
+				'value' => (string) $n['ago'],
+			),
+		);
+	}
+
+	/**
+	 * The distinct values of a column over the rows a resource's list may
+	 * show (a tab list), sorted.
+	 *
+	 * @param string $id     Resource id.
+	 * @param string $column Column.
+	 * @param array  $where  Further conditions.
+	 * @return string[]
+	 */
+	public static function distinct( $id, $column, array $where = array() ) {
+		$res  = self::def( $id );
+		$base = is_array( $res ) ? self::base_where( $res ) : null;
+		if ( null === $base ) {
+			return array();
+		}
+		foreach ( $where as $k => $rule ) {
+			$base[ $k . "\0extra" ] = $rule;
+		}
+		return Minn_Admin_Kernel_SQL::distinct( self::table_of( $res['source'] ), $column, $base );
 	}
 }

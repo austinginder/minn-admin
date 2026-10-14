@@ -12,7 +12,11 @@
  *    fields leaving, a secret never; each field type on awkward stored
  *    values; a write whose effect is not there never reporting success; a
  *    throw answering in one shape with nothing of the exception in it; the
- *    handler tier's gate and ids.
+ *    handler tier's gate and ids. Then the log shapes, on a network table
+ *    two tenants share: a fixed condition on every read (list, item, card,
+ *    tab list) that matches nothing when it cannot be read; facets, LIKE and
+ *    'any' rules that never widen; status-card counts over the list's own
+ *    rows; a missing table; an array source; an id that is not a number.
  * 2. Every real declaration: each action has a declared gate and a
  *    post-condition, each descriptor action that points at a kernel route
  *    names a declared action with its method and a state the action accepts,
@@ -467,6 +471,275 @@ $check( 'text: decode turns entities into text', 'Smith & Sons "x"' === call_use
 $check( 'text: an array is not text', '' === call_user_func( $f, array( 'type' => 'text' ), array( 'a' ) ) );
 $check( 'enum: a value outside the set is empty', '' === call_user_func( $f, array( 'type' => 'enum', 'values' => array( 'a', 'b' ) ), 'c' ) );
 $check( 'int: a numeric prefix is read, the rest dropped', 12 === call_user_func( $f, array( 'type' => 'int' ), '12abc' ) );
+
+// --- 1b. Log shapes: a network table, fixed conditions, facets, cards ------
+// Two tenants in one network table; only site 1 is ever this site's.
+$lt = $wpdb->base_prefix . 'minn_conf_log';
+$wpdb->query( "CREATE TEMPORARY TABLE {$lt} ( id BIGINT UNSIGNED NOT NULL PRIMARY KEY, site_id BIGINT NOT NULL, kind VARCHAR(20) NOT NULL, src VARCHAR(40) NULL, actor VARCHAR(60) NOT NULL, created BIGINT NOT NULL ) ENGINE=InnoDB" ); // phpcs:ignore
+$now  = time();
+$logs = array(
+	array( 1, 1, 'a', '', 'ann', $now - 60 ),
+	array( 2, 1, 'a', null, 'bob 100%', $now - 2 * DAY_IN_SECONDS ),
+	array( 3, 1, 'b', 'rest', 'cy_d', $now - 3 * DAY_IN_SECONDS ),
+	array( 4, 1, 'b', 'rest|app:x', 'dee', $now - 10 * DAY_IN_SECONDS ),
+	array( 5, 1, 'c', 'app:y', 'eve', $now - 20 * DAY_IN_SECONDS ),
+	array( 6, 1, 'c', 'restx', 'fay', $now - 30 ),
+	array( 7, 2, 'a', 'rest', 'other-tenant', $now - 30 ),
+	array( 8, 2, 'z', '', 'other-tenant', $now - 30 ),
+);
+foreach ( $logs as $g ) {
+	$wpdb->insert( $lt, array( 'id' => $g[0], 'site_id' => $g[1], 'kind' => $g[2], 'src' => $g[3], 'actor' => $g[4], 'created' => $g[5] ) );
+}
+$site_answer = array( 'site_id' => 1 );
+$col_calls   = 0;
+$page_calls  = array();
+Minn_Admin_Kernel::resource( 'minn-conformance/log', array(
+	'gates'  => array( 'view' => '__return_true' ),
+	'source' => array(
+		'table'   => 'minn_conf_log',
+		'network' => true,
+		'key'     => 'id',
+		'columns' => function () use ( &$col_calls ) {
+			$col_calls++;
+			return array( 'id', 'site_id', 'kind', 'src', 'actor', 'created' );
+		},
+		'where'   => function () use ( &$site_answer ) {
+			return $site_answer;
+		},
+	),
+	'list'   => array(
+		'facets' => array(
+			array( 'param' => 'kind', 'column' => 'kind', 'type' => 'key' ),
+			array( 'param' => 'level', 'values' => array(
+				'hot'  => array( 'kind' => array( 'a', 'b' ) ),
+				'late' => function () {
+					return array( 'kind' => 'c' );
+				},
+			) ),
+			array( 'param' => 'src', 'values' => function ( $v ) {
+				if ( 'browser' === $v ) {
+					return array( 'src' => array( 'any' => array( '', null ) ) );
+				}
+				if ( 'app' === $v ) {
+					return array( 'src' => array( 'any' => array( array( 'contains' => '|app:' ), array( 'starts' => 'app:' ) ) ) );
+				}
+				return array( 'src' => array( 'any' => array( $v, array( 'starts' => $v . '|' ) ) ) );
+			} ),
+		),
+		'search' => array(
+			'columns' => array( 'actor' ),
+			'also'    => function ( $term ) {
+				return 'magic' === $term ? array( 'kind' => 'c' ) : null;
+			},
+		),
+		'range'  => array( 'column' => 'created', 'clock' => 'epoch' ),
+		'order'  => array( 'column' => 'created' ),
+		'batch'  => function ( array $rows ) use ( &$page_calls ) {
+			$page_calls[] = count( $rows );
+			return 'batched';
+		},
+		'row'    => function ( array $r, array $q ) {
+			return array( 'id' => (int) $r['id'], 'actor' => $r['actor'], 'date' => $r['created'], 'page' => $q['batch'] . '@' . $q['page'], 'site_id' => $r['site_id'] );
+		},
+		'fields' => array( 'id' => 'int', 'actor' => 'text', 'page' => 'text', 'date' => array( 'type' => 'datetime', 'stored' => 'epoch', 'wire' => 'z' ) ),
+	),
+	'item'   => array( 'view' => function ( array $row ) {
+		return array( 'id' => (int) $row['id'] );
+	} ),
+) );
+$check( 'a source whose columns are a function asks it only when a read runs', 0 === $col_calls, (string) $col_calls );
+$ids = function ( $params = array() ) use ( $call ) {
+	list( $st, $d ) = $call( 'GET', '/minn-admin/v1/minn-conformance/log', $params );
+	return array( $st, array_column( (array) ( $d['items'] ?? array() ), 'id' ), $d );
+};
+list( $st, $got, $d ) = $ids();
+$check( "a fixed condition holds on the list: only this site's rows", 200 === $st && array( 6, 1, 2, 3, 4, 5 ) === $got && 6 === ( $d['total'] ?? -1 ), wp_json_encode( $d ) );
+$check( 'the batch hook runs once per page and its answer reaches each row beside the page number', array( 6 ) === $page_calls && 'batched@1' === ( $d['items'][0]['page'] ?? '' ), wp_json_encode( array( $page_calls, $d['items'][0]['page'] ?? null ) ) );
+$check( 'an undeclared field never leaves, even one the row built', ! isset( $d['items'][0]['site_id'] ) );
+$first = array_values( array_filter( (array) $d['items'], function ( $i ) {
+	return 1 === $i['id'];
+} ) )[0] ?? array();
+$check( "the 'z' wire is UTC with a Z", gmdate( 'Y-m-d\TH:i:s\Z', $now - 60 ) === ( $first['date'] ?? '' ), (string) ( $first['date'] ?? '' ) );
+list( $st ) = $call( 'GET', '/minn-admin/v1/minn-conformance/log/7' );
+$check( "another site's row by id is not found (404), never forbidden", 404 === $st, (string) $st );
+list( $st ) = $call( 'GET', '/minn-admin/v1/minn-conformance/log/3' );
+$check( "this site's row by id answers", 200 === $st, (string) $st );
+foreach ( array( 'a WP_Error' => new WP_Error( 'x', 'x' ), 'false' => false, 'a string' => 'site_id = 1' ) as $what => $answer ) {
+	$site_answer = $answer;
+	list( $st, $got ) = $ids();
+	list( $ist )      = $call( 'GET', '/minn-admin/v1/minn-conformance/log/1' );
+	$n                = Minn_Admin_Kernel::log_counts( 'minn-conformance/log' );
+	$check( "a fixed condition answering {$what} matches nothing: list, item and card", 200 === $st && array() === $got && 404 === $ist && 0 === ( $n['total'] ?? -1 ) && array() === Minn_Admin_Kernel::distinct( 'minn-conformance/log', 'kind' ), $st . ' ' . $ist . ' ' . wp_json_encode( $n ) );
+}
+$site_answer = array( 'site_id' => 1 );
+list( , $got ) = $ids( array( 'kind' => 'B' ) );
+$check( "a 'key' facet matches the value as sanitize_key() leaves it", array( 3, 4 ) === $got, wp_json_encode( $got ) );
+list( , $got ) = $ids( array( 'kind' => "' OR 1=1 --" ) );
+$check( "a 'key' facet's hostile value narrows to its sanitized self, never widens", array() === $got, wp_json_encode( $got ) );
+list( , $got ) = $ids( array( 'level' => 'hot' ) );
+$check( 'a mapped facet value narrows by its conditions', array( 1, 2, 3, 4 ) === $got, wp_json_encode( $got ) );
+list( , $got ) = $ids( array( 'level' => 'late' ) );
+$check( 'a mapped facet value may be a function answering conditions', array( 6, 5 ) === $got, wp_json_encode( $got ) );
+list( , $got ) = $ids( array( 'level' => 'nope' ) );
+$check( 'an unknown facet value narrows nothing', 6 === count( $got ), wp_json_encode( $got ) );
+list( , $got ) = $ids( array( 'src' => 'browser' ) );
+$check( "'any' of an empty string and NULL", array( 1, 2 ) === $got, wp_json_encode( $got ) );
+list( , $got ) = $ids( array( 'src' => 'rest' ) );
+$check( "'any' of exact and 'starts': rest and rest|app, not restx", array( 3, 4 ) === $got, wp_json_encode( $got ) );
+list( , $got ) = $ids( array( 'src' => 'app' ) );
+$check( "'contains' and 'starts' together", array( 4, 5 ) === $got, wp_json_encode( $got ) );
+list( , $got ) = $ids( array( 'src' => '%' ) );
+$check( "a LIKE value's wildcard is a literal, never a wildcard", array() === $got, wp_json_encode( $got ) );
+list( , $got ) = $ids( array( 'search' => '_' ) );
+$check( "a search for '_' finds only the row holding one", array( 3 ) === $got, wp_json_encode( $got ) );
+list( , $got ) = $ids( array( 'search' => 'magic' ) );
+$check( "a search's 'also' conditions are one more way to match", array( 6, 5 ) === $got, wp_json_encode( $got ) );
+list( , $got ) = $ids( array( 'search' => 'bob' ) );
+$check( 'a search still matches its columns', array( 2 ) === $got, wp_json_encode( $got ) );
+$n = Minn_Admin_Kernel::log_counts( 'minn-conformance/log', array(
+	'top'    => array( 'column' => 'kind', 'window' => 30 * DAY_IN_SECONDS ),
+	'counts' => array( 'b_week' => array( 'where' => array( 'kind' => 'b' ), 'window' => 7 * DAY_IN_SECONDS ), 'c_ever' => array( 'where' => array( 'kind' => 'c' ) ) ),
+	'chart'  => array( 'split' => 'kind', 'secondary' => array( 'c' ) ),
+) );
+$check( "a card counts only this site's rows, by the list's date column", 1 + 1 === $n['day'] && 4 === $n['week'] && 6 === $n['total'], wp_json_encode( array( $n['day'], $n['week'], $n['total'] ) ) );
+$check( "a card's latest is the newest row by key, on this site", (string) ( $now - 30 ) === $n['last'], (string) $n['last'] );
+$check( "a card's top value breaks ties by the value", array( 'value' => 'a', 'count' => 2 ) === $n['top'], wp_json_encode( $n['top'] ) );
+$check( "a card's named counts keep their windows", 1 === $n['counts']['b_week'] && 2 === $n['counts']['c_ever'], wp_json_encode( $n['counts'] ) );
+$chart_total = 0;
+foreach ( $n['days'] as $day ) {
+	$chart_total += (int) $day['value'] + (int) $day['secondary'];
+}
+$check( "a card's chart counts this site's last fourteen days", 5 === $chart_total, wp_json_encode( $n['days'] ) );
+$check( 'a tab list is the distinct values on this site only', array( 'a', 'b', 'c' ) === Minn_Admin_Kernel::distinct( 'minn-conformance/log', 'kind' ) );
+$check( 'a card from a bare source has no scope but its own conditions', 2 === Minn_Admin_Kernel::log_counts( array( 'table' => 'minn_conf_log', 'network' => true, 'key' => 'id', 'where' => array( 'site_id' => 2 ), 'date' => array( 'column' => 'created', 'clock' => 'epoch' ) ) )['total'] );
+// A table that is not there.
+Minn_Admin_Kernel::resource( 'minn-conformance/gone', array(
+	'gates'  => array( 'view' => '__return_true' ),
+	'source' => array( 'table' => 'minn_conf_nowhere', 'key' => 'id', 'columns' => array( 'id' ) ),
+	'list'   => array( 'range' => array( 'column' => 'created', 'clock' => 'epoch' ), 'row' => function ( $r ) {
+		return $r;
+	} ),
+	'item'   => array( 'view' => function ( $r ) {
+		return $r;
+	} ),
+) );
+$wpdb->last_error = '';
+list( $st, $d )   = $call( 'GET', '/minn-admin/v1/minn-conformance/gone' );
+list( $ist )      = $call( 'GET', '/minn-admin/v1/minn-conformance/gone/1' );
+$check( 'a missing table is an empty list, a 404 and no card, never a SQL error', 200 === $st && 0 === ( $d['total'] ?? -1 ) && 404 === $ist && null === Minn_Admin_Kernel::log_counts( 'minn-conformance/gone' ) && '' === $wpdb->last_error, $st . ' ' . $ist . ' ' . $wpdb->last_error );
+$check( 'has_column knows a column from a missing one', Minn_Admin_Kernel_SQL::has_column( array( 'table' => 'minn_conf_log', 'network' => true ), 'src' ) && ! Minn_Admin_Kernel_SQL::has_column( array( 'table' => 'minn_conf_log', 'network' => true ), 'nope' ) );
+list( $tag_sql ) = Minn_Admin_Kernel_SQL::where( array( "kind\0one" => 'a', "kind\0two" => array( 'not' => array( 'b' ) ) ) );
+$check( 'two rules on one column, tagged, both apply', 2 === count( $tag_sql ), wp_json_encode( $tag_sql ) );
+// An array source.
+$mem = array(
+	array( 'id' => 'f1', 'who' => 'Ann', 'locked' => true, 'level' => 'warn', 'when' => $now - 60 ),
+	array( 'id' => 'f2', 'who' => 'bob', 'locked' => false, 'level' => 'info', 'when' => $now - 3 * DAY_IN_SECONDS ),
+	array( 'id' => 'f3', 'who' => 'Cy', 'locked' => true, 'level' => 'info', 'when' => $now - 30 * DAY_IN_SECONDS ),
+);
+Minn_Admin_Kernel::resource( 'minn-conformance/mem', array(
+	'gates'  => array( 'view' => '__return_true' ),
+	'source' => array( 'rows' => function () use ( $mem ) {
+		return $mem;
+	} ),
+	'list'   => array(
+		'per_page' => 2,
+		'facets'   => array(
+			array( 'param' => 'kind', 'values' => array( 'locked' => array( 'locked' => true ) ) ),
+			array( 'param' => 'level', 'column' => 'level', 'type' => 'key' ),
+		),
+		'search'   => array( 'columns' => array( 'who' ) ),
+		'range'    => array( 'column' => 'when', 'clock' => 'epoch' ),
+		'fields'   => array( 'id' => 'text', 'who' => 'text' ),
+	),
+) );
+$mids = function ( $params = array() ) use ( $call ) {
+	list( $st, $d ) = $call( 'GET', '/minn-admin/v1/minn-conformance/mem', $params );
+	return array( array_column( (array) ( $d['items'] ?? array() ), 'id' ), $d['total'] ?? -1, $d );
+};
+list( $got, $total, $d ) = $mids();
+$check( 'an array source pages in its own order, with the full total', array( 'f1', 'f2' ) === $got && 3 === $total, wp_json_encode( $d ) );
+$check( 'an array source with no row builder sends only the declared fields', array( 'id', 'who' ) === array_keys( (array) ( $d['items'][0] ?? array() ) ), wp_json_encode( $d['items'][0] ?? null ) );
+list( $got ) = $mids( array( 'kind' => 'locked' ) );
+$check( 'an array facet matches a boolean as a boolean', array( 'f1', 'f3' ) === $got, wp_json_encode( $got ) );
+list( $got ) = $mids( array( 'level' => 'INFO' ) );
+$check( "an array 'key' facet matches as sanitized", array( 'f2', 'f3' ) === $got, wp_json_encode( $got ) );
+list( $got ) = $mids( array( 'search' => 'AN' ) );
+$check( 'an array search ignores case', array( 'f1' ) === $got, wp_json_encode( $got ) );
+list( $got ) = $mids( array( 'after' => wp_date( 'Y-m-d', $now - 7 * DAY_IN_SECONDS ) ) );
+$check( 'an array range narrows by its column', array( 'f1', 'f2' ) === $got, wp_json_encode( $got ) );
+$check( 'matches() mirrors where(): IN, NOT, operators, IS NULL', Minn_Admin_Kernel_SQL::matches( array( 'a' => 2, 'b' => null ), array( 'a' => array( 1, 2 ), "a\0x" => array( 'not' => array( 3 ) ), "a\0y" => array( 'op' => '>=', 'value' => 2 ), 'b' => null ) )
+	&& ! Minn_Admin_Kernel_SQL::matches( array( 'a' => 2 ), array( 'a' => array() ) ) && ! Minn_Admin_Kernel_SQL::matches( array( 'a' => 2 ), array( 'a' => array( 'any' => array() ) ) ) );
+// What the review of the log shapes found.
+$warned = array();
+set_error_handler( function ( $no, $msg ) use ( &$warned ) {
+	$warned[] = $msg;
+	return true;
+} );
+list( $st, $got ) = $ids( array( 'kind' => array( 'a' ), 'search' => array( 'x' ) ) );
+restore_error_handler();
+$check( 'a facet or search sent as an array narrows nothing and raises no notice', 200 === $st && 6 === count( $got ) && ! $warned, wp_json_encode( $warned ) );
+$threw = false;
+try {
+	Minn_Admin_Kernel_SQL::where( array( 'kind' => array( 'oops' => 'a' ) ) );
+} catch ( InvalidArgumentException $e ) {
+	$threw = true;
+}
+$check( 'a keyed array that is no known rule is refused, never read as a list', $threw );
+list( $gap_sql, $gap_args ) = Minn_Admin_Kernel_SQL::where( array( 'kind' => array( 3 => 'a', 7 => 'b' ) ) );
+$check( 'a list with gaps in its keys is still a list', array( 'kind IN (%s,%s)' ) === $gap_sql && array( 'a', 'b' ) === $gap_args, wp_json_encode( $gap_sql ) );
+$check( "matches(): a boolean equals a boolean or 1 and 0, never the text 'false'", Minn_Admin_Kernel_SQL::matches( array( 'x' => true ), array( 'x' => true ) ) && Minn_Admin_Kernel_SQL::matches( array( 'x' => '1' ), array( 'x' => true ) ) && ! Minn_Admin_Kernel_SQL::matches( array( 'x' => 'false' ), array( 'x' => true ) ) && ! Minn_Admin_Kernel_SQL::matches( array( 'x' => '2' ), array( 'x' => true ) ) );
+$check( 'matches(): an operator compares numbers only when both are numbers', ! Minn_Admin_Kernel_SQL::matches( array( 'x' => 'abc' ), array( 'x' => array( 'op' => '>', 'value' => 0 ) ) ) && Minn_Admin_Kernel_SQL::matches( array( 'x' => '10' ), array( 'x' => array( 'op' => '>', 'value' => 9 ) ) ) );
+$check( "matches(): NULL meets 'any' with a NULL member, and an empty NOT", Minn_Admin_Kernel_SQL::matches( array( 'x' => null ), array( 'x' => array( 'any' => array( '', null ) ) ) ) && Minn_Admin_Kernel_SQL::matches( array( 'x' => null ), array( 'x' => array( 'not' => array() ) ) ) && ! Minn_Admin_Kernel_SQL::matches( array( 'x' => null ), array( 'x' => array( 'not' => array( 1 ) ) ) ) );
+Minn_Admin_Kernel::resource( 'minn-conformance/mem-scoped', array(
+	'gates'  => array( 'view' => '__return_true' ),
+	'source' => array(
+		'rows'  => function () use ( $mem ) {
+			return $mem;
+		},
+		'where' => array( 'level' => 'info' ),
+	),
+	'list'   => array( 'fields' => array( 'id' => 'text' ) ),
+) );
+list( , $d ) = $call( 'GET', '/minn-admin/v1/minn-conformance/mem-scoped' );
+$check( "an array source is held to its declared 'where'", array( 'f2', 'f3' ) === array_column( (array) ( $d['items'] ?? array() ), 'id' ), wp_json_encode( $d ) );
+// A column list that happens to name a class and its method stays a list.
+class Minn_Conf_Cols {
+	public static $called = 0;
+	public static function kind() {
+		self::$called++;
+		return array( 'nope' );
+	}
+}
+$ct = $wpdb->prefix . 'minn_conf_cols';
+$wpdb->query( "CREATE TEMPORARY TABLE {$ct} ( Minn_Conf_Cols BIGINT UNSIGNED NOT NULL PRIMARY KEY, kind VARCHAR(20) NOT NULL ) ENGINE=InnoDB" ); // phpcs:ignore
+$wpdb->insert( $ct, array( 'Minn_Conf_Cols' => 1, 'kind' => 'k' ) );
+Minn_Admin_Kernel::resource( 'minn-conformance/cols', array(
+	'gates'  => array( 'view' => '__return_true' ),
+	'source' => array( 'table' => 'minn_conf_cols', 'key' => 'Minn_Conf_Cols', 'columns' => array( 'Minn_Conf_Cols', 'kind' ) ),
+	'list'   => array( 'fields' => array( 'kind' => 'text' ) ),
+) );
+list( $st, $d ) = $call( 'GET', '/minn-admin/v1/minn-conformance/cols' );
+$check( "a two-column list naming a class and its method is read as columns, never called", 200 === $st && 0 === Minn_Conf_Cols::$called && 'k' === ( $d['items'][0]['kind'] ?? '' ), $st . ' ' . wp_json_encode( $d ) );
+Minn_Admin_Kernel::resource( 'minn-conformance/nometa', array(
+	'gates'  => array( 'view' => '__return_true' ),
+	'source' => array( 'table' => 'minn_conf_log', 'network' => true, 'key' => 'id', 'columns' => array( 'id', 'actor' ), 'where' => array( 'site_id' => 1 ) ),
+	'list'   => array(
+		'search' => array( 'columns' => array( 'actor' ), 'meta' => array( 'table' => 'minn_conf_nowhere_meta', 'key' => 'log_id', 'name' => 'k', 'value' => 'v' ) ),
+		'fields' => array( 'id' => 'int' ),
+	),
+) );
+$wpdb->last_error = '';
+list( $st, $d )   = $call( 'GET', '/minn-admin/v1/minn-conformance/nometa', array( 'search' => 'ann' ) );
+$check( 'a search over a meta table that is not there searches the columns, never a SQL error', 200 === $st && array( 1 ) === array_column( (array) ( $d['items'] ?? array() ), 'id' ) && '' === $wpdb->last_error, $st . ' ' . $wpdb->last_error );
+$check( 'the readers answer nothing for a table that is not there', 0 === Minn_Admin_Kernel_SQL::count( 'minn_conf_nowhere' ) && array() === Minn_Admin_Kernel_SQL::select( 'minn_conf_nowhere', array( 'id' ) ) && null === Minn_Admin_Kernel_SQL::top( 'minn_conf_nowhere', 'id', array() ) && array() === Minn_Admin_Kernel_SQL::distinct( 'minn_conf_nowhere', 'id', array() ) && '' === $wpdb->last_error, $wpdb->last_error );
+
+// An endpoint id of another shape.
+Minn_Admin_Kernel::endpoint( 'minn-conformance/ep-hex/(?P<id>[a-f0-9]{32})', array( 'gate' => '__return_true', 'run' => function ( $r, $ctx ) {
+	return array( 'id' => $ctx['id'] );
+} ) );
+$hex            = md5( 'minn' ); // Starts with a letter: an int cast would make it 0.
+list( $st, $d ) = $call( 'GET', '/minn-admin/v1/minn-conformance/ep-hex/' . $hex );
+$check( 'an endpoint id that is not \d+ reaches the handler as its string', 200 === $st && $hex === ( $d['id'] ?? '' ), $st . ' ' . wp_json_encode( $d ) );
 
 // --- 2. Every real declaration ----------------------------------------------
 $real = array_filter( Minn_Admin_Kernel::resources(), function ( $r ) {
