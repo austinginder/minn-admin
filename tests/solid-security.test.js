@@ -79,7 +79,10 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		/* ===== Shim shape ===== */
 		t.check( 'lockouts listed', !! list && list.total >= 3, JSON.stringify( list && list.total ) );
 		const locked = list.items.find( ( r ) => r.status === 'locked' && r.ip === '198.51.100.9' );
-		t.check( 'active lockout carries type/ip/UTC date', !! locked && locked.type === 'host' && /Z$/.test( locked.date ), JSON.stringify( locked ) );
+		// The type is the label Solid's lockout registry gives the module, or
+		// the slug tidied when no module registers it: the seeder's "host" is
+		// not one Solid registers, so it reads "Host".
+		t.check( 'active lockout carries type/ip/UTC date', !! locked && locked.type === 'Host' && /Z$/.test( locked.date ), JSON.stringify( locked ) );
 		t.check( 'expired + released states derive', list.items.some( ( r ) => r.status === 'expired' && r.who === 'admin' )
 			&& list.items.some( ( r ) => r.status === 'released' ) );
 		const lockedOnly = await api( 'minn-admin/v1/solid-security/lockouts?kind=locked' );
