@@ -15,6 +15,21 @@
 defined( 'ABSPATH' ) || exit;
 
 /**
+ * The site's calendar day $delta days from today (negative is past), Y-m-d.
+ *
+ * A step of DAY_IN_SECONDS is not a calendar day: across a DST change it
+ * lands an hour off, which near midnight skips a day or repeats one. So the
+ * site's today is read once and the calendar does the stepping.
+ *
+ * @param int $delta Days from today.
+ * @return string
+ */
+function minn_admin_chart_day( $delta = 0 ) {
+	$today = new DateTimeImmutable( wp_date( 'Y-m-d' ), new DateTimeZone( 'UTC' ) );
+	return $today->modify( sprintf( '%+d day', (int) $delta ) )->format( 'Y-m-d' );
+}
+
+/**
  * Empty buckets for the last $n site-local days ending today, keyed Y-m-d.
  *
  * @param int $n Days.
@@ -23,7 +38,7 @@ defined( 'ABSPATH' ) || exit;
 function minn_admin_chart_days( $n = 14 ) {
 	$days = array();
 	for ( $i = $n - 1; $i >= 0; $i-- ) {
-		$d          = wp_date( 'Y-m-d', time() - $i * DAY_IN_SECONDS );
+		$d          = minn_admin_chart_day( -$i );
 		// from/to are the bounds a clicked bar sends back to the collection
 		// (the `dateQuery` contract). They are SITE-LOCAL, like the buckets
 		// themselves; a route whose column is on another clock converts them
@@ -41,13 +56,13 @@ function minn_admin_chart_days( $n = 14 ) {
 
 /** Site-local midnight $n-1 days ago, as a MySQL datetime on the site clock. */
 function minn_admin_chart_local_since( $n = 14 ) {
-	return wp_date( 'Y-m-d', time() - ( $n - 1 ) * DAY_IN_SECONDS ) . ' 00:00:00';
+	return minn_admin_chart_day( 1 - $n ) . ' 00:00:00';
 }
 
 /** The same instant as minn_admin_chart_local_since(), as a UTC MySQL datetime. */
 function minn_admin_chart_utc_since( $n = 14 ) {
 	try {
-		$local = new DateTimeImmutable( wp_date( 'Y-m-d', time() - ( $n - 1 ) * DAY_IN_SECONDS ) . ' 00:00:00', wp_timezone() );
+		$local = new DateTimeImmutable( minn_admin_chart_local_since( $n ), wp_timezone() );
 		return $local->setTimezone( new DateTimeZone( 'UTC' ) )->format( 'Y-m-d H:i:s' );
 	} catch ( \Throwable $e ) {
 		return gmdate( 'Y-m-d H:i:s', time() - $n * DAY_IN_SECONDS );

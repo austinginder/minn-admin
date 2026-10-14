@@ -301,7 +301,7 @@ add_action( 'rest_api_init', function () {
 			$since = minn_admin_chart_local_since();
 			$byday = array();
 			for ( $i = 13; $i >= 0; $i-- ) {
-				$d           = wp_date( 'Y-m-d', time() - $i * DAY_IN_SECONDS );
+				$d           = minn_admin_chart_day( -$i );
 				// The bounds a clicked bar sends back, on the site's clock.
 				$byday[ $d ] = array(
 					'label'     => gmdate( 'M j', strtotime( $d ) ),

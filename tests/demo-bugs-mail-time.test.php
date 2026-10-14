@@ -325,6 +325,63 @@ try {
 			$check( 'D-40 Site Mailer: today\'s bar lists the sends', $bar && $find( $list['items'] ?? array(), $ml_one ) && $find( $list['items'] ?? array(), $ml_many ), count( $list['items'] ?? array() ) . ' rows' );
 		}
 	}
+
+	// --- I1 Chart days across a DST change -----------------------------------
+	// The day keys stepped back 86,400 seconds at a time, which lands an hour
+	// off across a DST change: just after a spring-forward midnight the chart
+	// skipped a day, and late on the day after a fall-back it repeated one.
+	// The clock is pinned through core's wp_date filter, which every day key
+	// is read through, at a Los Angeles moment on each side.
+	foreach ( array( '2027-03-15 00:30:00', '2026-11-02 23:30:00' ) as $pin_local ) {
+		$pin_zone  = new DateTimeZone( 'America/Los_Angeles' );
+		$pin_at    = new DateTimeImmutable( $pin_local, $pin_zone );
+		$pin_shift = $pin_at->getTimestamp() - time();
+		$pin_tz    = function () {
+			return 'America/Los_Angeles';
+		};
+		$pin_off   = function () use ( $pin_at ) {
+			return $pin_at->getOffset() / HOUR_IN_SECONDS;
+		};
+		$pin_clock = function ( $date, $format, $timestamp, $timezone ) use ( $pin_shift ) {
+			return ( new DateTimeImmutable( '@' . ( (int) $timestamp + $pin_shift ) ) )->setTimezone( $timezone )->format( $format );
+		};
+		$pin_want  = array();
+		for ( $i = 13; $i >= 0; $i-- ) {
+			$pin_want[] = $pin_at->setTime( 12, 0 )->modify( "-{$i} day" )->format( 'Y-m-d' );
+		}
+		$pin_days  = function ( $data ) {
+			return array_map( function ( $p ) {
+				return substr( (string) ( $p['from'] ?? '' ), 0, 10 );
+			}, (array) ( $data['chart']['points'] ?? array() ) );
+		};
+		add_filter( 'pre_option_timezone_string', $pin_tz, 100 );
+		add_filter( 'pre_option_gmt_offset', $pin_off, 100 );
+		add_filter( 'wp_date', $pin_clock, 10, 4 );
+		try {
+			$got = array_keys( minn_admin_chart_days( 14 ) );
+			$check( "I1 shared chart: 14 consecutive site days end on the pinned day at {$pin_local} Los Angeles", $pin_want === $got, wp_json_encode( array_values( array_diff( $pin_want, $got ) ) ) . ' missing, ' . count( array_unique( $got ) ) . ' distinct' );
+			$check( "I1 shared chart: the window opens on the first bar's day at {$pin_local}", $pin_want[0] . ' 00:00:00' === minn_admin_chart_local_since( 14 ), minn_admin_chart_local_since( 14 ) );
+			if ( defined( 'SRFM_VER' ) && $has( $sf_table ) ) {
+				list( , $st_data ) = $call( 'GET', '/minn-admin/v1/sureforms/status' );
+				$got = $pin_days( $st_data );
+				$check( "I1 SureForms chart (the shared days): 14 consecutive site days at {$pin_local}", $pin_want === $got, count( array_unique( $got ) ) . ' distinct, last ' . end( $got ) );
+			}
+			if ( defined( 'SUREMAILS_VERSION' ) && $has( $sm_table ) ) {
+				list( , $st_data ) = $call( 'GET', '/minn-admin/v1/suremails/status' );
+				$got = $pin_days( $st_data );
+				$check( "I1 SureMails chart: 14 consecutive site days at {$pin_local}", $pin_want === $got, count( array_unique( $got ) ) . ' distinct, last ' . end( $got ) );
+			}
+			if ( defined( 'SITE_MAILER_VERSION' ) && $has( $ml_table ) ) {
+				list( , $st_data ) = $call( 'GET', '/minn-admin/v1/site-mailer/status' );
+				$got = $pin_days( $st_data );
+				$check( "I1 Site Mailer chart: 14 consecutive site days at {$pin_local}", $pin_want === $got, count( array_unique( $got ) ) . ' distinct, last ' . end( $got ) );
+			}
+		} finally {
+			remove_filter( 'wp_date', $pin_clock, 10 );
+			remove_filter( 'pre_option_timezone_string', $pin_tz, 100 );
+			remove_filter( 'pre_option_gmt_offset', $pin_off, 100 );
+		}
+	}
 } finally {
 	$wipe();
 	remove_filter( 'pre_option_timezone_string', $tz_string, 99 );
