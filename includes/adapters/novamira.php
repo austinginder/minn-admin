@@ -604,13 +604,25 @@ function minn_admin_novamira_save( array $values ) {
 	if ( array_key_exists( 'context', $values ) && function_exists( '\\Novamira\\Context\\instructions_update_content' ) ) {
 		\Novamira\Context\instructions_update_content( (string) $values['context'] );
 	}
-	$rules = novamira_get_ability_rules();
+	$rules  = novamira_get_ability_rules();
+	$hidden = function ( $name ) {
+		return function_exists( 'novamira_ability_is_hub_hidden' ) && novamira_ability_is_hub_hidden( (string) $name );
+	};
+	// Minn 0.44 drew the bundled MCP adapter's meta-abilities as switches,
+	// so a site may hold a rule switching one off, which breaks the bridge.
+	// Their Hub hides and refuses those names, as Minn now does, so nothing
+	// could switch it back: a save clears it.
+	foreach ( array_keys( $rules ) as $name ) {
+		if ( $hidden( $name ) ) {
+			unset( $rules[ $name ] );
+		}
+	}
 	foreach ( $values as $key => $on ) {
 		if ( 0 !== strpos( (string) $key, 'ability:' ) ) {
 			continue;
 		}
 		$name = substr( (string) $key, 8 );
-		if ( ! function_exists( 'novamira_is_valid_ability_name' ) || ! novamira_is_valid_ability_name( $name ) ) {
+		if ( ! function_exists( 'novamira_is_valid_ability_name' ) || ! novamira_is_valid_ability_name( $name ) || $hidden( $name ) ) {
 			continue;
 		}
 		// Their Hub's refusal: a feature's ability is not switched alone,
