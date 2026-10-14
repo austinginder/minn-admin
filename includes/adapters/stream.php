@@ -110,6 +110,49 @@ function minn_admin_stream_can() {
 	return false;
 }
 
+/**
+ * Stream's own words for a connector's context or action ("sessions" is
+ * "Sessions", "login" is "Log In"), the labels its screen prints. Read from
+ * every connector: a REST request registers only the front-end ones, so the
+ * live registry would miss Settings, Editor, Menus and the rest. A term with
+ * no label is tidied. Their labels are esc_html'd; this returns plain text.
+ *
+ * @param string $connector Stored connector slug.
+ * @param string $kind      'contexts' or 'actions'.
+ * @param string $term      Stored context or action slug.
+ * @return string
+ */
+function minn_admin_stream_term_label( $connector, $kind, $term ) {
+	static $labels = null;
+	if ( null === $labels ) {
+		$labels = array();
+		try {
+			$registry = function_exists( 'wp_stream_get_instance' ) ? wp_stream_get_instance()->connectors : null;
+			if ( is_object( $registry ) && method_exists( $registry, 'get_all_including_admin_only' ) ) {
+				$all = $registry->get_all_including_admin_only();
+			} elseif ( is_object( $registry ) && method_exists( $registry, 'get_all' ) ) {
+				$all = $registry->get_all();
+			} else {
+				$all = array();
+			}
+			foreach ( (array) $all as $one ) {
+				if ( is_array( $one ) && isset( $one['slug'] ) ) {
+					$labels[ (string) $one['slug'] ] = array(
+						'contexts' => (array) ( $one['contexts'] ?? array() ),
+						'actions'  => (array) ( $one['actions'] ?? array() ),
+					);
+				}
+			}
+		} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
+			// No registry: every term is tidied.
+		}
+	}
+	$label = $labels[ (string) $connector ][ $kind ][ (string) $term ] ?? '';
+	return is_scalar( $label ) && '' !== (string) $label
+		? Minn_Admin::plain_text( $label )
+		: ucwords( str_replace( array( '-', '_' ), ' ', (string) $term ) );
+}
+
 function minn_admin_stream_admin_url() {
 	return admin_url( 'admin.php?page=wp_stream' );
 }
@@ -341,7 +384,9 @@ add_action( 'rest_api_init', function () {
 					'summary'   => $r->summary,
 					'who'       => $uid ? $users[ $uid ] : 'Guest',
 					'connector' => $r->connector,
-					'context'   => $r->context . ( $r->action ? ' / ' . $r->action : '' ),
+					// In Stream's words ("Sessions / Log In"), as its own list prints them.
+					'context'   => minn_admin_stream_term_label( $r->connector, 'contexts', $r->context )
+						. ( $r->action ? ' / ' . minn_admin_stream_term_label( $r->connector, 'actions', $r->action ) : '' ),
 					'ip'        => $r->ip,
 					// Stream stores GMT datetimes — append Z so parseWpDate
 					// does not treat them as site-local (EDT "in 4h" bug).

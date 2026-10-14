@@ -696,6 +696,97 @@ if ( ! $s10_noon ) {
 	}
 }
 
+// --- S12 Stream and Solid Security name contexts and lockout types in words -
+// Stream's records carry connector, context and action slugs, and its own
+// screen prints each through the connector's labels. Solid Security's
+// lockout_type is the lockout module ("brute_force"), whose registry carries
+// the label its own screens print.
+if ( ! function_exists( 'wp_stream_get_instance' ) || ! function_exists( 'minn_admin_stream_can' ) ) {
+	$skip( 'S12 Stream is not installed' );
+} else {
+	$s12_id = 0;
+	try {
+		$wpdb->insert( $wpdb->base_prefix . 'stream', array( 'site_id' => get_current_network_id(), 'blog_id' => get_current_blog_id(), 'object_id' => $admin, 'user_id' => $admin, 'user_role' => 'administrator', 'summary' => $marker . ' logged in', 'created' => gmdate( 'Y-m-d H:i:s' ), 'connector' => 'users', 'context' => 'sessions', 'action' => 'login', 'ip' => '203.0.113.49' ) );
+		$s12_id = (int) $wpdb->insert_id;
+		// Their labels for the users connector, as their own screen reads them.
+		$s12_want = null;
+		$connectors = wp_stream_get_instance()->connectors;
+		$all = method_exists( $connectors, 'get_all_including_admin_only' ) ? $connectors->get_all_including_admin_only() : $connectors->get_all();
+		foreach ( (array) $all as $c ) {
+			if ( 'users' === ( $c['slug'] ?? '' ) && isset( $c['contexts']['sessions'], $c['actions']['login'] ) ) {
+				$s12_want = Minn_Admin::plain_text( $c['contexts']['sessions'] ) . ' / ' . Minn_Admin::plain_text( $c['actions']['login'] );
+			}
+		}
+		list( $st, $d ) = $call( 'GET', '/minn-admin/v1/stream/records', null, array( 'search' => $marker, 'per_page' => 25, 'page' => 1 ) );
+		$s12_item = null;
+		foreach ( (array) ( $d['items'] ?? array() ) as $it ) {
+			if ( (int) $it['id'] === $s12_id ) {
+				$s12_item = $it;
+			}
+		}
+		if ( ! ( is_int( $s12_id ) && $s12_id > 1 ) || 200 !== $st || ! $s12_item || null === $s12_want ) {
+			$check( 'S12 the seeded Stream record lists', false, $st . ' ' . wp_json_encode( $s12_want ) . ' ' . substr( wp_json_encode( $d ), 0, 160 ) );
+		} else {
+			$check( 'S12 a Stream record\'s Context is in Stream\'s words, not sessions / login', $s12_want === $s12_item['context'], wp_json_encode( array( $s12_item['context'], $s12_want ) ) );
+		}
+	} finally {
+		if ( is_int( $s12_id ) && $s12_id > 1 ) {
+			$wpdb->delete( $wpdb->base_prefix . 'stream_meta', array( 'record_id' => $s12_id ) );
+			$wpdb->delete( $wpdb->base_prefix . 'stream', array( 'ID' => $s12_id ) );
+		}
+	}
+}
+if ( ! function_exists( 'minn_admin_solid_security_active' ) || ! minn_admin_solid_security_active() || ! minn_admin_solid_security_can() ) {
+	$skip( 'S12 Solid Security is not installed' );
+} else {
+	// A module this site registers (their label), and one it does not.
+	global $itsec_lockout;
+	$s12_modules = is_object( $itsec_lockout ) && method_exists( $itsec_lockout, 'get_lockout_modules' ) ? (array) $itsec_lockout->get_lockout_modules() : array();
+	$s12_type    = null;
+	foreach ( $s12_modules as $s12_slug => $s12_module ) {
+		if ( is_array( $s12_module ) && ! empty( $s12_module['label'] ) ) {
+			$s12_type = (string) $s12_slug;
+			break;
+		}
+	}
+	$s12_unknown = 'minn_probe_module';
+	if ( null === $s12_type ) {
+		$skip( 'S12 Solid Security registers no lockout module with a label here' );
+	} else {
+		$s12_los = array();
+		try {
+			foreach ( array( $s12_type => '203.0.113.59', $s12_unknown => '203.0.113.69' ) as $s12_t => $s12_host ) {
+				$wpdb->insert( $wpdb->base_prefix . 'itsec_lockouts', array( 'lockout_type' => $s12_t, 'lockout_start' => current_time( 'mysql' ), 'lockout_start_gmt' => gmdate( 'Y-m-d H:i:s' ), 'lockout_expire' => current_time( 'mysql' ), 'lockout_expire_gmt' => gmdate( 'Y-m-d H:i:s' ), 'lockout_host' => $s12_host, 'lockout_active' => 0 ) );
+				$id = (int) $wpdb->insert_id;
+				if ( is_int( $id ) && $id > 1 ) {
+					$s12_los[ $s12_t ] = $id;
+				}
+			}
+			list( $st, $d ) = $call( 'GET', '/minn-admin/v1/solid-security/lockouts', null, array( 'search' => '203.0.113.', 'per_page' => 100, 'page' => 1 ) );
+			$s12_items = array();
+			foreach ( (array) ( $d['items'] ?? array() ) as $it ) {
+				$t = array_search( (int) $it['id'], $s12_los, true );
+				if ( false !== $t ) {
+					$s12_items[ $t ] = $it;
+				}
+			}
+			if ( 2 !== count( $s12_los ) || 200 !== $st || 2 !== count( $s12_items ) ) {
+				$check( 'S12 the seeded Solid Security lockouts list', false, $st . ' ' . substr( wp_json_encode( $d ), 0, 160 ) );
+			} else {
+				$want = Minn_Admin::plain_text( $s12_modules[ $s12_type ]['label'] );
+				$check( 'S12 a Solid Security lockout\'s Type is their module label, not the slug', $want === $s12_items[ $s12_type ]['type'], wp_json_encode( array( $s12_type, $s12_items[ $s12_type ]['type'], $want ) ) );
+				$check( 'S12 a module they do not register here reads tidied, not as the slug', 'Minn Probe Module' === $s12_items[ $s12_unknown ]['type'], (string) $s12_items[ $s12_unknown ]['type'] );
+			}
+		} finally {
+			foreach ( $s12_los as $id ) {
+				if ( is_int( $id ) && $id > 1 ) {
+					$wpdb->delete( $wpdb->base_prefix . 'itsec_lockouts', array( 'lockout_id' => $id ) );
+				}
+			}
+		}
+	}
+}
+
 // --- S10 All-In-One Security: an event's When keeps its own offset ----------
 // Runs last: All-In-One Security is not loaded here (its bundled task manager
 // re-runs its table migration on every load of an inactive copy), so a

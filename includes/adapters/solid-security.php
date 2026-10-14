@@ -55,6 +55,28 @@ function minn_admin_solid_security_admin_url() {
 	return admin_url( 'admin.php?page=' . ( $onboarded ? 'itsec-dashboard' : 'itsec' ) );
 }
 
+/**
+ * Their label for a lockout's module ("firewall" is "Firewall Rule"): the
+ * `label` each module registers with their lockout registry, which their own
+ * screens print. A module this site does not register is tidied.
+ *
+ * @param string $type Stored lockout_type.
+ * @return string
+ */
+function minn_admin_solid_security_type_label( $type ) {
+	global $itsec_lockout;
+	$type = (string) $type;
+	try {
+		$modules = is_object( $itsec_lockout ) && method_exists( $itsec_lockout, 'get_lockout_modules' ) ? (array) $itsec_lockout->get_lockout_modules() : array();
+	} catch ( \Throwable $e ) {
+		$modules = array();
+	}
+	if ( isset( $modules[ $type ]['label'] ) && is_scalar( $modules[ $type ]['label'] ) && '' !== (string) $modules[ $type ]['label'] ) {
+		return Minn_Admin::plain_text( $modules[ $type ]['label'] );
+	}
+	return ucwords( str_replace( array( '-', '_' ), ' ', $type ) );
+}
+
 /** Display shape for one itsec_lockouts row. */
 function minn_admin_solid_security_row( $r ) {
 	$who = '';
@@ -76,7 +98,7 @@ function minn_admin_solid_security_row( $r ) {
 	return array(
 		'id'      => (int) $r->lockout_id,
 		'message' => __( 'Locked out: ', 'minn-admin' ) . ( $who ? $who : ( $r->lockout_host ? $r->lockout_host : 'unknown' ) ),
-		'type'    => (string) $r->lockout_type,
+		'type'    => minn_admin_solid_security_type_label( $r->lockout_type ),
 		'who'     => $who ? $who : '—',
 		'ip'      => $r->lockout_host ? (string) $r->lockout_host : '—',
 		'status'  => $status,
