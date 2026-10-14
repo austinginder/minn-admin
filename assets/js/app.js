@@ -39109,7 +39109,7 @@
 				<div class="minn-editor-locked-note">
 					Minn couldn't safely parse this ${ ed.type === 'pages' ? 'page' : 'post' }'s block structure,
 					so the body is read-only — the title can still be edited here.
-					${ ENGINE ? '' : `<button type="button" class="minn-linkish" id="minn-open-block-editor">${ esc( __( 'Open in block editor ↗' ) ) }</button>` }
+					${ ENGINE ? '' : `<button type="button" class="minn-linkish" id="minn-open-block-editor">${ esc( ed.isTemplate ? __( 'Open in Site Editor ↗' ) : __( 'Open in block editor ↗' ) ) }</button>` }
 				</div>` : '' }
 				${ locked ? `` : `
 				<div class="minn-editor-toolbar" role="toolbar" aria-label="${ esc( __( 'Formatting' ) ) }">
@@ -43282,7 +43282,9 @@
 			</div>
 			<div class="minn-insp-actions">
 				${ editable ? `<button class="minn-btn-primary" id="minn-insp-apply" type="button">${ esc( __( 'Apply' ) ) }</button>` : '' }
-				${ state.editor && ! ENGINE ? `<button type="button" class="minn-btn-soft" id="minn-insp-gutenberg" title="${ esc( __( 'Design controls — layout, spacing, colors — live in the block editor. Saves this post first so unsaved blocks appear there.' ) ) }">${ esc( __( 'Block editor ↗' ) ) }</button>` : '' }
+				${ state.editor && ! ENGINE ? ( state.editor.isTemplate
+					? `<button type="button" class="minn-btn-soft" id="minn-insp-gutenberg" title="${ esc( __( 'Opens in the Site Editor, in a new tab' ) ) }">${ esc( __( 'Site Editor' ) ) } ↗</button>`
+					: `<button type="button" class="minn-btn-soft" id="minn-insp-gutenberg" title="${ esc( __( 'Design controls — layout, spacing, colors — live in the block editor. Saves this post first so unsaved blocks appear there.' ) ) }">${ esc( __( 'Block editor ↗' ) ) }</button>` ) : '' }
 				<span class="minn-insp-move" role="group" aria-label="${ esc( __( 'Move block' ) ) }">
 					<button class="minn-btn-soft" id="minn-insp-move-up" type="button" title="${ esc( __( 'Move up' ) ) }" aria-label="${ esc( __( 'Move block up' ) ) }">${ icon( 'chevron-up' ) }</button>
 					<button class="minn-btn-soft" id="minn-insp-move-down" type="button" title="${ esc( __( 'Move down' ) ) }" aria-label="${ esc( __( 'Move block down' ) ) }">${ icon( 'chevron-down' ) }</button>
@@ -43330,7 +43332,9 @@
 		};
 		const go = ( id ) => {
 			closeInspector();
-			const url = B.site.adminUrl + 'post.php?post=' + id + '&action=edit';
+			// A template's id is "theme//slug", which post.php reads as no
+			// post at all: templates and parts open in the Site Editor.
+			const url = ed.isTemplate ? ed.editUrl : B.site.adminUrl + 'post.php?post=' + id + '&action=edit';
 			window.open( url, '_blank', 'noopener' );
 		};
 		// Clean and already has an id: nothing to flush.
@@ -47895,8 +47899,8 @@
 			// The escape hatch without new chrome: this post in wp-admin's own
 			// editor. Saves first (openInBlockEditor), so unsaved islands are
 			// there when it opens. ⌥-clicking the sidebar's WordPress button
-			// does the same thing.
-			if ( ! ENGINE ) cmds.push( { label: __( 'Edit in the block editor ↗' ), kind: 'action', icon: '↗', run: () => openInBlockEditor() } );
+			// does the same thing. A template's door is the Site Editor.
+			if ( ! ENGINE ) cmds.push( { label: state.editor.isTemplate ? __( 'Open in Site Editor ↗' ) : __( 'Edit in the block editor ↗' ), kind: 'action', icon: '↗', run: () => openInBlockEditor() } );
 		}
 		cmds.push(
 			{ label: __( 'Go to Overview' ), kind: 'nav', icon: '▦', run: () => go( 'overview' ) },
