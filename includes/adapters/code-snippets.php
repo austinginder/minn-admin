@@ -142,8 +142,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				array( 'key' => 'modified', 'label' => __( 'Modified', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
 			),
 			'detail'    => array(
-				// Re-fetch so the modal always has full code + fresh active flag.
-				'detailRoute' => 'code-snippets/v1/snippets/{id}',
+				// Re-fetch so the modal always has full code + fresh active flag
+				// (and the keys the action gates read, from the filter below).
+				'detailRoute' => 'code-snippets/v1/snippets/{id}?minn_view=1',
 				// Static rows hide editable fields; the form is the editor.
 				'skip'        => array(
 					'code', 'code_error', 'network', 'shared_network',
@@ -168,13 +169,19 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				// /activate|/deactivate routes exist but return an unprepared
 				// Snippet object that can 500 under rest_ensure_response.
 				// Deactivate goes through Minn's route, which knows a shared
-				// network row's id and asks Code Snippets in that scope.
+				// network row's id and asks Code Snippets in that scope. Their
+				// own routes take a site snippet's id alone, so a shared row
+				// is not offered Activate, Delete or the Edit link: a when-gate
+				// is one key and one value, so the list filter below names what
+				// Activate needs (_activate) and gives every row its
+				// shared_network flag. A shared snippet is switched on from
+				// their own screen.
 				array(
 					'label'  => __( 'Activate', 'minn-admin' ),
 					'method' => 'PUT',
 					'route'  => 'code-snippets/v1/snippets/{id}',
 					'body'   => array( 'active' => true ),
-					'when'   => array( 'key' => 'active', 'equals' => false ),
+					'when'   => array( 'key' => '_activate', 'equals' => 'site' ),
 				),
 				array(
 					'label'  => __( 'Deactivate', 'minn-admin' ),
@@ -183,8 +190,14 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'when'   => array( 'key' => 'active', 'equals' => true ),
 				),
 				array(
+					'label' => __( 'Switch on in Code Snippets ↗', 'minn-admin' ),
+					'href'  => admin_url( 'admin.php?page=snippets' ),
+					'when'  => array( 'key' => '_activate', 'equals' => 'network' ),
+				),
+				array(
 					'label' => __( 'Edit in Code Snippets ↗', 'minn-admin' ),
 					'href'  => admin_url( 'admin.php?page=edit-snippet&id={id}' ),
+					'when'  => array( 'key' => 'shared_network', 'equals' => false ),
 				),
 				array(
 					'label'   => __( 'Delete snippet', 'minn-admin' ),
@@ -192,6 +205,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'route'   => 'code-snippets/v1/snippets/{id}',
 					'confirm' => __( 'Delete this snippet permanently? Its code will be gone.', 'minn-admin' ),
 					'danger'  => true,
+					'when'    => array( 'key' => 'shared_network', 'equals' => false ),
 				),
 			),
 			// Their list has no active= filter, so bulk is the multi-item win.
@@ -201,7 +215,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'method' => 'PUT',
 					'route'  => 'code-snippets/v1/snippets/{id}',
 					'body'   => array( 'active' => true ),
-					'when'   => array( 'key' => 'active', 'equals' => false ),
+					'when'   => array( 'key' => '_activate', 'equals' => 'site' ),
 				),
 				array(
 					'label'  => __( 'Deactivate', 'minn-admin' ),
@@ -215,6 +229,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'route'   => 'code-snippets/v1/snippets/{id}',
 					'confirm' => __( 'Delete the selected snippets permanently?', 'minn-admin' ),
 					'danger'  => true,
+					'when'    => array( 'key' => 'shared_network', 'equals' => false ),
 				),
 			),
 		),
@@ -227,8 +242,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		// own that answers GET alone, so there is no write for the client to
 		// send through it. Their detail route goes: it takes the id alone,
 		// so it cannot name a shared network row, and its 404 for one would
-		// stop the view loading. Deactivate keys on the list row's flag.
-		$surfaces['code-snippets']['collection']['detail'] = array( 'sectionsRoute' => 'minn-admin/v1/code-snippets/{id}' );
+		// stop the view loading. Deactivate keys on the list row's flag. The
+		// skip list stays, so a view that fails to load lists no raw keys.
+		unset( $surfaces['code-snippets']['collection']['detail']['detailRoute'] );
+		$surfaces['code-snippets']['collection']['detail']['sectionsRoute'] = 'minn-admin/v1/code-snippets/{id}';
 		// Activating a snippet runs its code. Deactivating one stops code
 		// running, so it stays available on a hardened site.
 		// Identify the activation by the request it sends, never by its label:
@@ -346,25 +363,36 @@ add_action( 'rest_api_init', function () {
 	// those rows network:<id>, which only Minn's routes below take and pass
 	// on as network=true; their own routes answer 404 for one rather than
 	// act on the wrong snippet. Their screens and every other client get
-	// the list as they ship it.
+	// the list as they ship it. Each row (and the dialog's single read) also
+	// carries a boolean shared_network and _activate, which the action gates
+	// read: 'site' for an inactive site snippet, 'network' for an inactive
+	// shared one, '' for one that is on.
 	add_filter( 'rest_request_after_callbacks', function ( $response, $handler, $request ) {
 		if ( ! $response instanceof WP_REST_Response || $response->is_error()
 			|| ! $request instanceof WP_REST_Request
 			|| 'GET' !== $request->get_method()
-			|| '/code-snippets/v1/snippets' !== $request->get_route()
+			|| ! preg_match( '#^/code-snippets/v1/snippets(/\d+)?$#', (string) $request->get_route(), $m )
 			|| ! $request->get_param( 'minn_view' ) ) {
 			return $response;
 		}
-		$items = $response->get_data();
+		$single = ! empty( $m[1] );
+		$items  = $response->get_data();
 		if ( ! is_array( $items ) ) {
 			return $response;
 		}
+		$items = $single ? array( $items ) : $items;
 		foreach ( $items as $i => $item ) {
-			if ( is_array( $item ) && ! empty( $item['shared_network'] ) && isset( $item['id'] ) && is_numeric( $item['id'] ) ) {
+			if ( ! is_array( $item ) ) {
+				continue;
+			}
+			$shared                        = ! empty( $item['shared_network'] );
+			$items[ $i ]['shared_network'] = $shared;
+			$items[ $i ]['_activate']      = ! empty( $item['active'] ) ? '' : ( $shared ? 'network' : 'site' );
+			if ( $shared && isset( $item['id'] ) && is_numeric( $item['id'] ) ) {
 				$items[ $i ]['id'] = 'network:' . (int) $item['id'];
 			}
 		}
-		$response->set_data( $items );
+		$response->set_data( $single ? $items[0] : $items );
 		return $response;
 	}, 10, 3 );
 

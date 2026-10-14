@@ -507,6 +507,8 @@ if ( ! defined( 'CODE_SNIPPETS_VERSION' ) || ! function_exists( 'Code_Snippets\\
 			$s11_want = wp_date( get_option( 'date_format' ), $s11_ts );
 			$check( 'S11 the status card\'s Last change is dated in the site\'s zone and format', $s11_row && $cs_name === ( $s11_row['value'] ?? '' ) && $s11_want === ( $s11_row['hint'] ?? '' ), wp_json_encode( $s11_row ) . ' want ' . $s11_want );
 
+			// F3 reads what an open site offers before the constant goes in.
+			$cs_open = Minn_Admin::code_edits_allowed() ? $surface( 'code-snippets' ) : null;
 			if ( ! defined( 'DISALLOW_FILE_EDIT' ) ) {
 				define( 'DISALLOW_FILE_EDIT', true );
 			}
@@ -614,6 +616,73 @@ if ( ! defined( 'CODE_SNIPPETS_VERSION' ) || ! function_exists( 'Code_Snippets\\
 				return 'minn-admin/v1/code-snippets/{id}/deactivate' !== ( $a['route'] ?? '' ) || 'POST' !== ( $a['method'] ?? '' ) || isset( $a['body'] );
 			} ), wp_json_encode( $deact ) );
 			$check( 'N5 the hardened page reads its snippet from the view alone (their id-only detail route cannot name a shared row)', ! isset( $det['detailRoute'] ) && '' !== $view, wp_json_encode( $det ) );
+
+			// F3: a shared row (network:<id>) is not offered what their own
+			// id-only routes cannot do for it: Activate, Delete, the Edit
+			// link. The client's when-gate is one key and one value, so the
+			// list filter names what Activate needs (_activate: site,
+			// network, or nothing when it is on). The gate below compares as
+			// the client does, String(value) === String(equals).
+			$check( 'F3 the hardened page keeps the skip list, so a failed view lists no raw keys (code included)', in_array( 'code', (array) ( $det['skip'] ?? array() ), true ), wp_json_encode( $det['skip'] ?? null ) );
+			$js_str = function ( $v ) {
+				if ( is_bool( $v ) ) {
+					return $v ? 'true' : 'false';
+				}
+				return null === $v ? 'undefined' : (string) $v;
+			};
+			$offered = function ( $s, $list, $item ) use ( $js_str ) {
+				$out = array();
+				foreach ( (array) ( $s['collection'][ $list ] ?? array() ) as $a ) {
+					if ( empty( $a['when'] ) || $js_str( $item[ $a['when']['key'] ] ?? null ) === $js_str( $a['when']['equals'] ) ) {
+						$out[] = (string) ( $a['label'] ?? '' );
+					}
+				}
+				return $out;
+			};
+			$f3_rows = function ( $res, $req ) {
+				$res = apply_filters( 'rest_request_after_callbacks', $res, array(), $req );
+				return $res instanceof WP_REST_Response ? $res->get_data() : null;
+			};
+			$f3_req = new WP_REST_Request( 'GET', '/code-snippets/v1/snippets' );
+			$f3_req->set_param( 'minn_view', 1 );
+			$f3 = (array) $f3_rows( new WP_REST_Response( array(
+				array( 'id' => 7, 'name' => 'Site off', 'shared_network' => false, 'active' => false ),
+				array( 'id' => 7, 'name' => 'Shared off', 'network' => true, 'shared_network' => true, 'active' => false ),
+				array( 'id' => 8, 'name' => 'Shared on', 'network' => true, 'shared_network' => true, 'active' => true ),
+				array( 'id' => 9, 'name' => 'Site on, older shape', 'active' => true ),
+			) ), $f3_req );
+			$check( 'F3 the list names what Activate needs and gives every row a shared_network flag', array( 'site', 'network', '', '' ) === array_map( function ( $r ) {
+				return $r['_activate'] ?? null;
+			}, $f3 ) && array( false, true, true, false ) === array_map( function ( $r ) {
+				return $r['shared_network'] ?? null;
+			}, $f3 ), wp_json_encode( $f3 ) );
+			$f3_one_req = new WP_REST_Request( 'GET', '/code-snippets/v1/snippets/7' );
+			$f3_one_req->set_param( 'minn_view', 1 );
+			$f3_one = (array) $f3_rows( new WP_REST_Response( array( 'id' => 7, 'name' => 'Site off', 'shared_network' => false, 'active' => false ) ), $f3_one_req );
+			$check( 'F3 so does a single snippet read for the dialog', 'site' === ( $f3_one['_activate'] ?? null ) && 7 === ( $f3_one['id'] ?? null ), wp_json_encode( $f3_one ) );
+			if ( ! $cs_open ) {
+				$skip( 'F3 open-site offers: this site disallows code edits' );
+			} else {
+				$check( 'F3 the dialog\'s detail read asks for those keys', false !== strpos( (string) ( $cs_open['collection']['detail']['detailRoute'] ?? '' ), 'minn_view=1' ), (string) ( $cs_open['collection']['detail']['detailRoute'] ?? '' ) );
+				$want = array(
+					'Site off'             => array( 'Activate', 'Edit in Code Snippets ↗', 'Delete snippet' ),
+					'Shared off'           => array( 'Switch on in Code Snippets ↗' ),
+					'Shared on'            => array( 'Deactivate' ),
+					'Site on, older shape' => array( 'Deactivate', 'Edit in Code Snippets ↗', 'Delete snippet' ),
+				);
+				foreach ( $f3 as $r ) {
+					$got = $offered( $cs_open, 'actions', $r );
+					$check( "F3 offered on \"{$r['name']}\"", $want[ $r['name'] ] === $got, wp_json_encode( $got ) );
+				}
+				$bulk_shared = $offered( $cs_open, 'bulk', $f3[1] );
+				$bulk_site   = $offered( $cs_open, 'bulk', $f3[0] );
+				$check( 'F3 bulk Activate and Delete skip a shared row, and still take a site row', array() === $bulk_shared && array( 'Activate', 'Delete' ) === $bulk_site, wp_json_encode( array( $bulk_shared, $bulk_site ) ) );
+			}
+			$hard_shared = $offered( $cs, 'actions', $f3[1] );
+			$check( 'F3 control: a hardened site offers a shared inactive row only the way to their screen', array( 'Switch on in Code Snippets ↗' ) === $hard_shared, wp_json_encode( $hard_shared ) );
+			// The real vendor, single site: a site snippet read the dialog's way.
+			list( $rd_st, $rd_one ) = $call( 'GET', '/code-snippets/v1/snippets/' . $cs_id, null, array( 'minn_view' => 1 ) );
+			$check( 'F3 control: a real site snippet reads as one Activate is offered on', 200 === $rd_st && 'site' === ( $rd_one['_activate'] ?? null ) && false === ( $rd_one['shared_network'] ?? null ) && $cs_id === ( $rd_one['id'] ?? null ), wp_json_encode( array( $rd_one['_activate'] ?? null, $rd_one['shared_network'] ?? null, $rd_one['id'] ?? null ) ) );
 
 			// The site path, end to end against Code Snippets itself: an active
 			// fixture (inert code) is switched off through Minn's route.
