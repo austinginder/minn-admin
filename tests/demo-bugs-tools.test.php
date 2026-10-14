@@ -293,7 +293,8 @@ if ( ! defined( 'REDIRECTION_VERSION' ) ) {
 			// A hit 95 minutes ago, written the way their visit() writes one.
 			$wpdb->query( $wpdb->prepare( "UPDATE {$rd_table} SET last_count = last_count + 1, last_access = NOW() - INTERVAL 95 MINUTE WHERE id = %d", $rd_ids['hit'] ) ); // phpcs:ignore
 			$call( 'POST', '/redirection/v1/bulk/redirect/disable', null, array( 'items' => (string) $rd_ids['off'] ) );
-			list( $st, $d ) = $call( 'GET', '/redirection/v1/redirect', null, array( 'filterBy' => array( 'url' => $marker ), 'per_page' => 25, 'page' => 0 ) );
+			// The surface's list asks with minn_view=1 (its collection query).
+			list( $st, $d ) = $call( 'GET', '/redirection/v1/redirect', null, array( 'filterBy' => array( 'url' => $marker ), 'per_page' => 25, 'page' => 0, 'minn_view' => 1 ) );
 			$by = array();
 			foreach ( (array) ( $d['items'] ?? array() ) as $it ) {
 				$by[ (int) ( $it['id'] ?? 0 ) ] = $it;
@@ -314,6 +315,16 @@ if ( ! defined( 'REDIRECTION_VERSION' ) ) {
 			$check( 'D-31 a rule never hit is handed no time', $col && '' === (string) ( $never[ $col['key'] ] ?? '' ), wp_json_encode( $col ? ( $never[ $col['key'] ] ?? null ) : null ) );
 			$status = $column( $rs, 'enabled' );
 			$check( 'D-31 a disabled rule shows as such: a status pill on Redirection\'s enabled flag', $status && 'pill' === ( $status['format'] ?? '' ) && false === ( $never['enabled'] ?? null ) && true === ( $hit['enabled'] ?? null ), wp_json_encode( $status ) );
+
+			// I15: only Minn's reading of their list gains last_hit. Their
+			// own screen and every other client get it as they ship it.
+			$check( 'I15 the Redirection surface asks its list with minn_view=1', false !== strpos( (string) ( $rs['collection']['query'] ?? '' ), 'minn_view=1' ), wp_json_encode( $rs['collection']['query'] ?? null ) );
+			list( $pst, $plain ) = $call( 'GET', '/redirection/v1/redirect', null, array( 'filterBy' => array( 'url' => $marker ), 'per_page' => 25, 'page' => 0 ) );
+			$plain_keys = array();
+			foreach ( (array) ( $plain['items'] ?? array() ) as $it ) {
+				$plain_keys = array_merge( $plain_keys, array_keys( (array) $it ) );
+			}
+			$check( 'I15 a request without it gets their list unchanged, with no last_hit', 200 === $pst && $plain_keys && ! in_array( 'last_hit', $plain_keys, true ), wp_json_encode( array_values( array_unique( $plain_keys ) ) ) );
 		}
 	} finally {
 		if ( $rd_ids ) {

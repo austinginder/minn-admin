@@ -117,6 +117,8 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		),
 		'collection' => array(
 			'route'     => 'redirection/v1/redirect',
+			// Asks for last_hit (the rest_request_after_callbacks filter below).
+			'query'     => 'minn_view=1',
 			// Their filter route accepts orderby source|last_count|last_access
 			// (plus position/id) with direction asc|desc.
 			'sortQuery' => 'orderby={by}&direction={dir}',
@@ -240,9 +242,12 @@ add_action( 'rest_api_init', function () {
 	// older, counted from midnight. The time is in their table, written by
 	// visit() with MySQL NOW(), the database's own clock and zone, which
 	// UNIX_TIMESTAMP() reads back in the same zone. Added to each item of
-	// that list as last_hit; nothing else about their answer changes.
+	// that list as last_hit; nothing else about their answer changes. The
+	// surface asks with minn_view=1, so their screen and every other client
+	// get the list as they ship it.
 	add_filter( 'rest_request_after_callbacks', function ( $response, $handler, $request ) {
-		if ( ! $request instanceof WP_REST_Request || 'GET' !== $request->get_method() || '/redirection/v1/redirect' !== $request->get_route() ) {
+		if ( ! $request instanceof WP_REST_Request || 'GET' !== $request->get_method() || '/redirection/v1/redirect' !== $request->get_route()
+			|| ! $request->get_param( 'minn_view' ) ) {
 			return $response;
 		}
 		$data = $response instanceof WP_REST_Response ? $response->get_data() : $response;
