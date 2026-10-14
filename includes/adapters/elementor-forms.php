@@ -465,8 +465,10 @@ add_action( 'rest_api_init', function () {
 				$item = minn_admin_elementor_forms_item( $sub );
 
 				// Opening a detail marks unread → read (their screen semantics).
-				if ( empty( $sub['is_read'] ) && ( empty( $sub['status'] ) || 'trash' !== $sub['status'] ) ) {
-					$query->update_submission( (int) $sub['id'], array( 'is_read' => 1 ) );
+				// The entry counts as read only when their update landed: the
+				// item below carries that state to the page's gates.
+				if ( empty( $sub['is_read'] ) && ( empty( $sub['status'] ) || 'trash' !== $sub['status'] )
+					&& $query->update_submission( (int) $sub['id'], array( 'is_read' => 1 ) ) ) {
 					$item['status'] = 'read';
 				}
 
