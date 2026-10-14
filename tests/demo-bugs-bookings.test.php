@@ -709,5 +709,56 @@ if ( ! function_exists( 'minn_admin_jet_search_active' ) || ! minn_admin_jet_sea
 	}
 }
 
+/* ===== Booking status charts: I1 (the next 14 days across a DST change) ===== */
+// The charts stepped forward DAY_IN_SECONDS at a time, which lands an hour
+// off across a DST change: from just before a spring-forward midnight the
+// next day was skipped, and from just after a fall-back midnight the same
+// day came twice. The clock is pinned through core's wp_date filter, which
+// every day key is read through, at a Los Angeles moment on each side.
+$charts = array(
+	'Amelia'          => array( 'minn_admin_amelia_active', '/minn-admin/v1/amelia/status' ),
+	'Bookly'          => array( 'minn_admin_bookly_active', '/minn-admin/v1/bookly/status' ),
+	'JetBooking'      => array( 'minn_admin_jet_booking_active', '/minn-admin/v1/jet-booking/status' ),
+	'JetAppointments' => array( 'minn_admin_jet_apb_active', '/minn-admin/v1/jet-appointments/status' ),
+	'LatePoint'       => array( 'minn_admin_latepoint_active', '/minn-admin/v1/latepoint/status' ),
+);
+foreach ( array( '2027-03-13 23:30:00', '2026-11-01 00:30:00' ) as $pin_local ) {
+	$pin_at    = new DateTimeImmutable( $pin_local, new DateTimeZone( 'America/Los_Angeles' ) );
+	$pin_shift = $pin_at->getTimestamp() - time();
+	$pin_tz    = function () {
+		return 'America/Los_Angeles';
+	};
+	$pin_off   = function () use ( $pin_at ) {
+		return $pin_at->getOffset() / HOUR_IN_SECONDS;
+	};
+	$pin_clock = function ( $date, $format, $timestamp, $timezone ) use ( $pin_shift ) {
+		return ( new DateTimeImmutable( '@' . ( (int) $timestamp + $pin_shift ) ) )->setTimezone( $timezone )->format( $format );
+	};
+	$pin_want = array();
+	for ( $i = 0; $i < 14; $i++ ) {
+		$pin_want[] = $pin_at->setTime( 12, 0 )->modify( "+{$i} day" )->format( 'Y-m-d' );
+	}
+	add_filter( 'pre_option_timezone_string', $pin_tz, 100 );
+	add_filter( 'pre_option_gmt_offset', $pin_off, 100 );
+	add_filter( 'wp_date', $pin_clock, 10, 4 );
+	try {
+		foreach ( $charts as $name => $chart ) {
+			if ( ! function_exists( $chart[0] ) || ! call_user_func( $chart[0] ) ) {
+				$skip( "I1 {$name} chart: not active" );
+				continue;
+			}
+			list( $st, $data ) = $call( 'GET', $chart[1] );
+			$got = array_map( function ( $p ) {
+				return (string) ( $p['label'] ?? '' );
+			}, (array) ( $data['chart']['points'] ?? array() ) );
+			$check( "I1 {$name} chart: 14 consecutive site days from the pinned day at {$pin_local} Los Angeles", 200 === $st && $pin_want === $got, count( array_unique( $got ) ) . ' distinct, missing ' . wp_json_encode( array_values( array_diff( $pin_want, $got ) ) ) );
+		}
+	} finally {
+		remove_filter( 'wp_date', $pin_clock, 10 );
+		remove_filter( 'pre_option_timezone_string', $pin_tz, 100 );
+		remove_filter( 'pre_option_gmt_offset', $pin_off, 100 );
+	}
+}
+
 printf( "\ndemo-bugs-bookings: %d/%d passed\n", count( array_filter( $results ) ), count( $results ) );
 exit( count( array_filter( $results ) ) === count( $results ) ? 0 : 1 );
