@@ -357,7 +357,7 @@
             "shop_manager",
             "administrator"
         ],
-        "GET /minn-admin/v1/code-snippets/(?P<id>\\d+)": [
+        "GET /minn-admin/v1/code-snippets/(?P<id>(?:network:)?\\d+)": [
             "administrator"
         ],
         "GET /minn-admin/v1/code-snippets/status": [
@@ -1380,6 +1380,9 @@
             "administrator"
         ],
         "POST /minn-admin/v1/check-updates": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/code-snippets/(?P<id>(?:network:)?\\d+)/deactivate": [
             "administrator"
         ],
         "POST /minn-admin/v1/core/network-upgrade": [],
