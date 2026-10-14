@@ -6,7 +6,8 @@
  * escape hatch (the W button, Live preview, Open Stream, Tools, Edit in
  * the block editor) must stay off screen. On WordPress those same controls
  * stay. One suite covers both sides so a regression on either runtime
- * fails here.
+ * fails here. Add plugin is the other way round: the engine runs WordPress
+ * plugins, so its dialog searches the directory as WordPress's does.
  *
  * Run: MINN_TEST_PASS=… node engine-bailouts.test.js
  * Engine: MINN_TEST_URL=https://mmonroe-minn.localhost MINN_TEST_USER=austin …
@@ -85,6 +86,38 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		t.check( 'inactive theme cards offer Live preview',
 			preview.count > 0 && preview.hrefs.every( ( h ) => /(customize\.php\?theme=|site-editor\.php\?wp_theme_preview=)/.test( h ) ),
 			JSON.stringify( preview.hrefs ) );
+	}
+
+	/* ===== Extensions: Add plugin searches WordPress.org on both
+	   runtimes (the engine reads the directory through its update
+	   service and runs WordPress plugins). Only the engine adds the zip
+	   URL / GitHub row. ===== */
+	await page.click( '[data-xtab="plugins"]' );
+	const addPlugin = await page.waitForSelector( '#minn-add-plugin', { timeout: 15000 } ).catch( () => null );
+	if ( addPlugin ) {
+		await addPlugin.click();
+		await page.waitForSelector( '#minn-pi-search', { state: 'attached', timeout: 15000 } );
+		const dialog = await page.evaluate( () => {
+			const search = document.getElementById( 'minn-pi-search' );
+			return {
+				search: !! search && ! search.hidden && search.offsetParent !== null,
+				focused: document.activeElement === search,
+				cards: document.querySelectorAll( '.minn-pi-card' ).length,
+				urlRow: !! document.getElementById( 'minn-pi-url' ),
+				staleNote: /never run here/.test( ( document.querySelector( '.minn-modal-pi' ) || document.body ).textContent || '' ),
+			};
+		} );
+		t.check( 'Add plugin shows the directory search, focused', dialog.search && dialog.focused, JSON.stringify( dialog ) );
+		t.check( 'Add plugin shows the plugin catalog', dialog.cards > 0, String( dialog.cards ) );
+		t.check( 'Add plugin never says plugins will not run', ! dialog.staleNote );
+		if ( boot.engine ) {
+			t.check( 'Add plugin on the engine offers a zip URL or GitHub release', dialog.urlRow );
+		} else {
+			t.check( 'Add plugin on WordPress has no zip URL row', ! dialog.urlRow );
+		}
+		await page.click( '#minn-modal-close' );
+	} else {
+		t.check( 'no Add plugin for this user', true );
 	}
 
 	/* ===== Activity Log: Open Stream is Stream-adapter copy. Hidden on

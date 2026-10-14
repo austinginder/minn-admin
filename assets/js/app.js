@@ -49366,7 +49366,7 @@
 
 		if ( m.type === 'plugin-install' ) {
 			const installedNow = ( slug ) => ( state.cache.plugins || [] ).find( ( p ) => p.plugin.split( '/' )[ 0 ] === slug );
-			const showCatalog = ! ENGINE && m.results == null && ! m.q && ! m.searching;
+			const showCatalog = m.results == null && ! m.q && ! m.searching;
 			const catalogHtml = showCatalog ? `
 				<div class="minn-pi-catalog" role="list">
 					${ PLUGIN_CATALOG.map( ( cat ) => `
@@ -49428,12 +49428,11 @@
 							<div class="minn-dropzone-sub">${ sprintf( /* translators: 1: the text ".zip" in bold. 2: a "browse" link. */ __( 'Drop a plugin %1$s here or %2$s' ), `<b>${ esc( __( '.zip' ) ) }</b>`, `<b>${ esc( __( 'browse' ) ) }</b>` ) }</div>
 							<input type="file" id="minn-pi-file" accept=".zip" hidden>
 						</div>` : '' }
-						${ ENGINE && B.caps.uploadPlugins ? `<p class="minn-pi-engine-note">${ esc( __( 'Minn Engine runs Minn extensions: a folder with a minn.json. Drop one above, or install from a zip URL or GitHub release below. WordPress plugins from the directory would install but never run here.' ) ) }</p>
-						<div class="minn-pi-urlrow">
+						${ ENGINE && B.caps.uploadPlugins ? `<div class="minn-pi-urlrow">
 							<input class="minn-input" id="minn-pi-url" placeholder="${ esc( __( 'https://…/extension.zip or owner/repo' ) ) }" autocomplete="off" spellcheck="false">
 							<button type="button" class="minn-btn-soft" id="minn-pi-url-go">${ esc( __( 'Install' ) ) }</button>
 						</div>` : '' }
-						<input class="minn-input" id="minn-pi-search" placeholder="${ esc( __( 'Search the WordPress.org directory…' ) ) }" value="${ esc( m.q ) }" autocomplete="off"${ ENGINE ? ' hidden' : '' }>
+						<input class="minn-input" id="minn-pi-search" placeholder="${ esc( __( 'Search the WordPress.org directory…' ) ) }" value="${ esc( m.q ) }" autocomplete="off">
 						${ m.q || m.results != null ? `
 						<div class="minn-pi-search-bar">
 							<button type="button" class="minn-btn-soft" id="minn-pi-back">← ${ esc( __( 'Catalog' ) ) }</button>
@@ -51326,8 +51325,6 @@
 			};
 			urlGo.addEventListener( 'click', run );
 			urlInput.addEventListener( 'keydown', ( e ) => { if ( e.key === 'Enter' ) { e.preventDefault(); run(); } } );
-			urlInput.focus();
-			return bindPluginInstallModalRest( m );
 		}
 		bindPluginInstallModalRest( m );
 	}
@@ -51335,9 +51332,7 @@
 	function bindPluginInstallModalRest( m ) {
 		const input = $( '#minn-pi-search' );
 		// Focus the search only when the catalog is showing (empty open).
-		if ( ENGINE ) {
-			// no directory search here: the URL field above owns focus
-		} else if ( ! m.q ) {
+		if ( ! m.q ) {
 			input.focus();
 			input.setSelectionRange( 0, 0 );
 		} else {
