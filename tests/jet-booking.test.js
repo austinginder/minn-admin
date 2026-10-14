@@ -1,7 +1,7 @@
 /**
  * JetBooking bookings adapter. Bookings live in {prefix}jet_apartment_bookings
- * (WP-local naive day epochs for check-in / check-out, emitted as UTC ISO
- * after the site-offset shift); status writes go through
+ * (WP-local naive day epochs for check-in / check-out, emitted as that
+ * site-local midnight with the offset of its own day); status writes go through
  * jet_abaf()->db->update_booking so the plugin's own status hook fires.
  *
  * JetBooking stays ACTIVE as a bookings-family resident (fourth after
@@ -66,7 +66,7 @@ const CLEANUP = `if ( ! function_exists( 'jet_abaf' ) ) return;
 			 $day = strtotime( wp_date( 'Y-m-d' ) . ' 00:00:00 UTC' );
 			 $pending = jet_abaf()->db->insert_booking( array( 'apartment_id' => $cabin, 'status' => 'pending', 'check_in_date' => $day + 2 * DAY_IN_SECONDS, 'check_out_date' => $day + 5 * DAY_IN_SECONDS, 'user_email' => 'suite-priya@jet-booking.minn.test' ) );
 			 $canceled = jet_abaf()->db->insert_booking( array( 'apartment_id' => $cabin, 'status' => 'cancelled', 'check_in_date' => $day - 3 * DAY_IN_SECONDS, 'check_out_date' => $day - DAY_IN_SECONDS, 'user_email' => 'suite-sam@jet-booking.minn.test' ) );
-			 echo wp_json_encode( array( 'pending' => (int) $pending, 'canceled' => (int) $canceled, 'cabin' => $cabin ) );`
+			 echo wp_json_encode( array( 'pending' => (int) $pending, 'canceled' => (int) $canceled, 'cabin' => $cabin, 'in_day' => gmdate( 'Y-m-d', $day + 2 * DAY_IN_SECONDS ) ) );`
 		);
 		try { seed = JSON.parse( ( seedOut.match( /\{.*\}/ ) || [ '{}' ] )[ 0 ] ); } catch ( e ) { seed = {}; }
 		t.check( 'pending + cancelled suite bookings seeded through insert_booking', seed.pending > 0 && seed.canceled > 0, seedOut.slice( 0, 160 ) );
@@ -74,13 +74,14 @@ const CLEANUP = `if ( ! function_exists( 'jet_abaf' ) ) return;
 		const list = await api( 'minn-admin/v1/jet-booking/bookings' );
 		t.check( 'upcoming list answers', list.status === 200 && ( list.body.total || 0 ) >= 1, JSON.stringify( { s: list.status, total: list.body && list.body.total } ) );
 		const priya = ( list.body.items || [] ).find( ( i ) => i.id === seed.pending );
-		t.check( 'upcoming includes the pending suite row with a UTC check-in, nights and pill status',
-			!! priya && priya.status === 'pending' && /Z$/.test( priya.date || '' ) && /Minn Suite Cabin · 3 nights/.test( priya.service || '' ) && /suite-priya/.test( priya.customer || '' ),
+		t.check( 'upcoming includes the pending suite row with an offset check-in, nights and pill status',
+			!! priya && priya.status === 'pending' && /(Z|[+-]\d\d:\d\d)$/.test( priya.date || '' ) && /Minn Suite Cabin · 3 nights/.test( priya.service || '' ) && /suite-priya/.test( priya.customer || '' ),
 			JSON.stringify( priya ) );
 		// The stored check-in is local midnight + the plugin's one-second
-		// bookkeeping offset; the ISO must be the plain midnight in UTC terms.
-		t.check( 'check-in ISO is the local midnight (offset shifted, bookkeeping second dropped)',
-			!! priya && /T\d{2}:00:00Z$/.test( priya.date || '' ), priya && priya.date );
+		// bookkeeping offset; the ISO must be that day's plain local midnight,
+		// with the site's offset on that day.
+		t.check( 'check-in ISO is the stay\'s local midnight (its own offset, bookkeeping second dropped)',
+			!! priya && !! seed.in_day && new RegExp( '^' + seed.in_day + 'T00:00:00(Z|[+-]\\d\\d:\\d\\d)$' ).test( priya.date || '' ), priya && priya.date + ' vs ' + seed.in_day );
 
 		const pending = await api( 'minn-admin/v1/jet-booking/bookings?range=pending' );
 		t.check( 'pending filter narrows to in-progress rows',
