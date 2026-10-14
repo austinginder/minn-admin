@@ -149,14 +149,22 @@ const { launch, login, createPost, deletePost, openEditor, freshParagraph, repor
 		// Async html route.
 		const asyncHtml = await slashFind( '/fixture async html', 'Fixture Async HTML' );
 		t.check( 'slash surfaces the async html command', asyncHtml );
+		// The route answers in about a millisecond, but on a loaded lab its POST
+		// queues behind the editor's own requests for longer than a fixed 15s
+		// (2026-10-14: the 200 arrived after 6s+, 4 of 4 runs red). Wait for
+		// the reply itself, then for the markup it carries.
+		const htmlReply = page.waitForResponse( ( r ) => /minn-test\/command-html/.test( r.url() ), { timeout: 60000 } ).catch( () => null );
 		t.check( 'picked async html command row', await slashPick( 'Fixture Async HTML' ) );
+		await htmlReply;
 		await page.waitForSelector( '#minn-editor-body .minn-fixture-cmd-html', { timeout: 15000 } );
 		t.check( 'async route html landed in the body', true );
 
 		// Async island route.
 		const asyncIsland = await slashFind( '/fixture async island', 'Fixture Async Island' );
 		t.check( 'slash surfaces the async island command', asyncIsland );
+		const islandReply = page.waitForResponse( ( r ) => /minn-test\/command-template/.test( r.url() ), { timeout: 60000 } ).catch( () => null );
 		t.check( 'picked async island command row', await slashPick( 'Fixture Async Island' ) );
+		await islandReply;
 		let islandLanded = false;
 		for ( let i = 0; i < 20 && ! islandLanded; i++ ) {
 			await page.waitForTimeout( 400 );
