@@ -52,8 +52,14 @@ if ( ! function_exists( 'add_filter' ) ) {
 		} );
 		// A plugin loaded while it is not active still runs its start-up code:
 		// it schedules its cron events, whitelists the caller's address, warms
-		// its transients. Every option this process writes goes back to what
-		// it was at shutdown, unless another process has written it since.
+		// its transients. The cron table is never written from this process
+		// (a restore can lose a race with a cron runner that saw the event and
+		// rescheduled it). Every other option this process writes goes back
+		// to what it was at shutdown, unless another process has written it
+		// since.
+		WP_CLI::add_wp_hook( 'pre_update_option_cron', function ( $value, $old ) {
+			return $old;
+		}, PHP_INT_MAX, 2 );
 		$raw = function ( $name ) {
 			global $wpdb;
 			$row = $wpdb->get_row( $wpdb->prepare( "SELECT option_value, autoload FROM {$wpdb->options} WHERE option_name = %s", $name ) );
