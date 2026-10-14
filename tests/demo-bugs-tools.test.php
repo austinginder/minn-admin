@@ -539,6 +539,90 @@ if ( ! defined( 'CODE_SNIPPETS_VERSION' ) || ! function_exists( 'Code_Snippets\\
 			$check( 'D-34 a write sent to the read-only view is refused and changes nothing', $refused && ! array_filter( $refused, function ( $c ) {
 				return $c < 400;
 			} ) && $after && $cs_stored && $after->code === $cs_stored->code && $after->name === $cs_stored->name && ! $after->active, wp_json_encode( $refused ) );
+
+			// N5 and S14: on a network, a site's list carries the network's
+			// shared snippets under their network-table ids, which can equal a
+			// site snippet's, and a route given the id alone reads the site
+			// table. No lab network has Code Snippets, so the routing is
+			// checked against a stand-in for their snippet routes that
+			// records what Minn asks them; it answers before their own
+			// permission check runs, which the real-vendor check below keeps.
+			$check( 'N5 the Code Snippets surface asks its list with minn_view=1', false !== strpos( (string) ( $cs['collection']['query'] ?? '' ), 'minn_view=1' ), wp_json_encode( $cs['collection']['query'] ?? null ) );
+			$n5_list = function ( $minn_view ) {
+				$req = new WP_REST_Request( 'GET', '/code-snippets/v1/snippets' );
+				if ( $minn_view ) {
+					$req->set_param( 'minn_view', 1 );
+				}
+				$res = new WP_REST_Response( array(
+					array( 'id' => 7, 'name' => 'Site seven', 'network' => false, 'shared_network' => false, 'active' => true ),
+					array( 'id' => 7, 'name' => 'Shared seven', 'network' => true, 'shared_network' => true, 'active' => true ),
+				) );
+				$res = apply_filters( 'rest_request_after_callbacks', $res, array(), $req );
+				return array_map( function ( $it ) {
+					return $it['id'];
+				}, (array) ( $res instanceof WP_REST_Response ? $res->get_data() : array() ) );
+			};
+			$n5_ids = $n5_list( true );
+			$check( 'N5 Minn\'s list names a shared network row network:<id> and leaves the site row\'s id alone', array( 7, 'network:7' ) === $n5_ids, wp_json_encode( $n5_ids ) );
+			$n5_plain = $n5_list( false );
+			$check( 'N5 control: without minn_view their list is as they ship it', array( 7, 7 ) === $n5_plain, wp_json_encode( $n5_plain ) );
+
+			$n5_seen    = array();
+			$n5_standin = function ( $result, $server, $req ) use ( &$n5_seen ) {
+				if ( 0 !== strpos( (string) $req->get_route(), '/code-snippets/v1/snippets/' ) ) {
+					return $result;
+				}
+				$net         = $req->has_param( 'network' ) && $req->get_param( 'network' );
+				$n5_seen[]   = array( $req->get_method(), $req->get_route(), (bool) $net, $req->get_param( 'active' ) );
+				if ( 'GET' === $req->get_method() ) {
+					return rest_ensure_response( array( 'id' => 7, 'name' => $net ? 'Shared seven' : 'Site seven', 'desc' => '', 'code' => $net ? '/* network */' : '/* site */', 'scope' => 'global', 'priority' => 10, 'tags' => array(), 'active' => true, 'modified' => '' ) );
+				}
+				return rest_ensure_response( array( 'id' => 7, 'active' => false ) );
+			};
+			add_filter( 'rest_pre_dispatch', $n5_standin, 10, 3 );
+			try {
+				$n5_last = function () use ( &$n5_seen ) {
+					return $n5_seen ? end( $n5_seen ) : null;
+				};
+				list( $nst, $nsec ) = $call( 'GET', '/minn-admin/v1/code-snippets/network:7' );
+				$nname              = $row( $nsec, 'Name' );
+				$check( 'N5 the read-only view of a shared row reads the network snippet', 200 === $nst && $nname && 'Shared seven' === $nname['value'] && array( 'GET', '/code-snippets/v1/snippets/7', true, null ) === $n5_last(), $nst . ' ' . wp_json_encode( array( $nname, $n5_last() ) ) );
+				list( $sst, $ssec ) = $call( 'GET', '/minn-admin/v1/code-snippets/7' );
+				$sname              = $row( $ssec, 'Name' );
+				$check( 'N5 control: a site row\'s view reads the site snippet', 200 === $sst && $sname && 'Site seven' === $sname['value'] && array( 'GET', '/code-snippets/v1/snippets/7', false, null ) === $n5_last(), wp_json_encode( array( $sname, $n5_last() ) ) );
+				$n5_before = count( $n5_seen );
+				$n5_writes = array();
+				foreach ( array( 'POST', 'PUT', 'DELETE' ) as $m ) {
+					list( $wst )      = $call( $m, '/minn-admin/v1/code-snippets/network:7', array( 'active' => true, 'code' => 'echo 1;' ) );
+					$n5_writes[ $m ] = $wst;
+				}
+				$check( 'N5 control: the view stays GET-only for a shared row, and passes no write on', ! array_filter( $n5_writes, function ( $c ) {
+					return $c < 400;
+				} ) && count( $n5_seen ) === $n5_before, wp_json_encode( $n5_writes ) );
+
+				list( $dst ) = $call( 'POST', '/minn-admin/v1/code-snippets/network:7/deactivate' );
+				$check( 'S14 Deactivate on a shared row asks their deactivate route in the network scope', 200 === $dst && array( 'POST', '/code-snippets/v1/snippets/7/deactivate', true, null ) === $n5_last(), $dst . ' ' . wp_json_encode( $n5_last() ) );
+				list( $dst2 ) = $call( 'POST', '/minn-admin/v1/code-snippets/7/deactivate' );
+				$check( 'S14 control: on a site row it sends the switch-off it always sent, with no network', 200 === $dst2 && array( 'PUT', '/code-snippets/v1/snippets/7', false, false ) === $n5_last(), $dst2 . ' ' . wp_json_encode( $n5_last() ) );
+			} finally {
+				remove_filter( 'rest_pre_dispatch', $n5_standin, 10 );
+			}
+			$deact = array_values( array_filter( array_merge( (array) ( $cs['collection']['actions'] ?? array() ), (array) ( $cs['collection']['bulk'] ?? array() ) ), function ( $a ) {
+				return 'Deactivate' === ( $a['label'] ?? '' );
+			} ) );
+			$check( 'S14 Deactivate, single and bulk, goes through that route', 2 === count( $deact ) && ! array_filter( $deact, function ( $a ) {
+				return 'minn-admin/v1/code-snippets/{id}/deactivate' !== ( $a['route'] ?? '' ) || 'POST' !== ( $a['method'] ?? '' ) || isset( $a['body'] );
+			} ), wp_json_encode( $deact ) );
+			$check( 'N5 the hardened page reads its snippet from the view alone (their id-only detail route cannot name a shared row)', ! isset( $det['detailRoute'] ) && '' !== $view, wp_json_encode( $det ) );
+
+			// The site path, end to end against Code Snippets itself: an active
+			// fixture (inert code) is switched off through Minn's route.
+			$wpdb->update( $wpdb->prefix . 'snippets', array( 'active' => 1 ), array( 'id' => $cs_id ) );
+			$on_before = (int) $wpdb->get_var( $wpdb->prepare( "SELECT active FROM {$wpdb->prefix}snippets WHERE id = %d", $cs_id ) ); // phpcs:ignore
+			list( $rst ) = $call( 'POST', '/minn-admin/v1/code-snippets/' . $cs_id . '/deactivate' );
+			$on_after = (int) $wpdb->get_var( $wpdb->prepare( "SELECT active FROM {$wpdb->prefix}snippets WHERE id = %d", $cs_id ) ); // phpcs:ignore
+			$code_now = (string) $wpdb->get_var( $wpdb->prepare( "SELECT code FROM {$wpdb->prefix}snippets WHERE id = %d", $cs_id ) ); // phpcs:ignore
+			$check( 'S14 control: Deactivate through Minn switches a real site snippet off on a hardened site, code untouched', 1 === $on_before && 200 === $rst && 0 === $on_after && $cs_stored && $code_now === (string) $cs_stored->code, wp_json_encode( array( $on_before, $rst, $on_after ) ) );
 		}
 	} finally {
 		if ( is_int( $cs_id ) && $cs_id > 1 && function_exists( 'Code_Snippets\\delete_snippet' ) ) {

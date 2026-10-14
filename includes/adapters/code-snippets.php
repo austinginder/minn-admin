@@ -39,6 +39,20 @@ function minn_admin_code_snippets_cap() {
 	return 'manage_options';
 }
 
+/**
+ * A row id as Minn's own Code Snippets routes take it: a site snippet's
+ * number, or network:<number> for a shared network snippet, which is how
+ * Minn's reading of the list names those rows (the list filter below).
+ *
+ * @param string $raw Route id.
+ * @return array{0:int,1:bool} The snippet id and whether it is the network's.
+ */
+function minn_admin_code_snippets_row_id( $raw ) {
+	$raw     = (string) $raw;
+	$network = 0 === strpos( $raw, 'network:' );
+	return array( (int) ( $network ? substr( $raw, 8 ) : $raw ), $network );
+}
+
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! defined( 'CODE_SNIPPETS_VERSION' ) ) {
 		return $surfaces;
@@ -101,6 +115,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'status'     => array( 'route' => 'minn-admin/v1/code-snippets/status' ),
 		'collection' => array(
 			'route'     => 'code-snippets/v1/snippets',
+			// Asks for shared network rows under their own ids (the
+			// rest_request_after_callbacks filter below).
+			'query'     => 'minn_view=1',
 			'pageQuery' => 'per_page=25&page={page}',
 			// Their list endpoint has no free-text search; names are scannable
 			// in the title column and full code is editable in the detail.
@@ -150,6 +167,8 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				// PUT with {active} is the reliable toggle path; the dedicated
 				// /activate|/deactivate routes exist but return an unprepared
 				// Snippet object that can 500 under rest_ensure_response.
+				// Deactivate goes through Minn's route, which knows a shared
+				// network row's id and asks Code Snippets in that scope.
 				array(
 					'label'  => __( 'Activate', 'minn-admin' ),
 					'method' => 'PUT',
@@ -159,9 +178,8 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				),
 				array(
 					'label'  => __( 'Deactivate', 'minn-admin' ),
-					'method' => 'PUT',
-					'route'  => 'code-snippets/v1/snippets/{id}',
-					'body'   => array( 'active' => false ),
+					'method' => 'POST',
+					'route'  => 'minn-admin/v1/code-snippets/{id}/deactivate',
 					'when'   => array( 'key' => 'active', 'equals' => true ),
 				),
 				array(
@@ -187,9 +205,8 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				),
 				array(
 					'label'  => __( 'Deactivate', 'minn-admin' ),
-					'method' => 'PUT',
-					'route'  => 'code-snippets/v1/snippets/{id}',
-					'body'   => array( 'active' => false ),
+					'method' => 'POST',
+					'route'  => 'minn-admin/v1/code-snippets/{id}/deactivate',
 					'when'   => array( 'key' => 'active', 'equals' => true ),
 				),
 				array(
@@ -208,9 +225,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		unset( $surfaces['code-snippets']['collection']['detail']['edit'] );
 		// The page still shows the snippet, read-only, from a view of Minn's
 		// own that answers GET alone, so there is no write for the client to
-		// send through it. detailRoute stays: Deactivate keys on its fresh
-		// active flag.
-		$surfaces['code-snippets']['collection']['detail']['sectionsRoute'] = 'minn-admin/v1/code-snippets/{id}';
+		// send through it. Their detail route goes: it takes the id alone,
+		// so it cannot name a shared network row, and its 404 for one would
+		// stop the view loading. Deactivate keys on the list row's flag.
+		$surfaces['code-snippets']['collection']['detail'] = array( 'sectionsRoute' => 'minn-admin/v1/code-snippets/{id}' );
 		// Activating a snippet runs its code. Deactivating one stops code
 		// running, so it stays available on a hardened site.
 		// Identify the activation by the request it sends, never by its label:
@@ -320,16 +338,51 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
+	// On a network a site's list carries the network's shared snippets under
+	// their network-table ids, which can equal a site snippet's, and every
+	// route that takes the id alone reads the site table: opening a shared
+	// row showed the site snippet with the same number, and Deactivate
+	// switched that one off. Minn's reading of the list (minn_view=1) names
+	// those rows network:<id>, which only Minn's routes below take and pass
+	// on as network=true; their own routes answer 404 for one rather than
+	// act on the wrong snippet. Their screens and every other client get
+	// the list as they ship it.
+	add_filter( 'rest_request_after_callbacks', function ( $response, $handler, $request ) {
+		if ( ! $response instanceof WP_REST_Response || $response->is_error()
+			|| ! $request instanceof WP_REST_Request
+			|| 'GET' !== $request->get_method()
+			|| '/code-snippets/v1/snippets' !== $request->get_route()
+			|| ! $request->get_param( 'minn_view' ) ) {
+			return $response;
+		}
+		$items = $response->get_data();
+		if ( ! is_array( $items ) ) {
+			return $response;
+		}
+		foreach ( $items as $i => $item ) {
+			if ( is_array( $item ) && ! empty( $item['shared_network'] ) && isset( $item['id'] ) && is_numeric( $item['id'] ) ) {
+				$items[ $i ]['id'] = 'network:' . (int) $item['id'];
+			}
+		}
+		$response->set_data( $items );
+		return $response;
+	}, 10, 3 );
+
 	// One snippet, read-only: the snippet page on a site that disallows code
 	// edits. It reads through their own route, so their capability and
 	// network rules decide what it returns, and it registers GET alone.
-	register_rest_route( 'minn-admin/v1', '/code-snippets/(?P<id>\d+)', array(
+	register_rest_route( 'minn-admin/v1', '/code-snippets/(?P<id>(?:network:)?\d+)', array(
 		'methods'             => 'GET',
 		'permission_callback' => function () {
 			return current_user_can( minn_admin_code_snippets_cap() );
 		},
 		'callback'            => function ( WP_REST_Request $request ) {
-			$res = rest_do_request( new WP_REST_Request( 'GET', '/code-snippets/v1/snippets/' . (int) Minn_Admin::path_param( $request ) ) );
+			list( $id, $network ) = minn_admin_code_snippets_row_id( Minn_Admin::path_param( $request ) );
+			$inner                = new WP_REST_Request( 'GET', '/code-snippets/v1/snippets/' . $id );
+			if ( $network ) {
+				$inner->set_param( 'network', true );
+			}
+			$res = rest_do_request( $inner );
 			if ( $res->is_error() ) {
 				return $res->as_error();
 			}
@@ -352,6 +405,34 @@ add_action( 'rest_api_init', function () {
 				return '' !== $r['value'];
 			} ) );
 			return rest_ensure_response( array( 'sections' => array( array( 'title' => __( 'Snippet', 'minn-admin' ), 'rows' => $rows ) ) ) );
+		},
+	) );
+
+	// Deactivate, for a site row or a shared network row. It only ever
+	// switches a snippet off, through their own routes and their gates:
+	// the PUT the action always sent for a site snippet, and for a shared
+	// one their deactivate route in the network scope, which clears this
+	// site's own switch (active_shared_network_snippets).
+	register_rest_route( 'minn-admin/v1', '/code-snippets/(?P<id>(?:network:)?\d+)/deactivate', array(
+		'methods'             => 'POST',
+		'permission_callback' => function () {
+			return current_user_can( minn_admin_code_snippets_cap() );
+		},
+		'callback'            => function ( WP_REST_Request $request ) {
+			list( $id, $network ) = minn_admin_code_snippets_row_id( Minn_Admin::path_param( $request ) );
+			if ( $network ) {
+				$inner = new WP_REST_Request( 'POST', '/code-snippets/v1/snippets/' . $id . '/deactivate' );
+				$inner->set_param( 'network', true );
+			} else {
+				$inner = new WP_REST_Request( 'PUT', '/code-snippets/v1/snippets/' . $id );
+				$inner->set_header( 'content-type', 'application/json' );
+				$inner->set_body( wp_json_encode( array( 'active' => false ) ) );
+			}
+			$res = rest_do_request( $inner );
+			if ( $res->is_error() ) {
+				return $res->as_error();
+			}
+			return rest_ensure_response( array( 'message' => __( 'Snippet deactivated.', 'minn-admin' ) ) );
 		},
 	) );
 } );
