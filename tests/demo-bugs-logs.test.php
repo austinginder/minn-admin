@@ -532,4 +532,80 @@ if ( ! defined( 'WSAL_VERSION' ) || ! class_exists( 'WSAL\\Controllers\\Alert_Ma
 	}
 }
 
+
+// --- N9 Wordfence: a sign-out and the passkey codes read as what they are ---
+// Wordfence 9 also logs `logout` (fail 0), `loginPasskeyOK`, `loginFailPasskey`
+// and `loginFailPasskeyRequired`. A sign-out is neither a success nor a
+// failure, so it counts under neither, as on their own dashboard.
+if ( ! function_exists( 'minn_admin_wordfence_active' ) || ! class_exists( 'wfUtils' ) || ! minn_admin_wordfence_active() ) {
+	$skip( 'N9 Wordfence is not installed, or its login table is missing' );
+} else {
+	$n9_table = $wpdb->base_prefix . 'wfLogins';
+	$n9_ids   = array();
+	$n9_ok    = function ( $status ) {
+		foreach ( (array) ( $status['rows'] ?? array() ) as $r ) {
+			if ( 'Failed logins (24h)' === ( $r['label'] ?? '' ) ) {
+				return preg_match( '/([\d,]+)/', (string) ( $r['hint'] ?? '' ), $m ) ? (int) str_replace( ',', '', $m[1] ) : 0;
+			}
+		}
+		return null;
+	};
+	$n9_bar   = function ( $status ) {
+		$points = (array) ( $status['chart']['points'] ?? array() );
+		$today  = end( $points );
+		return is_array( $today ) ? (int) ( $today['value'] ?? 0 ) : null;
+	};
+	try {
+		list( , $n9_before ) = $call( 'GET', '/minn-admin/v1/wordfence/status' );
+		$ip = @wfUtils::inet_pton( '203.0.113.19' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		foreach ( array(
+			array( 'logout', 0, $marker . 'out' ),
+			array( 'loginPasskeyOK', 0, $marker . 'pk' ),
+			array( 'loginFailPasskey', 1, $marker . 'pkbad' ),
+			array( 'loginFailPasskeyRequired', 1, $marker . 'pkreq' ),
+		) as $i => $row ) {
+			$wpdb->insert( $n9_table, array( 'IP' => $ip, 'ctime' => time() - $i, 'fail' => $row[1], 'action' => $row[0], 'username' => $row[2], 'userID' => $row[1] ? 0 : $admin, 'UA' => 'Minn probe' ) );
+			$id = (int) $wpdb->insert_id;
+			if ( is_int( $id ) && $id > 1 ) {
+				$n9_ids[ $row[0] ] = $id;
+			}
+		}
+		list( , $n9_after ) = $call( 'GET', '/minn-admin/v1/wordfence/status' );
+		$n9_list = function ( $kind ) use ( $call, $marker, $n9_ids ) {
+			list( $st, $d ) = $call( 'GET', '/minn-admin/v1/wordfence/logins', null, array( 'search' => $marker, 'kind' => $kind, 'per_page' => 25, 'page' => 1 ) );
+			$out = array();
+			foreach ( (array) ( $d['items'] ?? array() ) as $it ) {
+				$code = array_search( (int) $it['id'], $n9_ids, true );
+				if ( false !== $code ) {
+					$out[ $code ] = $it;
+				}
+			}
+			return array( $st, $out );
+		};
+		list( $st, $all ) = $n9_list( '' );
+		if ( 4 !== count( $n9_ids ) || 200 !== $st || 4 !== count( $all ) ) {
+			$check( 'N9 the seeded rows list', false, $st . ' ' . count( $all ) );
+		} else {
+			$out = $all['logout'];
+			$check( 'N9 a sign-out\'s level and message say Signed out', 'Signed out' === $card( $out )['level'] && 0 === strpos( (string) $out['message'], 'Signed out' ), $card( $out )['level'] . ' / ' . $out['message'] );
+			$check( 'N9 a sign-out\'s result is neither success nor failed', ! in_array( $out['result'], array( 'success', 'failed' ), true ), (string) $out['result'] );
+			list( , $ok_tab )   = $n9_list( 'success' );
+			list( , $fail_tab ) = $n9_list( 'failed' );
+			$check( 'N9 the Successful and Failed tabs leave the sign-out out', ! isset( $ok_tab['logout'] ) && ! isset( $fail_tab['logout'] ) && isset( $ok_tab['loginPasskeyOK'] ), wp_json_encode( array( array_keys( $ok_tab ), array_keys( $fail_tab ) ) ) );
+			$a = $n9_ok( $n9_before );
+			$b = $n9_ok( $n9_after );
+			$check( 'N9 the status card counts the passkey sign-in as successful and not the sign-out', null !== $a && $b === $a + 1, $a . ' → ' . $b );
+			$check( 'N9 and so does today\'s Successful bar', null !== $n9_bar( $n9_before ) && $n9_bar( $n9_after ) === $n9_bar( $n9_before ) + 1, $n9_bar( $n9_before ) . ' → ' . $n9_bar( $n9_after ) );
+			$check( 'N9 the passkey codes read in words', 'Signed in with a passkey' === $card( $all['loginPasskeyOK'] )['level'] && 'Failed passkey login' === $card( $all['loginFailPasskey'] )['level'] && 'Login blocked (passkey required)' === $card( $all['loginFailPasskeyRequired'] )['level'], wp_json_encode( array( $card( $all['loginPasskeyOK'] )['level'], $card( $all['loginFailPasskey'] )['level'], $card( $all['loginFailPasskeyRequired'] )['level'] ) ) );
+			$check( 'N9 control: passkey results are success and failed', 'success' === $all['loginPasskeyOK']['result'] && 'failed' === $all['loginFailPasskey']['result'] && 'failed' === $all['loginFailPasskeyRequired']['result'] );
+		}
+	} finally {
+		foreach ( $n9_ids as $id ) {
+			if ( is_int( $id ) && $id > 1 ) {
+				$wpdb->delete( $n9_table, array( 'id' => $id ) );
+			}
+		}
+	}
+}
+
 $summary();

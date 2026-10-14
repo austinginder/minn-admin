@@ -59,14 +59,21 @@ function minn_admin_wordfence_active() {
 	return $found && 0 === strcasecmp( (string) $found, $table );
 }
 
-/** Human label for a wfLogins action code. */
+/**
+ * Human label for a wfLogins action code: every code Wordfence 9's
+ * logLogin() calls write, plus the two older ones.
+ */
 function minn_admin_wordfence_action_label( $action, $fail ) {
 	$map = array(
-		'loginOK'                 => __( 'Signed in', 'minn-admin' ),
-		'loginFailValidUsername'  => __( 'Failed login (valid user)', 'minn-admin' ),
-		'loginFailInvalidUsername'=> __( 'Failed login (unknown user)', 'minn-admin' ),
-		'lockedOut'               => __( 'Locked out', 'minn-admin' ),
-		'blocked'                 => 'Blocked',
+		'loginOK'                  => __( 'Signed in', 'minn-admin' ),
+		'loginPasskeyOK'           => __( 'Signed in with a passkey', 'minn-admin' ),
+		'logout'                   => __( 'Signed out', 'minn-admin' ),
+		'loginFailValidUsername'   => __( 'Failed login (valid user)', 'minn-admin' ),
+		'loginFailInvalidUsername' => __( 'Failed login (unknown user)', 'minn-admin' ),
+		'loginFailPasskey'         => __( 'Failed passkey login', 'minn-admin' ),
+		'loginFailPasskeyRequired' => __( 'Login blocked (passkey required)', 'minn-admin' ),
+		'lockedOut'                => __( 'Locked out', 'minn-admin' ),
+		'blocked'                  => 'Blocked',
 	);
 	if ( isset( $map[ $action ] ) ) {
 		return $map[ $action ];
@@ -129,8 +136,10 @@ function minn_admin_wordfence_status_model() {
 		"SELECT COUNT(*) FROM {$table} WHERE fail = 1 AND ctime >= %d",
 		time() - DAY_IN_SECONDS
 	) );
+	// A sign-out is logged with fail = 0 but is no sign-in: their own
+	// dashboard leaves `logout` out of its successful logins, and so does this.
 	$ok_24h = (int) $wpdb->get_var( $wpdb->prepare(
-		"SELECT COUNT(*) FROM {$table} WHERE fail = 0 AND ctime >= %d",
+		"SELECT COUNT(*) FROM {$table} WHERE fail = 0 AND action <> 'logout' AND ctime >= %d",
 		time() - DAY_IN_SECONDS
 	) );
 	// Fourteen site-local days of logins, failures split out. ctime is a UTC
@@ -138,7 +147,7 @@ function minn_admin_wordfence_status_model() {
 	$days   = minn_admin_chart_days();
 	$day_ex = minn_admin_chart_epoch_day_sql( 'ctime' );
 	$series = $wpdb->get_results( $wpdb->prepare(
-		"SELECT {$day_ex} AS d, COUNT(*) AS c, SUM(CASE WHEN fail = 1 THEN 1 ELSE 0 END) AS f
+		"SELECT {$day_ex} AS d, SUM(CASE WHEN fail = 0 AND action <> 'logout' THEN 1 ELSE 0 END) AS s, SUM(CASE WHEN fail = 1 THEN 1 ELSE 0 END) AS f
 		 FROM {$table} WHERE ctime >= %d GROUP BY d",
 		minn_admin_chart_epoch_since()
 	) );
@@ -146,7 +155,7 @@ function minn_admin_wordfence_status_model() {
 	foreach ( (array) $series as $row ) {
 		$d = minn_admin_chart_epoch_bucket_day( $row->d );
 		// The soft bar is value + secondary, so the two series stay disjoint.
-		minn_admin_chart_bump( $days, $d, false, (int) $row->c - (int) $row->f );
+		minn_admin_chart_bump( $days, $d, false, (int) $row->s );
 		minn_admin_chart_bump( $days, $d, true, (int) $row->f );
 	}
 
@@ -208,7 +217,7 @@ add_action( 'rest_api_init', function () {
 			if ( 'failed' === $kind ) {
 				$where = 'fail = 1';
 			} elseif ( 'success' === $kind ) {
-				$where = 'fail = 0';
+				$where = "fail = 0 AND action <> 'logout'";
 			}
 			if ( $request['search'] ) {
 				$like   = '%' . $wpdb->esc_like( (string) $request['search'] ) . '%';
@@ -242,7 +251,8 @@ add_action( 'rest_api_init', function () {
 						. ( $r->username ? ': ' . $r->username : '' ),
 					'who'     => $r->username ? $r->username : '—',
 					'ip'      => $ip ? $ip : '—',
-					'result'  => ( (int) $r->fail ) ? 'failed' : 'success',
+					// A sign-out is neither (their dashboard counts it as no sign-in).
+					'result'  => ( (int) $r->fail ) ? 'failed' : ( 'logout' === $r->action ? 'signed-out' : 'success' ),
 					// The event page reads this as the level: their code
 					// ("loginOK") in words.
 					'action'  => minn_admin_wordfence_action_label( $r->action, (int) $r->fail ),
