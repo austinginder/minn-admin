@@ -2,7 +2,9 @@
  * JetReviews moderation surface. Reviews live in {prefix}jet_reviews with
  * approved 0/1; approve/unapprove mirror their toggle endpoint (table update
  * + source rating sync), delete mirrors their delete endpoint. The suite
- * seeds a pending review through their Data::add_new_review and removes it.
+ * seeds a pending review through their Data::add_new_review, its ratings in
+ * the shape their submit endpoint stores (maybe_serialize of field_label /
+ * field_value / field_step / field_max per question), and removes it.
  */
 const { BASE, launch, login, loginAs, reporter } = require( './helpers' );
 const { evalPhp, apiFor, paintSurface } = require( './_jet-common' );
@@ -13,7 +15,7 @@ const { evalPhp, apiFor, paintSurface } = require( './_jet-common' );
 	const api = apiFor( page );
 	let id = 0;
 	try {
-		const seeded = evalPhp( 'jr', `$d = \\Jet_Reviews\\Reviews\\Data::get_instance(); $r = $d->add_new_review( array( 'source' => 'post', 'post_id' => 1, 'post_type' => 'post', 'author' => get_user_by( 'login', 'admin' )->ID, 'date' => current_time( 'mysql' ), 'title' => 'Minn suite review', 'content' => 'Suite review body text', 'type_slug' => 'default', 'rating_data' => wp_json_encode( array( array( 'title' => 'Quality', 'value' => 60 ) ) ), 'rating' => 60, 'approved' => 0 ) ); echo (int) ( $r['insert_id'] ?? 0 );` );
+		const seeded = evalPhp( 'jr', `$d = \\Jet_Reviews\\Reviews\\Data::get_instance(); $r = $d->add_new_review( array( 'source' => 'post', 'post_id' => 1, 'post_type' => 'post', 'author' => get_user_by( 'login', 'admin' )->ID, 'date' => current_time( 'mysql' ), 'title' => 'Minn suite review', 'content' => 'Suite review body text', 'type_slug' => 'default', 'rating_data' => maybe_serialize( array( array( 'field_label' => 'Quality', 'field_value' => 3, 'field_step' => 1, 'field_max' => 5 ) ) ), 'rating' => 60, 'approved' => 0 ) ); echo (int) ( $r['insert_id'] ?? 0 );` );
 		id = parseInt( seeded, 10 ) || 0;
 		t.check( 'a pending review is seeded through JetReviews', id > 0, seeded.slice( 0, 80 ) );
 
@@ -25,7 +27,7 @@ const { evalPhp, apiFor, paintSurface } = require( './_jet-common' );
 		const detail = await api( `minn-admin/v1/jet-reviews/reviews/${ id }` );
 		t.check( 'detail is an entry card with reviewer message and the rating breakdown', detail.status === 200 && detail.body.kind === 'entry'
 			&& ( detail.body.sections || [] ).some( ( s ) => s.title === 'Reviewer' && s.rows.some( ( r ) => r.label === 'Message' && /Suite review body/.test( r.value ) ) )
-			&& ( detail.body.sections || [] ).some( ( s ) => s.title === 'Review' && s.rows.some( ( r ) => r.label === 'Quality' && r.value === '60' ) )
+			&& ( detail.body.sections || [] ).some( ( s ) => s.title === 'Review' && s.rows.some( ( r ) => r.label === 'Quality' && r.value === '3/5' ) )
 			&& /page=jet-reviews-list-page/.test( detail.body.adminUrl || '' ), JSON.stringify( ( detail.body.sections || [] ).map( ( s ) => s.title ) ) );
 		const approve = await api( `minn-admin/v1/jet-reviews/reviews/${ id }/approve`, { method: 'POST', body: { approved: true } } );
 		const stored = evalPhp( 'jr2', `global $wpdb; echo (int) $wpdb->get_var( $wpdb->prepare( "SELECT approved FROM {$wpdb->prefix}jet_reviews WHERE id = %d", ${ id } ) );` );
