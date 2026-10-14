@@ -72,6 +72,31 @@ minn_admin_resource( 'everest/entries', array(
 ) );
 ```
 
+### Three tiers: nothing is dropped
+
+Many hand-written routes exist because nothing generic could do the job. The
+kernel keeps every one of them, in one of three tiers. The inventory sorts
+the 489 routes at v0.45.0 by what they do (485 parse; 4 build their namespace
+in code and show as unclassified):
+
+| Tier | Routes | Kinds |
+|---|---|---|
+| **Declared** | 345 (71%) | 112 lists, 82 status cards and charts, 78 single items (read, save, delete), 73 item actions (spam, trash, approve, mark read, recheck) |
+| **Kernel handler** | 140 (29%) | 36 jobs (run, backup, import, export, purge), 30 schema and builder, 25 send, preview and retry, 20 other writes (create, reorder, cleanup), 13 settings tabs, 11 activate, toggle and licence, 5 pickers |
+
+1. **Declared.** The generic shapes. Even here the vendor-specific part stays
+   in the adapter as a small callback: a status card's numbers, the call that
+   marks an entry spam.
+2. **Kernel handler.** Anything specialised registers through the kernel,
+   `minn_admin_endpoint()`, and keeps its own logic in a handler. The kernel
+   still owns the route under `minn-admin/v1`, the required gate, ids from the
+   URL, the write fence, the error shape and refusal reporting. This is the
+   escape hatch: nothing becomes impossible, and these routes count as
+   kernel-owned for the ratchet.
+3. **Left as it is.** Shapes the kernel does not fit stay untouched until a
+   primitive exists: the licence manager, the editor field panels, the
+   settings mappers and the Gravity Forms builder. No port is forced.
+
 ### Sources, vendor first
 
 In order of preference:
@@ -130,6 +155,25 @@ registered resource and checks:
 Per-adapter suites then cover only vendor-specific behaviour, and their
 security checks can be deleted as each family ports.
 
+### Parity before a port counts
+
+A port must not drop or change anything people use, and that is checked, not
+promised:
+
+1. **Capture before the port.** For every route an adapter has, record its
+   path and methods and, on the lab, its response shape: keys, types and
+   nesting for a list, an item and each action, as each role the route admits.
+   Record which browser suites cover the adapter.
+2. **Diff after the port.** The ported adapter must register the same routes
+   with the same methods, answer with the same shapes for the same roles, and
+   pass its suites. The bespoke client pages (the booking page, entry pages,
+   the subscription page) read exact response shapes, so a shape change is
+   the realistic way a feature breaks, and the diff is where it shows.
+3. **Only then is it ported.** An adapter counts as kernel on the dashboard
+   once its parity diff is empty and its suites are green. A difference is
+   either fixed in the port or recorded as a deliberate change with its
+   reason.
+
 ### A ratchet
 
 The number of hand-written REST routes in `includes/adapters/` (489 at
@@ -138,22 +182,25 @@ rises.
 
 ## v0.46 scope
 
-1. **The kernel and the conformance runner.** Roughly 2,000 to 3,000 lines of
-   PHP. It gets the release's full audit attention: a kernel bug would reach
-   every ported adapter at once.
-2. **Port form entries first.** The densest bug family in both the audit and
+1. **The parity capture and diff tool, first.** Before any kernel code, so the
+   current behaviour of every adapter is on record. It also captures the
+   whole lab once as the v0.45.0 reference.
+2. **The kernel and the conformance runner,** with both the declared and the
+   handler tier. Roughly 2,000 to 3,000 lines of PHP. It gets the release's
+   full audit attention: a kernel bug would reach every ported adapter at once.
+3. **Port form entries first.** The densest bug family in both the audit and
    the demo. Keep route paths and descriptor shapes, so the forms suites
    (about 300 checks) are the regression net with no rewrites. Delete the code
-   and per-adapter security checks the kernel replaces, and record the net
-   line change in the inventory.
-3. **Turn on the ratchet.**
-4. **Two light fences for unported adapters:** value redaction on every
+   and per-adapter security checks the kernel replaces, prove parity, and
+   record the net line change in the inventory.
+4. **Turn on the ratchet.**
+5. **Two light fences for unported adapters:** value redaction on every
    `minn-admin/v1` response, and the shared preview policy already applied to
    Gravity Forms.
-5. **Leftovers from the v0.45 hardening:** the screens that still send whole
+6. **Leftovers from the v0.45 hardening:** the screens that still send whole
    records (post type and taxonomy definitions, site appearance, role
    defaults, the global-styles Undo), and the multisite subsite Users list.
-6. **Keep the kernel API internal** until a second family ports cleanly.
+7. **Keep the kernel API internal** until a second family ports cleanly.
 
 Out of scope for v0.46: the licence manager (7,060 lines), the editor field
 panels (ACF, ACPT, Meta Box), the settings mappers, network and WooCommerce
@@ -164,12 +211,14 @@ entity handling.
 
 An estimate, to be replaced by measurement:
 
-- collection adapters about 50 to 65% smaller (52,151 lines today);
+- collection adapters about 40 to 55% smaller (52,151 lines today). The
+  declared tier is where the savings come from; a handler keeps its logic and
+  loses only its plumbing;
 - everything else about 5 to 10% smaller at first;
-- the adapter layer from 86,450 lines to roughly 52,000 to 60,000, with the
+- the adapter layer from 86,450 lines to roughly 55,000 to 64,000, with the
   kernel adding 2,000 to 3,000;
-- hand-written routes and permission callbacks in ported families close to
-  zero, replaced by a few gate declarations per resource.
+- hand-written routes in ported families at zero: each becomes a declaration
+  or a kernel handler, with a gate declared once per verb.
 
 ## Measuring progress
 
@@ -177,11 +226,11 @@ After each port, and at each release:
 
 ```bash
 node bin/adapter-inventory.js --record "forms ported"   # appends a snapshot to bin/adapter-inventory/history.json
-node bin/adapter-inventory.js --out /tmp/minn-inventory  # adapters.json for the current tree
+node bin/adapter-inventory.js --out /tmp/minn-inventory  # adapters.json and routes.json for the current tree
 ```
 
-Commit the history with the port, then upload `history.json` and
-`adapters.json` to the rollout dashboard. The v0.45.0 adapter list is the
+Commit the history with the port, then upload `history.json`,
+`adapters.json` and `routes.json` to the rollout dashboard. The v0.45.0 adapter list is the
 fixed baseline every change is measured against
 (`node bin/adapter-inventory.js --ref v0.45.0 --out <dir>`).
 
@@ -198,6 +247,9 @@ fixed baseline every change is measured against
 
 ## Risks
 
+- **Feature drop.** A port that silently loses or reshapes something. The
+  handler tier means nothing has to be dropped, and the parity diff means
+  nothing can be dropped unnoticed.
 - **Concentration.** A kernel mistake breaks every ported adapter. The runner,
   the audit focus and porting one family at a time are the mitigation.
 - **Vendor drift.** A vendor's REST shape or API can change; sources guard on
