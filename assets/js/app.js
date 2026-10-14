@@ -980,14 +980,14 @@
 		return esc( chromeLabel( stripTags( str ) ) );
 	}
 
-	// Vendor slugs ("payment_pending", "no-show") read as words. A
-	// parenthetical is detail and keeps its words as they came: "Failed login
-	// (unknown user)", not "(Unknown User)".
+	// A vendor slug ("payment_pending", "no-show", "SENT") is tidied into
+	// words. A label the server already wrote ("Signed in", "Failed login
+	// (unknown user)", a translated status) shows as sent: re-casing it read
+	// "Signed In" beside the page's own "Signed in".
 	function statusLabel( value ) {
-		const raw = String( value || '' ).replace( /[-_]/g, ' ' );
-		const cut = raw.indexOf( '(' );
-		const head = cut < 0 ? raw : raw.slice( 0, cut );
-		return chromeLabel( head.replace( /(^|\s)\S/g, ( c ) => c.toUpperCase() ) + ( cut < 0 ? '' : raw.slice( cut ) ) );
+		const raw = String( value == null ? '' : value ).trim();
+		if ( ! /^[A-Za-z0-9_-]+$/.test( raw ) ) return chromeLabel( raw );
+		return chromeLabel( raw.toLowerCase().replace( /[-_]/g, ' ' ).replace( /(^|\s)\S/g, ( c ) => c.toUpperCase() ) );
 	}
 
 	// ‹ 1 … 4 [5] 6 … 20 › — first, last and a window around the current page.
@@ -19276,7 +19276,7 @@
 		if ( PILL_STYLES.green.includes( v ) ) cls = 'publish';
 		else if ( PILL_STYLES.red.includes( v ) ) cls = 'trash-status';
 		else if ( PILL_STYLES.amber.includes( v ) ) cls = 'private';
-		return `<span class="minn-status ${ cls }">${ esc( v ? statusLabel( v ) : '—' ) }</span>`;
+		return `<span class="minn-status ${ cls }">${ esc( v ? statusLabel( value ) : '—' ) }</span>`;
 	}
 
 	// Sandboxed HTML previews (logged emails, form notifications) block remote
