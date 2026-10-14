@@ -200,6 +200,13 @@ try {
 			$want = wp_date( 'M j, Y g:i a', $sf_now_ts );
 			$check( 'D-04 SureForms: the entry header and Submission panel get the date on the site\'s clock, not a raw ISO string', $sub && $want === $sub['value'], $st . ' got ' . wp_json_encode( $sub['value'] ?? null ) . ' want ' . wp_json_encode( $want ) );
 
+			// S8: the Submission panel repeated the status as a raw word
+			// beneath the page's own pill. The pill and the action gates read
+			// the entry's status from the route's item, so it stays there.
+			$status_row = $row_of( $sec, __( 'Status', 'minn-admin' ) );
+			$check( 'S8 SureForms: the Submission panel has no raw Status row', null === $status_row, wp_json_encode( $status_row ) );
+			$check( 'S8 SureForms: the route still hands the page the entry\'s status', 'unread' === ( $sec['item']['status'] ?? null ), wp_json_encode( $sec['item'] ?? null ) );
+
 			// D-14: the list opened on Unread, so read entries stayed hidden
 			// until someone picked Read.
 			$surface = Minn_Admin_Surfaces::all()['sureforms'] ?? array();

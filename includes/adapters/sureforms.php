@@ -433,7 +433,6 @@ add_action( 'rest_api_init', function () {
 				$meta   = array(
 					array( 'label' => __( 'Form', 'minn-admin' ), 'value' => isset( $titles[ (int) $row->form_id ] ) ? $titles[ (int) $row->form_id ] : ( '#' . (int) $row->form_id ) ),
 					array( 'label' => __( 'Entry', 'minn-admin' ), 'value' => '#' . (int) $row->ID ),
-					array( 'label' => __( 'Status', 'minn-admin' ), 'value' => (string) $row->status ),
 				);
 				// The entry header and the Submission panel print this as it
 				// comes, so it is a date on the site's clock, as on the other
@@ -466,8 +465,14 @@ add_action( 'rest_api_init', function () {
 				if ( $activity ) {
 					$sections[] = array( 'title' => __( 'Activity', 'minn-admin' ), 'rows' => $activity );
 				}
+				// The status rides the item, not the panel: the page's pill and
+				// its action gates read it there, also when opened by a link.
 				return rest_ensure_response( array(
 					'kind'     => 'entry',
+					'item'     => array(
+						'id'     => (int) $row->ID,
+						'status' => (string) $row->status,
+					),
 					'sections' => $sections,
 					'adminUrl' => admin_url( 'admin.php?page=sureforms_entries&entry_id=' . (int) $row->ID ),
 				) );
