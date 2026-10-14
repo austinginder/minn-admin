@@ -5,9 +5,10 @@
  * Forms live in Elementor Pro only (free Elementor has no form widget).
  * Submissions sit in {prefix}e_submissions + e_submissions_values; Elementor
  * exposes elementor/v1/form-submissions, but the envelope (data/meta.pagination)
- * and nested form/main shapes don't match Minn's collection primitives, so
- * this shim normalizes via Elementor's own Query class. Cap matches theirs:
- * manage_options.
+ * and nested form/main shapes don't match Minn's collection primitives. The
+ * submissions are a kernel resource (docs/adapter-kernel.md) whose source is
+ * Elementor's own Query class: the kernel owns the routes, gates and errors,
+ * this file maps Elementor's rows. Cap matches theirs: manage_options.
  *
  * @package minn-admin
  */
@@ -59,6 +60,11 @@ function minn_admin_elementor_forms_ready() {
  */
 function minn_admin_elementor_forms_can_view() {
 	return current_user_can( 'manage_options' );
+}
+
+/** Elementor's Query, which owns every read and write of a submission. */
+function minn_admin_elementor_forms_query() {
+	return \ElementorPro\Modules\Forms\Submissions\Database\Query::get_instance();
 }
 
 /**
@@ -120,25 +126,171 @@ function minn_admin_elementor_forms_item( $sub ) {
 }
 
 /**
+ * One submission as Elementor's Query reads it, or null. It carries the
+ * Received / Trash bucket the actions are offered by.
+ *
+ * @param int $id Submission id.
+ * @return array|null
+ */
+function minn_admin_elementor_forms_get( $id ) {
+	$raw = minn_admin_elementor_forms_query()->get_submission( (int) $id );
+	if ( ! $raw || empty( $raw['data'] ) ) {
+		return null;
+	}
+	$sub           = $raw['data'];
+	$sub['bucket'] = ( ! empty( $sub['status'] ) && 'trash' === $sub['status'] ) ? 'trash' : 'inbox';
+	return $sub;
+}
+
+/** Whether the submission row is still in Elementor's table. */
+function minn_admin_elementor_forms_exists( $id ) {
+	return null !== Minn_Admin_Kernel_SQL::row( 'e_submissions', 'id', (int) $id, array( 'id' ) );
+}
+
+/**
+ * A page of submissions through Elementor's own Query: their status filter
+ * (all is everything not trashed), their search, their form key
+ * ("<post>_<element>"), and their date filter for a status-chart day rather
+ * than a hand-built clause: it takes the day only (Y-m-d), appends the day's
+ * edges itself and converts to UTC with get_gmt_from_date, which is exactly
+ * the conversion the site-local bounds need.
+ *
+ * @param array $q The kernel's list query.
+ * @return array [ rows, total ]
+ */
+function minn_admin_elementor_forms_list( array $q ) {
+	$request = $q['request'];
+	$filters = array( 'status' => array( 'value' => $q['filter'] ) );
+	if ( '' !== $q['search'] ) {
+		$filters['search'] = array( 'value' => $q['search'] );
+	}
+	if ( $request['form'] ) {
+		$filters['form'] = array( 'value' => (string) $request['form'] );
+	}
+	foreach ( array( 'after', 'before' ) as $bound_key ) {
+		$bound = (string) $request->get_param( $bound_key );
+		if ( '' !== $bound ) {
+			$filters[ $bound_key ] = array( 'value' => substr( $bound, 0, 10 ) );
+		}
+	}
+	$result = minn_admin_elementor_forms_query()->get_submissions( array(
+		'page'             => $q['page'],
+		'per_page'         => $q['per_page'],
+		'filters'          => $filters,
+		'order'            => array( 'order' => 'desc', 'by' => 'created_at' ),
+		'with_meta'        => true,
+		'with_form_fields' => false,
+	) );
+	$rows  = (array) ( $result['data'] ?? array() );
+	$total = isset( $result['meta']['pagination']['total'] ) ? (int) $result['meta']['pagination']['total'] : count( $rows );
+	return array( $rows, $total );
+}
+
+/** A submission's detail; opening it marks it read, as their screen does. */
+function minn_admin_elementor_forms_view( array $sub ) {
+	// Prefer field labels from the form snapshot when present.
+	$labels = array();
+	if ( ! empty( $sub['form']['fields'] ) && is_array( $sub['form']['fields'] ) ) {
+		foreach ( $sub['form']['fields'] as $field ) {
+			if ( empty( $field['id'] ) ) {
+				continue;
+			}
+			$labels[ $field['id'] ] = ! empty( $field['label'] )
+				? wp_strip_all_tags( (string) $field['label'] )
+				: (string) $field['id'];
+		}
+	}
+
+	$answers = array();
+	foreach ( (array) ( $sub['values'] ?? array() ) as $v ) {
+		$key = isset( $v['key'] ) ? (string) $v['key'] : '';
+		$val = isset( $v['value'] ) ? (string) $v['value'] : '';
+		if ( '' === trim( $val ) ) {
+			continue;
+		}
+		$label     = $labels[ $key ] ?? ucwords( str_replace( array( '_', '-' ), ' ', $key ) );
+		$answers[] = array(
+			'label' => $label,
+			'value' => $val,
+			'type'  => ( false !== strpos( $key, 'email' ) || is_email( $val ) ) ? 'email'
+				: ( ( 0 === strpos( $val, 'http' ) ) ? 'url' : 'text' ),
+		);
+	}
+
+	$meta   = array();
+	$meta[] = array(
+		'label' => __( 'Submitted', 'minn-admin' ),
+		'value' => ! empty( $sub['created_at'] )
+			? date_i18n( 'M j, Y g:i a', strtotime( $sub['created_at'] ) )
+			: '',
+	);
+	if ( ! empty( $sub['form']['name'] ) ) {
+		$meta[] = array( 'label' => __( 'Form', 'minn-admin' ), 'value' => $sub['form']['name'] );
+	}
+	if ( ! empty( $sub['referer'] ) ) {
+		$meta[] = array(
+			'label' => __( 'Page', 'minn-admin' ),
+			'value' => ! empty( $sub['referer_title'] )
+				? $sub['referer_title'] . ' · ' . $sub['referer']
+				: $sub['referer'],
+			'type'  => 'url',
+		);
+	}
+	if ( ! empty( $sub['user_ip'] ) ) {
+		$meta[] = array( 'label' => 'IP', 'value' => $sub['user_ip'] );
+	}
+	if ( ! empty( $sub['user_name'] ) ) {
+		$meta[] = array( 'label' => __( 'User', 'minn-admin' ), 'value' => $sub['user_name'] );
+	}
+
+	$item = minn_admin_elementor_forms_item( $sub );
+
+	// The entry counts as read only when their update landed: the item below
+	// carries that state to the page's gates.
+	if ( empty( $sub['is_read'] ) && ( empty( $sub['status'] ) || 'trash' !== $sub['status'] )
+		&& minn_admin_elementor_forms_query()->update_submission( (int) $sub['id'], array( 'is_read' => 1 ) ) ) {
+		$item['status'] = 'read';
+	}
+
+	return array(
+		'kind'     => 'entry',
+		// Form name in the title; answers render in the entry body.
+		'title'    => $item['form_name'] ?: 'Submission',
+		'status'   => $item['status'],
+		// The row as it stands now, after opening marked it read:
+		// the page's actions gate on it, not on the list's copy.
+		'item'     => array(
+			'id'     => $item['id'],
+			'status' => $item['status'],
+			'bucket' => $item['bucket'],
+		),
+		'sections' => array(
+			array( 'title' => __( 'Responses', 'minn-admin' ), 'rows' => $answers ),
+			array( 'title' => __( 'Submission', 'minn-admin' ), 'rows' => $meta ),
+		),
+		'adminUrl' => admin_url( 'admin.php?page=e-form-submissions#/form-submissions/' . (int) $sub['id'] ),
+		// Editable answers (adapters/elementor-forms-entry-edit.php).
+		'edit'     => function_exists( 'minn_admin_elementor_edit_block' ) ? minn_admin_elementor_edit_block( $sub ) : null,
+	);
+}
+
+/**
  * Status card: unread/total from Elementor's own count_submissions_by_status,
  * form count from distinct widgets that have actually received a submission.
  *
  * @return array
  */
 function minn_admin_elementor_forms_status_model() {
-	$query  = \ElementorPro\Modules\Forms\Submissions\Database\Query::get_instance();
-	$counts = $query->count_submissions_by_status();
+	$counts = minn_admin_elementor_forms_query()->count_submissions_by_status();
 	$arr    = ( is_object( $counts ) && method_exists( $counts, 'all' ) ) ? $counts->all() : (array) $counts;
 	$unread = isset( $arr['unread'] ) ? (int) $arr['unread'] : 0;
 	$total  = isset( $arr['all'] ) ? (int) $arr['all'] : 0;
 	$trash  = isset( $arr['trash'] ) ? (int) $arr['trash'] : 0;
 
 	global $wpdb;
-	$table = $wpdb->prefix . 'e_submissions';
+	$table  = $wpdb->prefix . 'e_submissions';
 	$nforms = 0;
-	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- prefix-derived table.
-	$like = $wpdb->esc_like( $table );
-	$has  = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $like ) );
+	$has    = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) ) );
 	if ( $has ) {
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- prefix-derived table, no user input.
 		$nforms = (int) $wpdb->get_var(
@@ -151,24 +303,17 @@ function minn_admin_elementor_forms_status_model() {
 		$hint .= ', ' . number_format_i18n( $trash ) . ' trash';
 	}
 
-	// created_at_gmt is UTC: bucket each row onto the site's day in PHP.
-	$chart = minn_admin_chart_days();
-	if ( $has ) {
-		$chart_day  = minn_admin_chart_utc_day_sql( 'created_at_gmt' );
-		$chart_rows = $wpdb->get_results( $wpdb->prepare(
-			"SELECT {$chart_day} AS d, COUNT(*) AS c FROM `{$table}` WHERE status != 'trash' AND created_at_gmt >= %s GROUP BY d", // phpcs:ignore
-			minn_admin_chart_utc_since()
-		) );
-		foreach ( (array) $chart_rows as $cr ) {
-			minn_admin_chart_bump( $chart, (string) $cr->d, false, (int) $cr->c );
-		}
-	}
+	// created_at_gmt is UTC: the chart buckets each row onto the site's day.
+	$days = $has ? Minn_Admin_Kernel::inbox_counts( array(
+		'table' => 'e_submissions',
+		'chart' => array( 'column' => 'created_at_gmt', 'clock' => 'utc', 'where' => array( 'status' => array( 'not' => array( 'trash' ) ) ), 'split' => 'status' ),
+	) )['days'] : minn_admin_chart_days();
 	return array(
 		'rows'    => array(
 			array( 'label' => __( 'Unread entries', 'minn-admin' ), 'value' => number_format_i18n( $unread ), 'hint' => $hint ),
 			array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => number_format_i18n( $nforms ) ),
 		),
-		'chart'   => minn_admin_chart_build( $chart, __( 'Submissions', 'minn-admin' ) ),
+		'chart'   => minn_admin_chart_build( $days, __( 'Submissions', 'minn-admin' ) ),
 		'actions' => array(
 			array(
 				'label' => __( 'Open Elementor ↗', 'minn-admin' ),
@@ -178,6 +323,151 @@ function minn_admin_elementor_forms_status_model() {
 	);
 }
 
+/** An action's reply: the submission and the state the page shows next. */
+function minn_admin_elementor_forms_reply( $status ) {
+	return function ( $id ) use ( $status ) {
+		return array( 'id' => (int) $id, 'status' => $status );
+	};
+}
+
+// Elementor gates its submissions screen and data routes, reads and writes
+// alike, on manage_options. Trash, restore and mark read take a submission in
+// any state; a permanent delete only from the trash.
+minn_admin_resource( 'elementor/submissions', function () {
+	return array(
+		'active'  => 'minn_admin_elementor_forms_ready',
+		'gates'   => array(
+			'view'   => 'minn_admin_elementor_forms_can_view',
+			'manage' => 'minn_admin_elementor_forms_can_view',
+		),
+		'labels'  => array(
+			'not_found' => __( 'Submission not found.', 'minn-admin' ),
+		),
+		'source'  => array(
+			'list'   => 'minn_admin_elementor_forms_list',
+			'get'    => 'minn_admin_elementor_forms_get',
+			'exists' => 'minn_admin_elementor_forms_exists',
+		),
+		'list'    => array(
+			// Their Query filter_status: all (not trash) / unread / read / trash.
+			'filter' => array( 'param' => 'status', 'column' => 'status', 'values' => array( 'all', 'unread', 'read', 'trash' ), 'default' => 'all' ),
+			'search' => array( 'param' => 'search' ),
+			// Their date filter applies the day range (above); declared so the
+			// descriptor's day query comes from the resource.
+			'range'  => array( 'column' => 'created_at_gmt', 'clock' => 'utc' ),
+			'row'    => 'minn_admin_elementor_forms_item',
+			'fields' => array(
+				'id'        => 'int',
+				'summary'   => 'text',
+				'form_name' => 'text',
+				'form_key'  => 'text',
+				'status'    => 'text',
+				'bucket'    => 'text',
+				// created_at_gmt with a Z, built in the row.
+				'date'      => 'text',
+				'referer'   => 'text',
+			),
+		),
+		'item'    => array( 'view' => 'minn_admin_elementor_forms_view' ),
+		'actions' => array(
+			'read'    => array(
+				'gate'   => 'manage',
+				'run'    => function ( $id ) {
+					return minn_admin_elementor_forms_query()->update_submission( $id, array( 'is_read' => 1 ) );
+				},
+				'expect' => function ( $id, $fresh ) {
+					return is_array( $fresh ) && ! empty( $fresh['is_read'] );
+				},
+				'reply'  => minn_admin_elementor_forms_reply( 'read' ),
+				'done'   => __( 'Marked as read.', 'minn-admin' ),
+			),
+			'trash'   => array(
+				'gate'      => 'manage',
+				'run'       => function ( $id ) {
+					return false === minn_admin_elementor_forms_query()->move_to_trash_submission( $id )
+						? new WP_Error( 'trash_failed', __( 'Could not trash submission.', 'minn-admin' ), array( 'status' => 500 ) )
+						: true;
+				},
+				'expect'    => array( 'status' => 'trash' ),
+				'fail_code' => 'trash_failed',
+				'fail'      => __( 'Could not trash submission.', 'minn-admin' ),
+				'reply'     => minn_admin_elementor_forms_reply( 'trash' ),
+				'done'      => __( 'Moved to trash.', 'minn-admin' ),
+			),
+			'restore' => array(
+				'gate'      => 'manage',
+				'run'       => function ( $id ) {
+					return false === minn_admin_elementor_forms_query()->restore( $id )
+						? new WP_Error( 'restore_failed', __( 'Could not restore submission.', 'minn-admin' ), array( 'status' => 500 ) )
+						: true;
+				},
+				'expect'    => function ( $id, $fresh ) {
+					return is_array( $fresh ) && 'trash' !== (string) ( $fresh['status'] ?? '' );
+				},
+				'fail_code' => 'restore_failed',
+				'fail'      => __( 'Could not restore submission.', 'minn-admin' ),
+				'reply'     => minn_admin_elementor_forms_reply( 'unread' ),
+				'done'      => __( 'Submission restored.', 'minn-admin' ),
+			),
+			// Permanent delete only for trashed rows (Received goes to Trash first).
+			'delete'  => array(
+				'method'    => 'DELETE',
+				'gate'      => 'manage',
+				'when'      => array( 'bucket' => array( 'trash' ) ),
+				'code'      => 'not_trashed',
+				'refuse'    => __( 'Move the submission to trash before deleting permanently.', 'minn-admin' ),
+				'run'       => function ( $id ) {
+					return false === minn_admin_elementor_forms_query()->delete_submission( $id )
+						? new WP_Error( 'delete_failed', __( 'Could not delete submission.', 'minn-admin' ), array( 'status' => 500 ) )
+						: true;
+				},
+				'expect'    => 'gone',
+				'fail_code' => 'delete_failed',
+				'fail'      => __( 'Could not delete submission.', 'minn-admin' ),
+				'reply'     => function ( $id ) {
+					return array( 'id' => (int) $id, 'deleted' => true );
+				},
+				'done'      => __( 'Submission deleted permanently.', 'minn-admin' ),
+			),
+		),
+	);
+} );
+
+minn_admin_endpoint( 'elementor/status', array(
+	'active' => 'minn_admin_elementor_forms_ready',
+	'gate'   => 'minn_admin_elementor_forms_can_view',
+	'run'    => function () {
+		return minn_admin_elementor_forms_status_model();
+	},
+) );
+
+// Distinct forms that actually have submissions (the snapshot repository is
+// empty until a real Form widget saves; fixtures still need tabs).
+minn_admin_endpoint( 'elementor/forms', array(
+	'active' => 'minn_admin_elementor_forms_ready',
+	'gate'   => 'minn_admin_elementor_forms_can_view',
+	'run'    => function () {
+		global $wpdb;
+		$table = $wpdb->prefix . 'e_submissions';
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- prefix-derived table.
+		$rows = $wpdb->get_results(
+			"SELECT DISTINCT post_id, element_id, form_name
+			 FROM `{$table}`
+			 WHERE status != 'trash'
+			 ORDER BY form_name ASC"
+		);
+		$out  = array();
+		foreach ( (array) $rows as $r ) {
+			$key   = (int) $r->post_id . '_' . $r->element_id;
+			$out[] = array(
+				'id'    => $key,
+				'title' => $r->form_name ? (string) $r->form_name : $key,
+			);
+		}
+		return $out;
+	},
+) );
+
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! minn_admin_elementor_forms_ready() ) {
 		return $surfaces;
@@ -185,6 +475,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! minn_admin_elementor_forms_can_view() ) {
 		return $surfaces;
 	}
+	$ui = function ( $slug, $ui ) {
+		return Minn_Admin_Kernel::ui( 'elementor/submissions', $slug, $ui );
+	};
 
 	$surfaces['elementor-forms'] = array(
 		'label'      => __( 'Forms', 'minn-admin' ),
@@ -195,16 +488,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'icon'       => 'inbox',
 		'cap'        => 'read', // real gating above + in the shim.
 		'status'     => array( 'route' => 'minn-admin/v1/elementor/status' ),
-		'collection' => array(
+		// Route, paging, search, the status-chart day range and the filter
+		// query come from the resource, so they cannot drift from it.
+		'collection' => Minn_Admin_Kernel::collection( 'elementor/submissions', array(
 			'viewLabel' => __( 'Entries', 'minn-admin' ),
-			'route'     => 'minn-admin/v1/elementor/submissions',
-			// A status-chart bar narrows the list to that day (the chart's
-			// points carry from/to; the route reads after/before).
-			'dateQuery' => 'after={from}&before={to}',
-			'pageQuery' => 'per_page=25&page={page}',
-			'search'    => 'search={q}',
-			'itemsKey'  => 'items',
-			'totalKey'  => 'total',
 			'tabs'      => array(
 				'route'    => 'minn-admin/v1/elementor/forms',
 				'valueKey' => 'id',
@@ -212,7 +499,6 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'param'    => 'form',
 				'allLabel' => __( 'All entries', 'minn-admin' ),
 			),
-			// Their Query filter_status: all (not trash) / unread / read / trash.
 			'filter'    => array(
 				'label'   => __( 'Status', 'minn-admin' ),
 				'options' => array(
@@ -221,7 +507,6 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					array( 'read', 'Read' ),
 					array( 'trash', 'Trash' ),
 				),
-				'query'   => 'status={v}',
 			),
 			'columns'   => array(
 				array( 'key' => 'summary', 'label' => __( 'Entry', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
@@ -233,338 +518,21 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'sectionsRoute' => 'minn-admin/v1/elementor/submissions/{id}',
 			),
 			'actions'   => array(
-				array(
-					'label'  => __( 'Mark as read', 'minn-admin' ),
-					'method' => 'POST',
-					'route'  => 'minn-admin/v1/elementor/submissions/{id}/read',
-					'when'   => array( 'key' => 'status', 'equals' => 'unread' ),
-				),
-				array(
-					'label'   => __( 'Trash submission', 'minn-admin' ),
-					'method'  => 'POST',
-					'route'   => 'minn-admin/v1/elementor/submissions/{id}/trash',
-					'confirm' => __( 'Move this submission to trash?', 'minn-admin' ),
-					'danger'  => true,
-					'when'    => array( 'key' => 'bucket', 'equals' => 'inbox' ),
-				),
-				array(
-					'label'  => __( 'Restore', 'minn-admin' ),
-					'method' => 'POST',
-					'route'  => 'minn-admin/v1/elementor/submissions/{id}/restore',
-					'when'   => array( 'key' => 'bucket', 'equals' => 'trash' ),
-				),
-				array(
-					'label'   => __( 'Delete permanently', 'minn-admin' ),
-					'method'  => 'DELETE',
-					'route'   => 'minn-admin/v1/elementor/submissions/{id}',
-					'confirm' => __( 'Delete this submission permanently? There is no undo.', 'minn-admin' ),
-					'danger'  => true,
-					'when'    => array( 'key' => 'bucket', 'equals' => 'trash' ),
-				),
+				$ui( 'read', array( 'label' => __( 'Mark as read', 'minn-admin' ), 'when' => 'unread' ) ),
+				$ui( 'trash', array( 'label' => __( 'Trash submission', 'minn-admin' ), 'confirm' => __( 'Move this submission to trash?', 'minn-admin' ), 'danger' => true, 'key' => 'bucket', 'when' => 'inbox' ) ),
+				$ui( 'restore', array( 'label' => __( 'Restore', 'minn-admin' ), 'key' => 'bucket', 'when' => 'trash' ) ),
+				$ui( 'delete', array( 'label' => __( 'Delete permanently', 'minn-admin' ), 'confirm' => __( 'Delete this submission permanently? There is no undo.', 'minn-admin' ), 'danger' => true, 'when' => 'trash' ) ),
 				array(
 					'label' => __( 'Open in Elementor ↗', 'minn-admin' ),
 					'href'  => admin_url( 'admin.php?page=e-form-submissions#/form-submissions/{id}' ),
 				),
 			),
 			'bulk'      => array(
-				array(
-					'label'   => __( 'Trash', 'minn-admin' ),
-					'method'  => 'POST',
-					'route'   => 'minn-admin/v1/elementor/submissions/{id}/trash',
-					'confirm' => __( 'Move the selected submissions to trash?', 'minn-admin' ),
-					'danger'  => true,
-					'when'    => array( 'key' => 'bucket', 'equals' => 'inbox' ),
-				),
-				array(
-					'label'  => __( 'Restore', 'minn-admin' ),
-					'method' => 'POST',
-					'route'  => 'minn-admin/v1/elementor/submissions/{id}/restore',
-					'when'   => array( 'key' => 'bucket', 'equals' => 'trash' ),
-				),
-				array(
-					'label'   => __( 'Delete permanently', 'minn-admin' ),
-					'method'  => 'DELETE',
-					'route'   => 'minn-admin/v1/elementor/submissions/{id}',
-					'confirm' => __( 'Delete the selected submissions permanently?', 'minn-admin' ),
-					'danger'  => true,
-					'when'    => array( 'key' => 'bucket', 'equals' => 'trash' ),
-				),
+				$ui( 'trash', array( 'label' => __( 'Trash', 'minn-admin' ), 'confirm' => __( 'Move the selected submissions to trash?', 'minn-admin' ), 'danger' => true, 'key' => 'bucket', 'when' => 'inbox' ) ),
+				$ui( 'restore', array( 'label' => __( 'Restore', 'minn-admin' ), 'key' => 'bucket', 'when' => 'trash' ) ),
+				$ui( 'delete', array( 'label' => __( 'Delete permanently', 'minn-admin' ), 'confirm' => __( 'Delete the selected submissions permanently?', 'minn-admin' ), 'danger' => true, 'when' => 'trash' ) ),
 			),
-		),
+		) ),
 	);
 	return $surfaces;
-} );
-
-add_action( 'rest_api_init', function () {
-	if ( ! minn_admin_elementor_forms_ready() ) {
-		return;
-	}
-
-	register_rest_route( 'minn-admin/v1', '/elementor/status', array(
-		'methods'             => 'GET',
-		'permission_callback' => 'minn_admin_elementor_forms_can_view',
-		'callback'            => function () {
-			return rest_ensure_response( minn_admin_elementor_forms_status_model() );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/elementor/forms', array(
-		'methods'             => 'GET',
-		'permission_callback' => 'minn_admin_elementor_forms_can_view',
-		'callback'            => function () {
-			global $wpdb;
-			$table = $wpdb->prefix . 'e_submissions';
-			// Distinct forms that actually have submissions (snapshot repo is
-			// empty until a real Form widget saves; fixtures still need tabs).
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- prefix-derived table.
-			$rows = $wpdb->get_results(
-				"SELECT DISTINCT post_id, element_id, form_name
-				 FROM `{$table}`
-				 WHERE status != 'trash'
-				 ORDER BY form_name ASC"
-			);
-			$out = array();
-			foreach ( (array) $rows as $r ) {
-				$key = (int) $r->post_id . '_' . $r->element_id;
-				$out[] = array(
-					'id'    => $key,
-					'title' => $r->form_name ? (string) $r->form_name : $key,
-				);
-			}
-			return rest_ensure_response( $out );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/elementor/submissions', array(
-		'methods'             => 'GET',
-		'permission_callback' => 'minn_admin_elementor_forms_can_view',
-		'callback'            => function ( WP_REST_Request $request ) {
-			$query    = \ElementorPro\Modules\Forms\Submissions\Database\Query::get_instance();
-			$per_page = min( 100, max( 1, (int) ( $request['per_page'] ?: 25 ) ) );
-			$page     = max( 1, (int) ( $request['page'] ?: 1 ) );
-
-			// Their filter_status: all | unread | read | trash.
-			$status = sanitize_key( (string) ( $request['status'] ?: 'all' ) );
-			if ( ! in_array( $status, array( 'all', 'unread', 'read', 'trash' ), true ) ) {
-				$status = 'all';
-			}
-			$filters = array(
-				'status' => array( 'value' => $status ),
-			);
-			if ( $request['search'] ) {
-				$filters['search'] = array( 'value' => (string) $request['search'] );
-			}
-			if ( $request['form'] ) {
-				// Elementor filter expects post_id_element_id.
-				$filters['form'] = array( 'value' => (string) $request['form'] );
-			}
-			// A status-chart bar narrows the list to that day, through their
-			// OWN date filter rather than a hand-built clause: it takes the
-			// day only (Y-m-d), appends the day's edges itself and converts to
-			// UTC with get_gmt_from_date, which is exactly the conversion the
-			// site-local bounds need.
-			foreach ( array( 'after', 'before' ) as $bound_key ) {
-				$bound = (string) $request->get_param( $bound_key );
-				if ( '' !== $bound ) {
-					$filters[ $bound_key ] = array( 'value' => substr( $bound, 0, 10 ) );
-				}
-			}
-
-			$result = $query->get_submissions( array(
-				'page'             => $page,
-				'per_page'         => $per_page,
-				'filters'          => $filters,
-				'order'            => array( 'order' => 'desc', 'by' => 'created_at' ),
-				'with_meta'        => true,
-				'with_form_fields' => false,
-			) );
-
-			$items = array();
-			foreach ( (array) ( $result['data'] ?? array() ) as $sub ) {
-				$items[] = minn_admin_elementor_forms_item( $sub );
-			}
-
-			$total = isset( $result['meta']['pagination']['total'] )
-				? (int) $result['meta']['pagination']['total']
-				: count( $items );
-
-			return rest_ensure_response( array(
-				'items' => $items,
-				'total' => $total,
-			) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/elementor/submissions/(?P<id>\d+)', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => 'minn_admin_elementor_forms_can_view',
-			'callback'            => function ( WP_REST_Request $request ) {
-				$query = \ElementorPro\Modules\Forms\Submissions\Database\Query::get_instance();
-				$raw   = $query->get_submission( (int) Minn_Admin::path_param( $request ) );
-				if ( ! $raw || empty( $raw['data'] ) ) {
-					return new WP_Error( 'not_found', __( 'Submission not found.', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				$sub = $raw['data'];
-
-				// Prefer field labels from the form snapshot when present.
-				$labels = array();
-				if ( ! empty( $sub['form']['fields'] ) && is_array( $sub['form']['fields'] ) ) {
-					foreach ( $sub['form']['fields'] as $field ) {
-						if ( empty( $field['id'] ) ) {
-							continue;
-						}
-						$labels[ $field['id'] ] = ! empty( $field['label'] )
-							? wp_strip_all_tags( (string) $field['label'] )
-							: (string) $field['id'];
-					}
-				}
-
-				$answers = array();
-				foreach ( (array) ( $sub['values'] ?? array() ) as $v ) {
-					$key = isset( $v['key'] ) ? (string) $v['key'] : '';
-					$val = isset( $v['value'] ) ? (string) $v['value'] : '';
-					if ( '' === trim( $val ) ) {
-						continue;
-					}
-					$label = $labels[ $key ] ?? ucwords( str_replace( array( '_', '-' ), ' ', $key ) );
-					$answers[] = array(
-						'label' => $label,
-						'value' => $val,
-						'type'  => ( false !== strpos( $key, 'email' ) || is_email( $val ) ) ? 'email'
-							: ( ( 0 === strpos( $val, 'http' ) ) ? 'url' : 'text' ),
-					);
-				}
-
-				$meta   = array();
-				$meta[] = array(
-					'label' => __( 'Submitted', 'minn-admin' ),
-					'value' => ! empty( $sub['created_at'] )
-						? date_i18n( 'M j, Y g:i a', strtotime( $sub['created_at'] ) )
-						: '',
-				);
-				if ( ! empty( $sub['form']['name'] ) ) {
-					$meta[] = array( 'label' => __( 'Form', 'minn-admin' ), 'value' => $sub['form']['name'] );
-				}
-				if ( ! empty( $sub['referer'] ) ) {
-					$meta[] = array(
-						'label' => __( 'Page', 'minn-admin' ),
-						'value' => ! empty( $sub['referer_title'] )
-							? $sub['referer_title'] . ' · ' . $sub['referer']
-							: $sub['referer'],
-						'type'  => 'url',
-					);
-				}
-				if ( ! empty( $sub['user_ip'] ) ) {
-					$meta[] = array( 'label' => 'IP', 'value' => $sub['user_ip'] );
-				}
-				if ( ! empty( $sub['user_name'] ) ) {
-					$meta[] = array( 'label' => __( 'User', 'minn-admin' ), 'value' => $sub['user_name'] );
-				}
-
-				$item = minn_admin_elementor_forms_item( $sub );
-
-				// Opening a detail marks unread → read (their screen semantics).
-				// The entry counts as read only when their update landed: the
-				// item below carries that state to the page's gates.
-				if ( empty( $sub['is_read'] ) && ( empty( $sub['status'] ) || 'trash' !== $sub['status'] )
-					&& $query->update_submission( (int) $sub['id'], array( 'is_read' => 1 ) ) ) {
-					$item['status'] = 'read';
-				}
-
-				return rest_ensure_response( array(
-					'kind'     => 'entry',
-					// Form name in the title; answers render in the entry body.
-					'title'    => $item['form_name'] ?: 'Submission',
-					'status'   => $item['status'],
-					// The row as it stands now, after opening marked it read:
-					// the page's actions gate on it, not on the list's copy.
-					'item'     => array(
-						'id'     => $item['id'],
-						'status' => $item['status'],
-						'bucket' => $item['bucket'],
-					),
-					'sections' => array(
-						array( 'title' => __( 'Responses', 'minn-admin' ), 'rows' => $answers ),
-						array( 'title' => __( 'Submission', 'minn-admin' ), 'rows' => $meta ),
-					),
-					'adminUrl' => admin_url( 'admin.php?page=e-form-submissions#/form-submissions/' . (int) $sub['id'] ),
-					// Editable answers (adapters/elementor-forms-entry-edit.php).
-					'edit'     => function_exists( 'minn_admin_elementor_edit_block' ) ? minn_admin_elementor_edit_block( $sub ) : null,
-				) );
-			},
-		),
-		array(
-			'methods'             => 'DELETE',
-			'permission_callback' => 'minn_admin_elementor_forms_can_view',
-			'callback'            => function ( WP_REST_Request $request ) {
-				$query = \ElementorPro\Modules\Forms\Submissions\Database\Query::get_instance();
-				$id    = (int) Minn_Admin::path_param( $request );
-				$raw   = $query->get_submission( $id );
-				if ( ! $raw || empty( $raw['data'] ) ) {
-					return new WP_Error( 'not_found', __( 'Submission not found.', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				// Permanent delete only for trashed rows (Received → Trash first).
-				if ( empty( $raw['data']['status'] ) || 'trash' !== $raw['data']['status'] ) {
-					return new WP_Error( 'not_trashed', __( 'Move the submission to trash before deleting permanently.', 'minn-admin' ), array( 'status' => 400 ) );
-				}
-				$ok = $query->delete_submission( $id );
-				if ( false === $ok ) {
-					return new WP_Error( 'delete_failed', __( 'Could not delete submission.', 'minn-admin' ), array( 'status' => 500 ) );
-				}
-				return rest_ensure_response( array( 'id' => $id, 'deleted' => true, 'message' => __( 'Submission deleted permanently.', 'minn-admin' ) ) );
-			},
-		),
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/elementor/submissions/(?P<id>\d+)/trash', array(
-		'methods'             => 'POST',
-		'permission_callback' => 'minn_admin_elementor_forms_can_view',
-		'callback'            => function ( WP_REST_Request $request ) {
-			$query = \ElementorPro\Modules\Forms\Submissions\Database\Query::get_instance();
-			$id    = (int) Minn_Admin::path_param( $request );
-			$raw   = $query->get_submission( $id );
-			if ( ! $raw || empty( $raw['data'] ) ) {
-				return new WP_Error( 'not_found', __( 'Submission not found.', 'minn-admin' ), array( 'status' => 404 ) );
-			}
-			$ok = $query->move_to_trash_submission( $id );
-			if ( false === $ok ) {
-				return new WP_Error( 'trash_failed', __( 'Could not trash submission.', 'minn-admin' ), array( 'status' => 500 ) );
-			}
-			return rest_ensure_response( array( 'id' => $id, 'status' => 'trash', 'message' => __( 'Moved to trash.', 'minn-admin' ) ) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/elementor/submissions/(?P<id>\d+)/restore', array(
-		'methods'             => 'POST',
-		'permission_callback' => 'minn_admin_elementor_forms_can_view',
-		'callback'            => function ( WP_REST_Request $request ) {
-			$query = \ElementorPro\Modules\Forms\Submissions\Database\Query::get_instance();
-			$id    = (int) Minn_Admin::path_param( $request );
-			$raw   = $query->get_submission( $id );
-			if ( ! $raw || empty( $raw['data'] ) ) {
-				return new WP_Error( 'not_found', __( 'Submission not found.', 'minn-admin' ), array( 'status' => 404 ) );
-			}
-			$ok = $query->restore( $id );
-			if ( false === $ok ) {
-				return new WP_Error( 'restore_failed', __( 'Could not restore submission.', 'minn-admin' ), array( 'status' => 500 ) );
-			}
-			return rest_ensure_response( array( 'id' => $id, 'status' => 'unread', 'message' => __( 'Submission restored.', 'minn-admin' ) ) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/elementor/submissions/(?P<id>\d+)/read', array(
-		'methods'             => 'POST',
-		'permission_callback' => 'minn_admin_elementor_forms_can_view',
-		'callback'            => function ( WP_REST_Request $request ) {
-			$query = \ElementorPro\Modules\Forms\Submissions\Database\Query::get_instance();
-			$id    = (int) Minn_Admin::path_param( $request );
-			$raw   = $query->get_submission( $id );
-			if ( ! $raw || empty( $raw['data'] ) ) {
-				return new WP_Error( 'not_found', __( 'Submission not found.', 'minn-admin' ), array( 'status' => 404 ) );
-			}
-			$query->update_submission( $id, array( 'is_read' => 1 ) );
-			return rest_ensure_response( array( 'id' => $id, 'status' => 'read', 'message' => __( 'Marked as read.', 'minn-admin' ) ) );
-		},
-	) );
 } );

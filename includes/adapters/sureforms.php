@@ -6,9 +6,11 @@
  * (free feature; opt-out is a per-form do_not_store_entries flag). `form_data`
  * is JSON keyed per block with the label encoded in the key
  * (minn_admin_sureforms_answers() reads it back the way SureForms does). Read/unread/trash status, per-form tabs
- * from the sureforms_form CPT, search, delete, and a status card. Prefix-scoped
- * SELECTs; json_decode only, never unserialize. `created_at` is written on the
- * site's clock (current_time), converted to UTC via the shared helper.
+ * from the sureforms_form CPT, search, delete, and a status card. The entries
+ * are a kernel resource (docs/adapter-kernel.md): the kernel owns the routes,
+ * gates, paging and errors; json_decode only, never unserialize. `created_at`
+ * is written on the site's clock (current_time), converted to UTC via the
+ * shared helper.
  *
  * last-sweep: 2026-07-17
  *
@@ -35,6 +37,13 @@ function minn_admin_sureforms_can() {
 function minn_admin_sureforms_table() {
 	global $wpdb;
 	return $wpdb->prefix . 'srfm_entries';
+}
+
+/** Whether SureForms has created its entries table yet (asked every time). */
+function minn_admin_sureforms_has_table() {
+	global $wpdb;
+	$t = minn_admin_sureforms_table();
+	return $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $t ) ) === $t;
 }
 
 /** Map of sureforms_form post id => title, for tabs and entry meta. */
@@ -129,131 +138,6 @@ function minn_admin_sureforms_summary( array $data ) {
 	return $summary ?: __( '(empty entry)', 'minn-admin' );
 }
 
-add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
-	// Every sibling forms adapter gates registration on its own helper; without
-	// it the nav entry is advertised to every Contributor and dead-ends on 403.
-	if ( ! minn_admin_sureforms_active() || ! minn_admin_sureforms_can() ) {
-		return $surfaces;
-	}
-	$surfaces['sureforms'] = array(
-		'label'      => __( 'Forms', 'minn-admin' ),
-		'family'     => 'forms',
-		'group'      => 'workspace',
-		'sub'        => 'SureForms',
-		'plugin'     => 'sureforms',
-		'icon'       => 'inbox',
-		'cap'        => 'read', // real gate is minn_admin_sureforms_can().
-		'status'     => array( 'route' => 'minn-admin/v1/sureforms/status' ),
-		'collection' => array(
-			'viewLabel' => __( 'Entries', 'minn-admin' ),
-			'route'     => 'minn-admin/v1/sureforms/entries',
-			// A status-chart bar narrows the list to that day (the chart's
-			// points carry from/to; the route reads after/before).
-			'dateQuery' => 'after={from}&before={to}',
-			'pageQuery' => 'per_page=25&page={page}',
-			'search'    => 'search={q}',
-			'itemsKey'  => 'items',
-			'totalKey'  => 'total',
-			'tabs'      => array(
-				'route'    => 'minn-admin/v1/sureforms/forms',
-				'valueKey' => 'id',
-				'labelKey' => 'title',
-				'param'    => 'form_id',
-				'allLabel' => __( 'All entries', 'minn-admin' ),
-			),
-			'filter'    => array(
-				'label'   => __( 'Status', 'minn-admin' ),
-				// The first option is where the list opens: everything
-				// received, as on the other form providers.
-				'options' => array(
-					array( 'all', 'Received' ),
-					array( 'unread', 'Unread' ),
-					array( 'read', 'Read' ),
-					array( 'trash', 'Trash' ),
-				),
-				'query'   => 'status={v}',
-			),
-			'columns'   => array(
-				array( 'key' => 'summary', 'label' => __( 'Entry', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
-				array( 'key' => 'form_title', 'label' => __( 'Form', 'minn-admin' ) ),
-				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '96px' ),
-				array( 'key' => 'date', 'label' => __( 'When', 'minn-admin' ), 'format' => 'ago' ),
-			),
-			'detail'    => array(
-				'sectionsRoute' => 'minn-admin/v1/sureforms/entries/{id}',
-			),
-			'actions'   => array(
-				array(
-					'label'  => __( 'Mark read', 'minn-admin' ),
-					'method' => 'POST',
-					'route'  => 'minn-admin/v1/sureforms/entries/{id}/status',
-					'body'   => array( 'status' => 'read' ),
-					'when'   => array( 'key' => 'status', 'equals' => 'unread' ),
-				),
-				array(
-					'label'  => __( 'Mark unread', 'minn-admin' ),
-					'method' => 'POST',
-					'route'  => 'minn-admin/v1/sureforms/entries/{id}/status',
-					'body'   => array( 'status' => 'unread' ),
-					'when'   => array( 'key' => 'status', 'equals' => 'read' ),
-				),
-				array(
-					'label'   => __( 'Trash', 'minn-admin' ),
-					'method'  => 'POST',
-					'route'   => 'minn-admin/v1/sureforms/entries/{id}/status',
-					'body'    => array( 'status' => 'trash' ),
-					'when'    => array( 'key' => 'status', 'equals' => 'read' ),
-				),
-				array(
-					'label'   => __( 'Delete permanently', 'minn-admin' ),
-					'method'  => 'DELETE',
-					'route'   => 'minn-admin/v1/sureforms/entries/{id}',
-					'confirm' => __( 'Delete this entry permanently? There is no undo.', 'minn-admin' ),
-					'danger'  => true,
-					'when'    => array( 'key' => 'status', 'equals' => 'trash' ),
-				),
-			),
-			'bulk'      => array(
-				array(
-					'label'  => __( 'Mark read', 'minn-admin' ),
-					'method' => 'POST',
-					'route'  => 'minn-admin/v1/sureforms/entries/{id}/status',
-					'body'   => array( 'status' => 'read' ),
-				),
-				array(
-					'label'   => __( 'Trash', 'minn-admin' ),
-					'method'  => 'POST',
-					'route'   => 'minn-admin/v1/sureforms/entries/{id}/status',
-					'body'    => array( 'status' => 'trash' ),
-					'danger'  => true,
-				),
-			),
-		),
-		// Forms with SureForms' own Views and Conversion rate (2.12.6+). Both
-		// read "—" until their Form views tracking setting is on, exactly as
-		// their Forms list hides the columns.
-		'manage'     => array(
-			'viewLabel' => __( 'Forms', 'minn-admin' ),
-			'route'     => 'minn-admin/v1/sureforms/forms?manage=1',
-			'columns'   => array(
-				array( 'key' => 'title', 'label' => __( 'Form', 'minn-admin' ), 'format' => 'title' ),
-				array( 'key' => 'entries', 'label' => __( 'Entries', 'minn-admin' ), 'format' => 'num', 'width' => '84px' ),
-				array( 'key' => 'views', 'label' => __( 'Views', 'minn-admin' ), 'width' => '84px' ),
-				array( 'key' => 'conversion', 'label' => __( 'Conversion', 'minn-admin' ), 'width' => '104px' ),
-				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '96px' ),
-			),
-			'detail'    => array(),
-			'actions'   => array(
-				array(
-					'label' => __( 'Edit in SureForms ↗', 'minn-admin' ),
-					'href'  => admin_url( 'post.php?post={id}&action=edit' ),
-				),
-			),
-		),
-	);
-	return $surfaces;
-} );
-
 /**
  * One form's Views + Conversion rate from SureForms' own calculation.
  *
@@ -297,275 +181,372 @@ function minn_admin_sureforms_metrics( $form_id ) {
 	return array( 'views' => (int) \SRFM\Inc\Form_Views::get_instance()->get_views( (int) $form_id ), 'conversion' => null );
 }
 
-add_action( 'rest_api_init', function () {
-	if ( ! minn_admin_sureforms_active() ) {
-		return;
+/**
+ * A page of entries. The kernel has read the request (page, status, form
+ * tab, search term, day range); this adds what only SureForms needs: its
+ * table may not exist yet, and answers are stored through htmlspecialchars()
+ * (which left apostrophes alone before PHP 8.1), inside SureForms' own
+ * encode_json, so the search term is matched in each stored form.
+ *
+ * @param array $q The kernel's list query.
+ * @return array [ rows, total ]
+ */
+function minn_admin_sureforms_list( array $q ) {
+	if ( ! minn_admin_sureforms_has_table() ) {
+		return array( array(), 0 );
 	}
-	$perm      = 'minn_admin_sureforms_can';
-	$has_table = function () {
-		global $wpdb;
-		$t = minn_admin_sureforms_table();
-		return $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $t ) ) === $t;
-	};
-
-	// Forms list for the tab strip.
-	register_rest_route( 'minn-admin/v1', '/sureforms/forms', array(
-		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) {
-			$out    = array();
-			$manage = ! empty( $request['manage'] );
-			foreach ( minn_admin_sureforms_form_titles() as $id => $title ) {
-				if ( ! $manage ) {
-					$out[] = array( 'id' => $id, 'title' => $title );
-					continue;
-				}
-				$m       = minn_admin_sureforms_metrics( $id );
-				$entries = class_exists( '\\SRFM\\Inc\\Database\\Tables\\Entries' )
-					? (int) \SRFM\Inc\Database\Tables\Entries::get_total_entries_by_status( 'all', (int) $id )
-					: 0;
-				$out[]   = array(
-					'id'         => $id,
-					'title'      => $title,
-					'status'     => (string) get_post_status( $id ),
-					'entries'    => $entries,
-					'views'      => null === $m['views'] ? '—' : number_format_i18n( $m['views'] ),
-					'conversion' => null === $m['conversion'] ? '—' : number_format_i18n( $m['conversion'], 1 ) . '%',
-				);
-			}
-			return rest_ensure_response( $out );
-		},
+	global $wpdb;
+	list( $sql, $args ) = Minn_Admin_Kernel::list_where( $q );
+	$search = sanitize_text_field( $q['search'] );
+	if ( '' !== $search ) {
+		$ors = array();
+		foreach ( array_unique( array( $search, htmlspecialchars( $search ), htmlspecialchars( $search, ENT_COMPAT | ENT_HTML401 ) ) ) as $term ) {
+			$ors[]  = 'e.form_data LIKE %s';
+			$args[] = '%' . $wpdb->esc_like( substr( (string) wp_json_encode( $term, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ), 1, -1 ) ) . '%';
+		}
+		$sql[] = '( ' . implode( ' OR ', $ors ) . ' )';
+	}
+	// created_at is site-local, like the status-chart bounds.
+	list( $range_sql, $range_args ) = minn_admin_chart_range_clause( $q['request'], 'e.created_at', 'local' );
+	// Newest first by when it was sent, so a row added out of order (an
+	// import, a restored backup) lands where it belongs.
+	list( $rows, $total ) = Minn_Admin_Kernel_SQL::page( array(
+		'table'   => 'srfm_entries',
+		'key'     => 'ID',
+		'columns' => array( 'ID', 'form_id', 'form_data', 'status', 'created_at' ),
+		'sql'     => array_merge( $sql, $range_sql ),
+		'args'    => array_merge( $args, $range_args ),
+		'order'   => 'created_at',
+		'dir'     => 'DESC',
+		'limit'   => $q['per_page'],
+		'offset'  => ( $q['page'] - 1 ) * $q['per_page'],
 	) );
+	$titles = minn_admin_sureforms_form_titles();
+	foreach ( $rows as $i => $r ) {
+		$fid                     = (int) $r['form_id'];
+		$rows[ $i ]['form_title'] = isset( $titles[ $fid ] ) ? $titles[ $fid ] : ( 'Form #' . $fid );
+	}
+	return array( $rows, $total );
+}
 
-	register_rest_route( 'minn-admin/v1', '/sureforms/entries', array(
-		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) use ( $has_table ) {
-			if ( ! $has_table() ) {
-				return rest_ensure_response( array( 'items' => array(), 'total' => 0 ) );
-			}
-			global $wpdb;
-			$table    = minn_admin_sureforms_table();
-			$per_page = min( 100, max( 1, (int) $request->get_param( 'per_page' ) ?: 25 ) );
-			$page     = max( 1, (int) $request->get_param( 'page' ) ?: 1 );
-			$status   = sanitize_key( (string) $request->get_param( 'status' ) );
-			$form_id  = (int) $request->get_param( 'form_id' );
-			$search   = sanitize_text_field( (string) $request->get_param( 'search' ) );
-			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			$where  = array( '1=1' );
-			$params = array();
-			if ( in_array( $status, array( 'read', 'unread', 'trash' ), true ) ) {
-				$where[]  = 'status = %s';
-				$params[] = $status;
-			} else {
-				// Default view hides trash (their inbox behavior).
-				$where[] = "status <> 'trash'";
-			}
-			if ( $form_id ) {
-				$where[]  = 'form_id = %d';
-				$params[] = $form_id;
-			}
-			if ( '' !== $search ) {
-				// Answers are stored through htmlspecialchars() (which left
-				// apostrophes alone before PHP 8.1), inside SureForms' own
-				// encode_json, so the term is matched in each stored form.
-				$ors = array();
-				foreach ( array_unique( array( $search, htmlspecialchars( $search ), htmlspecialchars( $search, ENT_COMPAT | ENT_HTML401 ) ) ) as $term ) {
-					$ors[]    = 'form_data LIKE %s';
-					$params[] = '%' . $wpdb->esc_like( substr( (string) wp_json_encode( $term, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ), 1, -1 ) ) . '%';
-				}
-				$where[] = '( ' . implode( ' OR ', $ors ) . ' )';
-			}
-			// A status-chart bar narrows the list to that day. created_at is
-			// site-local, like the bounds, so they compare as they come.
-			list( $range_sql, $range_args ) = minn_admin_chart_range_clause( $request, 'created_at', 'local' );
-			$where = array_merge( $where, $range_sql );
-			$params = array_merge( $params, $range_args );
-			$where_sql = 'WHERE ' . implode( ' AND ', $where );
-			$count_sql = "SELECT COUNT(*) FROM {$table} {$where_sql}";
-			$total     = (int) ( $params ? $wpdb->get_var( $wpdb->prepare( $count_sql, $params ) ) : $wpdb->get_var( $count_sql ) );
-			// Newest first by when it was sent, so a row added out of order
-			// (an import, a restored backup) lands where it belongs; the id
-			// breaks ties so pages never overlap.
-			$rows      = $wpdb->get_results( $wpdb->prepare(
-				"SELECT ID, form_id, form_data, status, created_at FROM {$table} {$where_sql} ORDER BY created_at DESC, ID DESC LIMIT %d OFFSET %d",
-				array_merge( $params, array( $per_page, ( $page - 1 ) * $per_page ) )
-			) );
-			// phpcs:enable
-			$titles = minn_admin_sureforms_form_titles();
-			$items  = array_map( function ( $r ) use ( $titles ) {
-				$data = json_decode( (string) $r->form_data, true );
-				$data = is_array( $data ) ? $data : array();
-				return array(
-					'id'         => (int) $r->ID,
-					'summary'    => minn_admin_sureforms_summary( minn_admin_sureforms_answers( $data ) ),
-					'form_title' => isset( $titles[ (int) $r->form_id ] ) ? $titles[ (int) $r->form_id ] : ( 'Form #' . (int) $r->form_id ),
-					'status'     => (string) $r->status,
-					'date'       => minn_admin_db_local_to_utc_iso( $r->created_at ),
-				);
-			}, $rows ? $rows : array() );
-			return rest_ensure_response( array( 'items' => $items, 'total' => $total ) );
-		},
-	) );
+/** An entry's list row. */
+function minn_admin_sureforms_row( array $r ) {
+	$data = json_decode( (string) $r['form_data'], true );
+	$data = is_array( $data ) ? $data : array();
+	return array(
+		'id'         => (int) $r['ID'],
+		'summary'    => minn_admin_sureforms_summary( minn_admin_sureforms_answers( $data ) ),
+		'form_title' => (string) $r['form_title'],
+		'status'     => (string) $r['status'],
+		'date'       => minn_admin_db_local_to_utc_iso( $r['created_at'] ),
+	);
+}
 
-	register_rest_route( 'minn-admin/v1', '/sureforms/entries/(?P<id>\d+)', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) {
-				global $wpdb;
-				$table = minn_admin_sureforms_table();
-				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE ID = %d", (int) Minn_Admin::path_param( $request ) ) );
-				if ( ! $row ) {
-					return new WP_Error( 'not_found', __( 'Entry not found', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				$data   = json_decode( (string) $row->form_data, true );
-				$data   = is_array( $data ) ? minn_admin_sureforms_answers( $data ) : array();
-				$answers = array();
-				foreach ( $data as $label => $value ) {
-					$value = is_array( $value )
-						? implode( ', ', array_filter( array_map( 'strval', $value ) ) )
-						: minn_admin_sureforms_text( $value );
-					$answers[] = array(
-						'label' => (string) $label,
-						'value' => '' !== (string) $value ? (string) $value : '—',
-					);
-				}
-				$titles = minn_admin_sureforms_form_titles();
-				$meta   = array(
-					array( 'label' => __( 'Form', 'minn-admin' ), 'value' => isset( $titles[ (int) $row->form_id ] ) ? $titles[ (int) $row->form_id ] : ( '#' . (int) $row->form_id ) ),
-					array( 'label' => __( 'Entry', 'minn-admin' ), 'value' => '#' . (int) $row->ID ),
-				);
-				// The entry header and the Submission panel print this as it
-				// comes, so it is a date on the site's clock, as on the other
-				// form providers, not an ISO string.
-				$iso = minn_admin_db_local_to_utc_iso( $row->created_at );
-				if ( '' !== $iso ) {
-					$meta[] = array( 'label' => __( 'Submitted', 'minn-admin' ), 'value' => wp_date( 'M j, Y g:i a', strtotime( $iso ) ) );
-				}
-				// Their entry activity log (2.12.8+ also records the
-				// notification emails): newest first, { title, messages[],
-				// timestamp } with site-local timestamps.
-				$activity = array();
-				$logs     = json_decode( (string) ( $row->logs ?? '' ), true );
-				foreach ( is_array( $logs ) ? array_slice( $logs, 0, 20 ) : array() as $log ) {
-					if ( ! is_array( $log ) || empty( $log['title'] ) ) {
-						continue;
-					}
-					// Site-local already, so the site's own date format applies as-is.
-					$when       = ! empty( $log['timestamp'] ) ? (string) mysql2date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), (string) $log['timestamp'] ) : '';
-					$messages   = array_filter( array_map( 'wp_strip_all_tags', array_map( 'strval', (array) ( $log['messages'] ?? array() ) ) ) );
-					$activity[] = array(
-						'label' => (string) $log['title'] . ( '' !== $when ? ' · ' . $when : '' ),
-						'value' => $messages ? implode( "\n", $messages ) : '—',
-					);
-				}
-				$sections = array(
-					array( 'title' => __( 'Answers', 'minn-admin' ), 'rows' => $answers ),
-					array( 'title' => __( 'Submission', 'minn-admin' ), 'rows' => $meta ),
-				);
-				if ( $activity ) {
-					$sections[] = array( 'title' => __( 'Activity', 'minn-admin' ), 'rows' => $activity );
-				}
-				// The status rides the item, not the panel: the page's pill and
-				// its action gates read it there, also when opened by a link.
-				return rest_ensure_response( array(
-					'kind'     => 'entry',
-					'item'     => array(
-						'id'     => (int) $row->ID,
-						'status' => (string) $row->status,
-					),
-					'sections' => $sections,
-					'adminUrl' => admin_url( 'admin.php?page=sureforms_entries&entry_id=' . (int) $row->ID ),
-				) );
-			},
+/** An entry's detail: answers, the submission's facts, its activity log. */
+function minn_admin_sureforms_view( array $raw ) {
+	$row     = (object) $raw;
+	$data    = json_decode( (string) $row->form_data, true );
+	$data    = is_array( $data ) ? minn_admin_sureforms_answers( $data ) : array();
+	$answers = array();
+	foreach ( $data as $label => $value ) {
+		$value     = is_array( $value )
+			? implode( ', ', array_filter( array_map( 'strval', $value ) ) )
+			: minn_admin_sureforms_text( $value );
+		$answers[] = array(
+			'label' => (string) $label,
+			'value' => '' !== (string) $value ? (string) $value : '—',
+		);
+	}
+	$titles = minn_admin_sureforms_form_titles();
+	$meta   = array(
+		array( 'label' => __( 'Form', 'minn-admin' ), 'value' => isset( $titles[ (int) $row->form_id ] ) ? $titles[ (int) $row->form_id ] : ( '#' . (int) $row->form_id ) ),
+		array( 'label' => __( 'Entry', 'minn-admin' ), 'value' => '#' . (int) $row->ID ),
+	);
+	// The entry header and the Submission panel print this as it comes, so
+	// it is a date on the site's clock, as on the other form providers, not
+	// an ISO string.
+	$iso = minn_admin_db_local_to_utc_iso( $row->created_at );
+	if ( '' !== $iso ) {
+		$meta[] = array( 'label' => __( 'Submitted', 'minn-admin' ), 'value' => wp_date( 'M j, Y g:i a', strtotime( $iso ) ) );
+	}
+	// Their entry activity log (2.12.8+ also records the notification
+	// emails): newest first, { title, messages[], timestamp } with site-local
+	// timestamps.
+	$activity = array();
+	$logs     = json_decode( (string) ( $row->logs ?? '' ), true );
+	foreach ( is_array( $logs ) ? array_slice( $logs, 0, 20 ) : array() as $log ) {
+		if ( ! is_array( $log ) || empty( $log['title'] ) ) {
+			continue;
+		}
+		// Site-local already, so the site's own date format applies as-is.
+		$when       = ! empty( $log['timestamp'] ) ? (string) mysql2date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), (string) $log['timestamp'] ) : '';
+		$messages   = array_filter( array_map( 'wp_strip_all_tags', array_map( 'strval', (array) ( $log['messages'] ?? array() ) ) ) );
+		$activity[] = array(
+			'label' => (string) $log['title'] . ( '' !== $when ? ' · ' . $when : '' ),
+			'value' => $messages ? implode( "\n", $messages ) : '—',
+		);
+	}
+	$sections = array(
+		array( 'title' => __( 'Answers', 'minn-admin' ), 'rows' => $answers ),
+		array( 'title' => __( 'Submission', 'minn-admin' ), 'rows' => $meta ),
+	);
+	if ( $activity ) {
+		$sections[] = array( 'title' => __( 'Activity', 'minn-admin' ), 'rows' => $activity );
+	}
+	// The status rides the item, not the panel: the page's pill and its
+	// action gates read it there, also when opened by a link.
+	return array(
+		'kind'     => 'entry',
+		'item'     => array(
+			'id'     => (int) $row->ID,
+			'status' => (string) $row->status,
 		),
-		array(
-			'methods'             => 'DELETE',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) {
-				global $wpdb;
-				$table = minn_admin_sureforms_table();
-				$id    = (int) Minn_Admin::path_param( $request );
-				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				if ( ! $wpdb->get_var( $wpdb->prepare( "SELECT ID FROM {$table} WHERE ID = %d", $id ) ) ) {
-					return new WP_Error( 'not_found', __( 'Entry not found', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				// Through their model, as their own delete does: it fires
-				// srfm_before_delete_entry, which add-ons use to remove what
-				// they keep for an entry (uploaded files among them).
-				if ( class_exists( '\SRFM\Inc\Database\Tables\Entries' ) && method_exists( '\SRFM\Inc\Database\Tables\Entries', 'delete' ) ) {
-					$deleted = \SRFM\Inc\Database\Tables\Entries::delete( $id );
-				} else {
-					do_action( 'srfm_before_delete_entry', $id );
-					// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-					$deleted = $wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE ID = %d", $id ) );
-				}
-				if ( ! $deleted ) {
-					return new WP_Error( 'not_found', __( 'Entry not found', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				return rest_ensure_response( array( 'deleted' => true, 'message' => __( 'Entry deleted.', 'minn-admin' ) ) );
-			},
+		'sections' => $sections,
+		'adminUrl' => admin_url( 'admin.php?page=sureforms_entries&entry_id=' . (int) $row->ID ),
+	);
+}
+
+// SureForms gates reads and writes alike on its one admin capability. Status
+// changes and deletes take an entry in any state.
+minn_admin_resource( 'sureforms/entries', function () {
+	return array(
+		'active'  => 'minn_admin_sureforms_active',
+		'gates'   => array(
+			'view'   => 'minn_admin_sureforms_can',
+			'manage' => 'minn_admin_sureforms_can',
 		),
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/sureforms/entries/(?P<id>\d+)/status', array(
-		'methods'             => 'POST',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) {
-			$status = sanitize_key( (string) $request->get_param( 'status' ) );
-			if ( ! in_array( $status, array( 'read', 'unread', 'trash' ), true ) ) {
-				return new WP_Error( 'bad_status', __( 'Unknown status', 'minn-admin' ), array( 'status' => 400 ) );
-			}
-			global $wpdb;
-			$table   = minn_admin_sureforms_table();
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			$updated = $wpdb->update( $table, array( 'status' => $status ), array( 'ID' => (int) Minn_Admin::path_param( $request ) ), array( '%s' ), array( '%d' ) );
-			if ( false === $updated ) {
-				return new WP_Error( 'update_failed', __( 'Could not update the entry.', 'minn-admin' ), array( 'status' => 500 ) );
-			}
-			return rest_ensure_response( array( 'ok' => true, 'status' => $status ) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/sureforms/status', array(
-		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function () use ( $has_table ) {
-			$admin_url = admin_url( 'admin.php?page=sureforms_entries' );
-			if ( ! $has_table() ) {
-				return rest_ensure_response( array(
-					'rows'    => array( array( 'label' => __( 'Entries', 'minn-admin' ), 'value' => '—', 'hint' => __( 'No submissions yet', 'minn-admin' ) ) ),
-					'actions' => array( array( 'label' => __( 'Open SureForms ↗', 'minn-admin' ), 'href' => $admin_url ) ),
-				) );
-			}
-			global $wpdb;
-			$table  = minn_admin_sureforms_table();
-			$unread = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE status = 'unread'" ); // phpcs:ignore
-			$total  = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE status <> 'trash'" ); // phpcs:ignore
-			$forms  = count( minn_admin_sureforms_form_titles() );
-			// Group onto the site's day in SQL rather than fetching a row per
-			// entry: this table is filled by unauthenticated submissions, so a
-			// per-row fetch has no bound. created_at is site-local, so DATE()
-			// is already the site's day.
-			$chart      = minn_admin_chart_days();
-			$chart_rows = $wpdb->get_results( $wpdb->prepare( "SELECT DATE(created_at) AS d, COUNT(*) AS c FROM {$table} WHERE status <> 'trash' AND created_at >= %s GROUP BY d", minn_admin_chart_local_since() ) ); // phpcs:ignore
-			foreach ( (array) $chart_rows as $cr ) {
-				minn_admin_chart_bump( $chart, (string) $cr->d, false, (int) $cr->c );
-			}
-			return rest_ensure_response( array(
-				'rows'    => array(
-					array(
-						'label' => __( 'Unread entries', 'minn-admin' ),
-						'value' => number_format_i18n( $unread ),
-						'hint'  => number_format_i18n( $total ) . ' total',
-					),
-					array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => number_format_i18n( $forms ) ),
+		'labels'  => array(
+			'not_found' => __( 'Entry not found', 'minn-admin' ),
+		),
+		'source'  => array(
+			'table'  => 'srfm_entries',
+			'key'    => 'ID',
+			'detail' => array(),
+			'list'   => 'minn_admin_sureforms_list',
+		),
+		'list'    => array(
+			// The default view hides trash (their inbox behaviour).
+			'filter' => array(
+				'param'   => 'status',
+				'values'  => array(
+					'all'    => array( 'status' => array( 'not' => array( 'trash' ) ) ),
+					'unread' => array( 'status' => 'unread' ),
+					'read'   => array( 'status' => 'read' ),
+					'trash'  => array( 'status' => 'trash' ),
 				),
-				'chart'   => minn_admin_chart_build( $chart, __( 'Entries', 'minn-admin' ) ),
-				'actions' => array( array( 'label' => __( 'Open SureForms ↗', 'minn-admin' ), 'href' => $admin_url ) ),
-			) );
-		},
-	) );
+				'default' => 'all',
+			),
+			'tab'    => array( 'param' => 'form_id', 'column' => 'form_id' ),
+			// The term is matched by the source above, in each stored encoding.
+			'search' => array( 'param' => 'search' ),
+			'range'  => array( 'column' => 'created_at', 'clock' => 'local' ),
+			'row'    => 'minn_admin_sureforms_row',
+			'fields' => array(
+				'id'         => 'int',
+				'summary'    => 'text',
+				'form_title' => 'text',
+				'status'     => 'text',
+				// UTC with a Z, from the site-local column (built in the row).
+				'date'       => 'text',
+			),
+		),
+		'item'    => array( 'view' => 'minn_admin_sureforms_view' ),
+		'actions' => array(
+			'status' => array(
+				'gate'   => 'manage',
+				'run'    => function ( $id, $row, WP_REST_Request $request ) {
+					$status = sanitize_key( (string) $request->get_param( 'status' ) );
+					if ( ! in_array( $status, array( 'read', 'unread', 'trash' ), true ) ) {
+						return new WP_Error( 'bad_status', __( 'Unknown status', 'minn-admin' ), array( 'status' => 400 ) );
+					}
+					global $wpdb;
+					$updated = $wpdb->update( minn_admin_sureforms_table(), array( 'status' => $status ), array( 'ID' => $id ), array( '%s' ), array( '%d' ) );
+					if ( false === $updated ) {
+						return new WP_Error( 'update_failed', __( 'Could not update the entry.', 'minn-admin' ), array( 'status' => 500 ) );
+					}
+					return $status;
+				},
+				'expect' => function ( $id, $fresh, $status ) {
+					return is_array( $fresh ) && (string) $status === (string) $fresh['status'];
+				},
+				'fail_code' => 'update_failed',
+				'fail'      => __( 'Could not update the entry.', 'minn-admin' ),
+				'reply'  => function ( $id, $fresh, $status ) {
+					return array( 'status' => $status );
+				},
+			),
+			// Through their model, as their own delete does: it fires
+			// srfm_before_delete_entry, which add-ons use to remove what they
+			// keep for an entry (uploaded files among them).
+			'delete' => array(
+				'method'    => 'DELETE',
+				'gate'      => 'manage',
+				'run'       => function ( $id ) {
+					global $wpdb;
+					if ( class_exists( '\SRFM\Inc\Database\Tables\Entries' ) && method_exists( '\SRFM\Inc\Database\Tables\Entries', 'delete' ) ) {
+						$deleted = \SRFM\Inc\Database\Tables\Entries::delete( $id );
+					} else {
+						do_action( 'srfm_before_delete_entry', $id );
+						$deleted = $wpdb->delete( minn_admin_sureforms_table(), array( 'ID' => $id ), array( '%d' ) );
+					}
+					return $deleted ? true : new WP_Error( 'not_found', __( 'Entry not found', 'minn-admin' ), array( 'status' => 404 ) );
+				},
+				'expect'    => 'gone',
+				'fail_code' => 'delete_failed',
+				'fail'      => __( 'SureForms reported success but the entry still exists.', 'minn-admin' ),
+				'reply'     => function () {
+					return array( 'deleted' => true );
+				},
+				'done'      => __( 'Entry deleted.', 'minn-admin' ),
+			),
+		),
+	);
+} );
+
+// Forms list for the tab strip, and the Forms view.
+minn_admin_endpoint( 'sureforms/forms', array(
+	'active' => 'minn_admin_sureforms_active',
+	'gate'   => 'minn_admin_sureforms_can',
+	'run'    => function ( WP_REST_Request $request ) {
+		$out    = array();
+		$manage = ! empty( $request['manage'] );
+		foreach ( minn_admin_sureforms_form_titles() as $id => $title ) {
+			if ( ! $manage ) {
+				$out[] = array( 'id' => $id, 'title' => $title );
+				continue;
+			}
+			$m       = minn_admin_sureforms_metrics( $id );
+			$entries = class_exists( '\\SRFM\\Inc\\Database\\Tables\\Entries' )
+				? (int) \SRFM\Inc\Database\Tables\Entries::get_total_entries_by_status( 'all', (int) $id )
+				: 0;
+			$out[]   = array(
+				'id'         => $id,
+				'title'      => $title,
+				'status'     => (string) get_post_status( $id ),
+				'entries'    => $entries,
+				'views'      => null === $m['views'] ? '—' : number_format_i18n( $m['views'] ),
+				'conversion' => null === $m['conversion'] ? '—' : number_format_i18n( $m['conversion'], 1 ) . '%',
+			);
+		}
+		return $out;
+	},
+) );
+
+minn_admin_endpoint( 'sureforms/status', array(
+	'active' => 'minn_admin_sureforms_active',
+	'gate'   => 'minn_admin_sureforms_can',
+	'run'    => function () {
+		$open = array( array( 'label' => __( 'Open SureForms ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=sureforms_entries' ) ) );
+		if ( ! minn_admin_sureforms_has_table() ) {
+			return array(
+				'rows'    => array( array( 'label' => __( 'Entries', 'minn-admin' ), 'value' => '—', 'hint' => __( 'No submissions yet', 'minn-admin' ) ) ),
+				'actions' => $open,
+			);
+		}
+		// created_at is site-local, so the chart groups on the site's day.
+		$kept = array( 'status' => array( 'not' => array( 'trash' ) ) );
+		$n    = Minn_Admin_Kernel::inbox_counts( array(
+			'table'    => 'srfm_entries',
+			'received' => $kept,
+			'unread'   => array( 'status' => 'unread' ),
+			'chart'    => array( 'column' => 'created_at', 'clock' => 'local', 'where' => $kept, 'split' => 'status' ),
+		) );
+		return array(
+			'rows'    => array(
+				array(
+					'label' => __( 'Unread entries', 'minn-admin' ),
+					'value' => number_format_i18n( $n['unread'] ),
+					'hint'  => number_format_i18n( $n['received'] ) . ' total',
+				),
+				array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => number_format_i18n( count( minn_admin_sureforms_form_titles() ) ) ),
+			),
+			'chart'   => minn_admin_chart_build( $n['days'], __( 'Entries', 'minn-admin' ) ),
+			'actions' => $open,
+		);
+	},
+) );
+
+add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
+	// Every sibling forms adapter gates registration on its own helper; without
+	// it the nav entry is advertised to every Contributor and dead-ends on 403.
+	if ( ! minn_admin_sureforms_active() || ! minn_admin_sureforms_can() ) {
+		return $surfaces;
+	}
+	$ui = function ( $slug, $ui ) {
+		return Minn_Admin_Kernel::ui( 'sureforms/entries', $slug, $ui );
+	};
+	$surfaces['sureforms'] = array(
+		'label'      => __( 'Forms', 'minn-admin' ),
+		'family'     => 'forms',
+		'group'      => 'workspace',
+		'sub'        => 'SureForms',
+		'plugin'     => 'sureforms',
+		'icon'       => 'inbox',
+		'cap'        => 'read', // real gate is minn_admin_sureforms_can().
+		'status'     => array( 'route' => 'minn-admin/v1/sureforms/status' ),
+		// Route, paging, search, the status-chart day range and the filter
+		// query come from the resource, so they cannot drift from it.
+		'collection' => Minn_Admin_Kernel::collection( 'sureforms/entries', array(
+			'viewLabel' => __( 'Entries', 'minn-admin' ),
+			'tabs'      => array(
+				'route'    => 'minn-admin/v1/sureforms/forms',
+				'valueKey' => 'id',
+				'labelKey' => 'title',
+				'param'    => 'form_id',
+				'allLabel' => __( 'All entries', 'minn-admin' ),
+			),
+			'filter'    => array(
+				'label'   => __( 'Status', 'minn-admin' ),
+				// The first option is where the list opens: everything
+				// received, as on the other form providers.
+				'options' => array(
+					array( 'all', 'Received' ),
+					array( 'unread', 'Unread' ),
+					array( 'read', 'Read' ),
+					array( 'trash', 'Trash' ),
+				),
+			),
+			'columns'   => array(
+				array( 'key' => 'summary', 'label' => __( 'Entry', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
+				array( 'key' => 'form_title', 'label' => __( 'Form', 'minn-admin' ) ),
+				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '96px' ),
+				array( 'key' => 'date', 'label' => __( 'When', 'minn-admin' ), 'format' => 'ago' ),
+			),
+			'detail'    => array(
+				'sectionsRoute' => 'minn-admin/v1/sureforms/entries/{id}',
+			),
+			'actions'   => array(
+				$ui( 'status', array( 'label' => __( 'Mark read', 'minn-admin' ), 'body' => array( 'status' => 'read' ), 'when' => 'unread' ) ),
+				$ui( 'status', array( 'label' => __( 'Mark unread', 'minn-admin' ), 'body' => array( 'status' => 'unread' ), 'when' => 'read' ) ),
+				$ui( 'status', array( 'label' => __( 'Trash', 'minn-admin' ), 'body' => array( 'status' => 'trash' ), 'when' => 'read' ) ),
+				$ui( 'delete', array( 'label' => __( 'Delete permanently', 'minn-admin' ), 'confirm' => __( 'Delete this entry permanently? There is no undo.', 'minn-admin' ), 'danger' => true, 'when' => 'trash' ) ),
+			),
+			'bulk'      => array(
+				$ui( 'status', array( 'label' => __( 'Mark read', 'minn-admin' ), 'body' => array( 'status' => 'read' ) ) ),
+				$ui( 'status', array( 'label' => __( 'Trash', 'minn-admin' ), 'body' => array( 'status' => 'trash' ), 'danger' => true ) ),
+			),
+		) ),
+		// Forms with SureForms' own Views and Conversion rate (2.12.6+). Both
+		// read "—" until their Form views tracking setting is on, exactly as
+		// their Forms list hides the columns.
+		'manage'     => array(
+			'viewLabel' => __( 'Forms', 'minn-admin' ),
+			'route'     => 'minn-admin/v1/sureforms/forms?manage=1',
+			'columns'   => array(
+				array( 'key' => 'title', 'label' => __( 'Form', 'minn-admin' ), 'format' => 'title' ),
+				array( 'key' => 'entries', 'label' => __( 'Entries', 'minn-admin' ), 'format' => 'num', 'width' => '84px' ),
+				array( 'key' => 'views', 'label' => __( 'Views', 'minn-admin' ), 'width' => '84px' ),
+				array( 'key' => 'conversion', 'label' => __( 'Conversion', 'minn-admin' ), 'width' => '104px' ),
+				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '96px' ),
+			),
+			'detail'    => array(),
+			'actions'   => array(
+				array(
+					'label' => __( 'Edit in SureForms ↗', 'minn-admin' ),
+					'href'  => admin_url( 'post.php?post={id}&action=edit' ),
+				),
+			),
+		),
+	);
+	return $surfaces;
 } );
