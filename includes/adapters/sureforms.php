@@ -384,8 +384,11 @@ add_action( 'rest_api_init', function () {
 			$where_sql = 'WHERE ' . implode( ' AND ', $where );
 			$count_sql = "SELECT COUNT(*) FROM {$table} {$where_sql}";
 			$total     = (int) ( $params ? $wpdb->get_var( $wpdb->prepare( $count_sql, $params ) ) : $wpdb->get_var( $count_sql ) );
+			// Newest first by when it was sent, so a row added out of order
+			// (an import, a restored backup) lands where it belongs; the id
+			// breaks ties so pages never overlap.
 			$rows      = $wpdb->get_results( $wpdb->prepare(
-				"SELECT ID, form_id, form_data, status, created_at FROM {$table} {$where_sql} ORDER BY ID DESC LIMIT %d OFFSET %d",
+				"SELECT ID, form_id, form_data, status, created_at FROM {$table} {$where_sql} ORDER BY created_at DESC, ID DESC LIMIT %d OFFSET %d",
 				array_merge( $params, array( $per_page, ( $page - 1 ) * $per_page ) )
 			) );
 			// phpcs:enable

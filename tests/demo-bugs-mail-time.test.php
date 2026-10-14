@@ -144,6 +144,15 @@ $find      = function ( $items, $id ) {
 	}
 	return null;
 };
+// Where a row sits in a list, or -1.
+$pos       = function ( $items, $id ) {
+	foreach ( array_values( (array) $items ) as $i => $it ) {
+		if ( (int) ( $it['id'] ?? 0 ) === (int) $id ) {
+			return $i;
+		}
+	}
+	return -1;
+};
 $row_of    = function ( $sections, $label ) {
 	foreach ( (array) ( $sections['sections'] ?? array() ) as $sec ) {
 		foreach ( (array) ( $sec['rows'] ?? array() ) as $r ) {
@@ -253,6 +262,14 @@ try {
 				list( $st, $list ) = $call( 'GET', '/minn-admin/v1/sureforms/entries', array( 'search' => $term, 'per_page' => 100 ) );
 				$check( "S3 SureForms: searching \"{$term}\" finds the entry", $sf_ent && $find( $list['items'] ?? array(), $sf_ent ), $st . ' ' . count( $list['items'] ?? array() ) . ' rows' );
 			}
+
+			// S9: the list sorted by id, so an entry added out of order (an
+			// import, a restored backup) sat above newer ones.
+			$sf_import = $sf_add( 'read', wp_date( 'Y-m-d H:i:s', $sf_now_ts - 2 * HOUR_IN_SECONDS ) );
+			list( $st, $list ) = $call( 'GET', '/minn-admin/v1/sureforms/entries', array( 'search' => $marker, 'per_page' => 100 ) );
+			$a = $pos( $list['items'] ?? array(), $sf_now );
+			$b = $pos( $list['items'] ?? array(), $sf_import );
+			$check( 'S9 SureForms: the list sorts by when an entry was sent, newest first', $sf_import && $a >= 0 && $b > $a, "{$st} just-now at {$a}, two-hours-old import at {$b}" );
 		}
 	}
 
@@ -296,6 +313,30 @@ try {
 			$bar = $point( $sm_after, $today );
 			list( , $list ) = $call( 'GET', '/minn-admin/v1/suremails/emails', array( 'search' => $marker, 'per_page' => 100, 'after' => $bar['from'] ?? '', 'before' => $bar['to'] ?? '' ) );
 			$check( 'D-40 SureMails: today\'s bar lists the send', $bar && $find( $list['items'] ?? array(), $sm_id ), count( $list['items'] ?? array() ) . ' rows' );
+
+			// S9: the log sorted by id, so a row written out of order sat
+			// above newer sends.
+			$sm_older = wp_date( 'Y-m-d H:i:s', $sm_ts - 2 * HOUR_IN_SECONDS );
+			$ok       = $wpdb->insert( $sm_table, array(
+				'email_from'  => 'site@example.com',
+				'email_to'    => maybe_serialize( array( 'dana@example.com' ) ),
+				'subject'     => $marker . ' older',
+				'body'        => '<p>body</p>',
+				'headers'     => maybe_serialize( '' ),
+				'attachments' => maybe_serialize( array() ),
+				'status'      => 'sent',
+				'response'    => maybe_serialize( '' ),
+				'meta'        => wp_json_encode( array( 'retry' => 0, 'resend' => 0 ) ),
+				'connection'  => 'SMTP',
+				'created_at'  => $sm_older,
+				'updated_at'  => $sm_older,
+			) );
+			$sm_old   = $ok ? (int) $wpdb->insert_id : 0;
+			$sm_old   = is_int( $sm_old ) && $sm_old > 1 ? $sm_old : 0;
+			list( $st, $list ) = $call( 'GET', '/minn-admin/v1/suremails/emails', array( 'search' => $marker, 'per_page' => 100 ) );
+			$a = $pos( $list['items'] ?? array(), $sm_id );
+			$b = $pos( $list['items'] ?? array(), $sm_old );
+			$check( 'S9 SureMails: the log sorts by when a send was logged, newest first', $sm_old && $a >= 0 && $b > $a, "{$st} just-now at {$a}, two-hours-old row at {$b}" );
 		}
 	}
 
@@ -374,6 +415,14 @@ try {
 			list( $st, $list ) = $call( 'GET', '/minn-admin/v1/site-mailer/emails', array( 'search' => $marker, 'per_page' => 100 ) );
 			$maps = $find( $list['items'] ?? array(), $ml_maps );
 			$check( 'I3 Site Mailer: a recipient list of maps shows as stored rather than empty', $maps && false !== strpos( (string) $maps['to'], 'mapped@example.com' ), $st . ' ' . wp_json_encode( $maps['to'] ?? null ) );
+
+			// S9: the log sorted by id, so a row written out of order sat
+			// above newer sends.
+			$ml_old = $ml_add( 'older@example.com', wp_date( 'Y-m-d H:i:s', $ml_ts - 2 * HOUR_IN_SECONDS ) );
+			list( $st, $list ) = $call( 'GET', '/minn-admin/v1/site-mailer/emails', array( 'search' => $marker, 'per_page' => 100 ) );
+			$a = $pos( $list['items'] ?? array(), $ml_one );
+			$b = $pos( $list['items'] ?? array(), $ml_old );
+			$check( 'S9 Site Mailer: the log sorts by when a send was logged, newest first', $ml_old && $a >= 0 && $b > $a, "{$st} just-now at {$a}, two-hours-old row at {$b}" );
 		}
 	}
 
