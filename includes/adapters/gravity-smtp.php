@@ -1001,11 +1001,14 @@ add_action( 'rest_api_init', function () {
 					"SELECT id, email, reason, notes, date_created FROM {$table} {$where} ORDER BY date_created DESC, id DESC LIMIT %d OFFSET %d", // phpcs:ignore
 					...array_merge( $args, array( $per_page, ( $page - 1 ) * $per_page ) )
 				), ARRAY_A );
-				$items = array_map( function ( $row ) {
+				// The reason in Gravity SMTP's own words where it has them; any
+				// other goes out as the slug, which the client's pill tidies.
+				$labels = '\Gravity_Forms\Gravity_SMTP\Enums\Suppression_Reason_Enum';
+				$items  = array_map( function ( $row ) use ( $labels ) {
 					return array(
 						'id'           => (int) $row['id'],
 						'email'        => (string) $row['email'],
-						'reason'       => str_replace( '_', ' ', (string) $row['reason'] ),
+						'reason'       => class_exists( $labels ) ? (string) $labels::label( (string) $row['reason'] ) : (string) $row['reason'],
 						'notes'        => (string) $row['notes'],
 						'date_created' => (string) $row['date_created'],
 					);

@@ -58,7 +58,8 @@ $has      = function ( $table ) use ( $wpdb ) {
 $sf_table = $wpdb->prefix . 'srfm_entries';
 $sm_table = $wpdb->prefix . 'suremails_email_log';
 $ml_table = $wpdb->prefix . 'site_mail_logs';
-$wipe     = function () use ( $wpdb, $has, $marker, $sf_table, $sm_table, $ml_table ) {
+$gs_table = $wpdb->prefix . 'gravitysmtp_suppressed_emails';
+$wipe     = function () use ( $wpdb, $has, $marker, $sf_table, $sm_table, $ml_table, $gs_table ) {
 	$like = '%' . $wpdb->esc_like( $marker ) . '%';
 	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 	if ( $has( $sf_table ) ) {
@@ -69,6 +70,9 @@ $wipe     = function () use ( $wpdb, $has, $marker, $sf_table, $sm_table, $ml_ta
 	}
 	if ( $has( $ml_table ) ) {
 		$wpdb->query( $wpdb->prepare( "DELETE FROM {$ml_table} WHERE subject LIKE %s", $like ) );
+	}
+	if ( $has( $gs_table ) ) {
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$gs_table} WHERE email LIKE %s", $like ) );
 	}
 	// phpcs:enable
 };
@@ -481,6 +485,36 @@ try {
 			remove_filter( 'pre_option_timezone_string', $pin_tz, 100 );
 			remove_filter( 'pre_option_gmt_offset', $pin_off, 100 );
 		}
+	}
+
+	// --- F2 Gravity SMTP suppression reasons -----------------------------------
+	// The Reason pill got the slug pre-spaced ("manually added"), which the
+	// client reads as a label already written and shows lowercase. Gravity
+	// SMTP's own screen calls it "Manually Suppressed".
+	$gs_enum = '\Gravity_Forms\Gravity_SMTP\Enums\Suppression_Reason_Enum';
+	if ( ! function_exists( 'minn_admin_gravity_smtp_active' ) || ! minn_admin_gravity_smtp_active() ) {
+		$skip( 'F2 Gravity SMTP inactive' );
+	} elseif ( ! $has( $gs_table ) ) {
+		$skip( 'F2 Gravity SMTP has no suppression table here' );
+	} else {
+		$gs_add  = function ( $reason ) use ( $wpdb, $gs_table, $marker ) {
+			$ok = $wpdb->insert( $gs_table, array(
+				'email'        => $marker . '-' . $reason . '@example.com',
+				'reason'       => $reason,
+				'notes'        => '',
+				'date_created' => current_time( 'mysql', true ),
+			) );
+			$id = $ok ? (int) $wpdb->insert_id : 0;
+			return is_int( $id ) && $id > 1 ? $id : 0;
+		};
+		$gs_own  = $gs_add( 'manually_added' );
+		$gs_new  = $gs_add( 'hard_bounce' );
+		list( $st, $list ) = $call( 'GET', '/minn-admin/v1/gravity-smtp/suppressed', array( 'search' => $marker, 'per_page' => 100 ) );
+		$own  = $find( $list['items'] ?? array(), $gs_own );
+		$new  = $find( $list['items'] ?? array(), $gs_new );
+		$want = class_exists( $gs_enum ) ? (string) $gs_enum::label( 'manually_added' ) : 'manually_added';
+		$check( 'F2 Gravity SMTP: a manual suppression\'s Reason is Gravity SMTP\'s own label', $own && $want === $own['reason'], $st . ' ' . wp_json_encode( $own['reason'] ?? null ) . ' want ' . wp_json_encode( $want ) );
+		$check( 'F2 Gravity SMTP: a reason it has no label for goes out as the slug, for the pill to tidy', $new && 'hard_bounce' === $new['reason'], wp_json_encode( $new['reason'] ?? null ) );
 	}
 } finally {
 	$wipe();
