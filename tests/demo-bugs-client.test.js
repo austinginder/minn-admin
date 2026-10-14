@@ -978,6 +978,19 @@ const id = ( v ) => ( Number.isInteger( v ) && v > 1 ? v : null );
 			` );
 		}
 		if ( mediaId ) await api( `wp/v2/media/${ mediaId }?force=true`, { method: 'DELETE' } ).catch( () => {} );
+		// That delete can fail under load, and its error is swallowed. A left
+		// image shifts every suite that takes the newest media (acf-photos took
+		// it as its photo, 2026-10-14), so sweep the fixture by its unique
+		// title as well.
+		try {
+			evalPhp( `
+				foreach ( get_posts( array( 'post_type' => 'attachment', 'post_status' => 'inherit', 'title' => 'demo-bugs-media-${ suffix }', 'numberposts' => 5, 'fields' => 'ids' ) ) as $aid ) {
+					if ( is_int( $aid ) && $aid > 1 ) {
+						wp_delete_attachment( $aid, true );
+					}
+				}
+			` );
+		} catch ( e ) {}
 		if ( wc.sub ) await api( `wc/v3/subscriptions/${ wc.sub }?force=true`, { method: 'DELETE' } ).catch( () => {} );
 		if ( wc.renewal ) await api( `wc/v3/orders/${ wc.renewal }?force=true`, { method: 'DELETE' } ).catch( () => {} );
 		if ( wc.parent ) await api( `wc/v3/orders/${ wc.parent }?force=true`, { method: 'DELETE' } ).catch( () => {} );
