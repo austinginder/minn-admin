@@ -695,6 +695,16 @@
 		return new Date( d.getTime() + z.shift )[ kind || 'toLocaleString' ]( uiLocale(), o );
 	}
 
+	// The site's calendar day of an instant, as YYYY-MM-DD.
+	function siteDayKey( d ) {
+		const z = siteZone();
+		const o = { year: 'numeric', month: '2-digit', day: '2-digit' };
+		if ( z.timeZone ) o.timeZone = z.timeZone;
+		const p = {};
+		new Intl.DateTimeFormat( 'en-US', o ).formatToParts( new Date( d.getTime() + z.shift ) ).forEach( ( x ) => { p[ x.type ] = x.value; } );
+		return `${ p.year }-${ p.month }-${ p.day }`;
+	}
+
 	// A detail value that is a full ISO-8601 instant (Z or an offset) as the
 	// site's clock reads it, '' for anything else: text that merely holds a
 	// date, or a bare stamp whose zone the value does not say, stays as sent.
@@ -51809,14 +51819,12 @@
 			.catch( ( e ) => { toast( e.message, true ); closeModal(); } );
 	}
 
-	/** Local YYYY-MM-DD for a revision stamp (for heatmap cells / day filter). */
+	/** The site's YYYY-MM-DD for a revision stamp (for heatmap cells / day
+	 *  filter), the day revisionWhenFull prints it on. */
 	function revisionDayKey( when ) {
 		const d = parseWpDate( when );
 		if ( ! d || Number.isNaN( d.getTime() ) ) return '';
-		const y = d.getFullYear();
-		const mo = String( d.getMonth() + 1 ).padStart( 2, '0' );
-		const day = String( d.getDate() ).padStart( 2, '0' );
-		return `${ y }-${ mo }-${ day }`;
+		return siteDayKey( d );
 	}
 
 	function revisionDayLabel( key ) {
