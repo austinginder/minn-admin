@@ -700,6 +700,14 @@
 		return new Date( d.getTime() + z.shift )[ kind || 'toLocaleString' ]( uiLocale(), o );
 	}
 
+	// A zone saved in Settings: the name, and the offset it keeps today.
+	function syncSiteZone( tz ) {
+		const off = tz ? zoneOffsetMin( tz, Date.now() ) : null;
+		if ( null === off ) return;
+		B.timezone = tz;
+		B.gmtOffset = off / 60;
+	}
+
 	// The site's calendar day of an instant, as YYYY-MM-DD.
 	function siteDayKey( d ) {
 		const z = siteZone();
@@ -31641,6 +31649,8 @@
 						// Site title / Site icon feed the sidebar brand — patch
 						// it in place so it doesn't wait for a reload.
 						if ( 'title' in payload || 'site_icon' in payload ) await refreshBrand( payload, cache.values, cache );
+						// The app's clock follows a new zone without a reload.
+						if ( 'timezone' in payload ) syncSiteZone( cache.values.timezone || payload.timezone );
 					} catch ( err ) { toast( err.message, true ); okAll = false; }
 				}
 
