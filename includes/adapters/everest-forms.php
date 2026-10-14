@@ -490,125 +490,127 @@ function minn_admin_everest_status_reply( $id, $fresh ) {
 // Everest's own screen restores from trash under the edit meta cap and
 // trashes, spams and deletes under the delete one (class-evf-admin-entries.php
 // untrash_entry vs trash_entry); the item gate asks it per entry.
-minn_admin_resource( 'everest/entries', array(
-	'active'    => 'minn_admin_everest_active',
-	'gates'     => array(
-		'view'   => 'minn_admin_everest_can',
-		'edit'   => function () {
-			return minn_admin_everest_can( 'edit' );
-		},
-		'delete' => function () {
-			return minn_admin_everest_can( 'delete' );
-		},
-	),
-	'item_gate' => 'minn_admin_everest_can_entry',
-	'labels'    => array(
-		'not_found' => __( 'Entry not found.', 'minn-admin' ),
-		'forbidden' => __( 'You cannot access that entry.', 'minn-admin' ),
-	),
-	'source'    => array(
-		'table'   => 'evf_entries',
-		'key'     => 'entry_id',
-		'columns' => array( 'entry_id', 'form_id', 'status', 'date_created' ),
-		'detail'  => array( 'entry_id', 'form_id', 'status', 'date_created', 'user_ip_address', 'viewed' ),
-	),
-	'list'      => array(
-		// Same three buckets as their entries screen.
-		'filter' => array( 'param' => 'status', 'column' => 'status', 'values' => array( 'publish', 'spam', 'trash' ), 'default' => 'publish' ),
-		'tab'    => array( 'param' => 'form_id', 'column' => 'form_id' ),
-		// The list returns real answer values, so it is the bulk read the
-		// per-entry gate exists to prevent: scoped to the caller's own forms
-		// unless they hold the others or manage capability.
-		'scope'  => array(
-			'column'  => 'form_id',
-			'allowed' => 'minn_admin_everest_allowed_form_ids',
-			'refuse'  => __( 'You cannot view entries for that form.', 'minn-admin' ),
-		),
-		// Answer meta, minus their bookkeeping keys.
-		'search' => array( 'param' => 'search', 'meta' => array( 'table' => 'evf_entrymeta', 'key' => 'entry_id', 'name' => 'meta_key', 'value' => 'meta_value', 'skip' => '_evf_' ) ),
-		'range'  => array( 'column' => 'date_created', 'clock' => 'utc' ),
-		'order'  => array( 'column' => 'entry_id', 'dir' => 'DESC' ),
-		'row'    => 'minn_admin_everest_row',
-		'fields' => array(
-			'id'         => 'int',
-			'summary'    => 'text',
-			'form_title' => 'text',
-			'status'     => 'text',
-			'state'      => 'text',
-			// current_time( 'mysql', true ): the descriptor's column says utc.
-			'date'       => array( 'type' => 'datetime', 'stored' => 'utc', 'wire' => 'naked' ),
-		),
-	),
-	'item'      => array( 'view' => 'minn_admin_everest_view' ),
-	'actions'   => array(
-		'trash'   => array(
-			'gate'   => 'delete',
-			'when'   => array( 'status' => array( 'publish' ) ),
-			'refuse' => __( 'Only received entries can be trashed.', 'minn-admin' ),
-			'run'    => function ( $id, $row ) {
-				return minn_admin_everest_set_status( $id, 'trash', (int) $row['form_id'] );
+minn_admin_resource( 'everest/entries', function () {
+	return array(
+		'active'    => 'minn_admin_everest_active',
+		'gates'     => array(
+			'view'   => 'minn_admin_everest_can',
+			'edit'   => function () {
+				return minn_admin_everest_can( 'edit' );
 			},
-			'expect' => array( 'status' => 'trash' ),
-			'reply'  => 'minn_admin_everest_status_reply',
-			'done'   => __( 'Entry moved to trash.', 'minn-admin' ),
-		),
-		'restore' => array(
-			'gate'   => 'edit',
-			'when'   => array( 'status' => array( 'trash' ) ),
-			'refuse' => __( 'Only trashed entries can be restored.', 'minn-admin' ),
-			'run'    => function ( $id, $row ) {
-				// Their restore puts back the status the entry was trashed from,
-				// read from _evf_trash_entry_status. A trash that wrote none (their
-				// own Abilities API) would restore to an empty status that no
-				// filter lists and no action accepts, so it goes to received.
-				global $wpdb;
-				$prior = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->prefix}evf_entrymeta WHERE entry_id = %d AND meta_key = '_evf_trash_entry_status' LIMIT 1", $id ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$op    = in_array( (string) $prior, array( 'publish', 'spam' ), true ) ? 'publish' : 'unspam';
-				return minn_admin_everest_set_status( $id, $op, (int) $row['form_id'] );
+			'delete' => function () {
+				return minn_admin_everest_can( 'delete' );
 			},
-			'expect' => array( 'status' => array( 'publish', 'spam' ) ),
-			'reply'  => 'minn_admin_everest_status_reply',
-			'done'   => __( 'Entry restored.', 'minn-admin' ),
 		),
-		'spam'    => array(
-			'gate'   => 'delete',
-			'when'   => array( 'status' => array( 'publish' ) ),
-			'refuse' => __( 'Only received entries can be marked spam.', 'minn-admin' ),
-			'run'    => function ( $id, $row ) {
-				return minn_admin_everest_set_status( $id, 'spam', (int) $row['form_id'] );
-			},
-			'expect' => array( 'status' => 'spam' ),
-			'reply'  => 'minn_admin_everest_status_reply',
-			'done'   => __( 'Entry marked as spam.', 'minn-admin' ),
+		'item_gate' => 'minn_admin_everest_can_entry',
+		'labels'    => array(
+			'not_found' => __( 'Entry not found.', 'minn-admin' ),
+			'forbidden' => __( 'You cannot access that entry.', 'minn-admin' ),
 		),
-		'unspam'  => array(
-			'gate'   => 'delete',
-			'when'   => array( 'status' => array( 'spam' ) ),
-			'refuse' => __( 'Only spam entries can be unmarked.', 'minn-admin' ),
-			'run'    => function ( $id, $row ) {
-				return minn_admin_everest_set_status( $id, 'unspam', (int) $row['form_id'] );
-			},
-			'expect' => array( 'status' => 'publish' ),
-			'reply'  => 'minn_admin_everest_status_reply',
-			'done'   => __( 'Entry marked not spam.', 'minn-admin' ),
+		'source'    => array(
+			'table'   => 'evf_entries',
+			'key'     => 'entry_id',
+			'columns' => array( 'entry_id', 'form_id', 'status', 'date_created' ),
+			'detail'  => array( 'entry_id', 'form_id', 'status', 'date_created', 'user_ip_address', 'viewed' ),
 		),
-		// Permanent delete is for trash or spam only (Received goes to trash first).
-		'delete'  => array(
-			'method'    => 'DELETE',
-			'gate'      => 'delete',
-			'when'      => array( 'status' => array( 'trash', 'spam' ) ),
-			'code'      => 'not_trashed',
-			'refuse'    => __( 'Move the entry to trash (or spam) before deleting permanently.', 'minn-admin' ),
-			'run'       => function ( $id, $row ) {
-				return minn_admin_everest_set_status( $id, 'delete', (int) $row['form_id'] );
-			},
-			'expect'    => 'gone',
-			'fail_code' => 'delete_failed',
-			'fail'      => __( 'Everest Forms reported success but the entry still exists.', 'minn-admin' ),
-			'done'      => __( 'Entry deleted permanently.', 'minn-admin' ),
+		'list'      => array(
+			// Same three buckets as their entries screen.
+			'filter' => array( 'param' => 'status', 'column' => 'status', 'values' => array( 'publish', 'spam', 'trash' ), 'default' => 'publish' ),
+			'tab'    => array( 'param' => 'form_id', 'column' => 'form_id' ),
+			// The list returns real answer values, so it is the bulk read the
+			// per-entry gate exists to prevent: scoped to the caller's own forms
+			// unless they hold the others or manage capability.
+			'scope'  => array(
+				'column'  => 'form_id',
+				'allowed' => 'minn_admin_everest_allowed_form_ids',
+				'refuse'  => __( 'You cannot view entries for that form.', 'minn-admin' ),
+			),
+			// Answer meta, minus their bookkeeping keys.
+			'search' => array( 'param' => 'search', 'meta' => array( 'table' => 'evf_entrymeta', 'key' => 'entry_id', 'name' => 'meta_key', 'value' => 'meta_value', 'skip' => '_evf_' ) ),
+			'range'  => array( 'column' => 'date_created', 'clock' => 'utc' ),
+			'order'  => array( 'column' => 'entry_id', 'dir' => 'DESC' ),
+			'row'    => 'minn_admin_everest_row',
+			'fields' => array(
+				'id'         => 'int',
+				'summary'    => 'text',
+				'form_title' => 'text',
+				'status'     => 'text',
+				'state'      => 'text',
+				// current_time( 'mysql', true ): the descriptor's column says utc.
+				'date'       => array( 'type' => 'datetime', 'stored' => 'utc', 'wire' => 'naked' ),
+			),
 		),
-	),
-) );
+		'item'      => array( 'view' => 'minn_admin_everest_view' ),
+		'actions'   => array(
+			'trash'   => array(
+				'gate'   => 'delete',
+				'when'   => array( 'status' => array( 'publish' ) ),
+				'refuse' => __( 'Only received entries can be trashed.', 'minn-admin' ),
+				'run'    => function ( $id, $row ) {
+					return minn_admin_everest_set_status( $id, 'trash', (int) $row['form_id'] );
+				},
+				'expect' => array( 'status' => 'trash' ),
+				'reply'  => 'minn_admin_everest_status_reply',
+				'done'   => __( 'Entry moved to trash.', 'minn-admin' ),
+			),
+			'restore' => array(
+				'gate'   => 'edit',
+				'when'   => array( 'status' => array( 'trash' ) ),
+				'refuse' => __( 'Only trashed entries can be restored.', 'minn-admin' ),
+				'run'    => function ( $id, $row ) {
+					// Their restore puts back the status the entry was trashed from,
+					// read from _evf_trash_entry_status. A trash that wrote none (their
+					// own Abilities API) would restore to an empty status that no
+					// filter lists and no action accepts, so it goes to received.
+					global $wpdb;
+					$prior = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->prefix}evf_entrymeta WHERE entry_id = %d AND meta_key = '_evf_trash_entry_status' LIMIT 1", $id ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					$op    = in_array( (string) $prior, array( 'publish', 'spam' ), true ) ? 'publish' : 'unspam';
+					return minn_admin_everest_set_status( $id, $op, (int) $row['form_id'] );
+				},
+				'expect' => array( 'status' => array( 'publish', 'spam' ) ),
+				'reply'  => 'minn_admin_everest_status_reply',
+				'done'   => __( 'Entry restored.', 'minn-admin' ),
+			),
+			'spam'    => array(
+				'gate'   => 'delete',
+				'when'   => array( 'status' => array( 'publish' ) ),
+				'refuse' => __( 'Only received entries can be marked spam.', 'minn-admin' ),
+				'run'    => function ( $id, $row ) {
+					return minn_admin_everest_set_status( $id, 'spam', (int) $row['form_id'] );
+				},
+				'expect' => array( 'status' => 'spam' ),
+				'reply'  => 'minn_admin_everest_status_reply',
+				'done'   => __( 'Entry marked as spam.', 'minn-admin' ),
+			),
+			'unspam'  => array(
+				'gate'   => 'delete',
+				'when'   => array( 'status' => array( 'spam' ) ),
+				'refuse' => __( 'Only spam entries can be unmarked.', 'minn-admin' ),
+				'run'    => function ( $id, $row ) {
+					return minn_admin_everest_set_status( $id, 'unspam', (int) $row['form_id'] );
+				},
+				'expect' => array( 'status' => 'publish' ),
+				'reply'  => 'minn_admin_everest_status_reply',
+				'done'   => __( 'Entry marked not spam.', 'minn-admin' ),
+			),
+			// Permanent delete is for trash or spam only (Received goes to trash first).
+			'delete'  => array(
+				'method'    => 'DELETE',
+				'gate'      => 'delete',
+				'when'      => array( 'status' => array( 'trash', 'spam' ) ),
+				'code'      => 'not_trashed',
+				'refuse'    => __( 'Move the entry to trash (or spam) before deleting permanently.', 'minn-admin' ),
+				'run'       => function ( $id, $row ) {
+					return minn_admin_everest_set_status( $id, 'delete', (int) $row['form_id'] );
+				},
+				'expect'    => 'gone',
+				'fail_code' => 'delete_failed',
+				'fail'      => __( 'Everest Forms reported success but the entry still exists.', 'minn-admin' ),
+				'done'      => __( 'Entry deleted permanently.', 'minn-admin' ),
+			),
+		),
+	);
+} );
 minn_admin_endpoint( 'everest/status', array(
 	'active' => 'minn_admin_everest_active',
 	'gate'   => 'minn_admin_everest_can',

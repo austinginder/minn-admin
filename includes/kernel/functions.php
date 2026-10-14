@@ -11,10 +11,12 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Declare a resource: its list, item and actions get kernel-owned routes.
  *
- * @param string $id  Route base under minn-admin/v1, e.g. "everest/entries".
- * @param array  $def Declaration; Minn_Admin_Kernel's header lists the keys.
+ * @param string         $id  Route base under minn-admin/v1, e.g. "everest/entries".
+ * @param array|callable $def Declaration (Minn_Admin_Kernel's header lists the keys),
+ *                            or a function returning it so its strings are
+ *                            translated after Minn's translations load.
  */
-function minn_admin_resource( $id, array $def ) {
+function minn_admin_resource( $id, $def ) {
 	Minn_Admin_Kernel::resource( $id, $def );
 }
 

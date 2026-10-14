@@ -209,22 +209,30 @@ entity handling.
 
 ## What to expect
 
-An estimate, to be replaced by measurement:
+The first estimate was collection adapters 40 to 55% smaller. The forms family,
+ported first, measured otherwise:
 
-- collection adapters about 40 to 55% smaller (52,151 lines today). The
-  declared tier is where the savings come from; a handler keeps its logic and
-  loses only its plumbing;
-- everything else about 5 to 10% smaller at first;
-- the adapter layer from 86,450 lines to roughly 55,000 to 64,000, with the
-  kernel adding 2,000 to 3,000;
-- hand-written routes in ported families at zero: each becomes a declaration
-  or a kernel handler, with a gate declared once per verb.
+| | v0.45.0 | ported |
+|---|---|---|
+| Ten form-entry adapters and Gravity Forms | 8,289 lines | 7,808 lines (−6%) |
+| Hand-written routes in them | 84 | 0 |
+| Kernel | — | 1,227 lines |
+
+Most of a form adapter is the vendor's own shape: how answers are stored and
+decoded, which buckets an entry moves between, what the status card counts, the
+descriptor's labels and confirms. That stays. What the routes repeated is what
+went, and it is where the bugs were: each forms route now passes the same gate
+check (a strict yes, so a WP_Error or a truthy number never opens it), the same
+row scope on lists, items and actions alike, the same not found, forbidden and
+wrong-state answers in that order, the same post-condition on every write, and the
+same error shape. The case for the kernel is that, not size; expect later families
+to shrink by a similar few percent.
 
 ## Porting an adapter
 
 The kernel lives in `includes/kernel/`; `class-minn-admin-kernel.php` opens with the
 declaration keys, and `includes/adapters/everest-forms.php` is the worked example (902
-lines to 717, no hand-written route left, parity empty). A port, one adapter at a time:
+lines to 725, no hand-written route left, parity empty). A port, one adapter at a time:
 
 1. **Read the adapter whole** and sort its routes: a list, an item and item actions
    become `minn_admin_resource()`; a status card, a forms tab list, a send, a job or an
@@ -256,9 +264,19 @@ lines to 717, no hand-written route left, parity empty). A port, one adapter at 
 6. **Delete what the kernel replaced:** the adapter's guard helpers, its hand-built SQL
    for lists and rows, its error plumbing.
 
-What the kernel does not have yet: the save path for edit forms (changed fields only, a
-base stamp and a 409 on a stale copy), which the entry-edit adapters will need when they
-port, and secret-value redaction beyond the `secret` field type.
+Declare with a function (`minn_admin_resource( 'x/y', function () { return array( … ); } )`)
+when the declaration carries labels or messages: the kernel builds it on first use,
+after Minn's translations load at `init` in the reader's language. A callable source
+that proves deletion (`'expect' => 'gone'`) declares `exists`, asked of the store
+directly, since its own read may hide a row from the caller.
+
+What the kernel does not have yet: the save path for edit forms (changed fields only,
+a base stamp and a 409 on a stale copy), which the entry-edit adapters will need when
+they port; secret-value redaction beyond the `secret` field type; and what the forms
+ports worked around: a fixed condition for every read of a table (Forminator's
+`entry_type`), OR between condition sets, a LIKE condition (a token in a serialized
+blob, cfdb7), string tab values (Elementor), a UTC wire format ending in `Z`, and a
+status card without a secondary series.
 
 ## Measuring progress
 

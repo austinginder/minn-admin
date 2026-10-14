@@ -342,89 +342,91 @@ function minn_admin_ninja_forms_restore( $id ) {
 	return $result ? true : new WP_Error( 'restore_failed', __( 'Could not restore the entry.', 'minn-admin' ), array( 'status' => 500 ) );
 }
 
-minn_admin_resource( 'ninja-forms/entries', array(
-	'active'  => 'minn_admin_ninja_forms_active',
-	'gates'   => array(
-		'view'   => 'minn_admin_ninja_forms_can',
-		'manage' => 'minn_admin_ninja_forms_can',
-	),
-	'labels'  => array(
-		'not_found' => __( 'Entry not found', 'minn-admin' ),
-	),
-	'source'  => array(
-		'list'   => 'minn_admin_ninja_forms_list',
-		'get'    => 'minn_admin_ninja_forms_get',
-		'exists' => 'minn_admin_ninja_forms_exists',
-	),
-	'list'    => array(
-		'filter' => array( 'param' => 'status', 'column' => 'post_status', 'values' => array( 'publish', 'trash' ), 'default' => 'publish' ),
-		'tab'    => array( 'param' => 'form_id', 'column' => '_form_id' ),
-		'search' => array( 'param' => 'search' ),
-		// The source reads after/before into its date_query; this gives the
-		// descriptor its day range.
-		'range'  => array( 'column' => 'post_date', 'clock' => 'local' ),
-		'row'    => 'minn_admin_ninja_forms_row',
-		'fields' => array(
-			'id'         => 'int',
-			'summary'    => 'text',
-			'form_title' => 'text',
-			'status'     => 'text',
-			'state'      => 'text',
-			'seq'        => 'int',
-			// post_date is site-local; emitted naked (the client parses local).
-			'date'       => array( 'type' => 'datetime', 'stored' => 'site', 'wire' => 'naked' ),
+minn_admin_resource( 'ninja-forms/entries', function () {
+	return array(
+		'active'  => 'minn_admin_ninja_forms_active',
+		'gates'   => array(
+			'view'   => 'minn_admin_ninja_forms_can',
+			'manage' => 'minn_admin_ninja_forms_can',
 		),
-	),
-	'item'    => array( 'view' => 'minn_admin_ninja_forms_view' ),
-	'actions' => array(
-		// Their own model's trash (their screen's semantics).
-		'trash'   => array(
-			'gate'      => 'manage',
-			'run'       => function ( $id ) {
-				Ninja_Forms()->form()->sub( $id )->get()->trash();
-				return true;
-			},
-			'expect'    => array( 'status' => 'trash' ),
-			'fail_code' => 'trash_failed',
-			'fail'      => __( 'Ninja Forms reported success but the entry is not in the trash.', 'minn-admin' ),
-			'reply'     => function () {
-				return array( 'status' => 'trash' );
-			},
-			'done'      => __( 'Moved to trash.', 'minn-admin' ),
+		'labels'  => array(
+			'not_found' => __( 'Entry not found', 'minn-admin' ),
 		),
-		'restore' => array(
-			'gate'      => 'manage',
-			'when'      => array( 'status' => array( 'trash' ) ),
-			'code'      => 'not_trashed',
-			'refuse'    => __( 'Only trashed entries can be restored.', 'minn-admin' ),
-			'run'       => 'minn_admin_ninja_forms_restore',
-			'expect'    => function ( $id, $fresh ) {
-				return is_array( $fresh ) && 'trash' !== $fresh['status'];
-			},
-			'fail_code' => 'restore_failed',
-			'fail'      => __( 'Could not restore the entry.', 'minn-admin' ),
-			'reply'     => function () {
-				return array( 'status' => 'publish' );
-			},
-			'done'      => __( 'Entry restored.', 'minn-admin' ),
+		'source'  => array(
+			'list'   => 'minn_admin_ninja_forms_list',
+			'get'    => 'minn_admin_ninja_forms_get',
+			'exists' => 'minn_admin_ninja_forms_exists',
 		),
-		'delete'  => array(
-			'method'    => 'DELETE',
-			'gate'      => 'manage',
-			'when'      => array( 'status' => array( 'trash' ) ),
-			'code'      => 'not_trashed',
-			'refuse'    => __( 'Move the entry to trash before deleting permanently.', 'minn-admin' ),
-			'run'       => function ( $id ) {
-				Ninja_Forms()->form()->sub( $id )->get()->delete();
-				return true;
-			},
-			'expect'    => 'gone',
-			'fail_code' => 'delete_failed',
-			'fail'      => __( 'Entry still exists after delete.', 'minn-admin' ),
-			'done'      => __( 'Entry deleted permanently.', 'minn-admin' ),
+		'list'    => array(
+			'filter' => array( 'param' => 'status', 'column' => 'post_status', 'values' => array( 'publish', 'trash' ), 'default' => 'publish' ),
+			'tab'    => array( 'param' => 'form_id', 'column' => '_form_id' ),
+			'search' => array( 'param' => 'search' ),
+			// The source reads after/before into its date_query; this gives the
+			// descriptor its day range.
+			'range'  => array( 'column' => 'post_date', 'clock' => 'local' ),
+			'row'    => 'minn_admin_ninja_forms_row',
+			'fields' => array(
+				'id'         => 'int',
+				'summary'    => 'text',
+				'form_title' => 'text',
+				'status'     => 'text',
+				'state'      => 'text',
+				'seq'        => 'int',
+				// post_date is site-local; emitted naked (the client parses local).
+				'date'       => array( 'type' => 'datetime', 'stored' => 'site', 'wire' => 'naked' ),
+			),
 		),
-	),
-) );
+		'item'    => array( 'view' => 'minn_admin_ninja_forms_view' ),
+		'actions' => array(
+			// Their own model's trash (their screen's semantics).
+			'trash'   => array(
+				'gate'      => 'manage',
+				'run'       => function ( $id ) {
+					Ninja_Forms()->form()->sub( $id )->get()->trash();
+					return true;
+				},
+				'expect'    => array( 'status' => 'trash' ),
+				'fail_code' => 'trash_failed',
+				'fail'      => __( 'Ninja Forms reported success but the entry is not in the trash.', 'minn-admin' ),
+				'reply'     => function () {
+					return array( 'status' => 'trash' );
+				},
+				'done'      => __( 'Moved to trash.', 'minn-admin' ),
+			),
+			'restore' => array(
+				'gate'      => 'manage',
+				'when'      => array( 'status' => array( 'trash' ) ),
+				'code'      => 'not_trashed',
+				'refuse'    => __( 'Only trashed entries can be restored.', 'minn-admin' ),
+				'run'       => 'minn_admin_ninja_forms_restore',
+				'expect'    => function ( $id, $fresh ) {
+					return is_array( $fresh ) && 'trash' !== $fresh['status'];
+				},
+				'fail_code' => 'restore_failed',
+				'fail'      => __( 'Could not restore the entry.', 'minn-admin' ),
+				'reply'     => function () {
+					return array( 'status' => 'publish' );
+				},
+				'done'      => __( 'Entry restored.', 'minn-admin' ),
+			),
+			'delete'  => array(
+				'method'    => 'DELETE',
+				'gate'      => 'manage',
+				'when'      => array( 'status' => array( 'trash' ) ),
+				'code'      => 'not_trashed',
+				'refuse'    => __( 'Move the entry to trash before deleting permanently.', 'minn-admin' ),
+				'run'       => function ( $id ) {
+					Ninja_Forms()->form()->sub( $id )->get()->delete();
+					return true;
+				},
+				'expect'    => 'gone',
+				'fail_code' => 'delete_failed',
+				'fail'      => __( 'Entry still exists after delete.', 'minn-admin' ),
+				'done'      => __( 'Entry deleted permanently.', 'minn-admin' ),
+			),
+		),
+	);
+} );
 
 /**
  * Server-built model for the surface status card (SureForms parity).

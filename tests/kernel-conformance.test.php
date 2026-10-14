@@ -506,7 +506,8 @@ $walk = function ( $node, $where, $sid ) use ( &$walk, $check, $kernel_actions, 
 	// A descriptor action pointing at a kernel route names a declared action
 	// with its method, shown only in a state the action accepts.
 	if ( isset( $node['route'], $node['method'] ) && is_string( $node['route'] ) ) {
-		$key = strtoupper( $node['method'] ) . ' ' . $node['route'];
+		// A query on the route ("?force=1") is not part of which route it is.
+		$key = strtoupper( $node['method'] ) . ' ' . strtok( $node['route'], '?' );
 		if ( preg_match( '#^minn-admin/v1/(.+)/\{id\}#', $node['route'], $m ) && isset( $real[ $m[1] ] ) ) {
 			$check( "{$sid}{$where} {$key} is a declared action", isset( $kernel_actions[ $key ] ) );
 			$a = $kernel_actions[ $key ] ?? null;

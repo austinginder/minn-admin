@@ -80,24 +80,52 @@ class Minn_Admin_Kernel {
 	/**
 	 * Declare a resource. Routes register at rest_api_init.
 	 *
-	 * @param string $id  Route base under minn-admin/v1 ("everest/entries").
-	 * @param array  $def Declaration (see the class header).
+	 * The declaration may be a function returning the array, and an adapter
+	 * that declares when its file loads passes one: its labels and messages
+	 * are translated when the kernel first needs them, after Minn's
+	 * translations load at init in the reader's language, not before.
+	 *
+	 * @param string         $id  Route base under minn-admin/v1 ("everest/entries").
+	 * @param array|callable $def Declaration (see the class header), or a function returning it.
 	 */
-	public static function resource( $id, array $def ) {
+	public static function resource( $id, $def ) {
 		$id = trim( (string) $id, '/' );
-		if ( ! preg_match( '#^[a-z0-9-]+(/[a-z0-9-]+)*$#', $id ) ) {
-			_doing_it_wrong( __METHOD__, esc_html( 'Resource ids are lowercase path segments: ' . $id ), 'Minn Admin 0.46.0' );
+		if ( ! preg_match( '#^[a-z0-9-]+(/[a-z0-9-]+)*$#', $id ) || ! ( is_array( $def ) || is_callable( $def ) ) ) {
+			_doing_it_wrong( __METHOD__, esc_html( 'Resource ids are lowercase path segments, declarations arrays or functions: ' . $id ), 'Minn Admin 0.46.0' );
 			return;
 		}
-		$def['id']              = $id;
-		$def['file']            = self::caller();
-		self::$resources[ $id ] = $def;
+		self::$resources[ $id ] = array( 'lazy' => $def, 'id' => $id, 'file' => self::caller() );
 		self::hook();
 		// Declared after the REST server started (a late plugin, a test):
 		// register now rather than never.
 		if ( did_action( 'rest_api_init' ) ) {
-			self::register_one( 'resource', $id, $def );
+			self::register_one( 'resource', $id, self::def( $id ) );
 		}
+	}
+
+	/**
+	 * A resource's declaration, built from its function the first time it
+	 * is asked for.
+	 *
+	 * @param string $id Resource id.
+	 * @return array|null
+	 */
+	private static function def( $id ) {
+		$slot = self::$resources[ $id ] ?? null;
+		if ( ! is_array( $slot ) ) {
+			return null;
+		}
+		if ( array_key_exists( 'lazy', $slot ) ) {
+			if ( ! did_action( 'init' ) ) {
+				_doing_it_wrong( __METHOD__, esc_html( "{$id} was needed before init, so its labels are not yet in the reader's language." ), 'Minn Admin 0.46.0' );
+			}
+			$def = is_callable( $slot['lazy'] ) && ! is_array( $slot['lazy'] ) ? call_user_func( $slot['lazy'] ) : $slot['lazy'];
+			$def = is_array( $def ) ? $def : array();
+			$def['id']              = $slot['id'];
+			$def['file']            = $slot['file'];
+			self::$resources[ $id ] = $def;
+		}
+		return self::$resources[ $id ];
 	}
 
 	/**
@@ -106,6 +134,9 @@ class Minn_Admin_Kernel {
 	 * @param string $path Route under minn-admin/v1, may hold (?P<id>\d+).
 	 * @param array  $def  methods, gate (callable, required), run (callable(
 	 *                     WP_REST_Request, array ctx )), active, args.
+	 *                     Any message in it is translated when declared, so
+	 *                     an endpoint declared as its file loads keeps its
+	 *                     messages inside run.
 	 */
 	public static function endpoint( $path, array $def ) {
 		$def['path']       = trim( (string) $path, '/' );
@@ -144,6 +175,9 @@ class Minn_Admin_Kernel {
 
 	/** What is declared, for the conformance runner and the inventory. */
 	public static function resources() {
+		foreach ( array_keys( self::$resources ) as $id ) {
+			self::def( $id );
+		}
 		return self::$resources;
 	}
 
@@ -181,8 +215,8 @@ class Minn_Admin_Kernel {
 
 	/** rest_api_init: every active declaration's routes. */
 	public static function register() {
-		foreach ( self::$resources as $id => $res ) {
-			self::register_one( 'resource', $id, $res );
+		foreach ( array_keys( self::$resources ) as $id ) {
+			self::register_one( 'resource', $id, self::def( $id ) );
 		}
 		foreach ( self::$endpoints as $i => $ep ) {
 			self::register_one( 'endpoint', $i, $ep );
@@ -390,7 +424,7 @@ class Minn_Admin_Kernel {
 	 */
 	public static function load( $res, $id, $gate = 'view' ) {
 		if ( is_string( $res ) ) {
-			$res = self::$resources[ $res ] ?? null;
+			$res = self::def( $res );
 		}
 		if ( ! is_array( $res ) ) {
 			return self::fail( 'not_found', __( 'Not found.', 'minn-admin' ), 404 );
@@ -515,6 +549,19 @@ class Minn_Admin_Kernel {
 			$q['search'] = trim( (string) $r->get_param( $l['search']['param'] ?? 'search' ) );
 		}
 		return $q;
+	}
+
+	/**
+	 * A list query's conditions (filter, scope, tab) as SQL fragments and
+	 * their values, for a callable source that runs its own query over a
+	 * table: [ sql fragments, args ], every value a placeholder.
+	 *
+	 * @param array  $q     The kernel's list query, as the source is handed it.
+	 * @param string $alias The table alias the fragments qualify columns with.
+	 * @return array
+	 */
+	public static function list_where( array $q, $alias = 'e' ) {
+		return self::where_sql( (array) ( $q['where'] ?? array() ), $alias );
 	}
 
 	/** Conditions keyed "column\0why" (so a scope and a tab on one column both apply). */
@@ -664,8 +711,17 @@ class Minn_Admin_Kernel {
 		if ( 'gone' === $expect ) {
 			// A callable source's own read may hide a row from this caller,
 			// so gone is asked of the store itself when the source says how.
+			// A check that throws proves nothing, so the row counts as still there.
 			$exists = $res['source']['exists'] ?? null;
-			$held   = is_callable( $exists ) ? ! self::yes( $exists, $id ) : null === $fresh;
+			if ( is_callable( $exists ) ) {
+				try {
+					$held = false === call_user_func( $exists, $id );
+				} catch ( \Throwable $e ) {
+					$held = false;
+				}
+			} else {
+				$held = null === $fresh;
+			}
 		} elseif ( is_array( $expect ) ) {
 			$held = is_array( $fresh ) && self::holds( $expect, $fresh );
 		} elseif ( is_callable( $expect ) ) {
@@ -695,7 +751,7 @@ class Minn_Admin_Kernel {
 	 * @return array
 	 */
 	public static function collection( $id, array $extra = array() ) {
-		$res = self::$resources[ $id ] ?? null;
+		$res = self::def( $id );
 		if ( ! $res || empty( $res['list'] ) ) {
 			return $extra;
 		}
@@ -725,16 +781,18 @@ class Minn_Admin_Kernel {
 	 *
 	 * @param string $id   Resource id.
 	 * @param string $slug Action slug.
-	 * @param array  $ui   label, confirm, danger, body, when, key.
+	 * @param array  $ui   label, confirm, danger, body, query, when, key.
 	 * @return array
 	 */
 	public static function ui( $id, $slug, array $ui ) {
-		$a      = self::$resources[ $id ]['actions'][ $slug ] ?? array();
+		$a      = self::def( $id )['actions'][ $slug ] ?? array();
 		$method = strtoupper( (string) ( $a['method'] ?? 'POST' ) );
 		$out    = array(
 			'label'  => $ui['label'] ?? $slug,
 			'method' => $method,
-			'route'  => self::NS . '/' . $id . '/{id}' . ( 'DELETE' === $method ? '' : '/' . $slug ),
+			// A query rides the route itself ("force=1"): some servers drop
+			// the body of a DELETE.
+			'route'  => self::NS . '/' . $id . '/{id}' . ( 'DELETE' === $method ? '' : '/' . $slug ) . ( isset( $ui['query'] ) ? '?' . $ui['query'] : '' ),
 		);
 		foreach ( array( 'confirm', 'danger', 'body' ) as $k ) {
 			if ( isset( $ui[ $k ] ) ) {

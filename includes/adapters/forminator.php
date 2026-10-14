@@ -387,76 +387,78 @@ function minn_admin_forminator_spam_actions() {
 	return $out;
 }
 
-minn_admin_resource( 'forminator/entries', array(
-	'active'  => 'minn_admin_forminator_active',
-	'gates'   => array(
-		'view'   => 'minn_admin_forminator_can',
-		'manage' => 'minn_admin_forminator_can',
-	),
-	'labels'  => array(
-		'not_found' => __( 'Entry not found', 'minn-admin' ),
-	),
-	// The list reads the table; a single row goes through `get`, which
-	// answers only for custom-form entries, and `exists` asks the table
-	// whether a deleted row is really gone.
-	'source'  => array(
-		'table'   => 'frmt_form_entry',
-		'key'     => 'entry_id',
-		'columns' => array( 'entry_id', 'form_id', 'date_created', 'is_spam', 'status' ),
-		'get'     => 'minn_admin_forminator_entry',
-		'exists'  => 'minn_admin_forminator_exists',
-	),
-	'list'    => array(
-		// Received vs Spam (no trash in free).
-		'filter' => array(
-			'param'   => 'status',
-			'values'  => array(
-				'received' => minn_admin_forminator_bucket( 'received' ),
-				'spam'     => minn_admin_forminator_bucket( 'spam' ),
+minn_admin_resource( 'forminator/entries', function () {
+	return array(
+		'active'  => 'minn_admin_forminator_active',
+		'gates'   => array(
+			'view'   => 'minn_admin_forminator_can',
+			'manage' => 'minn_admin_forminator_can',
+		),
+		'labels'  => array(
+			'not_found' => __( 'Entry not found', 'minn-admin' ),
+		),
+		// The list reads the table; a single row goes through `get`, which
+		// answers only for custom-form entries, and `exists` asks the table
+		// whether a deleted row is really gone.
+		'source'  => array(
+			'table'   => 'frmt_form_entry',
+			'key'     => 'entry_id',
+			'columns' => array( 'entry_id', 'form_id', 'date_created', 'is_spam', 'status' ),
+			'get'     => 'minn_admin_forminator_entry',
+			'exists'  => 'minn_admin_forminator_exists',
+		),
+		'list'    => array(
+			// Received vs Spam (no trash in free).
+			'filter' => array(
+				'param'   => 'status',
+				'values'  => array(
+					'received' => minn_admin_forminator_bucket( 'received' ),
+					'spam'     => minn_admin_forminator_bucket( 'spam' ),
+				),
+				'default' => 'received',
 			),
-			'default' => 'received',
+			'tab'    => array( 'param' => 'form_id', 'column' => 'form_id' ),
+			// Same shape as Forminator's own entries search: a LIKE over answer
+			// meta, excluding its addon bookkeeping rows.
+			'search' => array( 'param' => 'search', 'meta' => array( 'table' => 'frmt_form_entry_meta', 'key' => 'entry_id', 'name' => 'meta_key', 'value' => 'meta_value', 'skip' => 'forminator_addon_' ) ),
+			// A status-chart bar narrows the list to that day; date_created is
+			// SITE-LOCAL, the same clock the bounds arrive on.
+			'range'  => array( 'column' => 'date_created', 'clock' => 'local' ),
+			// Newest submission first by the date Forminator stored, so an entry
+			// added out of order (an import) lands where it belongs.
+			'order'  => array( 'column' => 'date_created', 'dir' => 'DESC' ),
+			'row'    => 'minn_admin_forminator_row',
+			'fields' => array(
+				'id'         => 'int',
+				'summary'    => 'text',
+				'form_title' => 'text',
+				'status'     => 'text',
+				'date'       => array( 'type' => 'datetime', 'stored' => 'site', 'wire' => 'naked' ),
+			),
 		),
-		'tab'    => array( 'param' => 'form_id', 'column' => 'form_id' ),
-		// Same shape as Forminator's own entries search: a LIKE over answer
-		// meta, excluding its addon bookkeeping rows.
-		'search' => array( 'param' => 'search', 'meta' => array( 'table' => 'frmt_form_entry_meta', 'key' => 'entry_id', 'name' => 'meta_key', 'value' => 'meta_value', 'skip' => 'forminator_addon_' ) ),
-		// A status-chart bar narrows the list to that day; date_created is
-		// SITE-LOCAL, the same clock the bounds arrive on.
-		'range'  => array( 'column' => 'date_created', 'clock' => 'local' ),
-		// Newest submission first by the date Forminator stored, so an entry
-		// added out of order (an import) lands where it belongs.
-		'order'  => array( 'column' => 'date_created', 'dir' => 'DESC' ),
-		'row'    => 'minn_admin_forminator_row',
-		'fields' => array(
-			'id'         => 'int',
-			'summary'    => 'text',
-			'form_title' => 'text',
-			'status'     => 'text',
-			'date'       => array( 'type' => 'datetime', 'stored' => 'site', 'wire' => 'naked' ),
-		),
-	),
-	'item'    => array( 'view' => 'minn_admin_forminator_view' ),
-	'actions' => array_merge( minn_admin_forminator_spam_actions(), array(
-		'delete' => array(
-			'method'    => 'DELETE',
-			'gate'      => 'manage',
-			'run'       => function ( $id, $row ) {
-				// Their complete cleanup (meta and upload bookkeeping go too).
-				// The module type is their own check that the entry belongs to
-				// a form (1.58+; earlier versions ignore the extra argument).
-				$result = Forminator_API::delete_entry( (int) $row['form_id'], $id, 'custom-forms' );
-				if ( is_wp_error( $result ) ) {
-					$result->add_data( array( 'status' => 400 ) );
-				}
-				return $result;
-			},
-			'expect'    => 'gone',
-			'fail_code' => 'delete_failed',
-			'fail'      => __( 'Forminator reported success but the entry still exists.', 'minn-admin' ),
-			'done'      => __( 'Entry deleted permanently.', 'minn-admin' ),
-		),
-	) ),
-) );
+		'item'    => array( 'view' => 'minn_admin_forminator_view' ),
+		'actions' => array_merge( minn_admin_forminator_spam_actions(), array(
+			'delete' => array(
+				'method'    => 'DELETE',
+				'gate'      => 'manage',
+				'run'       => function ( $id, $row ) {
+					// Their complete cleanup (meta and upload bookkeeping go too).
+					// The module type is their own check that the entry belongs to
+					// a form (1.58+; earlier versions ignore the extra argument).
+					$result = Forminator_API::delete_entry( (int) $row['form_id'], $id, 'custom-forms' );
+					if ( is_wp_error( $result ) ) {
+						$result->add_data( array( 'status' => 400 ) );
+					}
+					return $result;
+				},
+				'expect'    => 'gone',
+				'fail_code' => 'delete_failed',
+				'fail'      => __( 'Forminator reported success but the entry still exists.', 'minn-admin' ),
+				'done'      => __( 'Entry deleted permanently.', 'minn-admin' ),
+			),
+		) ),
+	);
+} );
 
 minn_admin_endpoint( 'forminator/status', array(
 	'active' => 'minn_admin_forminator_active',

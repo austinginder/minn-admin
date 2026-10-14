@@ -349,104 +349,106 @@ function minn_admin_wpforms_can_entry( $entry_id, $gate ) {
 }
 
 $minn_admin_wpforms_inbox = array( 'status' => array( 'not' => array( 'spam', 'trash' ) ) );
-minn_admin_resource( 'wpforms/entries', array(
-	'active'    => 'minn_admin_wpforms_active',
-	'gates'     => array(
-		'view'   => function () {
-			return minn_admin_wpforms_can( 'view_entries' );
-		},
-		'edit'   => function () {
-			return minn_admin_wpforms_can( 'edit_entries' );
-		},
-		'delete' => function () {
-			return minn_admin_wpforms_can( 'delete_entries' );
-		},
-	),
-	'item_gate' => 'minn_admin_wpforms_can_entry',
-	'labels'    => array(
-		'not_found' => __( 'Entry not found.', 'minn-admin' ),
-		'forbidden' => __( 'You cannot access entries for that form.', 'minn-admin' ),
-	),
-	'source'    => array(
-		'table'   => 'wpforms_entries',
-		'key'     => 'entry_id',
-		'columns' => array( 'entry_id', 'form_id', 'status', 'viewed', 'starred', 'fields', 'date' ),
-		'detail'  => array(),
-	),
-	'list'      => array(
-		// Inbox behaviour: spam and trash stay in their buckets, and the
-		// first option is everything received, so read entries are not hidden.
-		'filter' => array(
-			'param'   => 'status',
-			'values'  => array(
-				'inbox'   => $minn_admin_wpforms_inbox,
-				'unread'  => $minn_admin_wpforms_inbox + array( 'viewed' => 0 ),
-				'read'    => $minn_admin_wpforms_inbox + array( 'viewed' => 1 ),
-				'starred' => $minn_admin_wpforms_inbox + array( 'starred' => 1 ),
-				'spam'    => array( 'status' => 'spam' ),
-				'trash'   => array( 'status' => 'trash' ),
+minn_admin_resource( 'wpforms/entries', function () use ( $minn_admin_wpforms_inbox ) {
+	return array(
+		'active'    => 'minn_admin_wpforms_active',
+		'gates'     => array(
+			'view'   => function () {
+				return minn_admin_wpforms_can( 'view_entries' );
+			},
+			'edit'   => function () {
+				return minn_admin_wpforms_can( 'edit_entries' );
+			},
+			'delete' => function () {
+				return minn_admin_wpforms_can( 'delete_entries' );
+			},
+		),
+		'item_gate' => 'minn_admin_wpforms_can_entry',
+		'labels'    => array(
+			'not_found' => __( 'Entry not found.', 'minn-admin' ),
+			'forbidden' => __( 'You cannot access entries for that form.', 'minn-admin' ),
+		),
+		'source'    => array(
+			'table'   => 'wpforms_entries',
+			'key'     => 'entry_id',
+			'columns' => array( 'entry_id', 'form_id', 'status', 'viewed', 'starred', 'fields', 'date' ),
+			'detail'  => array(),
+		),
+		'list'      => array(
+			// Inbox behaviour: spam and trash stay in their buckets, and the
+			// first option is everything received, so read entries are not hidden.
+			'filter' => array(
+				'param'   => 'status',
+				'values'  => array(
+					'inbox'   => $minn_admin_wpforms_inbox,
+					'unread'  => $minn_admin_wpforms_inbox + array( 'viewed' => 0 ),
+					'read'    => $minn_admin_wpforms_inbox + array( 'viewed' => 1 ),
+					'starred' => $minn_admin_wpforms_inbox + array( 'starred' => 1 ),
+					'spam'    => array( 'status' => 'spam' ),
+					'trash'   => array( 'status' => 'trash' ),
+				),
+				'default' => 'inbox',
 			),
-			'default' => 'inbox',
+			'tab'    => array(
+				'param'  => 'form_id',
+				'column' => 'form_id',
+				'gate'   => 'minn_admin_wpforms_can_form',
+				'refuse' => __( 'You cannot access entries for that form.', 'minn-admin' ),
+			),
+			// MANDATORY scope: without it an unfiltered list scans the whole
+			// entries table, returning other forms' submitter names and emails to
+			// a user provisioned only for their own forms.
+			'scope'  => array( 'column' => 'form_id', 'allowed' => 'minn_admin_wpforms_allowed_form_ids' ),
+			// Their own fallback search shape: a LIKE over the fields JSON.
+			'search' => array( 'param' => 'search', 'columns' => array( 'fields' ) ),
+			'range'  => array( 'column' => 'date', 'clock' => 'utc' ),
+			// Newest submission first by the date WPForms stored, so an entry
+			// added out of order (an import) lands where it belongs.
+			'order'  => array( 'column' => 'date', 'dir' => 'DESC' ),
+			'row'    => 'minn_admin_wpforms_row',
+			'fields' => array(
+				'id'         => 'int',
+				'summary'    => 'text',
+				'form_title' => 'text',
+				'starred'    => 'text',
+				'status'     => 'text',
+				'date'       => array( 'type' => 'datetime', 'stored' => 'utc', 'wire' => 'iso-utc' ),
+			),
 		),
-		'tab'    => array(
-			'param'  => 'form_id',
-			'column' => 'form_id',
-			'gate'   => 'minn_admin_wpforms_can_form',
-			'refuse' => __( 'You cannot access entries for that form.', 'minn-admin' ),
+		'item'      => array( 'view' => 'minn_admin_wpforms_view' ),
+		'actions'   => array(
+			'star'   => array(
+				'gate'   => 'edit',
+				'run'    => function ( $id, $row, WP_REST_Request $request ) {
+					$on = (int) (bool) $request->get_param( 'on' );
+					wpforms()->obj( 'entry' )->update( $id, array( 'starred' => $on ) );
+					return $on;
+				},
+				'expect' => function ( $id, $fresh, $on ) {
+					return is_array( $fresh ) && (int) $fresh['starred'] === (int) $on;
+				},
+				'reply'  => function ( $id, $fresh, $on ) {
+					return array( 'starred' => (int) $on );
+				},
+			),
+			// Their delete cleans entry_fields and entry_meta and fires hooks.
+			'delete' => array(
+				'method'    => 'DELETE',
+				'gate'      => 'delete',
+				'run'       => function ( $id ) {
+					return wpforms()->obj( 'entry' )->delete( $id ) ? true : new WP_Error( 'delete_failed', __( 'WPForms could not delete this entry.', 'minn-admin' ), array( 'status' => 500 ) );
+				},
+				'expect'    => 'gone',
+				'fail_code' => 'delete_failed',
+				'fail'      => __( 'WPForms could not delete this entry.', 'minn-admin' ),
+				'reply'     => function () {
+					return array( 'deleted' => true );
+				},
+				'done'      => __( 'Entry deleted.', 'minn-admin' ),
+			),
 		),
-		// MANDATORY scope: without it an unfiltered list scans the whole
-		// entries table, returning other forms' submitter names and emails to
-		// a user provisioned only for their own forms.
-		'scope'  => array( 'column' => 'form_id', 'allowed' => 'minn_admin_wpforms_allowed_form_ids' ),
-		// Their own fallback search shape: a LIKE over the fields JSON.
-		'search' => array( 'param' => 'search', 'columns' => array( 'fields' ) ),
-		'range'  => array( 'column' => 'date', 'clock' => 'utc' ),
-		// Newest submission first by the date WPForms stored, so an entry
-		// added out of order (an import) lands where it belongs.
-		'order'  => array( 'column' => 'date', 'dir' => 'DESC' ),
-		'row'    => 'minn_admin_wpforms_row',
-		'fields' => array(
-			'id'         => 'int',
-			'summary'    => 'text',
-			'form_title' => 'text',
-			'starred'    => 'text',
-			'status'     => 'text',
-			'date'       => array( 'type' => 'datetime', 'stored' => 'utc', 'wire' => 'iso-utc' ),
-		),
-	),
-	'item'      => array( 'view' => 'minn_admin_wpforms_view' ),
-	'actions'   => array(
-		'star'   => array(
-			'gate'   => 'edit',
-			'run'    => function ( $id, $row, WP_REST_Request $request ) {
-				$on = (int) (bool) $request->get_param( 'on' );
-				wpforms()->obj( 'entry' )->update( $id, array( 'starred' => $on ) );
-				return $on;
-			},
-			'expect' => function ( $id, $fresh, $on ) {
-				return is_array( $fresh ) && (int) $fresh['starred'] === (int) $on;
-			},
-			'reply'  => function ( $id, $fresh, $on ) {
-				return array( 'starred' => (int) $on );
-			},
-		),
-		// Their delete cleans entry_fields and entry_meta and fires hooks.
-		'delete' => array(
-			'method'    => 'DELETE',
-			'gate'      => 'delete',
-			'run'       => function ( $id ) {
-				return wpforms()->obj( 'entry' )->delete( $id ) ? true : new WP_Error( 'delete_failed', __( 'WPForms could not delete this entry.', 'minn-admin' ), array( 'status' => 500 ) );
-			},
-			'expect'    => 'gone',
-			'fail_code' => 'delete_failed',
-			'fail'      => __( 'WPForms could not delete this entry.', 'minn-admin' ),
-			'reply'     => function () {
-				return array( 'deleted' => true );
-			},
-			'done'      => __( 'Entry deleted.', 'minn-admin' ),
-		),
-	),
-) );
+	);
+} );
 unset( $minn_admin_wpforms_inbox );
 
 // Read, unread, spam, trash and restore share one route whose body names the
