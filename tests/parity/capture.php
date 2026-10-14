@@ -270,7 +270,9 @@ $shape = function ( $value ) use ( $format ) {
 				$t          = $vars ? 'object' : 'object:empty';
 				$inst[ $p ] = ( $inst[ $p ] ?? 0 ) + 1;
 				foreach ( $vars as $k => $e ) {
-					$cp          = $p . '.' . str_replace( array( '.', '[' ), array( '%2E', '%5B' ), (string) $k );
+					// This run's own role, named for its run, is one key in every capture.
+					$k           = preg_replace( '/^minn_parity_netrole_[a-z0-9]+$/', 'minn_parity_netrole', (string) $k );
+					$cp          = $p . '.' . str_replace( array( '.', '[' ), array( '%2E', '%5B' ), $k );
 					$seen[ $cp ] = ( $seen[ $cp ] ?? 0 ) + 1;
 					$walk( $e, $cp );
 				}
