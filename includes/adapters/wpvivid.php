@@ -108,9 +108,15 @@ function minn_admin_wpvivid_archive_job( $file_name ) {
  * by the parts inside it, listed the way their restore lists them.
  */
 function minn_admin_wpvivid_components_from_files( $backup ) {
-	$jobs = array();
+	$jobs      = array();
+	$file_jobs = array( 'themes', 'plugin', 'uploads', 'content', 'core' );
 	if ( ! empty( $backup['backup']['files'] ) && is_array( $backup['backup']['files'] ) ) {
 		foreach ( $backup['backup']['files'] as $file ) {
+			// Both kinds seen: no further part can change the answer, and
+			// each merged part is another archive to open.
+			if ( in_array( 'db', $jobs, true ) && array_intersect( $jobs, $file_jobs ) ) {
+				break;
+			}
 			$job = minn_admin_wpvivid_archive_job( $file['file_name'] ?? '' );
 			if ( 'all' !== $job ) {
 				$jobs[] = $job;
@@ -136,7 +142,7 @@ function minn_admin_wpvivid_components_from_files( $backup ) {
 	}
 	$jobs      = array_filter( $jobs );
 	$has_db    = in_array( 'db', $jobs, true );
-	$has_files = (bool) array_intersect( $jobs, array( 'themes', 'plugin', 'uploads', 'content', 'core' ) );
+	$has_files = (bool) array_intersect( $jobs, $file_jobs );
 	if ( $has_db && $has_files ) {
 		return 'Database · Files';
 	}
@@ -158,6 +164,11 @@ function minn_admin_wpvivid_rows() {
 	if ( ! is_array( $list ) || ! $list ) {
 		return array();
 	}
+	// The list, the status card and the status route each read the rows,
+	// some twice a request, and a merged set is read by opening its
+	// archives (every part: each part's package info lists only its own
+	// children), so each set is read once a request.
+	static $components_of = array();
 	$items = array();
 	foreach ( $list as $id => $set ) {
 		if ( ! is_array( $set ) ) {
@@ -180,7 +191,10 @@ function minn_admin_wpvivid_rows() {
 		if ( ! empty( $set['backup_files'] ) ) {
 			$components = minn_admin_wpvivid_components_label( $set['backup_files'], $set['type'] ?? '' );
 		} else {
-			$components = minn_admin_wpvivid_components_from_files( $set );
+			if ( ! isset( $components_of[ $id ] ) ) {
+				$components_of[ $id ] = minn_admin_wpvivid_components_from_files( $set );
+			}
+			$components = $components_of[ $id ];
 			if ( ! $components ) {
 				$components = minn_admin_wpvivid_components_label( '', $set['type'] ?? '' );
 			}
