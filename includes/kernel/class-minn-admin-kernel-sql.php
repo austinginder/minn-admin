@@ -27,7 +27,7 @@ class Minn_Admin_Kernel_SQL {
 	public static function ident( $name ) {
 		$name = (string) $name;
 		if ( ! preg_match( '/^[A-Za-z_][A-Za-z0-9_]{0,63}$/', $name ) ) {
-			throw new InvalidArgumentException( 'Not an identifier: ' . $name );
+			throw new InvalidArgumentException( 'minn_kernel_identifier=' . $name );
 		}
 		return $name;
 	}
@@ -89,7 +89,7 @@ class Minn_Admin_Kernel_SQL {
 			if ( is_array( $rule ) && array_key_exists( 'op', $rule ) ) {
 				$op = (string) $rule['op'];
 				if ( ! in_array( $op, array( '=', '!=', '<', '<=', '>', '>=' ), true ) ) {
-					throw new InvalidArgumentException( 'Not an operator: ' . $op );
+					throw new InvalidArgumentException( 'minn_kernel_operator=' . $op );
 				}
 				$sql[]  = "{$c} {$op} " . self::ph( $rule['value'] );
 				$args[] = $rule['value'];

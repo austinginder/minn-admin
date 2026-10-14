@@ -91,7 +91,8 @@ class Minn_Admin_Kernel {
 	public static function resource( $id, $def ) {
 		$id = trim( (string) $id, '/' );
 		if ( ! preg_match( '#^[a-z0-9-]+(/[a-z0-9-]+)*$#', $id ) || ! ( is_array( $def ) || is_callable( $def ) ) ) {
-			_doing_it_wrong( __METHOD__, esc_html( 'Resource ids are lowercase path segments, declarations arrays or functions: ' . $id ), 'Minn Admin 0.46.0' );
+			/* translators: %s: the resource id an adapter declared. */
+			_doing_it_wrong( __METHOD__, esc_html( sprintf( __( 'A resource id is lowercase path segments and its declaration an array or a function: %s', 'minn-admin' ), $id ) ), 'Minn Admin 0.46.0' );
 			return;
 		}
 		self::$resources[ $id ] = array( 'lazy' => $def, 'id' => $id, 'file' => self::caller() );
@@ -332,7 +333,8 @@ class Minn_Admin_Kernel {
 	private static function register_endpoint( array $ep ) {
 		$gate = $ep['gate'] ?? null;
 		if ( ! is_callable( $gate ) ) {
-			_doing_it_wrong( 'minn_admin_endpoint', esc_html( $ep['path'] . ' has no gate, so it has no route.' ), 'Minn Admin 0.46.0' );
+			/* translators: %s: the endpoint's route. */
+			_doing_it_wrong( 'minn_admin_endpoint', esc_html( sprintf( __( '%s has no gate, so it has no route.', 'minn-admin' ), $ep['path'] ) ), 'Minn Admin 0.46.0' );
 			return;
 		}
 		$run = $ep['run'] ?? null;

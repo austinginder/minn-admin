@@ -62,7 +62,7 @@ class Minn_Admin_Kernel_Fields {
 		if ( defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG ) {
 			$extra = array_diff( array_keys( $row ), array_keys( $fields ) );
 			if ( $extra ) {
-				error_log( 'Minn Admin kernel: undeclared fields dropped: ' . implode( ', ', $extra ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+				error_log( 'minn_kernel_fields_dropped=' . implode( ',', $extra ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 			}
 		}
 		return $out;
