@@ -251,7 +251,9 @@ function minn_admin_elementor_template_item( $post ) {
 		'type'       => $type,
 		'typeLabel'  => isset( $types[ $type ] ) ? $types[ $type ] : ( '' !== $type ? $type : '—' ),
 		'conditions' => minn_admin_elementor_conditions_summary( $post->ID ),
-		'status'     => (string) $post->post_status,
+		// Display only (no gate reads it): core and Elementor call a
+		// future post Scheduled, and the pill prints the slug it is given.
+		'status'     => 'future' === $post->post_status ? 'scheduled' : (string) $post->post_status,
 		'modified'   => $modified ? gmdate( 'c', $modified ) : '',
 		'editUrl'    => minn_admin_elementor_template_edit_url( $post->ID ),
 	);
