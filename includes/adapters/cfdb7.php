@@ -13,6 +13,12 @@
  * abandoned the rest of the entry — hiding the answers and, worse, hiding the
  * uploaded file from the delete path.
  *
+ * The entries are a kernel resource (docs/adapter-kernel.md): the kernel
+ * owns the routes, the gate, ids, paging, the not-found answer and the
+ * post-condition of each action. The read flag and the answers live inside
+ * the serialized blob, which no column condition reaches, so the list source
+ * adds the blob's own LIKE clauses to the kernel's page query.
+ *
  * @package minn-admin
  */
 
@@ -185,7 +191,13 @@ function minn_admin_cfdb7_values( $blob, $strings_only = false ) {
 	return $out;
 }
 
-/** CF7 form titles keyed by post id (for tabs, list rows, detail meta). */
+/** A CF7 form's title by post id. */
+function minn_admin_cfdb7_form_title( $id ) {
+	$post = get_post( (int) $id );
+	return $post && $post->post_title ? $post->post_title : ( 'Form #' . (int) $id );
+}
+
+/** CF7 form titles keyed by post id, for every form that has entries (the tabs). */
 function minn_admin_cfdb7_form_titles() {
 	global $wpdb;
 	$table = $wpdb->prefix . 'db7_forms';
@@ -193,8 +205,7 @@ function minn_admin_cfdb7_form_titles() {
 	$ids = array_map( 'intval', (array) $wpdb->get_col( "SELECT DISTINCT form_post_id FROM `{$table}`" ) );
 	$out = array();
 	foreach ( $ids as $id ) {
-		$post       = get_post( $id );
-		$out[ $id ] = $post && $post->post_title ? $post->post_title : ( 'Form #' . $id );
+		$out[ $id ] = minn_admin_cfdb7_form_title( $id );
 	}
 	asort( $out );
 	return $out;
@@ -260,10 +271,352 @@ function minn_admin_cfdb7_set_status( $blob, $status ) {
 	return serialize( $data ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_unserialize
 }
 
+
+/** Read or unread, by CFDB7's rule: only an explicit "read" flag is read. */
+function minn_admin_cfdb7_state( array $values ) {
+	return ( $values['cfdb7_status'] ?? '' ) === 'read' ? 'read' : 'unread';
+}
+
+/**
+ * A page of entries: the kernel's paged query plus the clauses only the blob
+ * can answer (the read flag and the answers are inside form_value).
+ *
+ * @param array    $q       The kernel's list query.
+ * @param string[] $columns Columns to read.
+ * @return array [ rows, total ]
+ */
+function minn_admin_cfdb7_list( array $q, array $columns ) {
+	global $wpdb;
+	list( $sql, $args ) = Minn_Admin_Kernel::list_where( $q );
+	// Read/unread is a fixed token inside the serialized blob.
+	$read = '%' . $wpdb->esc_like( 's:12:"cfdb7_status";s:4:"read"' ) . '%';
+	if ( 'read' === $q['filter'] ) {
+		$sql[]  = 'e.form_value LIKE %s';
+		$args[] = $read;
+	} elseif ( 'unread' === $q['filter'] ) {
+		// Absent or "unread" both count as unread for their screen.
+		$sql[]  = '(e.form_value LIKE %s OR e.form_value NOT LIKE %s)';
+		$args[] = '%' . $wpdb->esc_like( 's:12:"cfdb7_status";s:6:"unread"' ) . '%';
+		$args[] = $read;
+	}
+	if ( '' !== $q['search'] ) {
+		// Their own list screen searches the raw blob with LIKE. The blob holds
+		// quotes, apostrophes and slashes as the entities cfdb7_before_send_mail
+		// swapped in, so the term is matched that way too, swapped exactly as it
+		// swaps them.
+		$stored = str_replace(
+			array( '\"', "\'", '/', '\\', '"', "'" ),
+			array( '&quot;', '&#039;', '&#047;', '&#092;', '&quot;', '&#039;' ),
+			$q['search']
+		);
+		$sql[]  = '(e.form_value LIKE %s OR e.form_value LIKE %s)';
+		$args[] = '%' . $wpdb->esc_like( $q['search'] ) . '%';
+		$args[] = '%' . $wpdb->esc_like( $stored ) . '%';
+	}
+	// The declared range: form_date is current_time, i.e. SITE-LOCAL, the same
+	// clock the chart's bounds arrive on.
+	list( $range_sql, $range_args ) = minn_admin_chart_range_clause( $q['request'], 'e.form_date', 'local' );
+	return Minn_Admin_Kernel_SQL::page( array(
+		'table'   => 'db7_forms',
+		'key'     => 'form_id',
+		'columns' => $columns,
+		'sql'     => array_merge( $sql, $range_sql ),
+		'args'    => array_merge( $args, $range_args ),
+		'order'   => 'form_id',
+		'dir'     => 'DESC',
+		'limit'   => $q['per_page'],
+		'offset'  => ( $q['page'] - 1 ) * $q['per_page'],
+	) );
+}
+
+/** An entry's list row. */
+function minn_admin_cfdb7_row( array $row ) {
+	$values = minn_admin_cfdb7_values( (string) $row['form_value'] );
+	return array(
+		'id'           => (int) $row['form_id'],
+		'form_post_id' => (int) $row['form_post_id'],
+		'summary'      => minn_admin_cfdb7_summary( $values ),
+		'form'         => minn_admin_cfdb7_form_title( $row['form_post_id'] ),
+		'status'       => minn_admin_cfdb7_state( $values ),
+		'date'         => $row['form_date'],
+	);
+}
+
+/** An entry's detail; opening it marks it read, CFDB7's own view semantics. */
+function minn_admin_cfdb7_view( array $row ) {
+	global $wpdb;
+	$id      = (int) $row['form_id'];
+	$form_id = (int) $row['form_post_id'];
+	$values  = minn_admin_cfdb7_values( (string) $row['form_value'] );
+
+	// The entry counts as read only once the write landed.
+	$status = minn_admin_cfdb7_state( $values );
+	if ( 'unread' === $status ) {
+		$patched = minn_admin_cfdb7_set_status( $row['form_value'], 'read' );
+		if ( null !== $patched ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+			if ( $wpdb->update( $wpdb->prefix . 'db7_forms', array( 'form_value' => $patched ), array( 'form_id' => $id ), array( '%s' ), array( '%d' ) ) ) {
+				$status = 'read';
+			}
+		}
+	}
+
+	$upload_url = wp_upload_dir()['baseurl'] . '/cfdb7_uploads/';
+	$answers    = array();
+	foreach ( $values as $key => $value ) {
+		if ( 'cfdb7_status' === $key || '' === trim( (string) $value ) ) {
+			continue;
+		}
+		$is_file = false;
+		if ( false !== strpos( $key, 'cfdb7_file' ) ) {
+			$key     = str_replace( 'cfdb7_file', '', $key );
+			$is_file = true;
+		} else {
+			$value = minn_admin_cfdb7_text( $value );
+		}
+		$label     = preg_replace( '/^your[-_]/', '', (string) $key );
+		$label     = ucwords( str_replace( array( '-', '_' ), ' ', $label ) );
+		$answers[] = array(
+			'label' => $label . ( $is_file ? ' (file)' : '' ),
+			'value' => $is_file ? $upload_url . $value : (string) $value,
+			'type'  => $is_file ? 'url'
+				: ( is_email( (string) $value ) ? 'email'
+					: ( 0 === strpos( (string) $value, 'http' ) ? 'url' : 'text' ) ),
+		);
+	}
+
+	$title = minn_admin_cfdb7_form_title( $form_id );
+	$meta  = array(
+		array(
+			'label' => __( 'Submitted', 'minn-admin' ),
+			'value' => date_i18n( 'M j, Y g:i a', strtotime( (string) $row['form_date'] ) ),
+		),
+		array(
+			'label' => __( 'Form', 'minn-admin' ),
+			'value' => $title,
+		),
+	);
+
+	return array(
+		'kind'     => 'entry',
+		'title'    => $title,
+		'status'   => $status,
+		// The row as it stands now, after opening marked it read: the page's
+		// actions gate on it, not on the list's copy.
+		'item'     => array(
+			'id'           => $id,
+			'form_post_id' => $form_id,
+			'status'       => $status,
+		),
+		'sections' => array(
+			array( 'title' => __( 'Responses', 'minn-admin' ), 'rows' => $answers ),
+			array( 'title' => __( 'Submission', 'minn-admin' ), 'rows' => $meta ),
+		),
+		'adminUrl' => admin_url( 'admin.php?page=cfdb7-list.php&fid=' . $form_id . '&ufid=' . $id ),
+	);
+}
+
+/**
+ * Delete an entry: the files it uploaded first, then the row that names them,
+ * as CFDB7's own bulk delete does. Dropping only the row would strand a resume
+ * or ID scan on disk at a guessable URL with nothing left pointing at it.
+ *
+ * Every value in the row is visitor input, and a row stored before CFDB7 began
+ * keeping only its form's own fields can carry any key the visitor posted, so
+ * a value counts as an upload under exactly CFDB7's rules and no looser: the
+ * key ENDS in the cfdb7_file marker CFDB7 appends, the value is a string that
+ * is already a bare filename (one carrying a path is refused, never trimmed to
+ * the name at its end), it resolves to a file inside cfdb7_uploads (a link
+ * pointing out does not count), and it is not .php, which is never an upload
+ * and is what the folder's own index.php stub is. Values come through the
+ * shared data-only decoder with the scanner fallback, lists dropped.
+ *
+ * @param int   $id  Entry id.
+ * @param array $row The entry as loaded.
+ * @return true
+ */
+function minn_admin_cfdb7_delete( $id, array $row ) {
+	global $wpdb;
+	$dir  = wp_upload_dir()['basedir'] . '/cfdb7_uploads';
+	$root = realpath( $dir );
+	foreach ( minn_admin_cfdb7_values( (string) $row['form_value'], true ) as $key => $value ) {
+		if ( 'cfdb7_file' !== substr( (string) $key, -10 ) || '' === $value || basename( $value ) !== $value ) {
+			continue;
+		}
+		// realpath() throws on a NUL byte, which would fail the whole delete
+		// on one stored value; no upload is named so.
+		if ( false !== strpos( $value, "\0" ) ) {
+			continue;
+		}
+		$file = realpath( $dir . '/' . $value );
+		if ( false === $file || false === $root || ! is_file( $file ) || 0 !== strpos( $file, trailingslashit( $root ) ) ) {
+			continue;
+		}
+		if ( 'php' === strtolower( pathinfo( $file, PATHINFO_EXTENSION ) ) ) {
+			continue;
+		}
+		wp_delete_file( $file );
+	}
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+	$wpdb->delete( $wpdb->prefix . 'db7_forms', array( 'form_id' => (int) $id ), array( '%d' ) );
+	return true;
+}
+
+/** Server-built model for the surface status card. */
+function minn_admin_cfdb7_status_model() {
+	global $wpdb;
+	// form_date is site-local current_time, so the chart groups on the site's
+	// days. CFDB7 keeps no spam: every row counts into the one series.
+	$n = Minn_Admin_Kernel::inbox_counts( array(
+		'table'    => 'db7_forms',
+		'received' => array(),
+		'chart'    => array( 'column' => 'form_date', 'clock' => 'local', 'split' => 'form_post_id', 'secondary' => array() ),
+	) );
+	// Read/unread is a fixed token inside the serialized blob, which no column
+	// condition reaches; a row without the token is unread on their screen too
+	// (the list's rule).
+	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- prefix-derived table.
+	$unread = (int) $wpdb->get_var( $wpdb->prepare(
+		"SELECT COUNT(*) FROM `{$wpdb->prefix}db7_forms` WHERE form_value NOT LIKE %s",
+		'%' . $wpdb->esc_like( 's:12:"cfdb7_status";s:4:"read"' ) . '%'
+	) );
+	return array(
+		'rows'    => array(
+			array(
+				'label' => __( 'Unread entries', 'minn-admin' ),
+				'value' => number_format_i18n( $unread ),
+				'hint'  => sprintf(
+					/* translators: %s: total number of stored entries. */
+					__( '%s total', 'minn-admin' ),
+					number_format_i18n( $n['received'] )
+				),
+			),
+			array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => number_format_i18n( count( minn_admin_cfdb7_form_titles() ) ) ),
+		),
+		'chart'   => minn_admin_chart_build( $n['days'], __( 'Entries', 'minn-admin' ) ),
+		'actions' => array(
+			array( 'label' => __( 'Open CFDB7 ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=cfdb7-list.php' ) ),
+		),
+	);
+}
+
+// CFDB7 has one capability for everything it shows and does: its menu gate.
+$minn_admin_cfdb7_columns = array( 'form_id', 'form_post_id', 'form_value', 'form_date' );
+minn_admin_resource( 'cfdb7/entries', function () use ( $minn_admin_cfdb7_columns ) {
+	return array(
+		'active'  => 'minn_admin_cfdb7_ready',
+		'gates'   => array(
+			'view'   => 'minn_admin_cfdb7_can_view',
+			'manage' => 'minn_admin_cfdb7_can_view',
+		),
+		'labels'  => array(
+			'not_found' => __( 'Entry not found.', 'minn-admin' ),
+		),
+		'source'  => array(
+			'table'   => 'db7_forms',
+			'key'     => 'form_id',
+			'columns' => $minn_admin_cfdb7_columns,
+			'list'    => function ( array $q ) use ( $minn_admin_cfdb7_columns ) {
+				return minn_admin_cfdb7_list( $q, $minn_admin_cfdb7_columns );
+			},
+		),
+		'list'    => array(
+			// The read flag is inside the blob; the list source turns the value
+			// into its token clause.
+			'filter' => array(
+				'param'   => 'status',
+				'values'  => array(
+					'all'    => array(),
+					'unread' => array(),
+					'read'   => array(),
+				),
+				'default' => 'all',
+			),
+			'tab'    => array( 'param' => 'form_post_id', 'column' => 'form_post_id' ),
+			'search' => array( 'param' => 'search' ),
+			'range'  => array( 'column' => 'form_date', 'clock' => 'local' ),
+			'row'    => 'minn_admin_cfdb7_row',
+			'fields' => array(
+				'id'           => 'int',
+				'form_post_id' => 'int',
+				'summary'      => 'text',
+				'form'         => 'text',
+				'status'       => 'text',
+				// current_time() is site-local: sent un-zoned.
+				'date'         => array( 'type' => 'datetime', 'stored' => 'site', 'wire' => 'naked' ),
+			),
+		),
+		'item'    => array( 'view' => 'minn_admin_cfdb7_view' ),
+		'actions' => array(
+			// The same rewrite CFDB7's own bulk action makes (decode the entry, set
+			// cfdb7_status, serialize it back). An entry already unread is left as
+			// it is.
+			'unread' => array(
+				'gate'   => 'manage',
+				'run'    => function ( $id, $row ) {
+					global $wpdb;
+					$patched = minn_admin_cfdb7_set_status( $row['form_value'], 'unread' );
+					if ( null !== $patched ) {
+						// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+						$wpdb->update( $wpdb->prefix . 'db7_forms', array( 'form_value' => $patched ), array( 'form_id' => (int) $id ), array( '%s' ), array( '%d' ) );
+					}
+					return true;
+				},
+				'expect' => function ( $id, $fresh ) {
+					return is_array( $fresh ) && 'unread' === minn_admin_cfdb7_state( minn_admin_cfdb7_values( (string) $fresh['form_value'] ) );
+				},
+				'fail'   => __( 'The entry could not be marked as unread.', 'minn-admin' ),
+				'reply'  => function ( $id ) {
+					return array( 'id' => (int) $id, 'status' => 'unread' );
+				},
+				'done'   => __( 'Marked as unread.', 'minn-admin' ),
+			),
+			// CFDB7 has no trash: delete is permanent from any state.
+			'delete' => array(
+				'method'    => 'DELETE',
+				'gate'      => 'manage',
+				'run'       => 'minn_admin_cfdb7_delete',
+				'expect'    => 'gone',
+				'fail_code' => 'delete_failed',
+				'fail'      => __( 'CFDB7 could not delete the entry.', 'minn-admin' ),
+				'reply'     => function ( $id ) {
+					return array( 'id' => (int) $id, 'deleted' => true );
+				},
+				'done'      => __( 'Entry deleted permanently.', 'minn-admin' ),
+			),
+		),
+	);
+} );
+unset( $minn_admin_cfdb7_columns );
+
+minn_admin_endpoint( 'cfdb7/forms', array(
+	'active' => 'minn_admin_cfdb7_ready',
+	'gate'   => 'minn_admin_cfdb7_can_view',
+	'run'    => function () {
+		$out = array();
+		foreach ( minn_admin_cfdb7_form_titles() as $id => $title ) {
+			$out[] = array(
+				'id'    => $id,
+				'title' => $title,
+			);
+		}
+		return $out;
+	},
+) );
+
+minn_admin_endpoint( 'cfdb7/status', array(
+	'active' => 'minn_admin_cfdb7_ready',
+	'gate'   => 'minn_admin_cfdb7_can_view',
+	'run'    => 'minn_admin_cfdb7_status_model',
+) );
+
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! minn_admin_cfdb7_ready() || ! minn_admin_cfdb7_can_view() ) {
 		return $surfaces;
 	}
+	$ui = function ( $slug, $ui ) {
+		return Minn_Admin_Kernel::ui( 'cfdb7/entries', $slug, $ui );
+	};
 	$surfaces['cfdb7'] = array(
 		'label'      => __( 'Forms', 'minn-admin' ),
 		'family'     => 'forms',
@@ -273,16 +626,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'icon'       => 'inbox',
 		'cap'        => 'read',
 		'status'     => array( 'route' => 'minn-admin/v1/cfdb7/status' ),
-		'collection' => array(
+		// Route, paging, search, the status-chart day range and the filter
+		// query come from the resource, so they cannot drift from it.
+		'collection' => Minn_Admin_Kernel::collection( 'cfdb7/entries', array(
 			'viewLabel' => __( 'Messages', 'minn-admin' ),
-			'route'     => 'minn-admin/v1/cfdb7/entries',
-			// A status-chart bar narrows the list to that day (the chart's
-			// points carry from/to; the route reads after/before).
-			'dateQuery' => 'after={from}&before={to}',
-			'pageQuery' => 'per_page=25&page={page}',
-			'search'    => 'search={q}',
-			'itemsKey'  => 'items',
-			'totalKey'  => 'total',
 			'tabs'      => array(
 				'route'    => 'minn-admin/v1/cfdb7/forms',
 				'valueKey' => 'id',
@@ -298,7 +645,6 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					array( 'unread', 'Unread' ),
 					array( 'read', 'Read' ),
 				),
-				'query'   => 'status={v}',
 			),
 			'columns'   => array(
 				array( 'key' => 'summary', 'label' => __( 'Entry', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
@@ -310,353 +656,17 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'sectionsRoute' => 'minn-admin/v1/cfdb7/entries/{id}',
 			),
 			'actions'   => array(
-				array(
-					'label'  => __( 'Mark as unread', 'minn-admin' ),
-					'method' => 'POST',
-					'route'  => 'minn-admin/v1/cfdb7/entries/{id}/unread',
-					'when'   => array( 'key' => 'status', 'equals' => 'read' ),
-				),
-				array(
-					'label'   => __( 'Delete entry', 'minn-admin' ),
-					'method'  => 'DELETE',
-					'route'   => 'minn-admin/v1/cfdb7/entries/{id}',
-					'confirm' => __( 'Delete this entry permanently? CFDB7 has no trash.', 'minn-admin' ),
-					'danger'  => true,
-				),
+				$ui( 'unread', array( 'label' => __( 'Mark as unread', 'minn-admin' ), 'when' => 'read' ) ),
+				$ui( 'delete', array( 'label' => __( 'Delete entry', 'minn-admin' ), 'confirm' => __( 'Delete this entry permanently? CFDB7 has no trash.', 'minn-admin' ), 'danger' => true ) ),
 				array(
 					'label' => __( 'Open in CFDB7 ↗', 'minn-admin' ),
 					'href'  => admin_url( 'admin.php?page=cfdb7-list.php&fid={form_post_id}&ufid={id}' ),
 				),
 			),
 			'bulk'      => array(
-				array(
-					'label'   => __( 'Delete', 'minn-admin' ),
-					'method'  => 'DELETE',
-					'route'   => 'minn-admin/v1/cfdb7/entries/{id}',
-					'confirm' => __( 'Delete the selected entries permanently? CFDB7 has no trash.', 'minn-admin' ),
-					'danger'  => true,
-				),
+				$ui( 'delete', array( 'label' => __( 'Delete', 'minn-admin' ), 'confirm' => __( 'Delete the selected entries permanently? CFDB7 has no trash.', 'minn-admin' ), 'danger' => true ) ),
 			),
-		),
+		) ),
 	);
 	return $surfaces;
-} );
-
-add_action( 'rest_api_init', function () {
-	if ( ! minn_admin_cfdb7_ready() ) {
-		return;
-	}
-
-	register_rest_route( 'minn-admin/v1', '/cfdb7/forms', array(
-		'methods'             => 'GET',
-		'permission_callback' => 'minn_admin_cfdb7_can_view',
-		'callback'            => function () {
-			$out = array();
-			foreach ( minn_admin_cfdb7_form_titles() as $id => $title ) {
-				$out[] = array(
-					'id'    => $id,
-					'title' => $title,
-				);
-			}
-			return rest_ensure_response( $out );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/cfdb7/entries', array(
-		'methods'             => 'GET',
-		'permission_callback' => 'minn_admin_cfdb7_can_view',
-		'callback'            => function ( WP_REST_Request $request ) {
-			global $wpdb;
-			$table    = $wpdb->prefix . 'db7_forms';
-			$per_page = min( 100, max( 1, (int) ( $request['per_page'] ?: 25 ) ) );
-			$page     = max( 1, (int) ( $request['page'] ?: 1 ) );
-
-			$status = sanitize_key( (string) ( $request['status'] ?: 'all' ) );
-			if ( ! in_array( $status, array( 'all', 'read', 'unread' ), true ) ) {
-				$status = 'all';
-			}
-
-			$where = array( '1=1' );
-			$args  = array();
-			if ( $request['form_post_id'] ) {
-				$where[] = 'form_post_id = %d';
-				$args[]  = (int) $request['form_post_id'];
-			}
-			if ( $request['search'] ) {
-				// Their own list screen searches the raw blob with LIKE. The
-				// blob holds quotes, apostrophes and slashes as the entities
-				// cfdb7_before_send_mail swapped in, so the term is matched
-				// that way too, swapped exactly as it swaps them.
-				$term    = (string) $request['search'];
-				$stored  = str_replace(
-					array( '\"', "\'", '/', '\\', '"', "'" ),
-					array( '&quot;', '&#039;', '&#047;', '&#092;', '&quot;', '&#039;' ),
-					$term
-				);
-				$where[] = '(form_value LIKE %s OR form_value LIKE %s)';
-				$args[]  = '%' . $wpdb->esc_like( $term ) . '%';
-				$args[]  = '%' . $wpdb->esc_like( $stored ) . '%';
-			}
-			// Read/unread is a fixed token inside the serialized blob.
-			if ( 'read' === $status ) {
-				$where[] = 'form_value LIKE %s';
-				$args[]  = '%' . $wpdb->esc_like( 's:12:"cfdb7_status";s:4:"read"' ) . '%';
-			} elseif ( 'unread' === $status ) {
-				// Absent or "unread" both count as unread for their screen.
-				$where[] = '(form_value LIKE %s OR form_value NOT LIKE %s)';
-				$args[]  = '%' . $wpdb->esc_like( 's:12:"cfdb7_status";s:6:"unread"' ) . '%';
-				$args[]  = '%' . $wpdb->esc_like( 's:12:"cfdb7_status";s:4:"read"' ) . '%';
-			}
-			// A status-chart bar narrows the list to that day. form_date is
-			// current_time, i.e. SITE-LOCAL, the same clock the bounds arrive on.
-			list( $range_sql, $range_args ) = minn_admin_chart_range_clause( $request, 'form_date', 'local' );
-			$where = array_merge( $where, $range_sql );
-			$args  = array_merge( $args, $range_args );
-			$where_sql = implode( ' AND ', $where );
-
-			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			$total = (int) $wpdb->get_var(
-				$args
-					? $wpdb->prepare( "SELECT COUNT(*) FROM `{$table}` WHERE {$where_sql}", ...$args )
-					: "SELECT COUNT(*) FROM `{$table}` WHERE {$where_sql}"
-			);
-			$rows = $wpdb->get_results( $wpdb->prepare(
-				"SELECT form_id, form_post_id, form_value, form_date FROM `{$table}`
-				 WHERE {$where_sql} ORDER BY form_id DESC LIMIT %d OFFSET %d",
-				array_merge( $args, array( $per_page, ( $page - 1 ) * $per_page ) )
-			) );
-			// phpcs:enable
-
-			$titles = minn_admin_cfdb7_form_titles();
-			$items  = array();
-			foreach ( (array) $rows as $r ) {
-				$values  = minn_admin_cfdb7_values( (string) $r->form_value );
-				$items[] = array(
-					'id'           => (int) $r->form_id,
-					'form_post_id' => (int) $r->form_post_id,
-					'summary'      => minn_admin_cfdb7_summary( $values ),
-					'form'         => $titles[ (int) $r->form_post_id ] ?? ( 'Form #' . (int) $r->form_post_id ),
-					'status'       => ( $values['cfdb7_status'] ?? '' ) === 'read' ? 'read' : 'unread',
-					// form_date is current_time() = site-local; leave un-zoned.
-					'date'         => str_replace( ' ', 'T', (string) $r->form_date ),
-				);
-			}
-
-			return rest_ensure_response( array(
-				'items' => $items,
-				'total' => $total,
-			) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/cfdb7/entries/(?P<id>\d+)', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => 'minn_admin_cfdb7_can_view',
-			'callback'            => function ( WP_REST_Request $request ) {
-				global $wpdb;
-				$table = $wpdb->prefix . 'db7_forms';
-				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$row = $wpdb->get_row( $wpdb->prepare(
-					"SELECT form_id, form_post_id, form_value, form_date FROM `{$table}` WHERE form_id = %d",
-					(int) Minn_Admin::path_param( $request )
-				) );
-				if ( ! $row ) {
-					return new WP_Error( 'not_found', __( 'Entry not found.', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				$values = minn_admin_cfdb7_values( (string) $row->form_value );
-
-				// Opening marks read — CFDB7's own view semantics. The entry
-				// counts as read only once the write landed.
-				$status = ( $values['cfdb7_status'] ?? '' ) === 'read' ? 'read' : 'unread';
-				if ( 'unread' === $status ) {
-					$patched = minn_admin_cfdb7_set_status( $row->form_value, 'read' );
-					if ( null !== $patched ) {
-						// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
-						if ( $wpdb->update( $table, array( 'form_value' => $patched ), array( 'form_id' => (int) $row->form_id ), array( '%s' ), array( '%d' ) ) ) {
-							$status = 'read';
-						}
-					}
-				}
-
-				$upload_url = wp_upload_dir()['baseurl'] . '/cfdb7_uploads/';
-				$answers    = array();
-				foreach ( $values as $key => $value ) {
-					if ( 'cfdb7_status' === $key || '' === trim( (string) $value ) ) {
-						continue;
-					}
-					$is_file = false;
-					if ( false !== strpos( $key, 'cfdb7_file' ) ) {
-						$key     = str_replace( 'cfdb7_file', '', $key );
-						$is_file = true;
-					} else {
-						$value = minn_admin_cfdb7_text( $value );
-					}
-					$label     = preg_replace( '/^your[-_]/', '', (string) $key );
-					$label     = ucwords( str_replace( array( '-', '_' ), ' ', $label ) );
-					$answers[] = array(
-						'label' => $label . ( $is_file ? ' (file)' : '' ),
-						'value' => $is_file ? $upload_url . $value : (string) $value,
-						'type'  => $is_file ? 'url'
-							: ( is_email( (string) $value ) ? 'email'
-								: ( 0 === strpos( (string) $value, 'http' ) ? 'url' : 'text' ) ),
-					);
-				}
-
-				$titles = minn_admin_cfdb7_form_titles();
-				$meta   = array(
-					array(
-						'label' => __( 'Submitted', 'minn-admin' ),
-						'value' => date_i18n( 'M j, Y g:i a', strtotime( (string) $row->form_date ) ),
-					),
-					array(
-						'label' => __( 'Form', 'minn-admin' ),
-						'value' => $titles[ (int) $row->form_post_id ] ?? ( 'Form #' . (int) $row->form_post_id ),
-					),
-				);
-
-				return rest_ensure_response( array(
-					'kind'     => 'entry',
-					'title'    => $titles[ (int) $row->form_post_id ] ?? 'Message',
-					'status'   => $status,
-					// The row as it stands now, after opening marked it read:
-					// the page's actions gate on it, not on the list's copy.
-					'item'     => array(
-						'id'           => (int) $row->form_id,
-						'form_post_id' => (int) $row->form_post_id,
-						'status'       => $status,
-					),
-					'sections' => array(
-						array( 'title' => __( 'Responses', 'minn-admin' ), 'rows' => $answers ),
-						array( 'title' => __( 'Submission', 'minn-admin' ), 'rows' => $meta ),
-					),
-					'adminUrl' => admin_url( 'admin.php?page=cfdb7-list.php&fid=' . (int) $row->form_post_id . '&ufid=' . (int) $row->form_id ),
-				) );
-			},
-		),
-		array(
-			'methods'             => 'DELETE',
-			'permission_callback' => 'minn_admin_cfdb7_can_view',
-			'callback'            => function ( WP_REST_Request $request ) {
-				global $wpdb;
-				$table = $wpdb->prefix . 'db7_forms';
-				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$exists = $wpdb->get_var( $wpdb->prepare(
-					"SELECT form_id FROM `{$table}` WHERE form_id = %d",
-					(int) Minn_Admin::path_param( $request )
-				) );
-				if ( ! $exists ) {
-					return new WP_Error( 'not_found', __( 'Entry not found.', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				// Remove the files the entry uploaded before the row that names
-				// them, as CFDB7's own bulk delete does. Dropping only the row
-				// would strand a resume or ID scan on disk at a guessable URL
-				// with nothing left pointing at it.
-				//
-				// Every value in the row is visitor input, and a row stored
-				// before CFDB7 began keeping only its form's own fields can carry
-				// any key the visitor posted, so a value counts as an upload under
-				// exactly CFDB7's rules and no looser: the key ENDS in the
-				// cfdb7_file marker CFDB7 appends, the value is a string that is
-				// already a bare filename (one carrying a path is refused, never
-				// trimmed to the name at its end), it resolves to a file inside
-				// cfdb7_uploads (a link pointing out does not count), and it is
-				// not .php, which is never an upload and is what the folder's
-				// own index.php stub is. Values come through the shared
-				// data-only decoder with the scanner fallback, lists dropped.
-				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$blob = (string) $wpdb->get_var( $wpdb->prepare( "SELECT form_value FROM {$table} WHERE form_id = %d", (int) Minn_Admin::path_param( $request ) ) );
-				$dir  = wp_upload_dir()['basedir'] . '/cfdb7_uploads';
-				$root = realpath( $dir );
-				foreach ( minn_admin_cfdb7_values( $blob, true ) as $key => $value ) {
-					if ( 'cfdb7_file' !== substr( (string) $key, -10 ) || '' === $value || basename( $value ) !== $value ) {
-						continue;
-					}
-					// realpath() throws on a NUL byte, which would fail the
-					// whole delete on one stored value; no upload is named so.
-					if ( false !== strpos( $value, "\0" ) ) {
-						continue;
-					}
-					$file = realpath( $dir . '/' . $value );
-					if ( false === $file || false === $root || ! is_file( $file ) || 0 !== strpos( $file, trailingslashit( $root ) ) ) {
-						continue;
-					}
-					if ( 'php' === strtolower( pathinfo( $file, PATHINFO_EXTENSION ) ) ) {
-						continue;
-					}
-					wp_delete_file( $file );
-				}
-				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
-				$wpdb->delete( $table, array( 'form_id' => (int) Minn_Admin::path_param( $request ) ), array( '%d' ) );
-				return rest_ensure_response( array( 'id' => (int) Minn_Admin::path_param( $request ), 'deleted' => true, 'message' => __( 'Entry deleted permanently.', 'minn-admin' ) ) );
-			},
-		),
-	) );
-
-	// Mark unread: the same rewrite CFDB7's own bulk action makes (decode the
-	// entry, set cfdb7_status, serialize it back).
-	register_rest_route( 'minn-admin/v1', '/cfdb7/entries/(?P<id>\d+)/unread', array(
-		'methods'             => 'POST',
-		'permission_callback' => 'minn_admin_cfdb7_can_view',
-		'callback'            => function ( WP_REST_Request $request ) {
-			global $wpdb;
-			$table = $wpdb->prefix . 'db7_forms';
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			$row = $wpdb->get_row( $wpdb->prepare(
-				"SELECT form_id, form_value FROM `{$table}` WHERE form_id = %d",
-				(int) Minn_Admin::path_param( $request )
-			) );
-			if ( ! $row ) {
-				return new WP_Error( 'not_found', __( 'Entry not found.', 'minn-admin' ), array( 'status' => 404 ) );
-			}
-			$patched = minn_admin_cfdb7_set_status( $row->form_value, 'unread' );
-			if ( null !== $patched ) {
-				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
-				$wpdb->update( $table, array( 'form_value' => $patched ), array( 'form_id' => (int) $row->form_id ), array( '%s' ), array( '%d' ) );
-			}
-			return rest_ensure_response( array( 'id' => (int) $row->form_id, 'status' => 'unread', 'message' => __( 'Marked as unread.', 'minn-admin' ) ) );
-		},
-	) );
-	register_rest_route( 'minn-admin/v1', '/cfdb7/status', array(
-		'methods'             => 'GET',
-		'permission_callback' => 'minn_admin_cfdb7_can_view',
-		'callback'            => function () {
-			global $wpdb;
-			$table = $wpdb->prefix . 'db7_forms';
-			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- prefix-derived table.
-			$total  = (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$table}`" );
-			// Read/unread is a fixed token inside the serialized blob; a row
-			// without the token is unread on their screen too (the list's rule).
-			$unread = (int) $wpdb->get_var( $wpdb->prepare(
-				"SELECT COUNT(*) FROM `{$table}` WHERE form_value NOT LIKE %s",
-				'%' . $wpdb->esc_like( 's:12:"cfdb7_status";s:4:"read"' ) . '%'
-			) );
-			// phpcs:enable
-			$forms = count( minn_admin_cfdb7_form_titles() );
-			// form_date is site-local current_time, so DATE() groups on the site's days.
-			$chart = minn_admin_chart_days();
-			$chart_rows = $wpdb->get_results( $wpdb->prepare( "SELECT DATE(form_date) AS d, COUNT(*) AS c FROM `{$table}` WHERE form_date >= %s GROUP BY DATE(form_date)", minn_admin_chart_local_since() ) ); // phpcs:ignore
-			foreach ( (array) $chart_rows as $cr ) {
-				minn_admin_chart_bump( $chart, (string) $cr->d, false, (int) $cr->c );
-			}
-			return rest_ensure_response( array(
-				'rows'    => array(
-					array(
-						'label' => __( 'Unread entries', 'minn-admin' ),
-						'value' => number_format_i18n( $unread ),
-						'hint'  => sprintf(
-							/* translators: %s: total number of stored entries. */
-							__( '%s total', 'minn-admin' ),
-							number_format_i18n( $total )
-						),
-					),
-					array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => number_format_i18n( $forms ) ),
-				),
-				'chart'   => minn_admin_chart_build( $chart, __( 'Entries', 'minn-admin' ) ),
-				'actions' => array(
-					array( 'label' => __( 'Open CFDB7 ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=cfdb7-list.php' ) ),
-				),
-			) );
-		},
-	) );
 } );

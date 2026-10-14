@@ -14,6 +14,12 @@
  * etc., mapped through ITS map_meta_cap filter — edit_users by default), so
  * a site that remapped them keeps its policy in Minn.
  *
+ * The messages are a kernel resource (docs/adapter-kernel.md): the kernel
+ * owns the routes, gates, ids, the not-found and wrong-state answers and the
+ * post-condition of each action; the rows still come from Flamingo's find()
+ * (WP_Query for trash, which find() does not speak) and every change from its
+ * model's own methods.
+ *
  * @package minn-admin
  */
 
@@ -51,6 +57,16 @@ function minn_admin_flamingo_channels() {
 	return $out;
 }
 
+/** A message's channel slug as its form's name. */
+function minn_admin_flamingo_channel_name( $slug ) {
+	foreach ( minn_admin_flamingo_channels() as $c ) {
+		if ( (string) $c['slug'] === (string) $slug ) {
+			return $c['title'];
+		}
+	}
+	return (string) $slug;
+}
+
 /** CF7 submission statuses → short pill labels; spam wins outright. */
 function minn_admin_flamingo_status( $msg ) {
 	if ( ! empty( $msg->spam ) ) {
@@ -62,6 +78,44 @@ function minn_admin_flamingo_status( $msg ) {
 	);
 	$s = (string) $msg->submission_status;
 	return $map[ $s ] ?? ( $s ? $s : 'inbound' );
+}
+
+/** The list's bucket a post status files a message under. */
+function minn_admin_flamingo_bucket( $post_status ) {
+	if ( 'trash' === $post_status ) {
+		return 'trash';
+	}
+	return Flamingo_Inbound_Message::spam_status === $post_status ? 'spam' : 'inbox';
+}
+
+/** One message as the routes see it, or null when the id is not one. */
+function minn_admin_flamingo_get( $id ) {
+	$post = get_post( (int) $id );
+	if ( ! $post || Flamingo_Inbound_Message::post_type !== $post->post_type ) {
+		return null;
+	}
+	return array(
+		'ID'          => (int) $post->ID,
+		'post_status' => (string) $post->post_status,
+		'post_date'   => (string) $post->post_date,
+		'bucket'      => minn_admin_flamingo_bucket( $post->post_status ),
+	);
+}
+
+/** Whether the post is still in the table, whatever it now is. */
+function minn_admin_flamingo_exists( $id ) {
+	return null !== Minn_Admin_Kernel_SQL::row( 'posts', 'ID', (int) $id, array( 'ID' ) );
+}
+
+/**
+ * Trashed, or deleted where the site keeps no trash: Flamingo's trash()
+ * deletes outright when EMPTY_TRASH_DAYS is 0.
+ */
+function minn_admin_flamingo_trashed( $id, $fresh ) {
+	if ( is_array( $fresh ) ) {
+		return 'trash' === $fresh['bucket'];
+	}
+	return ! EMPTY_TRASH_DAYS && ! minn_admin_flamingo_exists( $id );
 }
 
 /**
@@ -91,17 +145,21 @@ function minn_admin_flamingo_status_model() {
 			number_format_i18n( $trash )
 		);
 	}
-	// Inbound messages are posts; post_date is site-local, so DATE() groups on the site's days.
-	global $wpdb;
-	$chart = minn_admin_chart_days();
-	$chart_rows = $wpdb->get_results( $wpdb->prepare(
-		"SELECT DATE(post_date) AS d, post_status, COUNT(*) AS c FROM {$wpdb->posts} WHERE post_type = %s AND post_status IN ('publish','flamingo-spam') AND post_date >= %s GROUP BY DATE(post_date), post_status",
-		Flamingo_Inbound_Message::post_type,
-		minn_admin_chart_local_since()
+	// Inbound messages are posts; post_date is site-local, so the chart groups
+	// on the site's days.
+	$n = Minn_Admin_Kernel::inbox_counts( array(
+		'table' => 'posts',
+		'chart' => array(
+			'column'    => 'post_date',
+			'clock'     => 'local',
+			'where'     => array(
+				'post_type'   => Flamingo_Inbound_Message::post_type,
+				'post_status' => array( 'publish', Flamingo_Inbound_Message::spam_status ),
+			),
+			'split'     => 'post_status',
+			'secondary' => array( Flamingo_Inbound_Message::spam_status ),
+		),
 	) );
-	foreach ( (array) $chart_rows as $cr ) {
-		minn_admin_chart_bump( $chart, (string) $cr->d, 'flamingo-spam' === (string) $cr->post_status, (int) $cr->c );
-	}
 	return array(
 		'rows'    => array(
 			array(
@@ -111,18 +169,401 @@ function minn_admin_flamingo_status_model() {
 			),
 			array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => number_format_i18n( $forms ) ),
 		),
-		'chart'   => minn_admin_chart_build( $chart, __( 'Messages', 'minn-admin' ), __( 'Spam', 'minn-admin' ) ),
+		'chart'   => minn_admin_chart_build( $n['days'], __( 'Messages', 'minn-admin' ), __( 'Spam', 'minn-admin' ) ),
 		'actions' => array(
 			array( 'label' => __( 'Open Flamingo ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=flamingo_inbound' ) ),
 		),
 	);
 }
 
+/**
+ * A page of messages through Flamingo's own find(), which takes WP_Query
+ * args (flamingo-spam is exclude_from_search, so statuses are named
+ * explicitly). find() does not speak 'trash'; WP_Query serves that bucket.
+ *
+ * @param array $q The kernel's list query.
+ * @return array [ rows, total ]
+ */
+function minn_admin_flamingo_list( array $q ) {
+	$r       = $q['request'];
+	$bucket  = (string) $q['filter'];
+	$status  = (string) ( $q['where']['post_status'] ?? 'publish' );
+	$channel = (int) $r->get_param( 'channel_id' );
+
+	// A status-chart bar narrows the list to that day. Flamingo messages are
+	// POSTS, so core's date_query serves both branches. post_date is the site's
+	// clock, the same one the bounds arrive on.
+	$date_query = array();
+	$after      = (string) $r->get_param( 'after' );
+	$before     = (string) $r->get_param( 'before' );
+	if ( '' !== $after || '' !== $before ) {
+		$date_query = array( array( 'inclusive' => true ) );
+		if ( '' !== $after ) {
+			$date_query[0]['after'] = $after;
+		}
+		if ( '' !== $before ) {
+			$date_query[0]['before'] = $before;
+		}
+	}
+
+	if ( 'trash' === $status ) {
+		$q_args = array(
+			'post_type'      => Flamingo_Inbound_Message::post_type,
+			'post_status'    => 'trash',
+			'date_query'     => $date_query,
+			'posts_per_page' => $q['per_page'],
+			'paged'          => $q['page'],
+			'orderby'        => 'date',
+			'order'          => 'DESC',
+		);
+		if ( $channel ) {
+			$q_args['tax_query'] = array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
+				array(
+					'taxonomy' => Flamingo_Inbound_Message::channel_taxonomy,
+					'field'    => 'term_id',
+					'terms'    => $channel,
+				),
+			);
+		}
+		if ( '' !== $q['search'] ) {
+			$q_args['s'] = sanitize_text_field( $q['search'] );
+		}
+		$query    = new WP_Query( $q_args );
+		$messages = array();
+		foreach ( $query->posts as $post ) {
+			$messages[] = new Flamingo_Inbound_Message( $post );
+		}
+		$total = (int) $query->found_posts;
+	} else {
+		$args = array(
+			'posts_per_page' => $q['per_page'],
+			'offset'         => ( $q['page'] - 1 ) * $q['per_page'],
+			'date_query'     => $date_query,
+			'orderby'        => 'date',
+			'order'          => 'DESC',
+			'post_status'    => $status,
+		);
+		if ( $channel ) {
+			$args['channel_id'] = $channel;
+		}
+		if ( '' !== $q['search'] ) {
+			$args['s'] = sanitize_text_field( $q['search'] );
+		}
+		$messages = Flamingo_Inbound_Message::find( $args );
+		// find()'s count() is unfiltered — recount via a limit=-1 pass.
+		$count_args                   = $args;
+		$count_args['posts_per_page'] = -1;
+		$count_args['offset']         = 0;
+		$total                        = count( Flamingo_Inbound_Message::find( $count_args ) );
+	}
+	$rows = array();
+	foreach ( $messages as $msg ) {
+		$rows[] = array( 'message' => $msg, 'bucket' => $bucket );
+	}
+	return array( $rows, $total );
+}
+
+/** A message's list row, from Flamingo's model. */
+function minn_admin_flamingo_row( array $row ) {
+	$msg    = $row['message'];
+	$bucket = $row['bucket'];
+	$post   = get_post( $msg->id() );
+	return array(
+		'id'      => (int) $msg->id(),
+		'from'    => $msg->from_name ?: ( $msg->from_email ?: __( '(unknown sender)', 'minn-admin' ) ),
+		'subject' => $msg->subject ?: __( '(no subject)', 'minn-admin' ),
+		'form'    => minn_admin_flamingo_channel_name( $msg->channel ),
+		'status'  => 'trash' === $bucket ? 'trash' : minn_admin_flamingo_status( $msg ),
+		'bucket'  => $bucket,
+		'spam'    => $msg->spam ? 'yes' : 'no',
+		'date'    => $post ? $post->post_date : '',
+	);
+}
+
+/** A message's detail: every answer, then the submission's own facts. */
+function minn_admin_flamingo_view( array $row ) {
+	$msg = new Flamingo_Inbound_Message( (int) $row['ID'] );
+
+	$answers = array();
+	foreach ( (array) $msg->fields as $key => $value ) {
+		if ( is_array( $value ) ) {
+			$value = implode( ', ', array_filter( array_map( 'strval', $value ) ) );
+		}
+		$value = trim( (string) $value );
+		if ( '' === $value ) {
+			continue;
+		}
+		// CF7 field names read like 'your-name' — humanize, and drop the
+		// conventional 'your-' prefix.
+		$label     = preg_replace( '/^your[-_]/', '', (string) $key );
+		$label     = ucwords( str_replace( array( '-', '_' ), ' ', $label ) );
+		$answers[] = array(
+			'label' => $label,
+			'value' => $value,
+			'type'  => is_email( $value ) ? 'email'
+				: ( 0 === strpos( $value, 'http' ) ? 'url' : 'text' ),
+		);
+	}
+
+	$meta = array(
+		array(
+			'label' => __( 'Submitted', 'minn-admin' ),
+			'value' => date_i18n( 'M j, Y g:i a', strtotime( $row['post_date'] ) ),
+		),
+	);
+	if ( $msg->channel ) {
+		$meta[] = array( 'label' => __( 'Form', 'minn-admin' ), 'value' => minn_admin_flamingo_channel_name( $msg->channel ) );
+	}
+	if ( $msg->from ) {
+		$meta[] = array( 'label' => __( 'From', 'minn-admin' ), 'value' => (string) $msg->from );
+	}
+	$extra = (array) $msg->meta; // CF7's special mail tags: url, remote_ip, user_agent…
+	if ( ! empty( $extra['url'] ) ) {
+		$meta[] = array( 'label' => __( 'Source', 'minn-admin' ), 'value' => (string) $extra['url'], 'type' => 'url' );
+	}
+	if ( ! empty( $extra['remote_ip'] ) ) {
+		$meta[] = array( 'label' => 'IP', 'value' => (string) $extra['remote_ip'] );
+	}
+	if ( ! empty( $extra['user_agent'] ) ) {
+		$meta[] = array( 'label' => __( 'Client', 'minn-admin' ), 'value' => (string) $extra['user_agent'] );
+	}
+	if ( $msg->spam ) {
+		$log = array();
+		foreach ( (array) $msg->spam_log as $entry ) {
+			if ( ! empty( $entry['reason'] ) ) {
+				$log[] = (string) $entry['reason'];
+			}
+		}
+		$meta[] = array( 'label' => __( 'Spam', 'minn-admin' ), 'value' => $log ? implode( ' · ', $log ) : 'Marked as spam' );
+	}
+
+	return array(
+		'kind'     => 'entry',
+		'title'    => $msg->subject ?: 'Message',
+		'status'   => minn_admin_flamingo_status( $msg ),
+		'sections' => array(
+			array( 'title' => __( 'Responses', 'minn-admin' ), 'rows' => $answers ),
+			array( 'title' => __( 'Submission', 'minn-admin' ), 'rows' => $meta ),
+		),
+		'adminUrl' => admin_url( 'admin.php?page=flamingo_inbound&post=' . (int) $msg->id() . '&action=edit' ),
+	);
+}
+
+/** Every action's reply names the message it acted on. */
+function minn_admin_flamingo_id_reply( $id ) {
+	return array( 'id' => (int) $id );
+}
+
+// Flamingo's own meta caps, mapped through ITS map_meta_cap filter. Its
+// untrash action requires the delete meta cap (admin/admin.php, the untrash
+// bulk action); stock maps both caps to edit_users, a site that splits them
+// means it.
+minn_admin_resource( 'cf7/messages', function () {
+	return array(
+		'active'  => 'minn_admin_flamingo_ready',
+		'gates'   => array(
+			'view'   => 'minn_admin_flamingo_can_view',
+			'delete' => function () {
+				return current_user_can( 'flamingo_delete_inbound_message' );
+			},
+			'spam'   => function () {
+				return current_user_can( 'flamingo_spam_inbound_message' );
+			},
+			'unspam' => function () {
+				return current_user_can( 'flamingo_unspam_inbound_message' );
+			},
+		),
+		'labels'  => array(
+			'not_found' => __( 'Message not found.', 'minn-admin' ),
+		),
+		'source'  => array(
+			'list'   => 'minn_admin_flamingo_list',
+			'get'    => 'minn_admin_flamingo_get',
+			'exists' => 'minn_admin_flamingo_exists',
+		),
+		'list'    => array(
+			// flamingo-spam is exclude_from_search; trash is core trash — three
+			// buckets, each one post status the list source asks find() for.
+			'filter' => array(
+				'param'   => 'status',
+				'values'  => array(
+					'inbox' => array( 'post_status' => 'publish' ),
+					'spam'  => array( 'post_status' => 'flamingo-spam' ),
+					'trash' => array( 'post_status' => 'trash' ),
+				),
+				'default' => 'inbox',
+			),
+			'search' => array( 'param' => 'search' ),
+			'range'  => array( 'column' => 'post_date', 'clock' => 'local' ),
+			'row'    => 'minn_admin_flamingo_row',
+			'fields' => array(
+				'id'      => 'int',
+				'from'    => 'text',
+				'subject' => 'text',
+				'form'    => 'text',
+				'status'  => 'text',
+				'bucket'  => 'text',
+				'spam'    => 'text',
+				// post_date is site-local; sent un-zoned so timeAgo parses it as local.
+				'date'    => array( 'type' => 'datetime', 'stored' => 'site', 'wire' => 'naked' ),
+			),
+		),
+		'item'    => array( 'view' => 'minn_admin_flamingo_view' ),
+		'actions' => array(
+			// Their own handlers (Akismet submit rides along like their UI). A
+			// message Flamingo already reads as spam is left as it is.
+			'spam'    => array(
+				'gate'   => 'spam',
+				'run'    => function ( $id ) {
+					( new Flamingo_Inbound_Message( $id ) )->spam();
+					return true;
+				},
+				'expect' => function ( $id ) {
+					return true === ( new Flamingo_Inbound_Message( $id ) )->spam;
+				},
+				'fail'   => __( 'Flamingo did not mark the message as spam.', 'minn-admin' ),
+				'reply'  => 'minn_admin_flamingo_id_reply',
+				'done'   => __( 'Marked as spam.', 'minn-admin' ),
+			),
+			// Out of the spam status. Flamingo may still read a message as spam by
+			// its Akismet flag when Akismet could not be told.
+			'unspam'  => array(
+				'gate'   => 'unspam',
+				'run'    => function ( $id ) {
+					( new Flamingo_Inbound_Message( $id ) )->unspam();
+					return true;
+				},
+				'expect' => function ( $id, $fresh ) {
+					return is_array( $fresh ) && 'spam' !== $fresh['bucket'];
+				},
+				'fail'   => __( 'Flamingo did not mark the message as not spam.', 'minn-admin' ),
+				'reply'  => 'minn_admin_flamingo_id_reply',
+				'done'   => __( 'Marked not spam.', 'minn-admin' ),
+			),
+			'trash'   => array(
+				'gate'   => 'delete',
+				'run'    => function ( $id ) {
+					( new Flamingo_Inbound_Message( $id ) )->trash();
+					return true;
+				},
+				'expect' => function ( $id, $fresh ) {
+					return minn_admin_flamingo_trashed( $id, $fresh );
+				},
+				'fail'   => __( 'Flamingo did not move the message to trash.', 'minn-admin' ),
+				'reply'  => 'minn_admin_flamingo_id_reply',
+				'done'   => __( 'Moved to trash.', 'minn-admin' ),
+			),
+			'restore' => array(
+				'gate'   => 'delete',
+				'when'   => array( 'bucket' => array( 'trash' ) ),
+				'code'   => 'not_trashed',
+				'refuse' => __( 'Only trashed messages can be restored.', 'minn-admin' ),
+				// Flamingo's wp_untrash_post_status filter puts back the status
+				// the message was trashed from.
+				'run'    => function ( $id ) {
+					( new Flamingo_Inbound_Message( $id ) )->untrash();
+					return true;
+				},
+				'expect' => function ( $id, $fresh ) {
+					return is_array( $fresh ) && 'trash' !== $fresh['bucket'];
+				},
+				'fail'   => __( 'Flamingo did not restore the message.', 'minn-admin' ),
+				'reply'  => 'minn_admin_flamingo_id_reply',
+				'done'   => __( 'Message restored.', 'minn-admin' ),
+			),
+			// Permanent for a message asked with force, in trash or read as spam
+			// (their delete() force-deletes the post); otherwise it goes to trash.
+			'delete'  => array(
+				'method' => 'DELETE',
+				'gate'   => 'delete',
+				'run'    => function ( $id, $row, WP_REST_Request $request ) {
+					$msg = new Flamingo_Inbound_Message( $id );
+					if ( ! empty( $request['force'] ) || 'trash' === $row['post_status'] || ! empty( $msg->spam ) ) {
+						$msg->delete();
+						return 'deleted';
+					}
+					$msg->trash();
+					return 'trashed';
+				},
+				'expect' => function ( $id, $fresh, $ran ) {
+					return 'deleted' === $ran ? ! minn_admin_flamingo_exists( $id ) : minn_admin_flamingo_trashed( $id, $fresh );
+				},
+				'fail'   => __( 'Flamingo did not delete the message.', 'minn-admin' ),
+				'reply'  => function ( $id, $fresh ) {
+					if ( null === $fresh ) {
+						return array( 'id' => (int) $id, 'deleted' => true, 'message' => __( 'Message deleted permanently.', 'minn-admin' ) );
+					}
+					return array( 'id' => (int) $id, 'trashed' => true, 'message' => __( 'Moved to trash.', 'minn-admin' ) );
+				},
+			),
+		),
+	);
+} );
+
+minn_admin_endpoint( 'cf7/status', array(
+	'active' => 'minn_admin_flamingo_ready',
+	'gate'   => 'minn_admin_flamingo_can_view',
+	'run'    => 'minn_admin_flamingo_status_model',
+) );
+
+minn_admin_endpoint( 'cf7/channels', array(
+	'active' => 'minn_admin_flamingo_ready',
+	'gate'   => 'minn_admin_flamingo_can_view',
+	'run'    => 'minn_admin_flamingo_channels',
+) );
+
+minn_admin_endpoint( 'cf7/forms', array(
+	'active' => function () {
+		return minn_admin_flamingo_ready() && defined( 'WPCF7_VERSION' );
+	},
+	'gate'   => 'minn_admin_flamingo_can_view',
+	'run'    => function ( WP_REST_Request $request ) {
+		$per_page = min( 100, max( 1, (int) ( $request['per_page'] ?: 25 ) ) );
+		$page     = max( 1, (int) ( $request['page'] ?: 1 ) );
+		$query    = new WP_Query( array(
+			'post_type'      => 'wpcf7_contact_form',
+			'post_status'    => 'publish',
+			'posts_per_page' => $per_page,
+			'paged'          => $page,
+			'orderby'        => 'title',
+			'order'          => 'ASC',
+		) );
+
+		// Message counts come from each form's channel term.
+		$counts = array();
+		foreach ( minn_admin_flamingo_channels() as $c ) {
+			$term = get_term( $c['id'], Flamingo_Inbound_Message::channel_taxonomy );
+			if ( $term && ! is_wp_error( $term ) ) {
+				$counts[ $term->slug ] = (int) $term->count;
+			}
+		}
+
+		$items = array();
+		foreach ( $query->posts as $post ) {
+			$items[] = array(
+				'id'        => (int) $post->ID,
+				'title'     => $post->post_title ?: __( '(untitled form)', 'minn-admin' ),
+				'shortcode' => sprintf( '[contact-form-7 id="%d"]', $post->ID ),
+				'messages'  => $counts[ $post->post_name ] ?? 0,
+				'date'      => str_replace( ' ', 'T', $post->post_modified ),
+			);
+		}
+		return array(
+			'items' => $items,
+			'total' => (int) $query->found_posts,
+		);
+	},
+) );
+
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! minn_admin_flamingo_ready() || ! minn_admin_flamingo_can_view() ) {
 		return $surfaces;
 	}
 	$cf7 = defined( 'WPCF7_VERSION' );
+	$ui  = function ( $slug, $ui ) {
+		return Minn_Admin_Kernel::ui( 'cf7/messages', $slug, $ui );
+	};
+	// Permanent, whatever bucket the message is in by the time it arrives.
 
 	$surfaces['cf7'] = array(
 		'label'      => __( 'Forms', 'minn-admin' ),
@@ -133,128 +574,60 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'status'     => array( 'route' => 'minn-admin/v1/cf7/status' ),
 		'icon'       => 'inbox',
 		'cap'        => 'read',
-		'collection' => array(
-			'viewLabel' => __( 'Messages', 'minn-admin' ),
-			// The messages are Flamingo's inbox, so they leave with Flamingo
-			// or that page, and Contact Form 7's forms list takes their place
-			// while Contact Form 7 is still in the menu; the forms list leaves
-			// with Contact Form 7.
-			'plugin'    => 'flamingo',
+		// Route, paging, search, the status-chart day range and the filter
+		// query come from the resource, so they cannot drift from it.
+		'collection' => Minn_Admin_Kernel::collection( 'cf7/messages', array(
+			'viewLabel'  => __( 'Messages', 'minn-admin' ),
+			// The messages are Flamingo's inbox, so they leave with Flamingo or
+			// that page, and Contact Form 7's forms list takes their place while
+			// Contact Form 7 is still in the menu; the forms list leaves with
+			// Contact Form 7.
+			'plugin'     => 'flamingo',
 			'adminPages' => array( 'flamingo_inbound' ),
-			'route'     => 'minn-admin/v1/cf7/messages',
-			// A status-chart bar narrows the list to that day (the chart's
-			// points carry from/to; the route reads after/before).
-			'dateQuery' => 'after={from}&before={to}',
-			'pageQuery' => 'per_page=25&page={page}',
-			'search'    => 'search={q}',
-			'itemsKey'  => 'items',
-			'totalKey'  => 'total',
-			'tabs'      => array(
+			'tabs'       => array(
 				'route'    => 'minn-admin/v1/cf7/channels',
 				'valueKey' => 'id',
 				'labelKey' => 'title',
 				'param'    => 'channel_id',
 				'allLabel' => __( 'All messages', 'minn-admin' ),
 			),
-			// flamingo-spam is exclude_from_search; trash is core trash — three buckets.
-			'filter'    => array(
+			'filter'     => array(
 				'label'   => __( 'Status', 'minn-admin' ),
 				'options' => array(
 					array( 'inbox', 'Received' ),
 					array( 'spam', 'Spam' ),
 					array( 'trash', 'Trash' ),
 				),
-				'query'   => 'status={v}',
 			),
-			'columns'   => array(
+			'columns'    => array(
 				array( 'key' => 'from', 'label' => __( 'From', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.2fr)' ),
 				array( 'key' => 'subject', 'label' => __( 'Subject', 'minn-admin' ), 'width' => 'minmax(0,1.4fr)' ),
 				array( 'key' => 'form', 'label' => __( 'Form', 'minn-admin' ) ),
 				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '96px' ),
 				array( 'key' => 'date', 'label' => __( 'When', 'minn-admin' ), 'format' => 'ago' ),
 			),
-			'detail'    => array(
+			'detail'     => array(
 				'sectionsRoute' => 'minn-admin/v1/cf7/messages/{id}',
 			),
-			'actions'   => array(
-				array(
-					'label'  => __( 'Mark as spam', 'minn-admin' ),
-					'method' => 'POST',
-					'route'  => 'minn-admin/v1/cf7/messages/{id}/spam',
-					'when'   => array( 'key' => 'bucket', 'equals' => 'inbox' ),
-				),
-				array(
-					'label'  => __( 'Not spam', 'minn-admin' ),
-					'method' => 'POST',
-					'route'  => 'minn-admin/v1/cf7/messages/{id}/unspam',
-					'when'   => array( 'key' => 'bucket', 'equals' => 'spam' ),
-				),
-				array(
-					'label'   => __( 'Trash message', 'minn-admin' ),
-					'method'  => 'POST',
-					'route'   => 'minn-admin/v1/cf7/messages/{id}/trash',
-					'confirm' => __( 'Move this message to trash?', 'minn-admin' ),
-					'danger'  => true,
-					'when'    => array( 'key' => 'bucket', 'equals' => 'inbox' ),
-				),
-				array(
-					'label'  => __( 'Restore', 'minn-admin' ),
-					'method' => 'POST',
-					'route'  => 'minn-admin/v1/cf7/messages/{id}/restore',
-					'when'   => array( 'key' => 'bucket', 'equals' => 'trash' ),
-				),
-				array(
-					'label'   => __( 'Delete permanently', 'minn-admin' ),
-					'method'  => 'DELETE',
-					'route'   => 'minn-admin/v1/cf7/messages/{id}?force=1',
-					'confirm' => __( 'Delete this message permanently? There is no undo.', 'minn-admin' ),
-					'danger'  => true,
-					'when'    => array( 'key' => 'bucket', 'equals' => 'trash' ),
-				),
-				array(
-					'label'   => __( 'Delete permanently', 'minn-admin' ),
-					'method'  => 'DELETE',
-					'route'   => 'minn-admin/v1/cf7/messages/{id}?force=1',
-					'confirm' => __( 'Delete this message permanently? There is no undo.', 'minn-admin' ),
-					'danger'  => true,
-					'when'    => array( 'key' => 'bucket', 'equals' => 'spam' ),
-				),
+			'actions'    => array(
+				$ui( 'spam', array( 'label' => __( 'Mark as spam', 'minn-admin' ), 'key' => 'bucket', 'when' => 'inbox' ) ),
+				$ui( 'unspam', array( 'label' => __( 'Not spam', 'minn-admin' ), 'key' => 'bucket', 'when' => 'spam' ) ),
+				$ui( 'trash', array( 'label' => __( 'Trash message', 'minn-admin' ), 'confirm' => __( 'Move this message to trash?', 'minn-admin' ), 'danger' => true, 'key' => 'bucket', 'when' => 'inbox' ) ),
+				$ui( 'restore', array( 'label' => __( 'Restore', 'minn-admin' ), 'when' => 'trash' ) ),
+				$ui( 'delete', array( 'label' => __( 'Delete permanently', 'minn-admin' ), 'confirm' => __( 'Delete this message permanently? There is no undo.', 'minn-admin' ), 'danger' => true, 'query' => 'force=1', 'key' => 'bucket', 'when' => 'trash' ) ),
+				$ui( 'delete', array( 'label' => __( 'Delete permanently', 'minn-admin' ), 'confirm' => __( 'Delete this message permanently? There is no undo.', 'minn-admin' ), 'danger' => true, 'query' => 'force=1', 'key' => 'bucket', 'when' => 'spam' ) ),
 				array(
 					'label' => __( 'Open in Flamingo ↗', 'minn-admin' ),
 					'href'  => admin_url( 'admin.php?page=flamingo_inbound&post={id}&action=edit' ),
 				),
 			),
-			'bulk'      => array(
-				array(
-					'label'  => __( 'Mark as spam', 'minn-admin' ),
-					'method' => 'POST',
-					'route'  => 'minn-admin/v1/cf7/messages/{id}/spam',
-					'when'   => array( 'key' => 'bucket', 'equals' => 'inbox' ),
-				),
-				array(
-					'label'   => __( 'Trash', 'minn-admin' ),
-					'method'  => 'POST',
-					'route'   => 'minn-admin/v1/cf7/messages/{id}/trash',
-					'confirm' => __( 'Move the selected messages to trash?', 'minn-admin' ),
-					'danger'  => true,
-					'when'    => array( 'key' => 'bucket', 'equals' => 'inbox' ),
-				),
-				array(
-					'label'  => __( 'Restore', 'minn-admin' ),
-					'method' => 'POST',
-					'route'  => 'minn-admin/v1/cf7/messages/{id}/restore',
-					'when'   => array( 'key' => 'bucket', 'equals' => 'trash' ),
-				),
-				array(
-					'label'   => __( 'Delete permanently', 'minn-admin' ),
-					'method'  => 'DELETE',
-					'route'   => 'minn-admin/v1/cf7/messages/{id}?force=1',
-					'confirm' => __( 'Delete the selected messages permanently?', 'minn-admin' ),
-					'danger'  => true,
-					'when'    => array( 'key' => 'bucket', 'equals' => 'trash' ),
-				),
+			'bulk'       => array(
+				$ui( 'spam', array( 'label' => __( 'Mark as spam', 'minn-admin' ), 'key' => 'bucket', 'when' => 'inbox' ) ),
+				$ui( 'trash', array( 'label' => __( 'Trash', 'minn-admin' ), 'confirm' => __( 'Move the selected messages to trash?', 'minn-admin' ), 'danger' => true, 'key' => 'bucket', 'when' => 'inbox' ) ),
+				$ui( 'restore', array( 'label' => __( 'Restore', 'minn-admin' ), 'when' => 'trash' ) ),
+				$ui( 'delete', array( 'label' => __( 'Delete permanently', 'minn-admin' ), 'confirm' => __( 'Delete the selected messages permanently?', 'minn-admin' ), 'danger' => true, 'query' => 'force=1', 'key' => 'bucket', 'when' => 'trash' ) ),
 			),
-		),
+		) ),
 	);
 
 	if ( $cf7 ) {
@@ -282,348 +655,4 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		);
 	}
 	return $surfaces;
-} );
-
-add_action( 'rest_api_init', function () {
-	if ( ! minn_admin_flamingo_ready() ) {
-		return;
-	}
-
-	register_rest_route( 'minn-admin/v1', '/cf7/status', array(
-		'methods'             => 'GET',
-		'permission_callback' => 'minn_admin_flamingo_can_view',
-		'callback'            => function () {
-			return rest_ensure_response( minn_admin_flamingo_status_model() );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/cf7/channels', array(
-		'methods'             => 'GET',
-		'permission_callback' => 'minn_admin_flamingo_can_view',
-		'callback'            => function () {
-			return rest_ensure_response( minn_admin_flamingo_channels() );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/cf7/messages', array(
-		'methods'             => 'GET',
-		'permission_callback' => 'minn_admin_flamingo_can_view',
-		'callback'            => function ( WP_REST_Request $request ) {
-			$per_page = min( 100, max( 1, (int) ( $request['per_page'] ?: 25 ) ) );
-			$page     = max( 1, (int) ( $request['page'] ?: 1 ) );
-			$bucket   = sanitize_key( (string) ( $request['status'] ?: 'inbox' ) );
-			if ( ! in_array( $bucket, array( 'inbox', 'spam', 'trash' ), true ) ) {
-				$bucket = 'inbox';
-			}
-
-			// A status-chart bar narrows the list to that day. Flamingo
-			// messages are POSTS and find() passes its args to WP_Query, so
-			// core's date_query serves both branches. post_date is the site's
-			// clock, the same one the bounds arrive on.
-			$date_query = array();
-			$after      = (string) $request->get_param( 'after' );
-			$before     = (string) $request->get_param( 'before' );
-			if ( '' !== $after || '' !== $before ) {
-				$date_query = array( array( 'inclusive' => true ) );
-				if ( '' !== $after ) {
-					$date_query[0]['after'] = $after;
-				}
-				if ( '' !== $before ) {
-					$date_query[0]['before'] = $before;
-				}
-			}
-
-			// flamingo-spam is exclude_from_search — name statuses explicitly.
-			// find() does not speak 'trash'; use WP_Query for that bucket.
-			if ( 'trash' === $bucket ) {
-				$q_args = array(
-					'post_type'      => Flamingo_Inbound_Message::post_type,
-					'post_status'    => 'trash',
-					'date_query'     => $date_query,
-					'posts_per_page' => $per_page,
-					'paged'          => $page,
-					'orderby'        => 'date',
-					'order'          => 'DESC',
-				);
-				if ( $request['channel_id'] ) {
-					$q_args['tax_query'] = array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
-						array(
-							'taxonomy' => Flamingo_Inbound_Message::channel_taxonomy,
-							'field'    => 'term_id',
-							'terms'    => (int) $request['channel_id'],
-						),
-					);
-				}
-				if ( $request['search'] ) {
-					$q_args['s'] = sanitize_text_field( (string) $request['search'] );
-				}
-				$query    = new WP_Query( $q_args );
-				$messages = array();
-				foreach ( $query->posts as $post ) {
-					$messages[] = new Flamingo_Inbound_Message( $post );
-				}
-				$total = (int) $query->found_posts;
-			} else {
-				$args = array(
-					'posts_per_page' => $per_page,
-					'offset'         => ( $page - 1 ) * $per_page,
-					'date_query'     => $date_query,
-					'orderby'        => 'date',
-					'order'          => 'DESC',
-					'post_status'    => 'spam' === $bucket
-						? Flamingo_Inbound_Message::spam_status
-						: 'publish',
-				);
-				if ( $request['channel_id'] ) {
-					$args['channel_id'] = (int) $request['channel_id'];
-				}
-				if ( $request['search'] ) {
-					$args['s'] = sanitize_text_field( (string) $request['search'] );
-				}
-				$messages = Flamingo_Inbound_Message::find( $args );
-				// find()'s count() is unfiltered — recount via a limit=-1 pass.
-				$count_args = $args;
-				$count_args['posts_per_page'] = -1;
-				$count_args['offset']         = 0;
-				$total = count( Flamingo_Inbound_Message::find( $count_args ) );
-			}
-
-			$channel_names = array();
-			foreach ( minn_admin_flamingo_channels() as $c ) {
-				$channel_names[ $c['slug'] ] = $c['title'];
-			}
-
-			$items = array();
-			foreach ( $messages as $msg ) {
-				$post   = get_post( $msg->id() );
-				$status = 'trash' === $bucket ? 'trash' : minn_admin_flamingo_status( $msg );
-				$items[] = array(
-					'id'      => (int) $msg->id(),
-					'from'    => $msg->from_name ?: ( $msg->from_email ?: __( '(unknown sender)', 'minn-admin' ) ),
-					'subject' => $msg->subject ?: __( '(no subject)', 'minn-admin' ),
-					'form'    => $channel_names[ (string) $msg->channel ] ?? (string) $msg->channel,
-					'status'  => $status,
-					'bucket'  => $bucket,
-					'spam'    => $msg->spam ? 'yes' : 'no',
-					// post_date is site-local; leave un-zoned so timeAgo
-					// parses it as local (fluent-forms precedent).
-					'date'    => $post ? str_replace( ' ', 'T', $post->post_date ) : '',
-				);
-			}
-
-			return rest_ensure_response( array(
-				'items' => $items,
-				'total' => $total,
-			) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/cf7/messages/(?P<id>\d+)', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => 'minn_admin_flamingo_can_view',
-			'callback'            => function ( WP_REST_Request $request ) {
-				$post = get_post( (int) Minn_Admin::path_param( $request ) );
-				if ( ! $post || Flamingo_Inbound_Message::post_type !== $post->post_type ) {
-					return new WP_Error( 'not_found', __( 'Message not found.', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				$msg = new Flamingo_Inbound_Message( $post );
-
-				$answers = array();
-				foreach ( (array) $msg->fields as $key => $value ) {
-					if ( is_array( $value ) ) {
-						$value = implode( ', ', array_filter( array_map( 'strval', $value ) ) );
-					}
-					$value = trim( (string) $value );
-					if ( '' === $value ) {
-						continue;
-					}
-					// CF7 field names read like 'your-name' — humanize, and
-					// drop the conventional 'your-' prefix.
-					$label     = preg_replace( '/^your[-_]/', '', (string) $key );
-					$label     = ucwords( str_replace( array( '-', '_' ), ' ', $label ) );
-					$answers[] = array(
-						'label' => $label,
-						'value' => $value,
-						'type'  => is_email( $value ) ? 'email'
-							: ( 0 === strpos( $value, 'http' ) ? 'url' : 'text' ),
-					);
-				}
-
-				$meta = array(
-					array(
-						'label' => __( 'Submitted', 'minn-admin' ),
-						'value' => date_i18n( 'M j, Y g:i a', strtotime( $post->post_date ) ),
-					),
-				);
-				$channel_names = array();
-				foreach ( minn_admin_flamingo_channels() as $c ) {
-					$channel_names[ $c['slug'] ] = $c['title'];
-				}
-				if ( $msg->channel ) {
-					$meta[] = array( 'label' => __( 'Form', 'minn-admin' ), 'value' => $channel_names[ (string) $msg->channel ] ?? (string) $msg->channel );
-				}
-				if ( $msg->from ) {
-					$meta[] = array( 'label' => __( 'From', 'minn-admin' ), 'value' => (string) $msg->from );
-				}
-				$extra = (array) $msg->meta; // CF7's special mail tags: url, remote_ip, user_agent…
-				if ( ! empty( $extra['url'] ) ) {
-					$meta[] = array( 'label' => __( 'Source', 'minn-admin' ), 'value' => (string) $extra['url'], 'type' => 'url' );
-				}
-				if ( ! empty( $extra['remote_ip'] ) ) {
-					$meta[] = array( 'label' => 'IP', 'value' => (string) $extra['remote_ip'] );
-				}
-				if ( ! empty( $extra['user_agent'] ) ) {
-					$meta[] = array( 'label' => __( 'Client', 'minn-admin' ), 'value' => (string) $extra['user_agent'] );
-				}
-				if ( $msg->spam ) {
-					$log = array();
-					foreach ( (array) $msg->spam_log as $entry ) {
-						if ( ! empty( $entry['reason'] ) ) {
-							$log[] = (string) $entry['reason'];
-						}
-					}
-					$meta[] = array( 'label' => __( 'Spam', 'minn-admin' ), 'value' => $log ? implode( ' · ', $log ) : 'Marked as spam' );
-				}
-
-				return rest_ensure_response( array(
-					'kind'     => 'entry',
-					'title'    => $msg->subject ?: 'Message',
-					'status'   => minn_admin_flamingo_status( $msg ),
-					'sections' => array(
-						array( 'title' => __( 'Responses', 'minn-admin' ), 'rows' => $answers ),
-						array( 'title' => __( 'Submission', 'minn-admin' ), 'rows' => $meta ),
-					),
-					'adminUrl' => admin_url( 'admin.php?page=flamingo_inbound&post=' . (int) $msg->id() . '&action=edit' ),
-				) );
-			},
-		),
-		array(
-			'methods'             => 'DELETE',
-			'permission_callback' => function () {
-				return current_user_can( 'flamingo_delete_inbound_message' );
-			},
-			'callback'            => function ( WP_REST_Request $request ) {
-				$post = get_post( (int) Minn_Admin::path_param( $request ) );
-				if ( ! $post || Flamingo_Inbound_Message::post_type !== $post->post_type ) {
-					return new WP_Error( 'not_found', __( 'Message not found.', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				$msg   = new Flamingo_Inbound_Message( $post );
-				$force = ! empty( $request['force'] ) || 'trash' === $post->post_status || ! empty( $msg->spam );
-				if ( $force ) {
-					// Permanent delete (their delete() / force-delete post).
-					$msg->delete();
-					return rest_ensure_response( array( 'id' => (int) Minn_Admin::path_param( $request ), 'deleted' => true, 'message' => __( 'Message deleted permanently.', 'minn-admin' ) ) );
-				}
-				$msg->trash();
-				return rest_ensure_response( array( 'id' => (int) Minn_Admin::path_param( $request ), 'trashed' => true, 'message' => __( 'Moved to trash.', 'minn-admin' ) ) );
-			},
-		),
-	) );
-
-	foreach ( array( 'spam', 'unspam' ) as $op ) {
-		register_rest_route( 'minn-admin/v1', '/cf7/messages/(?P<id>\d+)/' . $op, array(
-			'methods'             => 'POST',
-			'permission_callback' => function () use ( $op ) {
-				return current_user_can( "flamingo_{$op}_inbound_message" );
-			},
-			'callback'            => function ( WP_REST_Request $request ) use ( $op ) {
-				$post = get_post( (int) Minn_Admin::path_param( $request ) );
-				if ( ! $post || Flamingo_Inbound_Message::post_type !== $post->post_type ) {
-					return new WP_Error( 'not_found', __( 'Message not found.', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				$msg = new Flamingo_Inbound_Message( $post );
-				// Their own handlers (Akismet submit rides along like their UI).
-				$msg->$op();
-				return rest_ensure_response( array(
-					'id'      => (int) Minn_Admin::path_param( $request ),
-					'ok'      => true,
-					'message' => __( 'spam', 'minn-admin' ) === $op ? 'Marked as spam.' : 'Marked not spam.',
-				) );
-			},
-		) );
-	}
-
-	register_rest_route( 'minn-admin/v1', '/cf7/messages/(?P<id>\d+)/trash', array(
-		'methods'             => 'POST',
-		'permission_callback' => function () {
-			return current_user_can( 'flamingo_delete_inbound_message' );
-		},
-		'callback'            => function ( WP_REST_Request $request ) {
-			$post = get_post( (int) Minn_Admin::path_param( $request ) );
-			if ( ! $post || Flamingo_Inbound_Message::post_type !== $post->post_type ) {
-				return new WP_Error( 'not_found', __( 'Message not found.', 'minn-admin' ), array( 'status' => 404 ) );
-			}
-			$msg = new Flamingo_Inbound_Message( $post );
-			$msg->trash();
-			return rest_ensure_response( array( 'id' => (int) Minn_Admin::path_param( $request ), 'ok' => true, 'message' => __( 'Moved to trash.', 'minn-admin' ) ) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/cf7/messages/(?P<id>\d+)/restore', array(
-		'methods'             => 'POST',
-		// Flamingo's own untrash action requires the delete meta cap
-		// (admin/admin.php, the untrash bulk action); stock maps both caps to
-		// edit_users, a site that splits them means it.
-		'permission_callback' => function () {
-			return current_user_can( 'flamingo_delete_inbound_message' );
-		},
-		'callback'            => function ( WP_REST_Request $request ) {
-			$post = get_post( (int) Minn_Admin::path_param( $request ) );
-			if ( ! $post || Flamingo_Inbound_Message::post_type !== $post->post_type ) {
-				return new WP_Error( 'not_found', __( 'Message not found.', 'minn-admin' ), array( 'status' => 404 ) );
-			}
-			if ( 'trash' !== $post->post_status ) {
-				return new WP_Error( 'not_trashed', __( 'Only trashed messages can be restored.', 'minn-admin' ), array( 'status' => 400 ) );
-			}
-			$msg = new Flamingo_Inbound_Message( $post );
-			$msg->untrash();
-			return rest_ensure_response( array( 'id' => (int) Minn_Admin::path_param( $request ), 'ok' => true, 'message' => __( 'Message restored.', 'minn-admin' ) ) );
-		},
-	) );
-
-	if ( ! defined( 'WPCF7_VERSION' ) ) {
-		return;
-	}
-
-	register_rest_route( 'minn-admin/v1', '/cf7/forms', array(
-		'methods'             => 'GET',
-		'permission_callback' => 'minn_admin_flamingo_can_view',
-		'callback'            => function ( WP_REST_Request $request ) {
-			$per_page = min( 100, max( 1, (int) ( $request['per_page'] ?: 25 ) ) );
-			$page     = max( 1, (int) ( $request['page'] ?: 1 ) );
-			$query    = new WP_Query( array(
-				'post_type'      => 'wpcf7_contact_form',
-				'post_status'    => 'publish',
-				'posts_per_page' => $per_page,
-				'paged'          => $page,
-				'orderby'        => 'title',
-				'order'          => 'ASC',
-			) );
-
-			// Message counts come from each form's channel term.
-			$counts = array();
-			foreach ( minn_admin_flamingo_channels() as $c ) {
-				$term = get_term( $c['id'], Flamingo_Inbound_Message::channel_taxonomy );
-				if ( $term && ! is_wp_error( $term ) ) {
-					$counts[ $term->slug ] = (int) $term->count;
-				}
-			}
-
-			$items = array();
-			foreach ( $query->posts as $post ) {
-				$items[] = array(
-					'id'        => (int) $post->ID,
-					'title'     => $post->post_title ?: __( '(untitled form)', 'minn-admin' ),
-					'shortcode' => sprintf( '[contact-form-7 id="%d"]', $post->ID ),
-					'messages'  => $counts[ $post->post_name ] ?? 0,
-					'date'      => str_replace( ' ', 'T', $post->post_modified ),
-				);
-			}
-			return rest_ensure_response( array(
-				'items' => $items,
-				'total' => (int) $query->found_posts,
-			) );
-		},
-	) );
 } );

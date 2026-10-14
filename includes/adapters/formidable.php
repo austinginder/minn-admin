@@ -10,6 +10,10 @@
  * before/after hooks fire). Formidable has no entry trash: delete is
  * permanent and the confirm says so.
  *
+ * The entries are a kernel resource (docs/adapter-kernel.md): the kernel
+ * reads the item table and owns the routes, gates, paging, search and errors;
+ * this file supplies the rows, the detail and the delete call.
+ *
  * Clock: entries stamp current_time( 'mysql', 1 ) — UTC (unlike
  * Forminator's site-local stamps), so columns carry utc: true.
  *
@@ -119,10 +123,219 @@ function minn_admin_formidable_answers( $entry_id ) {
 	return $out;
 }
 
+/**
+ * The rows this surface ever names: submitted, top-level entries. Their table
+ * also holds drafts and repeater child rows, which belong to Formidable's own
+ * workflows.
+ */
+function minn_admin_formidable_submitted() {
+	return array( 'is_draft' => 0, 'parent_item_id' => 0 );
+}
+
+/**
+ * One entry the routes may read or delete, or null. A route that only ever
+ * names entries must not read a draft, and destroying a repeater child row
+ * would take one sub-row out of a live parent entry; neither is ever listed.
+ *
+ * @param int $id Entry id.
+ * @return array|null
+ */
+function minn_admin_formidable_get( $id ) {
+	$row = Minn_Admin_Kernel_SQL::row( 'frm_items', 'id', (int) $id, array( 'id', 'form_id', 'created_at', 'ip', 'is_draft', 'parent_item_id' ) );
+	return $row && empty( $row['is_draft'] ) && (int) $row['parent_item_id'] <= 0 ? $row : null;
+}
+
+/** An entry's list row: its first answers as the summary. */
+function minn_admin_formidable_row( array $row ) {
+	$form_id = (int) $row['form_id'];
+	$titles  = minn_admin_formidable_titles();
+	$answers = minn_admin_formidable_answers( (int) $row['id'] );
+	$parts   = array();
+	foreach ( minn_admin_formidable_fields( $form_id ) as $fid => $label ) {
+		if ( isset( $answers[ $fid ] ) && '' !== $answers[ $fid ] ) {
+			$parts[] = $answers[ $fid ];
+		}
+		if ( count( $parts ) >= 3 ) {
+			break;
+		}
+	}
+	return array(
+		'id'         => (int) $row['id'],
+		'summary'    => $parts ? implode( ' · ', $parts ) : __( '(empty entry)', 'minn-admin' ),
+		'form_title' => isset( $titles[ $form_id ] ) ? $titles[ $form_id ] : '#' . $form_id,
+		'date'       => $row['created_at'],
+	);
+}
+
+/** An entry's detail: every answer, then the submission's own facts. */
+function minn_admin_formidable_view( array $entry ) {
+	$id      = (int) $entry['id'];
+	$form_id = (int) $entry['form_id'];
+	$fields  = minn_admin_formidable_fields( $form_id );
+	$answers = minn_admin_formidable_answers( $id );
+	$titles  = minn_admin_formidable_titles();
+
+	$rows = array();
+	foreach ( $fields as $fid => $label ) {
+		$rows[] = array(
+			'label' => $label,
+			'value' => isset( $answers[ $fid ] ) && '' !== $answers[ $fid ] ? $answers[ $fid ] : '—',
+		);
+	}
+	foreach ( $answers as $fid => $value ) {
+		if ( ! isset( $fields[ $fid ] ) && '' !== $value ) {
+			$rows[] = array(
+				'label' => __( 'Field ', 'minn-admin' ) . $fid,
+				'value' => $value,
+			);
+		}
+	}
+	$meta = array(
+		array( 'label' => __( 'Form', 'minn-admin' ), 'value' => isset( $titles[ $form_id ] ) ? $titles[ $form_id ] : '#' . $form_id ),
+		array( 'label' => __( 'Entry', 'minn-admin' ), 'value' => '#' . $id ),
+		array( 'label' => __( 'Submitted', 'minn-admin' ), 'value' => date_i18n( 'M j, Y g:i a', strtotime( get_date_from_gmt( $entry['created_at'] ) ) ) ),
+	);
+	if ( ! empty( $entry['ip'] ) ) {
+		$meta[] = array( 'label' => 'IP', 'value' => (string) $entry['ip'] );
+	}
+	return array(
+		'kind'     => 'entry',
+		'sections' => array(
+			array( 'title' => __( 'Answers', 'minn-admin' ), 'rows' => $rows ),
+			array( 'title' => __( 'Submission', 'minn-admin' ), 'rows' => $meta ),
+		),
+		'adminUrl' => admin_url( 'admin.php?page=formidable-entries&frm_action=show&id=' . $id ),
+	);
+}
+
+/** Server-built model for the surface status card. */
+function minn_admin_formidable_status_model() {
+	$submitted = minn_admin_formidable_submitted();
+	// created_at is current_time( 'mysql', 1 ): UTC, so the chart buckets each
+	// row onto the site's day and the week's window is UTC too. Formidable
+	// keeps no spam: every row counts into the one series.
+	$n    = Minn_Admin_Kernel::inbox_counts( array(
+		'table'    => 'frm_items',
+		'received' => $submitted,
+		'chart'    => array( 'column' => 'created_at', 'clock' => 'utc', 'where' => $submitted, 'split' => 'form_id', 'secondary' => array() ),
+	) );
+	$week = Minn_Admin_Kernel_SQL::count( 'frm_items', $submitted + array(
+		'created_at' => array( 'op' => '>=', 'value' => gmdate( 'Y-m-d H:i:s', time() - ( 7 * DAY_IN_SECONDS ) ) ),
+	) );
+	return array(
+		'rows'    => array(
+			array(
+				'label' => __( 'Entries', 'minn-admin' ),
+				'value' => number_format_i18n( $n['received'] ),
+				'hint'  => sprintf(
+					/* translators: %s: number of entries received in the last 7 days. */
+					__( '%s in the last 7 days', 'minn-admin' ),
+					number_format_i18n( $week )
+				),
+			),
+			array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => number_format_i18n( count( minn_admin_formidable_titles() ) ) ),
+		),
+		'chart'   => minn_admin_chart_build( $n['days'], __( 'Entries', 'minn-admin' ) ),
+		'actions' => array(
+			array( 'label' => __( 'Open Formidable ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=formidable-entries' ) ),
+		),
+	);
+}
+
+minn_admin_resource( 'formidable/entries', function () {
+	return array(
+		'active'  => 'minn_admin_formidable_active',
+		'gates'   => array(
+			'view'   => 'minn_admin_formidable_can',
+			'delete' => function () {
+				return minn_admin_formidable_can( 'frm_delete_entries' );
+			},
+		),
+		'labels'  => array(
+			'not_found' => __( 'Entry not found', 'minn-admin' ),
+		),
+		'source'  => array(
+			'table'   => 'frm_items',
+			'key'     => 'id',
+			'columns' => array( 'id', 'form_id', 'created_at' ),
+			'get'     => 'minn_admin_formidable_get',
+			// Gone means gone from the table, not only from what get() shows.
+			'exists'  => function ( $id ) {
+				return null !== Minn_Admin_Kernel_SQL::row( 'frm_items', 'id', (int) $id, array( 'id' ) );
+			},
+		),
+		'list'    => array(
+			// The list has no filter of its own; a one-value filter is the
+			// kernel's fixed condition, whatever a request asks for.
+			'filter' => array(
+				'param'   => 'status',
+				'values'  => array( 'submitted' => minn_admin_formidable_submitted() ),
+				'default' => 'submitted',
+			),
+			'tab'    => array( 'param' => 'form_id', 'column' => 'form_id' ),
+			'search' => array( 'param' => 'search', 'meta' => array( 'table' => 'frm_item_metas', 'key' => 'item_id', 'value' => 'meta_value' ) ),
+			'range'  => array( 'column' => 'created_at', 'clock' => 'utc' ),
+			// Newest submission first by the date Formidable stored, so an entry
+			// added out of order (an import) lands where it belongs.
+			'order'  => array( 'column' => 'created_at', 'dir' => 'DESC' ),
+			'row'    => 'minn_admin_formidable_row',
+			'fields' => array(
+				'id'         => 'int',
+				'summary'    => 'text',
+				'form_title' => 'text',
+				// current_time( 'mysql', 1 ): the descriptor's column says utc.
+				'date'       => array( 'type' => 'datetime', 'stored' => 'utc', 'wire' => 'naked' ),
+			),
+		),
+		'item'    => array( 'view' => 'minn_admin_formidable_view' ),
+		'actions' => array(
+			// Formidable has no entry trash: delete is permanent from any state.
+			'delete' => array(
+				'method'    => 'DELETE',
+				'gate'      => 'delete',
+				// Their complete flow: metas deleted, their hooks fire.
+				'run'       => function ( $id ) {
+					return FrmEntry::destroy( $id ) ? true : new WP_Error( 'delete_failed', __( 'Formidable could not delete the entry.', 'minn-admin' ), array( 'status' => 500 ) );
+				},
+				'expect'    => 'gone',
+				'fail_code' => 'delete_failed',
+				'fail'      => __( 'Formidable could not delete the entry.', 'minn-admin' ),
+				'done'      => __( 'Entry deleted permanently.', 'minn-admin' ),
+			),
+		),
+	);
+} );
+
+minn_admin_endpoint( 'formidable/forms', array(
+	'active' => 'minn_admin_formidable_active',
+	'gate'   => 'minn_admin_formidable_can',
+	'run'    => function ( WP_REST_Request $request ) {
+		$manage = ! empty( $request['manage'] );
+		$out    = array();
+		foreach ( minn_admin_formidable_titles() as $id => $title ) {
+			$row = array( 'id' => (int) $id, 'title' => $title );
+			if ( $manage ) {
+				$row['entries'] = Minn_Admin_Kernel_SQL::count( 'frm_items', array( 'form_id' => (int) $id ) + minn_admin_formidable_submitted() );
+			}
+			$out[] = $row;
+		}
+		return $out;
+	},
+) );
+
+minn_admin_endpoint( 'formidable/status', array(
+	'active' => 'minn_admin_formidable_active',
+	'gate'   => 'minn_admin_formidable_can',
+	'run'    => 'minn_admin_formidable_status_model',
+) );
+
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! minn_admin_formidable_active() || ! minn_admin_formidable_can() ) {
 		return $surfaces;
 	}
+	$ui = function ( $slug, $ui ) {
+		return Minn_Admin_Kernel::ui( 'formidable/entries', $slug, $ui );
+	};
 
 	$surfaces['formidable'] = array(
 		'label'      => __( 'Forms', 'minn-admin' ),
@@ -133,16 +346,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'icon'       => 'inbox',
 		'cap'        => 'read', // real gate is the filter above (their cap model)
 		'status'     => array( 'route' => 'minn-admin/v1/formidable/status' ),
-		'collection' => array(
+		// Route, paging, search and the status-chart day range come from the
+		// resource, so they cannot drift from it.
+		'collection' => Minn_Admin_Kernel::collection( 'formidable/entries', array(
 			'viewLabel' => __( 'Entries', 'minn-admin' ),
-			'route'     => 'minn-admin/v1/formidable/entries',
-			// A status-chart bar narrows the list to that day (the chart's
-			// points carry from/to; the route reads after/before).
-			'dateQuery' => 'after={from}&before={to}',
-			'pageQuery' => 'per_page=25&page={page}',
-			'search'    => 'search={q}',
-			'itemsKey'  => 'items',
-			'totalKey'  => 'total',
 			'tabs'      => array(
 				'route'    => 'minn-admin/v1/formidable/forms',
 				'valueKey' => 'id',
@@ -160,24 +367,12 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'sectionsRoute' => 'minn-admin/v1/formidable/entries/{id}',
 			),
 			'actions'   => array(
-				array(
-					'label'   => __( 'Delete permanently', 'minn-admin' ),
-					'method'  => 'DELETE',
-					'route'   => 'minn-admin/v1/formidable/entries/{id}',
-					'confirm' => __( 'Delete this entry permanently? Formidable has no entry trash — there is no undo.', 'minn-admin' ),
-					'danger'  => true,
-				),
+				$ui( 'delete', array( 'label' => __( 'Delete permanently', 'minn-admin' ), 'confirm' => __( 'Delete this entry permanently? Formidable has no entry trash — there is no undo.', 'minn-admin' ), 'danger' => true ) ),
 			),
 			'bulk'      => array(
-				array(
-					'label'   => __( 'Delete permanently', 'minn-admin' ),
-					'method'  => 'DELETE',
-					'route'   => 'minn-admin/v1/formidable/entries/{id}',
-					'confirm' => __( 'Delete the selected entries permanently? There is no undo.', 'minn-admin' ),
-					'danger'  => true,
-				),
+				$ui( 'delete', array( 'label' => __( 'Delete permanently', 'minn-admin' ), 'confirm' => __( 'Delete the selected entries permanently? There is no undo.', 'minn-admin' ), 'danger' => true ) ),
 			),
-		),
+		) ),
 		'manage'     => array(
 			'viewLabel' => __( 'Forms', 'minn-admin' ),
 			'route'     => 'minn-admin/v1/formidable/forms?manage=1',
@@ -195,228 +390,4 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		),
 	);
 	return $surfaces;
-} );
-
-add_action( 'rest_api_init', function () {
-	if ( ! minn_admin_formidable_active() ) {
-		return;
-	}
-
-	register_rest_route( 'minn-admin/v1', '/formidable/forms', array(
-		'methods'             => 'GET',
-		'permission_callback' => function () {
-			return minn_admin_formidable_can();
-		},
-		'callback'            => function ( WP_REST_Request $request ) {
-			global $wpdb;
-			$manage = ! empty( $request['manage'] );
-			$out    = array();
-			foreach ( minn_admin_formidable_titles() as $id => $title ) {
-				$row = array( 'id' => (int) $id, 'title' => $title );
-				if ( $manage ) {
-					$row['entries'] = (int) $wpdb->get_var( $wpdb->prepare(
-						"SELECT COUNT(*) FROM {$wpdb->prefix}frm_items WHERE form_id = %d AND is_draft = 0 AND parent_item_id = 0", // phpcs:ignore
-						$id
-					) );
-				}
-				$out[] = $row;
-			}
-			return rest_ensure_response( $out );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/formidable/entries', array(
-		'methods'             => 'GET',
-		'permission_callback' => function () {
-			return minn_admin_formidable_can();
-		},
-		'callback'            => function ( WP_REST_Request $request ) {
-			global $wpdb;
-			$per_page = min( 100, max( 1, (int) ( $request['per_page'] ?: 25 ) ) );
-			$page     = max( 1, (int) ( $request['page'] ?: 1 ) );
-			$items_t  = $wpdb->prefix . 'frm_items';
-			$metas_t  = $wpdb->prefix . 'frm_item_metas';
-
-			// Submitted entries only (drafts and child/repeater rows are
-			// Formidable's own workflows).
-			$where = 'WHERE e.is_draft = 0 AND e.parent_item_id = 0';
-			$args  = array();
-			if ( $request['form_id'] ) {
-				$where .= ' AND e.form_id = %d';
-				$args[] = (int) $request['form_id'];
-			}
-			if ( $request['search'] ) {
-				$where .= " AND EXISTS ( SELECT 1 FROM {$metas_t} m WHERE m.item_id = e.id AND m.meta_value LIKE %s )";
-				$args[] = '%' . $wpdb->esc_like( (string) $request['search'] ) . '%';
-			}
-			// A status-chart bar narrows the list to that day. created_at is
-			// current_time('mysql', 1), i.e. UTC, so the site-local bounds are
-			// converted before they are compared.
-			list( $range_sql, $range_args ) = minn_admin_chart_range_clause( $request, 'e.created_at', 'utc' );
-			foreach ( $range_sql as $clause ) {
-				$where .= ' AND ' . $clause;
-			}
-			$args = array_merge( $args, $range_args );
-			$total = (int) $wpdb->get_var( $args
-				? $wpdb->prepare( "SELECT COUNT(*) FROM {$items_t} e {$where}", ...$args ) // phpcs:ignore
-				: "SELECT COUNT(*) FROM {$items_t} e {$where}" ); // phpcs:ignore
-			// Newest submission first by the date Formidable stored, so an
-			// entry added out of order (an import) lands where it belongs; the
-			// id breaks ties so pages never overlap.
-			$rows  = $wpdb->get_results( $wpdb->prepare(
-				"SELECT e.id, e.form_id, e.created_at FROM {$items_t} e {$where} ORDER BY e.created_at DESC, e.id DESC LIMIT %d OFFSET %d", // phpcs:ignore
-				...array_merge( $args, array( $per_page, ( $page - 1 ) * $per_page ) )
-			) );
-
-			$titles = minn_admin_formidable_titles();
-			$items  = array();
-			foreach ( (array) $rows as $row ) {
-				$form_id = (int) $row->form_id;
-				$fields  = minn_admin_formidable_fields( $form_id );
-				$answers = minn_admin_formidable_answers( (int) $row->id );
-				$parts   = array();
-				foreach ( $fields as $fid => $label ) {
-					if ( isset( $answers[ $fid ] ) && '' !== $answers[ $fid ] ) {
-						$parts[] = $answers[ $fid ];
-					}
-					if ( count( $parts ) >= 3 ) {
-						break;
-					}
-				}
-				$items[] = array(
-					'id'         => (int) $row->id,
-					'summary'    => $parts ? implode( ' · ', $parts ) : __( '(empty entry)', 'minn-admin' ),
-					'form_title' => isset( $titles[ $form_id ] ) ? $titles[ $form_id ] : '#' . $form_id,
-					'date'       => str_replace( ' ', 'T', (string) $row->created_at ),
-				);
-			}
-			return rest_ensure_response( array( 'items' => $items, 'total' => $total ) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/formidable/entries/(?P<id>\d+)', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => function () {
-				return minn_admin_formidable_can();
-			},
-			'callback'            => function ( WP_REST_Request $request ) {
-				$entry = FrmEntry::getOne( (int) Minn_Admin::path_param( $request ), true );
-				// Confirm the target is a submitted, top-level entry, the same
-				// test the list and the per-form count make. Their table also
-				// holds drafts and repeater child rows, which belong to
-				// Formidable's own workflows; this surface never lists them, so
-				// a route that only ever names entries must not read one.
-				if ( ! $entry || ! empty( $entry->is_draft ) || (int) $entry->parent_item_id > 0 ) {
-					return new WP_Error( 'not_found', __( 'Entry not found', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				$form_id = (int) $entry->form_id;
-				$fields  = minn_admin_formidable_fields( $form_id );
-				$answers = minn_admin_formidable_answers( (int) $entry->id );
-				$titles  = minn_admin_formidable_titles();
-
-				$rows = array();
-				foreach ( $fields as $fid => $label ) {
-					$rows[] = array(
-						'label' => $label,
-						'value' => isset( $answers[ $fid ] ) && '' !== $answers[ $fid ] ? $answers[ $fid ] : '—',
-					);
-				}
-				foreach ( $answers as $fid => $value ) {
-					if ( ! isset( $fields[ $fid ] ) && '' !== $value ) {
-						$rows[] = array(
-							'label' => __( 'Field ', 'minn-admin' ) . $fid,
-							'value' => $value,
-						);
-					}
-				}
-				$meta = array(
-					array( 'label' => __( 'Form', 'minn-admin' ), 'value' => isset( $titles[ $form_id ] ) ? $titles[ $form_id ] : '#' . $form_id ),
-					array( 'label' => __( 'Entry', 'minn-admin' ), 'value' => '#' . (int) $entry->id ),
-					array( 'label' => __( 'Submitted', 'minn-admin' ), 'value' => date_i18n( 'M j, Y g:i a', strtotime( get_date_from_gmt( $entry->created_at ) ) ) ),
-				);
-				if ( ! empty( $entry->ip ) ) {
-					$meta[] = array( 'label' => 'IP', 'value' => (string) $entry->ip );
-				}
-				return rest_ensure_response( array(
-					'kind'     => 'entry',
-					'sections' => array(
-						array( 'title' => __( 'Answers', 'minn-admin' ), 'rows' => $rows ),
-						array( 'title' => __( 'Submission', 'minn-admin' ), 'rows' => $meta ),
-					),
-					'adminUrl' => admin_url( 'admin.php?page=formidable-entries&frm_action=show&id=' . (int) $entry->id ),
-				) );
-			},
-		),
-		array(
-			'methods'             => 'DELETE',
-			'permission_callback' => function () {
-				return minn_admin_formidable_can( 'frm_delete_entries' );
-			},
-			'callback'            => function ( WP_REST_Request $request ) {
-				$id    = (int) Minn_Admin::path_param( $request );
-				$entry = FrmEntry::getOne( $id, true );
-				// The same discriminator the read route applies. Destroying a
-				// repeater child row would take one sub-row out of a live
-				// parent entry, and a draft belongs to whoever is still filling
-				// it in; neither is ever listed here.
-				if ( ! $entry || ! empty( $entry->is_draft ) || (int) $entry->parent_item_id > 0 ) {
-					return new WP_Error( 'not_found', __( 'Entry not found', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				// Their complete flow: metas deleted, their hooks fire.
-				$result = FrmEntry::destroy( $id );
-				if ( ! $result ) {
-					return new WP_Error( 'delete_failed', __( 'Formidable could not delete the entry.', 'minn-admin' ), array( 'status' => 500 ) );
-				}
-				return rest_ensure_response( array( 'ok' => true, 'message' => __( 'Entry deleted permanently.', 'minn-admin' ) ) );
-			},
-		),
-	) );
-	register_rest_route( 'minn-admin/v1', '/formidable/status', array(
-		'methods'             => 'GET',
-		'permission_callback' => function () {
-			return minn_admin_formidable_can();
-		},
-		'callback'            => function () {
-			global $wpdb;
-			$items_t = $wpdb->prefix . 'frm_items';
-			// The same discriminator the list applies: submitted, top-level
-			// entries. Drafts and repeater child rows are Formidable's own
-			// workflows and never count here.
-			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- prefix-derived table.
-			$total = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$items_t} WHERE is_draft = 0 AND parent_item_id = 0" );
-			// created_at is current_time( 'mysql', 1 ): UTC, so the window is UTC too.
-			$week  = (int) $wpdb->get_var( $wpdb->prepare(
-				"SELECT COUNT(*) FROM {$items_t} WHERE is_draft = 0 AND parent_item_id = 0 AND created_at >= %s",
-				gmdate( 'Y-m-d H:i:s', time() - ( 7 * DAY_IN_SECONDS ) )
-			) );
-			// phpcs:enable
-			$forms = count( minn_admin_formidable_titles() );
-			// created_at is UTC: bucket each row onto the site's day in PHP.
-			$chart = minn_admin_chart_days();
-			$chart_day  = minn_admin_chart_utc_day_sql( 'created_at' );
-			$chart_rows = $wpdb->get_results( $wpdb->prepare( "SELECT {$chart_day} AS d, COUNT(*) AS c FROM {$items_t} WHERE is_draft = 0 AND parent_item_id = 0 AND created_at >= %s GROUP BY d", minn_admin_chart_utc_since() ) ); // phpcs:ignore
-			foreach ( (array) $chart_rows as $cr ) {
-				minn_admin_chart_bump( $chart, (string) $cr->d, false, (int) $cr->c );
-			}
-			return rest_ensure_response( array(
-				'rows'    => array(
-					array(
-						'label' => __( 'Entries', 'minn-admin' ),
-						'value' => number_format_i18n( $total ),
-						'hint'  => sprintf(
-							/* translators: %s: number of entries received in the last 7 days. */
-							__( '%s in the last 7 days', 'minn-admin' ),
-							number_format_i18n( $week )
-						),
-					),
-					array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => number_format_i18n( $forms ) ),
-				),
-				'chart'   => minn_admin_chart_build( $chart, __( 'Entries', 'minn-admin' ) ),
-				'actions' => array(
-					array( 'label' => __( 'Open Formidable ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=formidable-entries' ) ),
-				),
-			) );
-		},
-	) );
 } );
