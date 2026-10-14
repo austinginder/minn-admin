@@ -577,6 +577,43 @@ try {
 			}
 		}
 	}
+
+	// --- Post SMTP times from the other half of the year ----------------------
+	// Post SMTP stamps `time` with current_time( 'timestamp' ): the site's wall
+	// clock read as an epoch. It was shifted back by today's gmt_offset, an
+	// hour off for a send from the other side of a DST change. Los Angeles,
+	// at a noon whose offset is not today's.
+	if ( ! function_exists( 'minn_admin_post_smtp_iso' ) ) {
+		$skip( 'Post SMTP adapter not loaded' );
+	} else {
+		$ps_zone  = new DateTimeZone( 'America/Los_Angeles' );
+		$ps_today = ( new DateTimeImmutable( 'now', $ps_zone ) )->getOffset();
+		$ps_noon  = null;
+		foreach ( array( '-01-15 12:00:00', '-07-15 12:00:00' ) as $ps_md ) {
+			$ps_try = new DateTimeImmutable( gmdate( 'Y' ) . $ps_md, $ps_zone );
+			if ( $ps_try->getOffset() !== $ps_today ) {
+				$ps_noon = $ps_try;
+				break;
+			}
+		}
+		$ps_tz  = function () {
+			return 'America/Los_Angeles';
+		};
+		$ps_off = function () use ( $ps_today ) {
+			return $ps_today / HOUR_IN_SECONDS;
+		};
+		add_filter( 'pre_option_timezone_string', $ps_tz, 100 );
+		add_filter( 'pre_option_gmt_offset', $ps_off, 100 );
+		try {
+			$ps_stamp = strtotime( $ps_noon->format( 'Y-m-d H:i:s' ) . ' UTC' );
+			$ps_want  = $ps_noon->setTimezone( new DateTimeZone( 'UTC' ) )->format( 'Y-m-d\TH:i:s\Z' );
+			$ps_got   = minn_admin_post_smtp_iso( $ps_stamp );
+			$check( 'Post SMTP: a send from the other half of the year keeps its own offset', $ps_want === $ps_got, 'noon ' . $ps_noon->format( 'Y-m-d' ) . " got {$ps_got} want {$ps_want}" );
+		} finally {
+			remove_filter( 'pre_option_timezone_string', $ps_tz, 100 );
+			remove_filter( 'pre_option_gmt_offset', $ps_off, 100 );
+		}
+	}
 } finally {
 	$wipe();
 	remove_filter( 'pre_option_timezone_string', $tz_string, 99 );

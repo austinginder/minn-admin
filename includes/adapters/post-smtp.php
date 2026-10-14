@@ -58,10 +58,16 @@ function minn_admin_post_smtp_recipients( $raw ) {
 	return $out;
 }
 
-/** WP-local epoch → ISO-8601 UTC (rule: hist-time columns store local). */
+/**
+ * WP-local epoch → ISO-8601 UTC. Post SMTP stamps current_time( 'timestamp' ),
+ * the site's wall clock read as an epoch, so it is read back in the site's
+ * zone at the offset that date had (today's is an hour off for a send from
+ * the other side of a DST change).
+ */
 function minn_admin_post_smtp_iso( $local_epoch ) {
-	$offset = (float) get_option( 'gmt_offset' ) * HOUR_IN_SECONDS;
-	return gmdate( 'Y-m-d\TH:i:s\Z', (int) $local_epoch - (int) $offset );
+	return ( new DateTimeImmutable( gmdate( 'Y-m-d H:i:s', (int) $local_epoch ), wp_timezone() ) )
+		->setTimezone( new DateTimeZone( 'UTC' ) )
+		->format( 'Y-m-d\TH:i:s\Z' );
 }
 
 /**
