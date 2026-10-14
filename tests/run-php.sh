@@ -102,6 +102,7 @@ run security-v045-delta-data single --user=admin
 run security-v045-delta-routes single --user=admin
 run security-v045-delta-surfaces single --user=admin
 run security-v045-registry single --user=admin
+run security-v046-kernel single --user=admin
 run sweep-v044 single --user=admin
 run write-fences single --user=admin
 
