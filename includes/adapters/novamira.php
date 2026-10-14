@@ -342,9 +342,10 @@ add_action( 'wp_abilities_api_init', 'minn_admin_novamira_preregistered', PHP_IN
 
 /**
  * Every registered ability with Novamira's rule applied: [ { name, label,
- * description, provider, disabled, off } ]. `off` marks an ability whose
- * Novamira feature is switched off (Design, Skills, Chat): the rule cannot
- * turn it on, so the switch is locked with a note.
+ * description, provider, disabled, off, owned } ]. `owned` marks an ability
+ * a Novamira feature owns (Design, Skills, the Block Editor Queue, the
+ * infrastructure): no rule reaches it, so the switch is locked with a note
+ * pointing to their Features screen. `off` marks one whose feature is off.
  */
 function minn_admin_novamira_abilities( $fresh = false ) {
 	static $cache = null;
@@ -359,6 +360,21 @@ function minn_admin_novamira_abilities( $fresh = false ) {
 	$hidden = function ( $name ) {
 		return function_exists( 'novamira_ability_is_hub_hidden' ) && novamira_ability_is_hub_hidden( (string) $name );
 	};
+	// Whether a Novamira feature owns the ability, and whether that feature
+	// is off. Their policy ignores a rule for an owned ability, and their Hub
+	// refuses the switch ("This ability cannot be changed"): it goes on and
+	// off with its feature, on their Features screen.
+	$feature = function ( $name, $category ) {
+		if ( ! class_exists( '\\Novamira\\Features\\Manager' ) || ! function_exists( '\\Novamira\\Features\\features' ) ) {
+			return array( false, false );
+		}
+		try {
+			$features = \Novamira\Features\features();
+			return array( null !== $features->feature_for_ability( $name, $category ), ! $features->is_ability_active( $name, $category ) );
+		} catch ( \Throwable $e ) {
+			return array( false, false );
+		}
+	};
 	if ( function_exists( 'wp_get_abilities' ) ) {
 		$registered = minn_admin_novamira_preregistered();
 		foreach ( wp_get_abilities() as $ability ) {
@@ -370,23 +386,18 @@ function minn_admin_novamira_abilities( $fresh = false ) {
 				continue;
 			}
 			$category = method_exists( $ability, 'get_category' ) ? (string) $ability->get_category() : '';
-			$off      = false;
-			if ( class_exists( '\\Novamira\\Features\\Manager' ) && function_exists( '\\Novamira\\Features\\features' ) ) {
-				try {
-					$features = \Novamira\Features\features();
-					$off      = ! $features->is_ability_active( $name, $category );
-				} catch ( \Throwable $e ) {
-					$off = false;
-				}
-			}
+			list( $owned, $off ) = $feature( $name, $category );
 			$out[]         = array(
 				'name'        => $name,
 				'label'       => (string) $ability->get_label(),
 				'description' => (string) $ability->get_description(),
 				'provider'    => (string) strstr( $name, '/', true ),
 				'category'    => $category,
-				'disabled'    => ! empty( $rules[ $name ]['disabled'] ),
+				// Their Hub's reading: a feature's ability is off exactly
+				// when its feature is, whatever a rule says.
+				'disabled'    => $owned ? $off : ! empty( $rules[ $name ]['disabled'] ),
 				'off'         => $off,
+				'owned'       => $owned,
 			);
 			$seen[ $name ] = true;
 		}
@@ -398,14 +409,16 @@ function minn_admin_novamira_abilities( $fresh = false ) {
 		if ( isset( $seen[ $name ] ) || empty( $rule['disabled'] ) || $hidden( $name ) ) {
 			continue;
 		}
+		list( $owned, $off ) = $feature( $name, '' );
 		$out[] = array(
 			'name'        => $name,
 			'label'       => ucwords( str_replace( '-', ' ', (string) substr( strrchr( $name, '/' ), 1 ) ) ),
 			'description' => '',
 			'provider'    => (string) strstr( $name, '/', true ),
 			'category'    => '',
-			'disabled'    => true,
-			'off'         => false,
+			'disabled'    => $owned ? $off : true,
+			'off'         => $off,
+			'owned'       => $owned,
 		);
 	}
 	$cache = $out;
@@ -506,15 +519,17 @@ function minn_admin_novamira_tab_shape( $tab ) {
 	// The Context tab carries Novamira's Context category under the
 	// instructions (see minn_admin_novamira_ability_tabs()).
 	$group  = 'context' === $tab ? 'c-context' : $tab;
-	$fields = array();
-	$values = array();
-	$locked = 0;
+	$fields        = array();
+	$values        = array();
+	$locked        = 0;
+	$locked_labels = array();
 	foreach ( minn_admin_novamira_abilities() as $a ) {
 		if ( sanitize_key( minn_admin_novamira_ability_group( $a ) ) !== $group ) {
 			continue;
 		}
-		if ( $a['off'] ) {
+		if ( $a['owned'] || $a['off'] ) {
 			$locked++;
+			$locked_labels[] = $a['label'];
 			continue;
 		}
 		$key            = 'ability:' . $a['name'];
@@ -529,16 +544,23 @@ function minn_admin_novamira_tab_shape( $tab ) {
 	$abilities = array(
 		'title'  => __( 'Abilities an agent may call', 'minn-admin' ),
 		'desc'   => ( minn_admin_novamira_enabled() ? '' : __( 'AI abilities are off: Novamira registers its own PHP, WP-CLI and file abilities only while they are on, so this list is what other plugins provide. ', 'minn-admin' ) ) . ( $locked
-			? sprintf( /* translators: %d: abilities of a switched-off Novamira feature. */ _n( '%d ability belongs to a Novamira feature that is switched off; turn the feature on in Novamira to offer it.', '%d abilities belong to Novamira features that are switched off; turn the feature on in Novamira to offer them.', $locked, 'minn-admin' ), $locked )
+			? sprintf( /* translators: %d: abilities that a Novamira feature switches on and off. */ _n( '%d ability goes on and off with its Novamira feature, on Novamira\'s Features screen.', '%d abilities go on and off with their Novamira features, on Novamira\'s Features screen.', $locked, 'minn-admin' ), $locked )
 			: '' ),
-		'fields' => $fields,
-		'locked' => $locked,
+		'fields'       => $fields,
+		'locked'       => $locked,
+		'lockedLabels' => $locked_labels,
 	);
+	// The locked row links to the tab's admin page: for a feature's
+	// abilities, that is their Features screen.
+	$features_url = function_exists( '\\Novamira\\Features\\Admin\\url' ) ? \Novamira\Features\Admin\url() : admin_url( 'admin.php?page=novamira-features' );
 	if ( 'context' === $tab ) {
 		$shape = minn_admin_novamira_context_shape();
 		if ( $fields || $locked ) {
 			$shape['groups'][] = $abilities;
 			$shape['values']   = $shape['values'] + $values;
+		}
+		if ( $locked ) {
+			$shape['adminUrl'] = $features_url;
 		}
 		return $shape;
 	}
@@ -548,7 +570,7 @@ function minn_admin_novamira_tab_shape( $tab ) {
 	return array(
 		'groups'   => array( $abilities ),
 		'values'   => $values,
-		'adminUrl' => admin_url( 'admin.php?page=novamira-abilities' ),
+		'adminUrl' => $locked ? $features_url : admin_url( 'admin.php?page=novamira-abilities' ),
 	);
 }
 
@@ -589,6 +611,11 @@ function minn_admin_novamira_save( array $values ) {
 		}
 		$name = substr( (string) $key, 8 );
 		if ( ! function_exists( 'novamira_is_valid_ability_name' ) || ! novamira_is_valid_ability_name( $name ) ) {
+			continue;
+		}
+		// Their Hub's refusal: a feature's ability is not switched alone,
+		// and a rule for one would read as off while agents can call it.
+		if ( function_exists( 'novamira_ability_can_be_managed_individually' ) && ! novamira_ability_can_be_managed_individually( $name ) ) {
 			continue;
 		}
 		$rules[ $name ] = array( 'disabled' => ! ( true === $on || '1' === $on || 1 === $on || 'true' === $on ) );

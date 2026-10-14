@@ -155,6 +155,50 @@ if ( ! function_exists( 'minn_admin_backwpup_active' ) || ! minn_admin_backwpup_
 	}
 }
 
+// --- S10 BackWPup: the backup-now poll reads the stamp in its own date's zone -
+// The job poll turned lastrun back into UTC with today's gmt_offset. A stamp
+// from the other half of the DST year came out an hour off, so a run started
+// in winter and polled in summer looked older than its start and the poll
+// said the job never started. A January start and its finished stamp are
+// handed to the poll through a transient and a read filter; the transient
+// is removed after.
+if ( ! function_exists( 'minn_admin_backwpup_active' ) || ! minn_admin_backwpup_active() || ! minn_admin_backwpup_folder_job_ids() ) {
+	$skip( 'S10 BackWPup is not active here, or has no local-folder job' );
+} else {
+	$s10_start = (int) get_gmt_from_date( gmdate( 'Y' ) . '-01-15 10:00:00', 'U' );
+	$s10_jan   = ( new DateTime( '@' . $s10_start ) )->setTimezone( wp_timezone() )->getOffset();
+	$s10_now   = ( new DateTime( 'now', wp_timezone() ) )->getOffset();
+	if ( $s10_jan === $s10_now ) {
+		$skip( 'S10 the site\'s zone has the same offset in January as today, so the two readings agree' );
+	} else {
+		$s10_job   = minn_admin_backwpup_folder_job_ids()[0];
+		$s10_token = 'minns10' . wp_generate_password( 5, false, false );
+		// What BackWPup writes as it starts: time() plus that day's offset.
+		$s10_hook  = function ( $jobs ) use ( $s10_job, $s10_start, $s10_jan ) {
+			foreach ( (array) $jobs as $k => $job ) {
+				if ( is_array( $job ) && isset( $job['jobid'] ) && (int) $job['jobid'] === $s10_job ) {
+					$jobs[ $k ]['lastrun']       = $s10_start + $s10_jan;
+					$jobs[ $k ]['lastrunerrors'] = 0;
+				}
+			}
+			return $jobs;
+		};
+		add_filter( 'site_option_backwpup_jobs', $s10_hook );
+		set_transient( 'minn_backwpup_job_' . $s10_token, array( 'started' => $s10_start, 'jobid' => $s10_job ), HOUR_IN_SECONDS );
+		try {
+			if ( minn_admin_backwpup_running() ) {
+				$skip( 'S10 a BackWPup job is running, so the poll reports that instead' );
+			} else {
+				list( $s10_st, $s10_body ) = $call( 'GET', '/minn-admin/v1/backwpup/job/' . $s10_token );
+				$check( 'S10 BackWPup: a job started and stamped in January reads as finished', 200 === $s10_st && 'done' === ( $s10_body['status'] ?? '' ), $s10_st . ' ' . wp_json_encode( $s10_body ) );
+			}
+		} finally {
+			remove_filter( 'site_option_backwpup_jobs', $s10_hook );
+			delete_transient( 'minn_backwpup_job_' . $s10_token );
+		}
+	}
+}
+
 // --- D-23 Backups: what each provider's detail dialog shows ----------------
 // BackWPup, UpdraftPlus and WPvivid rows carried no name, so their dialogs
 // were headed by the family label alone ("Backups"). Disembark printed its
@@ -183,6 +227,27 @@ if ( ! function_exists( 'minn_admin_updraftplus_active' ) || ! minn_admin_updraf
 		$skip( 'D-23 UpdraftPlus has no backup set to open' );
 	} else {
 		$dialog_checks( 'D-23 UpdraftPlus', $s, $item );
+		// I25: the list's Stored column printed the raw service ids too
+		// ("Googledrive"). Nothing gates on where, so the column can read
+		// the label.
+		$up_col = null;
+		foreach ( (array) $s['collection']['columns'] as $col ) {
+			if ( __( 'Stored', 'minn-admin' ) === ( $col['label'] ?? '' ) ) {
+				$up_col = $col;
+			}
+		}
+		$up_raw = array();
+		foreach ( (array) ( $d23['items'] ?? array() ) as $row ) {
+			$v = $up_col ? (string) ( $row[ $up_col['key'] ] ?? '' ) : '';
+			if ( '' === $v || preg_match( '/^[a-z][a-z0-9_-]*(, [a-z][a-z0-9_-]*)*$/', $v ) ) {
+				$up_raw[] = $v;
+			}
+		}
+		$up_gated = array_filter( (array) $s['collection']['actions'], function ( $a ) {
+			return 'where' === ( $a['when']['key'] ?? '' );
+		} );
+		$check( 'I25 UpdraftPlus: the Stored column shows where a set is kept in words, not a service id', $up_col && ! $up_raw, wp_json_encode( array( 'column' => $up_col, 'raw' => $up_raw ) ) );
+		$check( 'I25 UpdraftPlus control: no action is gated on the raw where', ! $up_gated, wp_json_encode( array_values( $up_gated ) ) );
 	}
 }
 
@@ -321,13 +386,37 @@ if ( ! function_exists( 'minn_admin_wpvivid_active' ) || ! minn_admin_wpvivid_ac
 		$vv_only  = $vv_set( 'minn-d23.test', 'backup_all', array( 'backup_themes', 'backup_plugin', 'backup_uploads', 'backup_content', 'backup_core' ) );
 		// Locked from their list's padlock: kept until deleted by hand.
 		$vv_db    = $vv_set( 'www.minn-d23.test', 'backup_db', array(), 1 );
-		$vv_rows  = array();
+		// I14: the file jobs their naming has beyond the five merged ones.
+		$vv_others  = $vv_set( 'minn-d23.test', 'backup_others', array() );
+		$vv_ufiles  = $vv_set( 'minn-d23.test', 'backup_uploads_files.part001', array() );
+		$vv_custom  = $vv_set( 'minn-d23.test', 'backup_custom_other', array() );
+		// N4: a merged set whose archive goes away after the first read.
+		$vv_memo    = $vv_set( 'minn-d23.test', 'backup_all', array( 'backup_db', 'backup_themes' ) );
+		$vv_rows    = array();
 		foreach ( minn_admin_wpvivid_rows() as $row ) {
 			$vv_rows[ $row['id'] ] = $row;
 		}
 		$vv_label = function ( $id ) use ( $vv_rows ) {
 			return isset( $vv_rows[ $id ] ) ? (string) $vv_rows[ $id ]['components'] : '(not listed)';
 		};
+		foreach ( array( 'backup_others' => $vv_others, 'backup_uploads_files' => $vv_ufiles, 'backup_custom_other' => $vv_custom ) as $vv_job => $vv_id ) {
+			$check( "I14 WPvivid: an archive of their {$vv_job} job reads Files", 'Files' === $vv_label( $vv_id ), $vv_label( $vv_id ) );
+		}
+		// The list, the status card and the status route each read the rows,
+		// some of them twice a request, and a merged set is read by opening
+		// its archives. Read once per request, a set keeps its first answer.
+		$vv_memo_list = WPvivid_Setting::get_option( 'wpvivid_backup_list' );
+		$vv_memo_file = isset( $vv_memo_list[ $vv_memo ]['backup']['files'][0]['file_name'] ) ? $vv_dir . $vv_memo_list[ $vv_memo ]['backup']['files'][0]['file_name'] : '';
+		if ( '' !== $vv_memo_file && is_file( $vv_memo_file ) ) {
+			unlink( $vv_memo_file );
+		}
+		$vv_again = '(not listed)';
+		foreach ( minn_admin_wpvivid_rows() as $row ) {
+			if ( $vv_memo === $row['id'] ) {
+				$vv_again = (string) $row['components'];
+			}
+		}
+		$check( 'N4 WPvivid: a merged set is opened once a request, so a second read keeps its answer', 'Database · Files' === $vv_label( $vv_memo ) && $vv_again === $vv_label( $vv_memo ), $vv_label( $vv_memo ) . ' then ' . $vv_again );
 		$check( 'D-23 WPvivid: a merged backup of files and database reads Database · Files', 'Database · Files' === $vv_label( $vv_full ), $vv_label( $vv_full ) );
 		$check( 'D-23 WPvivid control: a merged backup of files alone reads Files', 'Files' === $vv_label( $vv_only ), $vv_label( $vv_only ) );
 		$check( 'D-23 WPvivid: a database backup of a www. site reads Database', 'Database' === $vv_label( $vv_db ), $vv_label( $vv_db ) );
@@ -511,7 +600,23 @@ if ( ! function_exists( 'minn_admin_novamira_active' ) || ! minn_admin_novamira_
 		. "foreach ( minn_admin_novamira_abilities() as \$a ) { if ( 'core/get-site-info' === \$a['name'] ) { \$out['site_info_tab'] = sanitize_key( minn_admin_novamira_ability_group( \$a ) ); } }\n"
 		. "\$ctx = minn_admin_novamira_tab_shape( 'context' ); \$out['context'] = array();\n"
 		. "foreach ( (array) ( is_wp_error( \$ctx ) ? array() : \$ctx['groups'] ) as \$g ) { foreach ( (array) ( \$g['fields'] ?? array() ) as \$f ) { \$out['context'][] = \$f['key']; } }\n"
-		. "\$out['agent_context'] = (bool) wp_get_ability( 'novamira/agent-context' );\n"
+		. "\$out['agent_context'] = (bool) wp_get_ability( 'novamira/agent-context' ); \$out['context_locked'] = array(); \$out['agent_context_label'] = '';\n"
+		. "foreach ( (array) ( is_wp_error( \$ctx ) ? array() : \$ctx['groups'] ) as \$g ) { \$out['context_locked'] = array_merge( \$out['context_locked'], (array) ( \$g['lockedLabels'] ?? array() ) ); }\n"
+		// S1: an ability a Novamira feature owns (the Block Editor Queue's
+		// write ability), as its tab shows it and as a save treats it.
+		. "\$own = 'novamira/gutenberg-write-content';\n"
+		. "foreach ( minn_admin_novamira_abilities() as \$a ) { if ( 'novamira/agent-context' === \$a['name'] ) { \$out['agent_context_label'] = \$a['label']; } if ( \$own === \$a['name'] ) { \$out['owned'] = array( 'tab' => sanitize_key( minn_admin_novamira_ability_group( \$a ) ), 'label' => \$a['label'], 'fields' => array(), 'locked' => array() ); } }\n"
+		. "if ( ! empty( \$out['owned'] ) ) {\n"
+		. "\t\$sh = minn_admin_novamira_tab_shape( \$out['owned']['tab'] );\n"
+		. "\tforeach ( (array) ( is_wp_error( \$sh ) ? array() : \$sh['groups'] ) as \$g ) { \$out['owned']['fields'] = array_merge( \$out['owned']['fields'], wp_list_pluck( (array) ( \$g['fields'] ?? array() ), 'key' ) ); \$out['owned']['locked'] = array_merge( \$out['owned']['locked'], (array) ( \$g['lockedLabels'] ?? array() ) ); }\n"
+		. "\t\$out['owned']['adminUrl'] = is_wp_error( \$sh ) ? '' : (string) ( \$sh['adminUrl'] ?? '' );\n"
+		// What the save hands Novamira's rules, caught before it lands.
+		. "\tadd_filter( 'pre_update_option_novamira_ability_rules', function ( \$v, \$old ) { \$GLOBALS['minn_d26_attempt'] = \$v; return \$old; }, 10, 2 );\n"
+		. "\t\$req = new WP_REST_Request( 'POST', '/minn-admin/v1/novamira/abilities/' . \$out['owned']['tab'] ); \$req->set_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) ); \$req->set_header( 'content-type', 'application/json' ); \$req->set_body( wp_json_encode( array( 'values' => array( 'ability:' . \$own => false ) ) ) );\n"
+		. "\t\$res = rest_do_request( \$req ); \$vals = (array) ( \$res->get_data()['values'] ?? array() );\n"
+		. "\t\$out['owned']['save'] = \$res->get_status(); \$out['owned']['answer'] = array_key_exists( 'ability:' . \$own, \$vals ) ? \$vals[ 'ability:' . \$own ] : 'not a field';\n"
+		. "\t\$out['owned']['attempt'] = isset( \$GLOBALS['minn_d26_attempt'] ) ? array_keys( (array) \$GLOBALS['minn_d26_attempt'] ) : array();\n"
+		. "}\n"
 		. "foreach ( minn_admin_novamira_abilities() as \$a ) { \$out['providers'][ sanitize_key( minn_admin_novamira_ability_group( \$a ) ) ][ \$a['provider'] ] = true; }\n"
 		. "echo 'MINNPROBE ' . wp_json_encode( \$out ) . \"\\n\";\n"
 	);
@@ -583,8 +688,37 @@ if ( ! function_exists( 'minn_admin_novamira_active' ) || ! minn_admin_novamira_
 			if ( empty( $nt_on['agent_context'] ) ) {
 				$check( 'D-26 Novamira control: the Context tab holds the site instructions', in_array( 'context', $nt_ctx, true ), wp_json_encode( $nt_ctx ) );
 			} else {
-				$check( 'D-26 Novamira: the Context tab holds the site instructions and the ability that serves them', in_array( 'context', $nt_ctx, true ) && in_array( 'ability:novamira/agent-context', $nt_ctx, true ), wp_json_encode( $nt_ctx ) );
+				// A switch, or (a feature's ability, S1) a locked row.
+				$nt_ctx_has = in_array( 'ability:novamira/agent-context', $nt_ctx, true ) || in_array( (string) $nt_on['agent_context_label'], (array) ( $nt_on['context_locked'] ?? array() ), true );
+				$check( 'D-26 Novamira: the Context tab holds the site instructions and the ability that serves them', in_array( 'context', $nt_ctx, true ) && $nt_ctx_has, wp_json_encode( array( $nt_ctx, $nt_on['context_locked'] ?? null ) ) );
 			}
+			// S1: Novamira's policy ignores a rule for an ability one of its
+			// features owns, and their Hub refuses the switch. Minn drew it
+			// as a switch and saved the rule, so it read off while agents
+			// could still call it.
+			$nt_own = $nt_on['owned'] ?? null;
+			if ( ! $nt_own ) {
+				$skip( 'S1 Novamira: the Block Editor Queue\'s write ability is not registered here with abilities on' );
+			} else {
+				$check( 'S1 Novamira: an ability a Novamira feature owns is a locked row, not a switch, linking to their Features screen', ! in_array( 'ability:novamira/gutenberg-write-content', (array) $nt_own['fields'], true ) && in_array( (string) $nt_own['label'], (array) $nt_own['locked'], true ) && false !== strpos( (string) $nt_own['adminUrl'], 'page=novamira-features' ), wp_json_encode( $nt_own ) );
+				$check( 'S1 Novamira: a save asking to switch it off writes no rule for it and does not answer it as off', 200 === (int) $nt_own['save'] && false !== $nt_own['answer'] && ! in_array( 'novamira/gutenberg-write-content', (array) $nt_own['attempt'], true ), wp_json_encode( array( $nt_own['save'], $nt_own['answer'], $nt_own['attempt'] ) ) );
+			}
+		}
+
+		// N3: Minn 0.44 drew the bundled MCP adapter's meta-abilities as
+		// switches, so a site may hold a rule switching one off. Novamira's
+		// policy honours it (the bridge breaks), Minn now hides the name as
+		// their Hub does, and their Hub refuses it, so nothing could switch
+		// it back. The next save clears it.
+		if ( ! function_exists( 'novamira_ability_is_hub_hidden' ) || ! novamira_ability_is_hub_hidden( 'novamira-mcp-adapter/discover-abilities' ) ) {
+			$skip( 'N3 Novamira does not hide its MCP adapter\'s abilities here' );
+		} else {
+			$nt_rules = novamira_get_ability_rules();
+			$nt_rules['novamira-mcp-adapter/discover-abilities'] = array( 'disabled' => true );
+			novamira_update_ability_rules( $nt_rules );
+			minn_admin_novamira_save( array( 'ability:core/get-site-info' => false ) );
+			$nt_after = novamira_get_ability_rules();
+			$check( 'N3 Novamira: a save clears a rule for a meta-ability their Hub hides and refuses, and keeps the one it was asked for', ! isset( $nt_after['novamira-mcp-adapter/discover-abilities'] ) && ! empty( $nt_after['core/get-site-info']['disabled'] ), wp_json_encode( $nt_after ) );
 		}
 	} finally {
 		if ( '' !== $nt_session ) {
@@ -660,17 +794,40 @@ if ( ! function_exists( 'minn_admin_elementor_templates_ready' ) || ! minn_admin
 			$el_count = (string) ( $el_card[ __( 'Templates', 'minn-admin' ) ] ?? '' );
 			$el_kits  = get_posts( array( 'post_type' => \Elementor\TemplateLibrary\Source_Local::CPT, 'post_status' => 'any', 'meta_key' => \Elementor\Core\Base\Document::TYPE_META_KEY, 'meta_value' => 'kit', 'fields' => 'ids', 'numberposts' => -1 ) ); // phpcs:ignore WordPress.DB.SlowDBQuery
 			$check( 'D-27 Elementor: the Templates count matches the list (' . count( $el_kits ) . ' kit post(s) here)', number_format_i18n( (int) ( $el_list['total'] ?? -1 ) ) === $el_count, "card {$el_count}, list " . (int) ( $el_list['total'] ?? -1 ) );
+			// I24: the pill read a scheduled template's post_status, future,
+			// as "Future"; core and Elementor call it Scheduled.
+			$el_when = time() + DAY_IN_SECONDS;
+			wp_update_post( array( 'ID' => $el_id, 'post_status' => 'future', 'post_date' => get_date_from_gmt( gmdate( 'Y-m-d H:i:s', $el_when ) ), 'post_date_gmt' => gmdate( 'Y-m-d H:i:s', $el_when ) ) );
+			$el_future = minn_admin_elementor_template_item( get_post( $el_id ) );
+			$check( 'I24 Elementor: a scheduled template\'s pill reads Scheduled', 'future' === get_post_status( $el_id ) && 'scheduled' === $el_future['status'], get_post_status( $el_id ) . ' -> ' . $el_future['status'] );
 		}
 	} finally {
 		if ( is_int( $el_id ) && $el_id > 1 && get_post( $el_id ) ) {
+			wp_clear_scheduled_hook( 'publish_future_post', array( $el_id ) );
 			wp_delete_post( $el_id, true );
 		}
 	}
 }
 
-// --- D-28 OttoKit: Retry only where a request failed -------------------------
-// Their own screen offers Retry on a failed request only. Minn offered it on
-// every row, delivered ones included, and Retry re-fires the webhook.
+// --- S7 Bricks templates: Modified carries its zone ---------------------------
+// The D-27 pattern: post_modified_gmt went out bare, which the list (marked
+// utc) read right and the detail dialog read as site-local. Read-only: the
+// newest template there is.
+if ( ! function_exists( 'minn_admin_bricks_template_item' ) || ! class_exists( '\\Bricks\\Templates' ) || ! defined( 'BRICKS_DB_TEMPLATE_SLUG' ) ) {
+	$skip( 'S7 Bricks is not the active theme here' );
+} else {
+	$br_posts = get_posts( array( 'post_type' => BRICKS_DB_TEMPLATE_SLUG, 'post_status' => 'any', 'numberposts' => 1, 'orderby' => 'modified' ) );
+	if ( ! $br_posts ) {
+		$skip( 'S7 Bricks has no template here to read' );
+	} else {
+		$br_mod = (string) minn_admin_bricks_template_item( $br_posts[0] )['modified'];
+		$check( 'S7 Bricks: Modified carries its zone and is post_modified_gmt as UTC', (bool) preg_match( '/(Z|[+-]\d\d:?\d\d)$/', $br_mod ) && strtotime( $br_mod ) === strtotime( $br_posts[0]->post_modified_gmt . ' UTC' ), $br_mod );
+	}
+}
+
+// --- D-28 OttoKit: Retry where a request failed, Rerun where it was delivered -
+// Their own screen offers Retry on a failed request and Rerun on a delivered
+// one; both re-fire the webhook. Minn offered Retry on every row.
 if ( ! function_exists( 'minn_admin_ottokit_active' ) || ! minn_admin_ottokit_active() ) {
 	$skip( 'D-28 OttoKit (suretriggers) is not active here' );
 } elseif ( ! minn_admin_ottokit_has_table() ) {
@@ -680,18 +837,18 @@ if ( ! function_exists( 'minn_admin_ottokit_active' ) || ! minn_admin_ottokit_ac
 	if ( ! $ok_s ) {
 		$check( 'D-28 OttoKit: the surface is offered to this user', false );
 	} else {
-		$ok_retry = array();
+		$ok_by = array();
 		foreach ( array( 'actions', 'bulk' ) as $where ) {
 			foreach ( (array) ( $ok_s['collection'][ $where ] ?? array() ) as $a ) {
 				if ( false !== strpos( (string) ( $a['route'] ?? '' ), '/retry' ) ) {
-					$ok_retry[ $where ] = $a;
+					$ok_by[ $where ][ (string) ( $a['when']['equals'] ?? '' ) ] = (string) $a['label'];
 				}
 			}
 		}
-		foreach ( array( 'actions' => 'row and dialog', 'bulk' => 'bulk' ) as $where => $what ) {
-			$when = $ok_retry[ $where ]['when'] ?? null;
-			$check( "D-28 OttoKit: the {$what} Retry is offered only when the request failed", is_array( $when ) && 'status' === ( $when['key'] ?? '' ) && 'failed' === ( $when['equals'] ?? '' ), wp_json_encode( $ok_retry[ $where ] ?? null ) );
-		}
+		$check( 'D-28 OttoKit: the row and dialog offer Retry on a failed request', __( 'Retry', 'minn-admin' ) === ( $ok_by['actions']['failed'] ?? '' ), wp_json_encode( $ok_by ) );
+		$check( 'D-28 OttoKit: the bulk Retry is offered only when the request failed', array( 'failed' => __( 'Retry', 'minn-admin' ) ) === ( $ok_by['bulk'] ?? null ), wp_json_encode( $ok_by ) );
+		// I13: their screen offers Rerun on a delivered request.
+		$check( 'I13 OttoKit: the row and dialog offer Rerun on a delivered request, as their own screen does', __( 'Rerun', 'minn-admin' ) === ( $ok_by['actions']['success'] ?? '' ) && ! isset( $ok_by['actions'][''] ), wp_json_encode( $ok_by ) );
 	}
 }
 
