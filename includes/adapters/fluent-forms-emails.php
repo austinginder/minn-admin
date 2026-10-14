@@ -18,7 +18,8 @@
  * is). With Pro the page still has no routing editor, so a routing
  * notification keeps its list there too. The preview renders the
  * notification's subject and message with the form's latest entry through
- * their ShortCodeParser, the way their sender does.
+ * their ShortCodeParser, the way their sender does, with only the codes
+ * minn_admin_fluent_preview_tags() names resolved.
  *
  * @package minn-admin
  */
@@ -124,6 +125,38 @@ function minn_admin_fluent_tags( $form ) {
 		}
 	}
 	return $out;
+}
+
+/**
+ * The smart codes a preview resolves from a real submission
+ * (Minn_Admin_Preview): Fluent's own that read only the submission, the
+ * form, the site or the person previewing. {user.*} reads whoever is signed
+ * in, here the person previewing, so only its profile fields. {inputs.*}
+ * names the form's own inputs: any other key reads what the submission kept
+ * of the request (the page it was sent from, the referer). The submission's
+ * address, browser, page and account, its meta, {embed_post.*},
+ * {cookie.*}, {ip}, {browser.*}, {http_referer}, {chat_gpt_response.*}
+ * (which asks OpenAI and stores the answer) and every add-on's code stay
+ * placeholders.
+ *
+ * @param object $form The form row.
+ * @return string[]
+ */
+function minn_admin_fluent_preview_tags( $form ) {
+	$tags = array(
+		'all_data', 'all_data_without_hidden_fields', 'form_title', 'labels.*', 'admin_email', 'wp.admin_email', 'wp.site_url', 'wp.site_title', 'date.*', 'random_string.*',
+		'submission.id', 'submission.serial_number', 'submission.form_id', 'submission.status', 'submission.is_favourite', 'submission.created_at', 'submission.updated_at', 'submission.admin_view_url',
+		'submission.currency', 'submission.payment_status', 'submission.payment_method', 'submission.payment_type', 'submission.payment_total', 'submission.total_paid',
+		'payment.receipt', 'payment.summary', 'payment.summary_list', 'payment.order_items', 'payment.subscription_items', 'payment.payment_status', 'payment.payment_total', 'payment.payment_method',
+		'user.ID', 'user.id', 'user.display_name', 'user.first_name', 'user.last_name', 'user.nickname', 'user.user_email', 'user.user_login',
+	);
+	if ( class_exists( '\FluentForm\App\Modules\Form\FormFieldsParser' ) ) {
+		foreach ( array_keys( (array) \FluentForm\App\Modules\Form\FormFieldsParser::getInputs( $form ) ) as $name ) {
+			$tags[] = 'inputs.' . $name;
+			$tags[] = 'inputs.' . $name . '.*';
+		}
+	}
+	return $tags;
 }
 
 /** The page's read. */
@@ -321,6 +354,15 @@ add_action( 'rest_api_init', function () {
 			if ( ! current_user_can( 'unfiltered_html' ) && function_exists( 'fluentform_sanitize_html' ) ) {
 				$parts['message'] = fluentform_sanitize_html( $parts['message'] );
 			}
+			// {embed_post.*} reads the page the entry names (its author's meta,
+			// any of its meta, a draft's body) and an add-on's code does what
+			// the add-on does. Only the codes minn_admin_fluent_preview_tags()
+			// names resolve; any other is a placeholder before Fluent reads the
+			// text. A real send is unchanged.
+			$allow = minn_admin_fluent_preview_tags( $form );
+			foreach ( $parts as $part => $text ) {
+				$parts[ $part ] = Minn_Admin_Preview::restrict( $text, 'fluent', $allow );
+			}
 			$entry = minn_admin_ffe_can_read_entries( $form->id ) ? wpFluent()->table( 'fluentform_submissions' )->where( 'form_id', (int) $form->id )->orderBy( 'id', 'DESC' )->first() : null;
 			if ( ! $entry ) {
 				return rest_ensure_response( array( 'entry' => 0, 'subject' => $parts['subject'], 'html' => $parts['message'] ) );
@@ -328,23 +370,6 @@ add_action( 'rest_api_init', function () {
 			// {cookie.*} reads the current request's cookies: in a real send
 			// the submitter's, here the viewer's own, HttpOnly login cookie
 			// included. The preview resolves them against none.
-			// {embed_post.*} reads the page the entry names: its author's
-			// meta, any of its meta, any field of a private or draft page.
-			// Fluent matches a tag wherever the name sits inside the braces,
-			// and so does this; the tag stays a placeholder.
-			// {chat_gpt_response.*} (Fluent Forms Pro) asks OpenAI for an
-			// answer and stores it on the entry. It is matched the same way
-			// and stays as its name in square brackets, with no brace left
-			// to rebuild a tag from.
-			foreach ( $parts as $part => $text ) {
-				$text           = (string) preg_replace_callback( '/\{+([^}]*embed_post\.[^}]*)\}/', function ( $m ) {
-					/* translators: %s: a field of the page a form was sent from, named in a merge tag. */
-					return sprintf( __( '[page field: %s]', 'minn-admin' ), sanitize_text_field( substr( $m[1], strpos( $m[1], 'embed_post.' ) + 11 ) ) );
-				}, $text );
-				$parts[ $part ] = (string) preg_replace_callback( '/\{+([^}]*chat_gpt_response\.[^}]*)\}/', function ( $m ) {
-					return '[' . preg_replace( '/[^\w.]/', '', substr( $m[1], strpos( $m[1], 'chat_gpt_response.' ) ) ) . ']';
-				}, $text );
-			}
 			$cookies = $_COOKIE;
 			$_COOKIE = array();
 			try {

@@ -471,13 +471,52 @@ function minn_admin_gfn_store( $form, $n, $is_new ) {
 }
 
 /**
+ * The merge tags a notification preview or test send resolves from a real
+ * entry (Minn_Admin_Preview): Gravity Forms' own that read only the entry,
+ * the form, the site or the person previewing. A field tag is named by the
+ * form's own input ids. {entry:*} hands a column over raw, with none of the
+ * brace and bracket encoding a field tag gets (so a value would be read
+ * again as a tag, or run as a shortcode in a test send), so only the
+ * columns Gravity Forms itself writes. {user:*} reads the person
+ * previewing, so only its profile fields. {created_by:*} (the submitter's
+ * account), {embed_post:*}, {custom_field:*} and {embed_url} (the page it
+ * was sent from), {ip}, {user_agent} and {referer} (the sender's request),
+ * {payment_action:*}, the save-and-continue tags and every add-on's tag
+ * stay placeholders.
+ *
+ * @param array $form The form.
+ * @return string[]
+ */
+function minn_admin_gfn_preview_tags( $form ) {
+	$tags = array(
+		'all_fields', 'all_fields:*', 'all_fields_display_empty', 'pricing_fields', 'pricing_fields:*',
+		'form_title', 'form_id', 'entry_id', 'entry_url', 'post_id', 'post_edit_url', 'admin_email', 'admin_url', 'logout_url',
+		'date_mdy', 'date_dmy', 'today', 'today:*', 'date_created', 'date_created:*', 'date_updated', 'date_updated:*', 'payment_date', 'payment_date:*',
+		'entry:id', 'entry:form_id', 'entry:post_id', 'entry:date_created', 'entry:date_updated', 'entry:is_starred', 'entry:is_read', 'entry:status',
+		'entry:currency', 'entry:payment_status', 'entry:payment_date', 'entry:payment_amount', 'entry:payment_method', 'entry:transaction_id', 'entry:transaction_type', 'entry:is_fulfilled',
+		'user:ID', 'user:id', 'user:display_name', 'user:user_email', 'user:user_login', 'user:first_name', 'user:last_name', 'user:nickname',
+		// The submitter's profile fields Gravity Forms' entry screen shows;
+		// any other key of their account stays a placeholder.
+		'created_by:ID', 'created_by:id', 'created_by:display_name', 'created_by:user_login', 'created_by:user_email', 'created_by:first_name', 'created_by:last_name', 'created_by:nickname', 'created_by:roles', 'created_by:user_url',
+	);
+	foreach ( (array) rgar( $form, 'fields' ) as $field ) {
+		if ( is_object( $field ) && '' !== (string) $field->id ) {
+			$tags[] = ':' . $field->id;
+			$tags[] = ':' . $field->id . '.*';
+		}
+	}
+	return $tags;
+}
+
+/**
  * Merge tags that read past the entry: {created_by:<key>} reads any meta of
  * the account that submitted it (Gravity Forms answers it through
  * WP_User::get()), {custom_field:<key>} any meta of the page it was sent
  * from, protected keys included, and {embed_post:<field>} any field of that
- * page, private or draft. A preview or a test send made from a real entry
- * shows only the profile fields Gravity Forms' entry screen shows; every
- * other such tag stays a placeholder. The created_by match is Gravity
+ * page, private or draft. A preview made from a real entry shows only the
+ * profile fields Gravity Forms' entry screen shows; every other such tag
+ * stays a placeholder (the notification preview and test send go further:
+ * minn_admin_gfn_preview_tags()). The created_by match is Gravity
  * Forms' own (common.php): the colon is optional, so
  * {created_by_two_factor_totp_key} reads that key too, and a key runs up to
  * the closing brace across lines, less one trailing space. Real sends are
@@ -764,11 +803,12 @@ add_action( 'rest_api_init', function () {
 				) );
 			}
 			$autoformat = empty( $n['disableAutoformat'] );
-			return rest_ensure_response( minn_admin_gfn_guarded( $entry, function ( $entry ) use ( $n, $form, $autoformat ) {
+			$allow      = minn_admin_gfn_preview_tags( $form );
+			return rest_ensure_response( minn_admin_gfn_guarded( $entry, function ( $entry ) use ( $n, $form, $autoformat, $allow ) {
 				return array(
 					'entry'   => (int) $entry['id'],
-					'subject' => (string) GFCommon::replace_variables( minn_admin_gfn_neutral_tags( (string) $n['subject'] ), $form, $entry, false, false, false, 'text' ),
-					'html'    => (string) GFCommon::replace_variables( minn_admin_gfn_neutral_tags( (string) $n['message'] ), $form, $entry, false, false, $autoformat, 'html' ),
+					'subject' => (string) GFCommon::replace_variables( Minn_Admin_Preview::restrict( (string) $n['subject'], 'gf', $allow ), $form, $entry, false, false, false, 'text' ),
+					'html'    => (string) GFCommon::replace_variables( Minn_Admin_Preview::restrict( (string) $n['message'], 'gf', $allow ), $form, $entry, false, false, $autoformat, 'html' ),
 				);
 			} ) );
 		},
@@ -808,9 +848,11 @@ add_action( 'rest_api_init', function () {
 			$n['cc']      = '';
 			$n['bcc']     = '';
 			$n['routing'] = null;
+
+			$allow = minn_admin_gfn_preview_tags( $form );
 			foreach ( array( 'subject', 'message', 'from', 'fromName', 'replyTo' ) as $key ) {
 				if ( isset( $n[ $key ] ) ) {
-					$n[ $key ] = minn_admin_gfn_neutral_tags( (string) $n[ $key ] );
+					$n[ $key ] = Minn_Admin_Preview::restrict( (string) $n[ $key ], 'gf', $allow );
 				}
 			}
 			$n['subject'] = '[' . __( 'Test', 'minn-admin' ) . '] ' . (string) rgar( $n, 'subject' );

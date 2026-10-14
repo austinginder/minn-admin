@@ -78,6 +78,7 @@ run demo-bugs-logs single --user=admin
 MINN_SWAP_ADD=sureforms/sureforms.php,suremails/suremails.php,site-mailer/site-mailer.php run demo-bugs-mail-time single --user=admin --require=tests/lib/plugin-swap.php
 run demo-bugs-tools single --user=admin
 run egress-redaction single --user=admin
+run preview-policy single --user=admin
 run duplicate-copy single --user=admin
 run kernel-conformance single --user=admin
 run language-packs single

@@ -662,7 +662,7 @@ if ( ! class_exists( 'GFAPI' ) || ! function_exists( 'minn_admin_gfn_guarded' ) 
 				list( $ur_st, $ur_d ) = $call( 'POST', "/minn-admin/v1/gf/notifications/{$ur_form}:d45ur/preview", array( 'subject' => 'S ' . $ur_tags, 'message' => 'M ' . $ur_tags ) );
 				$ur_out = wp_json_encode( $ur_d );
 				$check( 'UR the notification preview mints no reset or activation link', 200 === $ur_st && ! $ur_leaks( $ur_out ), $ur_st . ' ' . substr( $ur_out, 0, 200 ) );
-				$check( 'UR the notification preview leaves both tags as placeholders', false !== strpos( $ur_out, '[set_password_url]' ) && false !== strpos( $ur_out, '[activation_url]' ), substr( $ur_out, 0, 200 ) );
+				$check( 'UR the notification preview leaves both tags as placeholders', (bool) preg_match( '/\[(tag: )?set_password_url\]/', $ur_out ) && (bool) preg_match( '/\[(tag: )?activation_url\]/', $ur_out ), substr( $ur_out, 0, 200 ) );
 				list( $ur_st, $ur_d ) = $call( 'POST', "/minn-admin/v1/gf/confirmations/{$ur_form}:d45urc/preview", array( 'type' => 'message', 'message' => 'M ' . $ur_tags ) );
 				$ur_out = wp_json_encode( $ur_d );
 				$check( 'UR the confirmation preview mints no reset or activation link', 200 === $ur_st && ! $ur_leaks( $ur_out ), $ur_st . ' ' . substr( $ur_out, 0, 200 ) );

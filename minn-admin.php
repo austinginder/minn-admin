@@ -180,6 +180,7 @@ require_once MINN_ADMIN_DIR . 'includes/class-minn-admin-logs.php';
 require_once MINN_ADMIN_DIR . 'includes/class-minn-admin-db.php';
 require_once MINN_ADMIN_DIR . 'includes/class-minn-admin-fences.php';
 require_once MINN_ADMIN_DIR . 'includes/class-minn-admin-egress.php';
+require_once MINN_ADMIN_DIR . 'includes/class-minn-admin-preview.php';
 require_once MINN_ADMIN_DIR . 'includes/kernel/class-minn-admin-kernel-sql.php';
 require_once MINN_ADMIN_DIR . 'includes/kernel/class-minn-admin-kernel-fields.php';
 require_once MINN_ADMIN_DIR . 'includes/kernel/class-minn-admin-kernel.php';

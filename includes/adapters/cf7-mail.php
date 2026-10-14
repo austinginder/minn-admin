@@ -13,7 +13,9 @@
  *
  * The preview fills the mail with the form's latest Flamingo message: field
  * tags from its answers, special tags from what Flamingo kept about the
- * submission or the site. With no message yet, tags show as typed.
+ * submission or the site. Only the tags minn_admin_cf7_preview_tags() names
+ * are filled; any other shows as a placeholder. With no message yet, those
+ * tags show as typed.
  *
  * @package minn-admin
  */
@@ -58,6 +60,29 @@ function minn_admin_cf7_special_tags() {
 	return $out;
 }
 
+/**
+ * The mail-tags a preview fills from a Flamingo message
+ * (Minn_Admin_Preview): the form's own fields, and the special tags that
+ * read the submission (its date, time, number and payment) or the site.
+ * The sender's address and browser, the page the form was sent from and
+ * its author, the signed-in sender's account, anything else the message
+ * kept (a Turnstile answer, an add-on's value) and every add-on's tag stay
+ * placeholders. The fill reads any key Flamingo kept, so the list is what
+ * stands between a tag and that key.
+ *
+ * @param WPCF7_ContactForm $contact_form The form.
+ * @return string[]
+ */
+function minn_admin_cf7_preview_tags( $contact_form ) {
+	$tags = array( '_site_title', '_site_description', '_site_url', '_site_domain', '_site_admin_email', '_date', '_time', '_serial_number', '_invalid_fields', '_contact_form_title', '_stripe_payment_link' );
+	foreach ( $contact_form->collect_mail_tags() as $name ) {
+		$tags[] = (string) $name;
+		$tags[] = '_raw_' . $name;
+		$tags[] = '_format_' . $name;
+	}
+	return $tags;
+}
+
 /** The form's latest Flamingo message, for the preview. */
 function minn_admin_cf7_latest_message( $contact_form ) {
 	// No channel name, no lookup: an empty channel would match every form's messages.
@@ -90,7 +115,10 @@ function minn_admin_cf7_fill( $text, $message, $exclude_blank = false ) {
 		'_site_admin_email' => get_bloginfo( 'admin_email' ),
 	);
 	$blank  = array();
-	$filled = preg_replace_callback( '/\[\s*(_?[a-zA-Z0-9_-]+)\s*\]/', function ( $m ) use ( $fields, $meta, $site, $message, &$blank ) {
+	// Names start as CF7's do (a letter, or "_" for a special tag), so the
+	// preview's tag pattern (Minn_Admin_Preview::CF7_TAG) sees every tag
+	// this fills.
+	$filled = preg_replace_callback( '/\[\s*([a-zA-Z_][a-zA-Z0-9_-]*)\s*\]/', function ( $m ) use ( $fields, $meta, $site, $message, &$blank ) {
 		$name = $m[1];
 		if ( ! $message && ! isset( $site[ $name ] ) ) {
 			return $m[0];
@@ -268,6 +296,14 @@ add_action( 'rest_api_init', function () {
 			$body    = (array) $request->get_json_params();
 			$which   = 'mail_2' === ( $body['which'] ?? '' ) ? 'mail_2' : 'mail';
 			$mail    = minn_admin_cf7_mail_in( $body['mail'] ?? array(), $form->prop( $which ) );
+			// [_user_email] reads the signed-in sender's account, [_post_*] the
+			// page the form was sent from, and the fill reads any key Flamingo
+			// kept. Only the tags minn_admin_cf7_preview_tags() names are
+			// filled; any other is a placeholder first.
+			$allow = minn_admin_cf7_preview_tags( $form );
+			foreach ( array( 'recipient', 'sender', 'subject', 'body' ) as $k ) {
+				$mail[ $k ] = Minn_Admin_Preview::restrict( $mail[ $k ], 'cf7', $allow );
+			}
 			$message = minn_admin_cf7_latest_message( $form );
 			$html    = minn_admin_cf7_fill( $mail['body'], $message, $mail['exclude_blank'] );
 			if ( ! current_user_can( 'unfiltered_html' ) ) {

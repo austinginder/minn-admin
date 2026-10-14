@@ -17,7 +17,8 @@
  * Adding or removing notifications and confirmations and their conditional
  * logic stay in the WPForms builder (stored conditions are kept). The
  * preview runs their own notification email (Emails\Notifications, set up
- * the way their sender sets it up) over the form's latest entry.
+ * the way their sender sets it up) over the form's latest entry, with only
+ * the smart tags minn_admin_wpforms_preview_tags() names resolved.
  *
  * @package minn-admin
  */
@@ -52,6 +53,20 @@ function minn_admin_wpforms_tags( $data ) {
 		$fields ? array( 'label' => __( 'Form fields', 'minn-admin' ), 'tags' => $fields ) : null,
 		$general ? array( 'label' => __( 'Other', 'minn-admin' ), 'tags' => $general ) : null,
 	) ) );
+}
+
+/**
+ * The smart tags a preview resolves from a real entry (Minn_Admin_Preview):
+ * WPForms' own that read only the entry, the form, the site or the person
+ * previewing. The user_* tags read the account that submitted the entry
+ * (with none, the person previewing), page_*, author_*, url_referer and
+ * query_var the page and the request it was sent from, and user_ip the
+ * sender's address: they stay placeholders, with every add-on's tag.
+ */
+function minn_admin_wpforms_preview_tags() {
+	// The submitter's name and address are on the entry screen the person
+	// previewing may already read, as Gravity Forms' are; their meta is not.
+	return array( 'user_id', 'user_display', 'user_full_name', 'user_first_name', 'user_last_name', 'user_email', 'field_id', 'field_html_id', 'field_value_id', 'all_fields', 'form_id', 'form_name', 'entry_id', 'entry_date', 'entry_type', 'entry_details_url', 'order_summary', 'admin_email', 'site_name', 'date', 'unique_value', 'url_login', 'url_logout', 'url_register', 'url_lost_password' );
 }
 
 /** The page's read. */
@@ -224,21 +239,13 @@ add_action( 'rest_api_init', function () {
 			if ( ! current_user_can( 'unfiltered_html' ) ) {
 				$message = wp_strip_all_tags( $message );
 			}
-			// {user_meta key="…"} resolves against the account that submitted
-			// the entry the preview uses: any of its meta (a 2FA seed, a licence
-			// key). WPForms' own preview never fills tags from a real entry, so
-			// here the tag shows as a placeholder; a real send is unchanged.
-			// The whole tag is matched as WPForms finds it, and its key read as
-			// WPForms reads attributes: in any order, spaces included.
-			$neutral = function ( $text ) {
-				return preg_replace_callback( '~\{user_meta(?:[ =][^\n}]*)?\}~i', function ( $m ) {
-					$key = preg_match( '/\bkey=(["\'])(.+?)\1/', $m[0], $k ) ? $k[2] : '';
-					/* translators: %s: a user meta key named in an email smart tag. */
-					return sprintf( __( '[user meta: %s]', 'minn-admin' ), sanitize_key( $key ) );
-				}, (string) $text );
-			};
-			$subject = $neutral( $subject );
-			$message = $neutral( $message );
+			// {user_meta key="…"} reads any meta of the account that submitted
+			// the entry the preview uses (a 2FA seed, a licence key), and an
+			// add-on's tag does whatever the add-on does. Only the tags
+			// minn_admin_wpforms_preview_tags() names resolve; any other is a
+			// placeholder before WPForms reads the text. A real send is unchanged.
+			$subject = Minn_Admin_Preview::restrict( $subject, 'wpforms', minn_admin_wpforms_preview_tags() );
+			$message = Minn_Admin_Preview::restrict( $message, 'wpforms', minn_admin_wpforms_preview_tags() );
 			global $wpdb;
 			// Editing a form doesn't include reading its entries; WPForms'
 			// own preview renders placeholder content for the same reason.
@@ -250,24 +257,32 @@ add_action( 'rest_api_init', function () {
 			$fields = (array) wpforms_decode( (string) $entry->fields );
 			$n      = (array) ( $data['settings']['notifications'][ $key ] ?? array() );
 			$emails = ( new \WPForms\Emails\Notifications() )->init( (string) ( $n['template'] ?? '' ) );
-			if ( $emails instanceof \WPForms\Emails\Notifications ) {
-				// Their sender's setup, then their own processing: the email
-				// template (which {all_fields} renders through) around the message.
-				$emails->__set( 'form_data', $data );
-				$emails->__set( 'fields', $fields );
-				$emails->__set( 'notification_id', $key );
-				$emails->__set( 'entry_id', (int) $entry->entry_id );
-				$emails->__set( 'message', '' );
-				$emails->process_email_template( $message );
-				list( $subject, $body ) = ( function ( $s, $m ) {
-					return array( $this->process_subject( $s ), $this->process_message( $m ) );
-				} )->call( $emails, $subject, $message );
-				$html = (string) $emails->__get( 'message' );
-				$html = '' !== trim( $html ) ? $html : $body;
-			} else {
-				$subject = wpforms_process_smart_tags( $subject, $data, $fields, (int) $entry->entry_id );
-				$html    = wpforms_process_smart_tags( $message, $data, $fields, (int) $entry->entry_id );
-			}
+			// WPForms replaces each tag through the whole text, value included,
+			// and its whole-text hooks run after every tag: a field value the
+			// submitter typed can carry an add-on's tag there. Only WPForms' own
+			// callbacks run on those hooks here.
+			$render = function () use ( $emails, $data, $fields, $key, $entry, $subject, $message ) {
+				if ( $emails instanceof \WPForms\Emails\Notifications ) {
+					// Their sender's setup, then their own processing: the email
+					// template (which {all_fields} renders through) around the message.
+					$emails->__set( 'form_data', $data );
+					$emails->__set( 'fields', $fields );
+					$emails->__set( 'notification_id', $key );
+					$emails->__set( 'entry_id', (int) $entry->entry_id );
+					$emails->__set( 'message', '' );
+					$emails->process_email_template( $message );
+					list( $subject, $body ) = ( function ( $s, $m ) {
+						return array( $this->process_subject( $s ), $this->process_message( $m ) );
+					} )->call( $emails, $subject, $message );
+					$html = (string) $emails->__get( 'message' );
+					return array( $subject, '' !== trim( $html ) ? $html : $body );
+				}
+				return array(
+					wpforms_process_smart_tags( $subject, $data, $fields, (int) $entry->entry_id ),
+					wpforms_process_smart_tags( $message, $data, $fields, (int) $entry->entry_id ),
+				);
+			};
+			list( $subject, $html ) = Minn_Admin_Preview::own_callbacks( array( 'wpforms_process_smart_tags', 'wpforms_smart_tag_process', 'wpforms_smarttags_process_value' ), WPFORMS_PLUGIN_DIR, $render );
 			return rest_ensure_response( array( 'entry' => (int) $entry->entry_id, 'subject' => wp_strip_all_tags( (string) $subject ), 'html' => (string) $html ) );
 		},
 	) );
