@@ -34,6 +34,8 @@
  *   dot   (I8) A content row's unsaved dot survives the pill clip on a phone.
  *   report  (S15) The copied system report carries the site name as text.
  *   tzsave  (S19) A timezone saved in Settings moves the app's clock.
+ *   tabs  (F10) A tab the vendor named reads as its pill does.
+ *   heat2  (F5) The heatmap grid steps the site's days and marks its today.
  *
  * Fixtures: two Amelia appointments and their customer (Amelia's own
  * tables), a PNG attachment, and a product, customer, parent order,
@@ -52,8 +54,10 @@
  * with mocks as well (an entry list and page, one event, one form's
  * settings held then refused, the settings save), so nothing is written.
  *
- * MINN_DEMO_ONLY=labels|tz|busy|rows|day|ip|settings|entry|year|heat|
- * itemsettings|dot|report|tzsave|media|subs|members runs those sections
+ * The tabs section answers Gravity Forms' form-tab GET with one mocked tab.
+ *
+ * MINN_DEMO_ONLY=labels|tz|busy|rows|day|ip|settings|entry|year|heat|heat2|
+ * itemsettings|dot|report|tabs|tzsave|media|subs|members runs those sections
  * (comma-separated).
  */
 const fs = require( 'fs' );
@@ -325,6 +329,8 @@ const id = ( v ) => ( Number.isInteger( v ) && v > 1 ? v : null );
 				Object.assign( {}, base, { id: 'demo-bugs-probe-4', hook: 'demo_bugs_probe_4', status: 'awaiting_customer_confirmation' } ),
 				Object.assign( {}, base, { id: 'demo-bugs-probe-5', hook: 'demo_bugs_probe_5', status: 'Signed in' } ),
 				Object.assign( {}, base, { id: 'demo-bugs-probe-6', hook: 'Ops desk <ops@example.com>', status: 'sent' } ),
+				Object.assign( {}, base, { id: 'demo-bugs-probe-7', hook: 'demo_bugs_probe_7', status: 'Failed Login' } ),
+				Object.assign( {}, base, { id: 'demo-bugs-probe-8', hook: 'demo_bugs_probe_8', status: 'signed-out' } ),
 			];
 			const detail = { sections: [ { title: 'Event', rows: [
 				{ label: 'Sent', value: '2026-10-09T19:44:00Z' },
@@ -360,6 +366,8 @@ const id = ( v ) => ( Number.isInteger( v ) && v > 1 ? v : null );
 						pill1: one.querySelector( '.minn-status' ).textContent.trim(),
 						pill2: two.querySelector( '.minn-status' ).textContent.trim(),
 						pill5: row( 'demo_bugs_probe_5' ).querySelector( '.minn-status' ).textContent.trim(),
+						pill7: row( 'demo_bugs_probe_7' ).querySelector( '.minn-status' ).textContent.trim(),
+						pill8: row( 'demo_bugs_probe_8' ).querySelector( '.minn-status' ).textContent.trim(),
 						title6: !! row( 'Ops desk <ops@example.com>' ),
 						spill: Math.round( pill.getBoundingClientRect().right - cell.getBoundingClientRect().right ),
 					};
@@ -369,6 +377,7 @@ const id = ( v ) => ( Number.isInteger( v ) && v > 1 ? v : null );
 				t.check( 'An underscored vendor status reads as words', 'Payment pending' === cells.pill1, cells.pill1 );
 				t.check( 'A label the server already wrote shows as sent, not re-cased', 'Failed login (unknown user)' === cells.pill2 && 'Signed in' === cells.pill5, JSON.stringify( [ cells.pill2, cells.pill5 ] ) );
 				t.check( 'A title cell keeps the address of a "Name <address>" value', cells.title6, String( cells.title6 ) );
+				t.check( 'F10: a vendor\'s own label keeps its casing; a slug takes Minn\'s words', 'Failed Login' === cells.pill7 && 'Signed out' === cells.pill8, JSON.stringify( [ cells.pill7, cells.pill8 ] ) );
 				t.check( 'A long status pill stays inside its column', cells.spill <= 1, JSON.stringify( { spill: cells.spill } ) );
 
 				await page.click( rowOf( 'demo_bugs_probe' ) );
@@ -735,6 +744,54 @@ const id = ( v ) => ( Number.isInteger( v ) && v > 1 ? v : null );
 				return text.split( '\n' )[ 0 ];
 			} );
 			t.check( 'S15: the copied system report names the site as text, not HTML', '# System report — Larkspur & Fern' === copied, copied );
+		}
+
+		/* ===== F10 · a vendor's tab label reads as its pill does ===== */
+		if ( want( 'tabs' ) && surfaces.includes( 'gravity-forms' ) ) {
+			// Gravity Forms' form tabs, answered with one tab the vendor named
+			// "Failed Login" (Aryo's own label for failed_login).
+			const isTabs = ( u ) => /gf\/forms[?&]active=1/.test( decodeURIComponent( u.href ) );
+			const onTabs = ( route ) => ( 'GET' === route.request().method()
+				? route.fulfill( { status: 200, contentType: 'application/json', body: JSON.stringify( [ { id: 990001, title: 'Failed Login' } ] ) } )
+				: route.abort() );
+			await page.route( isTabs, onTabs );
+			try {
+				await page.goto( BASE + '/minn-admin/gravity-forms', { waitUntil: 'domcontentloaded', timeout: 90000 } );
+				await page.waitForSelector( '[data-stab="990001"]', { timeout: 120000 } );
+				const tab = await page.$eval( '[data-stab="990001"]', ( el ) => el.textContent.trim() );
+				t.check( 'F10: a tab the vendor named "Failed Login" reads as its pill does', 'Failed Login' === tab, tab );
+			} finally {
+				await page.unroute( isTabs, onTabs ).catch( () => {} );
+			}
+		}
+
+		/* ===== F5 · the heatmap grid steps the site's days ===== */
+		if ( want( 'heat2' ) ) {
+			// The shipped grid, with the browser in Los Angeles, the site in
+			// Tokyo and the clock at Saturday 08:30 there (Friday 16:30 in LA):
+			// a revision at 08:00 Saturday is today's cell, shaded, not future.
+			const probe = `
+				const fs = require( 'fs' ), vm = require( 'vm' );
+				const src = fs.readFileSync( process.env.MINN_APP_JS, 'utf8' );
+				const fn = ( n ) => { const a = src.indexOf( '\\tfunction ' + n + '(' ); return a < 0 ? '' : src.slice( a, src.indexOf( '\\n\\t}', a ) + 3 ); };
+				const region = src.slice( src.indexOf( '\\tlet siteZoneFor' ), src.indexOf( '\\t// Absolute fallback for timeAgo' ) );
+				const NOW = Date.parse( '2026-10-09T23:30:00Z' );
+				class FakeDate extends Date { constructor( ...a ) { if ( a.length ) super( ...a ); else super( NOW ); } static now() { return NOW; } }
+				const ctx = { B: { timezone: 'Asia/Tokyo', gmtOffset: 9 }, uiLocale: () => 'en-US', Intl, Date: FakeDate, String, Math, Object, Number, Map, isNaN,
+					esc: ( x ) => String( x ), __: ( x ) => x, _n: ( a, b, n ) => ( 1 === n ? a : b ), sprintf: ( f, ...v ) => { let i = 0; return f.replace( /%(\\d\\$)?s/g, () => v[ i++ ] ); } };
+				const heat = vm.runInNewContext( region + fn( 'parseWpDate' ) + fn( 'revisionDayKey' ) + fn( 'revisionDayLabel' ) + fn( 'revisionsHeatmap' ) + '\\nrevisionsHeatmap;', ctx );
+				const html = heat( [ { whenRaw: '2026-10-10T08:00:00' } ] ).html;
+				const cells = [ ...html.matchAll( /class="minn-rev-heat-cell l(\\d)( future)?"\\s*data-revday="([\\d-]+)"/g ) ].map( ( m ) => ( { day: m[ 3 ], level: +m[ 1 ], future: !! m[ 2 ] } ) );
+				const sat = cells.find( ( c ) => '2026-10-10' === c.day );
+				const lastLive = cells.filter( ( c ) => ! c.future ).pop();
+				process.stdout.write( JSON.stringify( { sat, today: lastLive && lastLive.day } ) );`;
+			let got = {};
+			try {
+				got = JSON.parse( execFileSync( process.execPath, [ '-e', probe ], { encoding: 'utf8', env: Object.assign( {}, process.env, { TZ: 'America/Los_Angeles', MINN_APP_JS: path.resolve( __dirname, '../assets/js/app.js' ) } ) } ) || '{}' );
+			} catch ( e ) {
+				got = { error: String( e.stderr || e.message ).slice( 0, 200 ) };
+			}
+			t.check( 'F5: the heatmap marks the site\'s today, with its revision shaded, for a reader a day behind', !! got.sat && ! got.sat.future && got.sat.level > 0 && '2026-10-10' === got.today, JSON.stringify( got ) );
 		}
 
 		/* ===== D-06 · the media preview is a dialog ===== */

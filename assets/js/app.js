@@ -51868,8 +51868,10 @@
 		// floor ~12 weeks so a single busy day still has context.
 		const MAX_DAYS = 26 * 7;
 		const MIN_DAYS = 12 * 7;
-		const today = new Date();
-		today.setHours( 12, 0, 0, 0 );
+		// The grid steps the SITE's calendar, as its cell keys do: today is
+		// the site's day, held at local noon so stepping never crosses a date.
+		const [ ty, tm, td ] = siteDayKey( new Date() ).split( '-' ).map( Number );
+		const today = new Date( ty, tm - 1, td, 12 );
 		const keys = [ ...counts.keys() ].sort();
 		const earliest = keys[ 0 ];
 		let start = new Date( today );
