@@ -20929,8 +20929,12 @@
 				else kept = JSON.parse( sessionStorage.getItem( key ) || 'null' );
 			} catch ( e ) { /* storage off: the route's own item, if any */ }
 			p.item = { ...( listed || kept || { id: p.id } ), ...( p.sections.item || {} ) };
-			// Opening marks the entry read on the server; the list follows.
-			if ( listed && p.sections.item && 'is_read' in p.sections.item ) listed.is_read = p.sections.item.is_read;
+			// Opening marks the entry read on the server; the list follows with
+			// every field the route sent (its status pill, its menu's gates),
+			// so Back paints the row as the page shows it.
+			if ( listed && p.sections.item && 'object' === typeof p.sections.item ) {
+				Object.keys( p.sections.item ).forEach( ( k ) => { if ( 'id' !== k ) listed[ k ] = p.sections.item[ k ]; } );
+			}
 		} catch ( e ) {
 			p.loadError = e.message || String( e );
 		}
