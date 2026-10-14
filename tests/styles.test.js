@@ -348,6 +348,28 @@ const { launch, login, reporter, BASE, autoConfirm, activateClassicTheme } = req
 		const stripped = ( await rest( `wp/v2/global-styles/${ gsId }?context=edit&_fields=settings,styles` ) ).body;
 		t.check( 'Reset colors strips only the color slice and keeps the rest', ! ( stripped.settings && stripped.settings.color ) && ! ( stripped.styles && stripped.styles.color ) && stripped.styles && stripped.styles.typography && stripped.styles.typography.lineHeight === '1.9', JSON.stringify( { settings: Object.keys( stripped.settings || {} ), styles: stripped.styles } ) );
 
+		/* ===== Undo never removes a change made since ===== */
+		await open();
+		await page.evaluate( () => {
+			window.__minnApplyUndo = null;
+			const mo = new MutationObserver( () => {
+				const b = document.querySelector( '.minn-toast-action .minn-toast-btn' );
+				if ( b && /Applied/.test( b.closest( '.minn-toast' ).textContent ) ) {
+					window.__minnApplyUndo = b;
+					mo.disconnect();
+				}
+			} );
+			mo.observe( document.body, { childList: true } );
+		} );
+		await page.evaluate( ( id ) => document.querySelector( `[data-style="${ CSS.escape( id ) }"]` ).click(), midnight.id );
+		await page.waitForFunction( () => !! window.__minnApplyUndo, null, { timeout: 20000 } );
+		// Another tab (or the Site Editor) changes the look after the apply.
+		await rest( 'minn-admin/v1/styles/update', { method: 'POST', body: { changes: { 'styles.typography.lineHeight': '1.7' } } } );
+		await page.evaluate( () => window.__minnApplyUndo.click() );
+		await page.waitForFunction( () => [ ...document.querySelectorAll( '.minn-toast' ) ].some( ( x ) => /changed after this/.test( x.textContent ) ), null, { timeout: 20000 } );
+		const kept = ( await rest( `wp/v2/global-styles/${ gsId }?context=edit&_fields=settings,styles` ) ).body;
+		t.check( 'Undo after someone else changed the look refuses and keeps their change', !! ( kept.styles && kept.styles.typography && '1.7' === kept.styles.typography.lineHeight ), JSON.stringify( kept.styles && kept.styles.typography ) );
+
 		/* ===== Phone width: nothing overflows sideways ===== */
 		const wide = page.viewportSize();
 		await page.setViewportSize( { width: 390, height: 844 } );

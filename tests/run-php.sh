@@ -79,6 +79,7 @@ MINN_SWAP_ADD=sureforms/sureforms.php,suremails/suremails.php,site-mailer/site-m
 run demo-bugs-tools single --user=admin
 run egress-redaction single --user=admin
 run preview-policy single --user=admin
+run definition-saves single --user=admin
 run duplicate-copy single --user=admin
 run kernel-conformance single --user=admin
 run language-packs single

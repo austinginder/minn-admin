@@ -272,7 +272,8 @@ directly, since its own read may hide a row from the caller.
 
 What the kernel does not have yet: the save path for edit forms (changed fields only,
 a base stamp and a 409 on a stale copy), which the entry-edit adapters will need when
-they port; secret-value redaction beyond the `secret` field type; and what the forms
+they port (the post type and taxonomy definitions use the same stamp and partial save
+in `class-minn-admin-cpt.php`); and what the forms
 ports worked around: a fixed condition for every read of a table (Forminator's
 `entry_type`), OR between condition sets, a LIKE condition (a token in a serialized
 blob, cfdb7), string tab values (Elementor), a UTC wire format ending in `Z`, and a

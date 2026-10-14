@@ -497,6 +497,61 @@ class Minn_Admin_CPT {
 		return $out;
 	}
 
+	/**
+	 * A post type's definition as the modal shows it: labels, switches and
+	 * the supports and taxonomies it can tick.
+	 *
+	 * @param WP_Post_Type $pt Post type.
+	 * @return array
+	 */
+	private static function type_def( $pt ) {
+		return array(
+			// Registered labels may carry entities (translations do this
+			// routinely) — decode for Minn's text rendering.
+			'plural'       => Minn_Admin::plain_text( $pt->labels->name ),
+			'singular'     => Minn_Admin::plain_text( $pt->labels->singular_name ),
+			'description'  => (string) $pt->description,
+			'public'       => (bool) $pt->public,
+			'hierarchical' => (bool) $pt->hierarchical,
+			'has_archive'  => (bool) $pt->has_archive,
+			'show_in_rest' => (bool) $pt->show_in_rest,
+			'supports'     => array_keys( array_filter( get_all_post_type_supports( $pt->name ) ) ),
+			'taxonomies'   => array_values( get_object_taxonomies( $pt->name ) ),
+		);
+	}
+
+	/**
+	 * A definition's stamp: what a save carries back as `base`, so a copy
+	 * opened before someone else changed the definition is refused (409)
+	 * rather than written over their change.
+	 *
+	 * @param array $def Definition as type_def() or tax_def() builds it.
+	 * @return string
+	 */
+	private static function def_stamp( array $def ) {
+		foreach ( $def as $k => $v ) {
+			if ( is_array( $v ) ) {
+				sort( $v );
+				$def[ $k ] = $v;
+			}
+		}
+		ksort( $def );
+		// Twelve hex characters: enough to tell one copy from another, and too
+		// short to read as a key to the egress fence's scan.
+		return substr( md5( (string) wp_json_encode( $def ) ), 0, 12 );
+	}
+
+	/** The 409 a stale copy answers. */
+	private static function stale_error( $what ) {
+		return new WP_Error(
+			'minn_stale',
+			'type' === $what
+				? __( 'This post type was changed somewhere else after you opened it. Close it and open it again to see the change.', 'minn-admin' )
+				: __( 'This taxonomy was changed somewhere else after you opened it. Close it and open it again to see the change.', 'minn-admin' ),
+			array( 'status' => 409 )
+		);
+	}
+
 	public static function list_types() {
 		$out = array();
 		foreach ( get_post_types( array(), 'objects' ) as $pt ) {
@@ -505,23 +560,17 @@ class Minn_Admin_CPT {
 			}
 			$counts = (array) wp_count_posts( $pt->name );
 			$source = self::source_of( $pt->name );
-			$out[]  = array(
-				'slug'         => $pt->name,
-				// Registered labels may carry entities (translations do this
-				// routinely) — decode for Minn's text rendering.
-				'plural'       => Minn_Admin::plain_text( $pt->labels->name ),
-				'singular'     => Minn_Admin::plain_text( $pt->labels->singular_name ),
-				'description'  => $pt->description,
-				'public'       => (bool) $pt->public,
-				'hierarchical' => (bool) $pt->hierarchical,
-				'has_archive'  => (bool) $pt->has_archive,
-				'show_in_rest' => (bool) $pt->show_in_rest,
-				'rest_base'    => $pt->rest_base ?: $pt->name,
-				'supports'     => array_keys( array_filter( get_all_post_type_supports( $pt->name ) ) ),
-				'taxonomies'   => array_values( get_object_taxonomies( $pt->name ) ),
-				'count'        => array_sum( array_intersect_key( $counts, array_flip( array( 'publish', 'future', 'draft', 'pending', 'private' ) ) ) ),
-				'source'       => $source,
-				'editable'     => in_array( $source, self::editable_sources(), true ),
+			$def    = self::type_def( $pt );
+			$out[]  = array_merge(
+				array( 'slug' => $pt->name ),
+				$def,
+				array(
+					'rest_base' => $pt->rest_base ?: $pt->name,
+					'count'     => array_sum( array_intersect_key( $counts, array_flip( array( 'publish', 'future', 'draft', 'pending', 'private' ) ) ) ),
+					'source'    => $source,
+					'editable'  => in_array( $source, self::editable_sources(), true ),
+					'stamp'     => self::def_stamp( $def ),
+				)
 			);
 		}
 		// Taxonomies a post type can attach to (drives the CPT modal checkboxes).
@@ -637,9 +686,30 @@ class Minn_Admin_CPT {
 		if ( ! in_array( $source, self::editable_sources(), true ) ) {
 			return new WP_Error( 'not_editable', __( 'This post type is registered in code and can only be changed there.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
+		$now  = self::type_def( get_post_type_object( $slug ) );
+		$base = (string) $request->get_param( 'base' );
+		if ( '' !== $base && ! hash_equals( self::def_stamp( $now ), $base ) ) {
+			return self::stale_error( 'type' );
+		}
 		$def = self::def_from_request( $request );
-		// The modal offers nine supports and the listed taxonomies, and sends
-		// the whole definition; what it can't show (post formats, trackbacks,
+		// A field the save leaves out keeps what the modal showed for it, so
+		// a save that sends only what changed stores the same as one that
+		// sends everything.
+		foreach ( array( 'singular', 'plural', 'description', 'public', 'hierarchical', 'has_archive', 'show_in_rest' ) as $k ) {
+			if ( ! $request->has_param( $k ) ) {
+				$def[ $k ] = $now[ $k ];
+			}
+		}
+		if ( ! $request->has_param( 'supports' ) ) {
+			$def['supports'] = array_values( array_intersect( $now['supports'], self::SUPPORTS ) );
+		}
+		if ( ! $request->has_param( 'taxonomies' ) ) {
+			$def['taxonomies'] = array_values( array_filter( $now['taxonomies'], function ( $name ) {
+				$tax = get_taxonomy( $name );
+				return $tax && self::offered_taxonomy( $tax );
+			} ) );
+		}
+		// The modal offers nine supports and the listed taxonomies; what it can't show (post formats, trackbacks,
 		// a taxonomy hidden from it) stays as it was instead of being dropped
 		// by every save. "As it was" is the vendor's STORED definition, not
 		// the registered one: support or a taxonomy other code attaches at
@@ -760,17 +830,16 @@ class Minn_Admin_CPT {
 			}
 			$source = self::tax_source_of( $tax->name );
 			$count  = wp_count_terms( array( 'taxonomy' => $tax->name, 'hide_empty' => false ) );
-			$out[]  = array(
-				'slug'         => $tax->name,
-				'plural'       => Minn_Admin::plain_text( $tax->labels->name ),
-				'singular'     => Minn_Admin::plain_text( $tax->labels->singular_name ),
-				'public'       => (bool) $tax->public,
-				'hierarchical' => (bool) $tax->hierarchical,
-				'show_in_rest' => (bool) $tax->show_in_rest,
-				'object_types' => array_values( (array) $tax->object_type ),
-				'count'        => is_wp_error( $count ) ? 0 : (int) $count,
-				'source'       => $source,
-				'editable'     => in_array( $source, self::editable_sources(), true ),
+			$def    = self::tax_def( $tax );
+			$out[]  = array_merge(
+				array( 'slug' => $tax->name ),
+				$def,
+				array(
+					'count'    => is_wp_error( $count ) ? 0 : (int) $count,
+					'source'   => $source,
+					'editable' => in_array( $source, self::editable_sources(), true ),
+					'stamp'    => self::def_stamp( $def ),
+				)
 			);
 		}
 		return rest_ensure_response(
@@ -778,6 +847,18 @@ class Minn_Admin_CPT {
 				'taxonomies' => $out,
 				'backends'   => self::writable_backends(),
 			)
+		);
+	}
+
+	/** A taxonomy's definition as the modal shows it. */
+	private static function tax_def( $tax ) {
+		return array(
+			'plural'       => Minn_Admin::plain_text( $tax->labels->name ),
+			'singular'     => Minn_Admin::plain_text( $tax->labels->singular_name ),
+			'public'       => (bool) $tax->public,
+			'hierarchical' => (bool) $tax->hierarchical,
+			'show_in_rest' => (bool) $tax->show_in_rest,
+			'object_types' => array_values( (array) $tax->object_type ),
 		);
 	}
 
@@ -841,7 +922,24 @@ class Minn_Admin_CPT {
 		if ( ! in_array( $source, self::editable_sources(), true ) ) {
 			return new WP_Error( 'not_editable', __( 'This taxonomy is registered in code and can only be changed there.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
+		$now  = self::tax_def( get_taxonomy( $slug ) );
+		$base = (string) $request->get_param( 'base' );
+		if ( '' !== $base && ! hash_equals( self::def_stamp( $now ), $base ) ) {
+			return self::stale_error( 'taxonomy' );
+		}
 		$def = self::tax_def_from_request( $request );
+		// A field the save leaves out keeps what the modal showed for it.
+		foreach ( array( 'singular', 'plural', 'public', 'hierarchical', 'show_in_rest' ) as $k ) {
+			if ( ! $request->has_param( $k ) ) {
+				$def[ $k ] = $now[ $k ];
+			}
+		}
+		if ( ! $request->has_param( 'object_types' ) ) {
+			$def['object_types'] = array_values( array_filter( $now['object_types'], function ( $type ) {
+				$pto = get_post_type_object( $type );
+				return $pto && self::offered_type( $pto );
+			} ) );
+		}
 		// Same for the post types it attaches to: one the modal doesn't list
 		// (Media, for a media category) stays attached, read from the
 		// vendor's stored definition for the same reason.

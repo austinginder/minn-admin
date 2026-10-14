@@ -22666,7 +22666,7 @@
 			} );
 			if ( ! Object.keys( changes ).length ) return;
 			save.disabled = true;
-			const prev = d.current || { settings: {}, styles: {} };
+			const prev = await lookBefore( d );
 			try {
 				await api( 'minn-admin/v1/styles/update', { method: 'POST', body: JSON.stringify( { changes } ) } );
 			} catch ( e ) {
@@ -22678,10 +22678,11 @@
 			ss.editVals = null;
 			ss.data = null;
 			if ( state.route === 'styles' ) renderStyles();
+			const after = await lookAfter( d );
 			/* translators: %s: number of fields changed. */
 			toastAction( sprintf( _n( 'Look saved (%s change)', 'Look saved (%s changes)', Object.keys( changes ).length ), String( Object.keys( changes ).length ) ), __( 'Undo' ), async () => {
 				try {
-					await api( `wp/v2/global-styles/${ d.userStylesId }`, { method: 'POST', body: JSON.stringify( prev ) } );
+					if ( ! await undoLook( d, prev, after ) ) return;
 					ss.data = null;
 					if ( state.route === 'styles' ) renderStyles();
 					toast( __( 'Previous look restored' ) );
@@ -22690,6 +22691,50 @@
 				}
 			} );
 		} );
+	}
+
+	/* ---- An exact Undo for a change to the site's look. The look before is
+	 * read fresh just before the change (the page's copy can be older than
+	 * someone else's edit), and the look after is read right after it. Undo
+	 * puts the look before back only while the site still has exactly the
+	 * look this change left, so a change made since, in another tab or in the
+	 * Site Editor, is never undone along with it. ---- */
+	function stableLookJson( v ) {
+		if ( Array.isArray( v ) ) return '[' + v.map( stableLookJson ).join( ',' ) + ']';
+		if ( v && typeof v === 'object' ) {
+			return '{' + Object.keys( v ).sort().map( ( k ) => JSON.stringify( k ) + ':' + stableLookJson( v[ k ] ) ).join( ',' ) + '}';
+		}
+		return JSON.stringify( v );
+	}
+	async function readLook( id ) {
+		const r = await api( `wp/v2/global-styles/${ id }?context=edit` );
+		return { settings: ( r && r.settings ) || {}, styles: ( r && r.styles ) || {} };
+	}
+	async function lookBefore( d ) {
+		try {
+			return await readLook( d.userStylesId );
+		} catch ( e ) {
+			return d.current || { settings: {}, styles: {} };
+		}
+	}
+	async function lookAfter( d ) {
+		try {
+			return await readLook( d.userStylesId );
+		} catch ( e ) {
+			return null;
+		}
+	}
+	// Resolves true when the look before is back, false when Undo refused.
+	async function undoLook( d, before, after ) {
+		if ( after ) {
+			const now = await readLook( d.userStylesId );
+			if ( stableLookJson( now ) !== stableLookJson( after ) ) {
+				toast( __( 'The site’s look changed after this, so Undo would remove that change too. Nothing was changed.' ), true );
+				return false;
+			}
+		}
+		await api( `wp/v2/global-styles/${ d.userStylesId }`, { method: 'POST', body: JSON.stringify( before ) } );
+		return true;
 	}
 
 	/* ---- Copy / paste a look: the user config is one theme.json-shaped
@@ -22761,7 +22806,7 @@
 			toast( __( 'This account cannot store the settings part of a look on this site (it needs unfiltered HTML).' ), true );
 			return;
 		}
-		const prev = d.current || { settings: {}, styles: {} };
+		const prev = await lookBefore( d );
 		const btn = $( '#minn-paste-look-apply' );
 		if ( btn ) btn.disabled = true;
 		try {
@@ -22774,9 +22819,10 @@
 		closeModal();
 		ss.data = null;
 		if ( state.route === 'styles' ) renderStyles();
+		const after = await lookAfter( d );
 		toastAction( __( 'Look applied' ), __( 'Undo' ), async () => {
 			try {
-				await api( `wp/v2/global-styles/${ d.userStylesId }`, { method: 'POST', body: JSON.stringify( prev ) } );
+				if ( ! await undoLook( d, prev, after ) ) return;
 				ss.data = null;
 				if ( state.route === 'styles' ) renderStyles();
 				toast( __( 'Previous look restored' ) );
@@ -22815,7 +22861,7 @@
 					: __( 'Its fonts replace the type of your current look, for every visitor. Colors and layout stay as they are. Undo restores the look you have now.' ) ),
 			confirmLabel: __( 'Apply' ),
 		} ) ) return;
-		const prev = d.current || { settings: {}, styles: {} };
+		const prev = await lookBefore( d );
 		try {
 			await api( 'minn-admin/v1/styles/mix', { method: 'POST', body: JSON.stringify( { kind, id } ) } );
 		} catch ( e ) {
@@ -22828,9 +22874,10 @@
 			? ( 'colors' === kind ? __( 'Colors reset to the theme' ) : __( 'Type reset to the theme' ) )
 			/* translators: %s: a style variation's name. */
 			: sprintf( 'colors' === kind ? __( 'Using the colors of “%s”' ) : __( 'Using the type of “%s”' ), title );
+		const after = await lookAfter( d );
 		toastAction( done, __( 'Undo' ), async () => {
 			try {
-				await api( `wp/v2/global-styles/${ d.userStylesId }`, { method: 'POST', body: JSON.stringify( prev ) } );
+				if ( ! await undoLook( d, prev, after ) ) return;
 				ss.data = null;
 				if ( state.route === 'styles' ) renderStyles();
 				toast( __( 'Previous look restored' ) );
@@ -22850,7 +22897,7 @@
 			body: __( 'Every color, font and layout change made in the Site Editor is removed and the theme’s own look returns, for every visitor. Undo brings the customizations back.' ),
 			confirmLabel: __( 'Reset styles' ),
 		} ) ) return;
-		const prev = d.current || { settings: {}, styles: {} };
+		const prev = await lookBefore( d );
 		try {
 			await api( `wp/v2/global-styles/${ d.userStylesId }`, { method: 'POST', body: JSON.stringify( { settings: {}, styles: {} } ) } );
 		} catch ( e ) {
@@ -22859,9 +22906,10 @@
 		}
 		ss.data = null;
 		if ( state.route === 'styles' ) renderStyles();
+		const after = await lookAfter( d );
 		toastAction( __( 'Styles reset to the theme defaults' ), __( 'Undo' ), async () => {
 			try {
-				await api( `wp/v2/global-styles/${ d.userStylesId }`, { method: 'POST', body: JSON.stringify( prev ) } );
+				if ( ! await undoLook( d, prev, after ) ) return;
 				ss.data = null;
 				if ( state.route === 'styles' ) renderStyles();
 				toast( __( 'Customizations restored' ) );
@@ -22951,7 +22999,7 @@
 			body: __( 'The site’s colors, fonts and layout return to that saved version, for every visitor. Undo brings back the look you have now.' ),
 			confirmLabel: __( 'Restore' ),
 		} ) ) return;
-		const prev = d.current || { settings: {}, styles: {} };
+		const prev = await lookBefore( d );
 		try {
 			await api( 'minn-admin/v1/styles/restore', { method: 'POST', body: JSON.stringify( { revision: revId } ) } );
 		} catch ( e ) {
@@ -22961,9 +23009,10 @@
 		closeModal();
 		ss.data = null;
 		if ( state.route === 'styles' ) renderStyles();
+		const after = await lookAfter( d );
 		toastAction( __( 'Saved version restored' ), __( 'Undo' ), async () => {
 			try {
-				await api( `wp/v2/global-styles/${ d.userStylesId }`, { method: 'POST', body: JSON.stringify( prev ) } );
+				if ( ! await undoLook( d, prev, after ) ) return;
 				ss.data = null;
 				if ( state.route === 'styles' ) renderStyles();
 				toast( __( 'Previous look restored' ) );
@@ -22994,7 +23043,7 @@
 			confirmLabel: __( 'Apply style' ),
 		} ) ) return;
 		// The current config is the Undo — captured before anything is written.
-		const prev = d.current || { settings: {}, styles: {} };
+		const prev = await lookBefore( d );
 		const payload = 'default' === v.id
 			? { settings: {}, styles: {} }
 			: { settings: v.settings, styles: v.styles };
@@ -23006,10 +23055,11 @@
 		}
 		ss.data = null;
 		if ( state.route === 'styles' ) renderStyles();
+		const after = await lookAfter( d );
 		/* translators: %s: the style variation's name. */
 		toastAction( sprintf( __( 'Applied “%s”' ), v.title ), __( 'Undo' ), async () => {
 			try {
-				await api( `wp/v2/global-styles/${ d.userStylesId }`, { method: 'POST', body: JSON.stringify( prev ) } );
+				if ( ! await undoLook( d, prev, after ) ) return;
 				ss.data = null;
 				if ( state.route === 'styles' ) renderStyles();
 				toast( __( 'Previous look restored' ) );
@@ -27457,6 +27507,32 @@
 	}
 
 	// A definition changed — the Content view's type tabs must refetch.
+	// An edited post type or taxonomy definition as the save sends it: only
+	// the fields that differ from the copy the list served, and that copy's
+	// stamp as `base`, so a definition someone else changed meanwhile is
+	// refused (409) instead of written over, and an untouched field never
+	// goes back. A list compares only the items the dialog shows (it cannot
+	// show a support or taxonomy other code attaches). Null when nothing
+	// changed.
+	function changedDefinition( payload, orig, shown ) {
+		const out = {};
+		const sorted = ( a ) => JSON.stringify( [ ...( a || [] ) ].map( String ).sort() );
+		for ( const [ k, v ] of Object.entries( payload ) ) {
+			if ( k === 'slug' || k === 'backend' ) continue;
+			if ( Array.isArray( v ) ) {
+				const was = ( orig[ k ] || [] ).filter( ( x ) => ! shown[ k ] || shown[ k ].includes( x ) );
+				if ( sorted( v ) !== sorted( was ) ) out[ k ] = v;
+			} else if ( typeof v === 'number' ) {
+				if ( v !== ( orig[ k ] ? 1 : 0 ) ) out[ k ] = v;
+			} else if ( String( v ) !== String( orig[ k ] == null ? '' : orig[ k ] ) ) {
+				out[ k ] = v;
+			}
+		}
+		if ( ! Object.keys( out ).length ) return null;
+		if ( orig.stamp ) out.base = orig.stamp;
+		return out;
+	}
+
 	function bustTypeCaches() {
 		state.cache.postTypes = null;
 		state.cache.taxonomies = null;
@@ -49893,16 +49969,26 @@
 				$$( '[data-cpttax]', modal ).forEach( ( i ) => { if ( i.classList.contains( 'on' ) ) payload.taxonomies.push( i.dataset.cpttax ); } );
 				const backendEl = $( '[data-cptbackend]', modal );
 				if ( backendEl ) payload.backend = formControlValue( backendEl );
+				const send = m.item ? changedDefinition( payload, m.item, {
+					supports: $$( '[data-cptsupport]', modal ).map( ( i ) => i.dataset.cptsupport ),
+					taxonomies: $$( '[data-cpttax]', modal ).map( ( i ) => i.dataset.cpttax ),
+				} ) : payload;
+				if ( ! send ) {
+					closeModal();
+					return;
+				}
 				saveBtn.disabled = true;
 				saveBtn.textContent = __( 'Saving…' );
 				try {
-					await api( 'minn-admin/v1/post-types' + ( m.item ? '/' + m.item.slug : '' ), { method: 'POST', body: JSON.stringify( payload ) } );
+					await api( 'minn-admin/v1/post-types' + ( m.item ? '/' + m.item.slug : '' ), { method: 'POST', body: JSON.stringify( send ) } );
 					toast( m.item ? __( 'Post type updated' ) : __( 'Post type created' ) );
 					bustTypeCaches();
 					closeModal();
 					if ( onStructure() ) renderStructure();
 				} catch ( e ) {
 					toast( e.message, true );
+					// A stale copy: the list behind it reloads, so reopening shows the change.
+					if ( e.code === 'minn_stale' ) bustTypeCaches();
 					saveBtn.disabled = false;
 					saveBtn.textContent = m.item ? 'Save' : __( 'Create post type' );
 				}
@@ -50021,16 +50107,24 @@
 				$$( '[data-taxtype]', modal ).forEach( ( i ) => { if ( i.classList.contains( 'on' ) ) payload.object_types.push( i.dataset.taxtype ); } );
 				const backendEl = $( '[data-taxbackend]', modal );
 				if ( backendEl ) payload.backend = formControlValue( backendEl );
+				const send = m.item ? changedDefinition( payload, m.item, {
+					object_types: $$( '[data-taxtype]', modal ).map( ( i ) => i.dataset.taxtype ),
+				} ) : payload;
+				if ( ! send ) {
+					closeModal();
+					return;
+				}
 				saveBtn.disabled = true;
 				saveBtn.textContent = __( 'Saving…' );
 				try {
-					await api( 'minn-admin/v1/taxonomies' + ( m.item ? '/' + m.item.slug : '' ), { method: 'POST', body: JSON.stringify( payload ) } );
+					await api( 'minn-admin/v1/taxonomies' + ( m.item ? '/' + m.item.slug : '' ), { method: 'POST', body: JSON.stringify( send ) } );
 					toast( m.item ? __( 'Taxonomy updated' ) : __( 'Taxonomy created' ) );
 					bustTypeCaches();
 					closeModal();
 					if ( onStructure() ) renderStructure();
 				} catch ( e ) {
 					toast( e.message, true );
+					if ( e.code === 'minn_stale' ) bustTypeCaches();
 					saveBtn.disabled = false;
 					saveBtn.textContent = m.item ? 'Save' : __( 'Create taxonomy' );
 				}
