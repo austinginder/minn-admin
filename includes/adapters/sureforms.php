@@ -84,6 +84,16 @@ function minn_admin_sureforms_answers( array $data ) {
 }
 
 /**
+ * An answer as the visitor typed it. SureForms stores each string answer
+ * through htmlspecialchars(), so an ampersand or an apostrophe arrives as
+ * &amp; or &#039;; Minn escapes on output, so the entry reads them decoded.
+ * (The list's summary keeps them: its title cell reads the value as HTML.)
+ */
+function minn_admin_sureforms_text( $value ) {
+	return html_entity_decode( (string) $value, ENT_QUOTES, 'UTF-8' );
+}
+
+/**
  * A short contact summary from decoded form_data: prefer a name and an email,
  * else the first couple of answers. Mirrors the forms-family entry summary.
  */
@@ -356,8 +366,15 @@ add_action( 'rest_api_init', function () {
 				$params[] = $form_id;
 			}
 			if ( '' !== $search ) {
-				$where[]  = 'form_data LIKE %s';
-				$params[] = '%' . $wpdb->esc_like( $search ) . '%';
+				// Answers are stored through htmlspecialchars() (which left
+				// apostrophes alone before PHP 8.1), inside SureForms' own
+				// encode_json, so the term is matched in each stored form.
+				$ors = array();
+				foreach ( array_unique( array( $search, htmlspecialchars( $search ), htmlspecialchars( $search, ENT_COMPAT | ENT_HTML401 ) ) ) as $term ) {
+					$ors[]    = 'form_data LIKE %s';
+					$params[] = '%' . $wpdb->esc_like( substr( (string) wp_json_encode( $term, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ), 1, -1 ) ) . '%';
+				}
+				$where[] = '( ' . implode( ' OR ', $ors ) . ' )';
 			}
 			// A status-chart bar narrows the list to that day. created_at is
 			// site-local, like the bounds, so they compare as they come.
@@ -404,9 +421,9 @@ add_action( 'rest_api_init', function () {
 				$data   = is_array( $data ) ? minn_admin_sureforms_answers( $data ) : array();
 				$answers = array();
 				foreach ( $data as $label => $value ) {
-					if ( is_array( $value ) ) {
-						$value = implode( ', ', array_filter( array_map( 'strval', $value ) ) );
-					}
+					$value = is_array( $value )
+						? implode( ', ', array_filter( array_map( 'strval', $value ) ) )
+						: minn_admin_sureforms_text( $value );
 					$answers[] = array(
 						'label' => (string) $label,
 						'value' => '' !== (string) $value ? (string) $value : '—',

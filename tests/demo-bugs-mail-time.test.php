@@ -219,6 +219,33 @@ try {
 			list( $st, $list ) = $call( 'GET', '/minn-admin/v1/sureforms/entries', array( 'search' => $marker, 'per_page' => 100, 'after' => $bar['from'] ?? '', 'before' => $bar['to'] ?? '' ) );
 			$items = $list['items'] ?? array();
 			$check( 'D-40 SureForms: a clicked bar lists that day\'s entries', $bar && $find( $items, $sf_edge ) && ! $find( $items, $sf_now ), $st . ' ' . count( $items ) . ' rows for ' . ( $bar['from'] ?? '?' ) );
+
+			// S3: SureForms stores each answer through htmlspecialchars() and
+			// the row through its own encode_json (slashes and Unicode left
+			// as they are), so an apostrophe and an ampersand reached the
+			// entry page as &#039; and &amp;, and a search as typed missed.
+			$sf_typed = "Tom & Jerry's <b>day</b>";
+			$sf_ok    = $wpdb->insert( $sf_table, array(
+				'form_id'         => 0,
+				'user_id'         => 0,
+				'form_data'       => wp_json_encode( array( 'Name' => 'Ent ' . $marker, 'Message' => htmlspecialchars( $sf_typed ) ), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ),
+				'submission_info' => wp_json_encode( array() ),
+				'logs'            => wp_json_encode( array() ),
+				'status'          => 'unread',
+				'type'            => '',
+				'created_at'      => $sf_now_local,
+				'updated_at'      => $sf_now_local,
+			) );
+			$sf_ent   = $sf_ok ? (int) $wpdb->insert_id : 0;
+			$sf_ent   = is_int( $sf_ent ) && $sf_ent > 1 ? $sf_ent : 0;
+			list( $st, $sec ) = $call( 'GET', "/minn-admin/v1/sureforms/entries/{$sf_ent}" );
+			$msg = $row_of( $sec, 'Message' );
+			$check( 'S3 SureForms: an answer reads as typed on the entry page, not as stored entities', $sf_ent && $msg && $sf_typed === $msg['value'], $st . ' ' . wp_json_encode( $msg['value'] ?? null ) );
+			$check( 'S3 guard: the decoded answer is a plain row, which the client escapes', $msg && ! isset( $msg['type'] ), wp_json_encode( $msg['type'] ?? null ) );
+			foreach ( array( "Jerry's", 'Tom & Jerry' ) as $term ) {
+				list( $st, $list ) = $call( 'GET', '/minn-admin/v1/sureforms/entries', array( 'search' => $term, 'per_page' => 100 ) );
+				$check( "S3 SureForms: searching \"{$term}\" finds the entry", $sf_ent && $find( $list['items'] ?? array(), $sf_ent ), $st . ' ' . count( $list['items'] ?? array() ) . ' rows' );
+			}
 		}
 	}
 
