@@ -6821,7 +6821,7 @@
 							${ p.builder ? `<span class="minn-builder-chip" title="Managed with ${ esc( p.builder.name ) }">${ esc( p.builder.name ) }</span>` : '' }
 						</div>
 					</div>
-					<div class="minn-row-status"><span class="minn-status ${ esc( p.status ) }"${ statusPillTitle( p ) ? ` title="${ esc( statusPillTitle( p ) ) }"` : '' }>${ STATUS_LABELS[ p.status ] || esc( p.status ) }${ p.unsaved ? `<span class="minn-row-modified" aria-hidden="true"></span><span class="minn-sr-only"> ${ esc( __( 'Unsaved edits' ) ) }</span>` : '' }${ p.lockedBy ? `<span class="minn-row-locked" aria-hidden="true"></span><span class="minn-sr-only"> ${ esc( sprintf( /* translators: %s: the name of the person editing. */ __( '%s is editing' ), p.lockedBy ) ) }</span>` : '' }</span></div>
+					<div class="minn-row-status"><span class="minn-status ${ esc( p.status ) }"${ statusPillTitle( p ) ? ` title="${ esc( statusPillTitle( p ) ) }"` : '' }><span class="minn-status-text">${ STATUS_LABELS[ p.status ] || esc( p.status ) }</span>${ p.unsaved ? `<span class="minn-row-modified" aria-hidden="true"></span><span class="minn-sr-only"> ${ esc( __( 'Unsaved edits' ) ) }</span>` : '' }${ p.lockedBy ? `<span class="minn-row-locked" aria-hidden="true"></span><span class="minn-sr-only"> ${ esc( sprintf( /* translators: %s: the name of the person editing. */ __( '%s is editing' ), p.lockedBy ) ) }</span>` : '' }</span></div>
 					<div class="minn-row-meta">${ esc( p.author ) }</div>
 					<div class="minn-row-meta minn-row-date" title="${ esc( siteDateStr( parseWpDate( p.date ) ) ) }">${ timeAgo( p.date ) }</div>
 					${ state.contentTrash ? `
