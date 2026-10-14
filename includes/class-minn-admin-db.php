@@ -46,6 +46,9 @@ class Minn_Admin_DB {
 	/** Whether credential_needles() stopped at a cap, so long cells are withheld (shown_cell()). */
 	private static $needles_capped = false;
 
+	/** The credentials themselves behind credential_needles(), for the egress fence. */
+	private static $credentials = null;
+
 	/**
 	 * A path segment that holds credentials whatever its entries are keyed by:
 	 * licences, keys, tokens, secrets, credentials, codes, alone or after a
@@ -1080,6 +1083,7 @@ class Minn_Admin_DB {
 		foreach ( $values as $raw ) {
 			$credentials += self::credential_strings( (string) $raw );
 		}
+		self::$credentials = array_map( 'strval', array_keys( $credentials ) );
 		foreach ( array_keys( $credentials ) as $v ) {
 			$v             = (string) $v;
 			$needles[ $v ] = true;
@@ -1098,6 +1102,27 @@ class Minn_Admin_DB {
 		self::$needles        = $needles;
 		self::$needles_capped = $capped;
 		return $needles;
+	}
+
+	/**
+	 * Every credential the browser redacts, as the plain strings (the same
+	 * rows, vendor tables and account meta credential_needles() reads), for
+	 * the egress fence (class-minn-admin-egress.php). It runs only when a
+	 * response holds something shaped like a key, so its cost is paid rarely.
+	 *
+	 * @return string[]
+	 */
+	public static function egress_credentials() {
+		if ( null === self::$credentials ) {
+			self::$needles = null;
+			self::credential_needles();
+		}
+		return (array) self::$credentials;
+	}
+
+	/** The option names the browser treats as credential rows, for guards outside it. */
+	public static function credential_option_names() {
+		return self::secret_option_names();
 	}
 
 	/**
@@ -1235,7 +1260,7 @@ class Minn_Admin_DB {
 			}
 		}
 		// Whole words: account_key and update_token still count.
-		if ( preg_match( '/(^|[_\-])(public|status|expir\w*|date|time|count|limit|url|email|name|slug|type|version|item|plugin|theme|site|domain)([_\-]|$)/', $leaf ) ) {
+		if ( preg_match( '/(^|[_\-])(public|publishable|status|expir\w*|date|time|count|limit|url|email|name|slug|type|version|item|plugin|theme|site|domain)([_\-]|$)/', $leaf ) ) {
 			return false;
 		}
 		// A numbered list item counts at the top of a credential row (a list

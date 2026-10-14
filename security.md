@@ -95,6 +95,20 @@ A few properties worth knowing before auditing (details in
   either ask the activation capability themselves (a plugin update leaves a
   plugin the update switched off inactive for a caller who may not activate
   plugins, and says so).
+- No credential the database browser would redact leaves in a `minn-admin/v1`
+  response, whatever route built it (`includes/class-minn-admin-egress.php`).
+  The response is checked as it is sent, as JSON text, so keys, nested
+  objects and links count too: every copy of a credential, raw,
+  JSON-escaped, URL-encoded or inside a base64 token, becomes
+  `[redacted:<fingerprint>]`, and the response logs one line,
+  `minn_egress_redacted route= count=`. A route that hands a credential to its
+  owner on purpose (the WP Migrate connection key, the Disembark command,
+  a one-time login link) names that exact value, which passes in that
+  response only. A save that sends a redacted value back gets the real one
+  restored, but only into the option that already holds it, so a screen that
+  showed it cannot overwrite it and a pasted token never turns into the key
+  elsewhere. A copy in another case, in hex, cut short or split across two
+  values is not caught, as it is not in the browser either.
 - The database browser is read-only and redacts credentials three ways: by
   column name (a column named like a password, secret or token, in any
   table, which also cannot be sorted or filtered), by known vendor row

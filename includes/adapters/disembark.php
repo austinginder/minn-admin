@@ -110,7 +110,13 @@ function minn_admin_disembark_rm_contents( $dir ) {
 
 /** The connect string `wp disembark cli-info` prints — the whole product in one line. */
 function minn_admin_disembark_command() {
-	return 'disembark connect ' . home_url() . ' ' . \Disembark\Token::get();
+	$token = (string) \Disembark\Token::get();
+	// The command is for the person connecting the CLI: the egress fence
+	// lets the token through in it.
+	if ( class_exists( 'Minn_Admin_Egress' ) ) {
+		Minn_Admin_Egress::intended( $token );
+	}
+	return 'disembark connect ' . home_url() . ' ' . $token;
 }
 
 /** Server-built model for the surface status card. */

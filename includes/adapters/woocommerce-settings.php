@@ -1538,6 +1538,12 @@ function minn_admin_wc_api_key_save( $key_id, $body ) {
 	if ( ! $ok || ! $wpdb->insert_id ) {
 		return new WP_Error( 'minn_wc_key_insert', __( 'WooCommerce could not store the key.', 'minn-admin' ), array( 'status' => 500 ) );
 	}
+	// Shown once, to the person who made it, as WooCommerce's own screen
+	// does: the egress fence lets this pair through in this answer.
+	if ( class_exists( 'Minn_Admin_Egress' ) ) {
+		Minn_Admin_Egress::intended( $consumer_key );
+		Minn_Admin_Egress::intended( $consumer_secret );
+	}
 	return array(
 		'id'             => (int) $wpdb->insert_id,
 		'consumerKey'    => $consumer_key,

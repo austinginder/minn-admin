@@ -194,6 +194,11 @@ add_action( 'rest_api_init', function () {
 					array( 'status' => 409 )
 				);
 			}
+			// Handing the key to the person who connects the other site is
+			// the point of this route, so the egress fence lets it pass.
+			if ( class_exists( 'Minn_Admin_Egress' ) ) {
+				Minn_Admin_Egress::intended( $key );
+			}
 			return rest_ensure_response( array(
 				'url'   => untrailingslashit( network_home_url() ),
 				'key'   => $key,

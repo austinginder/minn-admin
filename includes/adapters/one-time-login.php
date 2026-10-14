@@ -83,6 +83,10 @@ add_action( 'rest_api_init', function () {
 			if ( ! $url ) {
 				return new WP_Error( 'mint_failed', __( 'One Time Login could not generate a link.', 'minn-admin' ), array( 'status' => 500 ) );
 			}
+			// The link is the point: the egress fence lets its token through.
+			if ( class_exists( 'Minn_Admin_Egress' ) ) {
+				Minn_Admin_Egress::intended( $url );
+			}
 			return rest_ensure_response( array(
 				'url'  => $url,
 				'name' => $user->display_name ? $user->display_name : $user->user_login,

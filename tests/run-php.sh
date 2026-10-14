@@ -77,6 +77,7 @@ run demo-bugs-logs single --user=admin
 # SureForms, SureMails and Site Mailer rest inactive; the swap loads them for this process only.
 MINN_SWAP_ADD=sureforms/sureforms.php,suremails/suremails.php,site-mailer/site-mailer.php run demo-bugs-mail-time single --user=admin --require=tests/lib/plugin-swap.php
 run demo-bugs-tools single --user=admin
+run egress-redaction single --user=admin
 run duplicate-copy single --user=admin
 run kernel-conformance single --user=admin
 run language-packs single
@@ -109,6 +110,7 @@ run write-fences single --user=admin
 # A network, from a site that is not the main one.
 run route-gates subsite --user=admin
 run kernel-conformance subsite --user=admin
+run egress-redaction subsite --user=admin
 run write-fences subsite --user=admin
 run multisite-db-redaction subsite --user=admin
 run multisite-languages subsite --user=admin
