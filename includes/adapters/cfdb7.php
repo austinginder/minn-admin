@@ -466,12 +466,16 @@ add_action( 'rest_api_init', function () {
 				}
 				$values = minn_admin_cfdb7_values( (string) $row->form_value );
 
-				// Opening marks read — CFDB7's own view semantics.
-				if ( ( $values['cfdb7_status'] ?? '' ) !== 'read' ) {
+				// Opening marks read — CFDB7's own view semantics. The entry
+				// counts as read only once the write landed.
+				$status = ( $values['cfdb7_status'] ?? '' ) === 'read' ? 'read' : 'unread';
+				if ( 'unread' === $status ) {
 					$patched = minn_admin_cfdb7_set_status( $row->form_value, 'read' );
 					if ( null !== $patched ) {
 						// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
-						$wpdb->update( $table, array( 'form_value' => $patched ), array( 'form_id' => (int) $row->form_id ), array( '%s' ), array( '%d' ) );
+						if ( $wpdb->update( $table, array( 'form_value' => $patched ), array( 'form_id' => (int) $row->form_id ), array( '%s' ), array( '%d' ) ) ) {
+							$status = 'read';
+						}
 					}
 				}
 
@@ -514,7 +518,14 @@ add_action( 'rest_api_init', function () {
 				return rest_ensure_response( array(
 					'kind'     => 'entry',
 					'title'    => $titles[ (int) $row->form_post_id ] ?? 'Message',
-					'status'   => 'read',
+					'status'   => $status,
+					// The row as it stands now, after opening marked it read:
+					// the page's actions gate on it, not on the list's copy.
+					'item'     => array(
+						'id'           => (int) $row->form_id,
+						'form_post_id' => (int) $row->form_post_id,
+						'status'       => $status,
+					),
 					'sections' => array(
 						array( 'title' => __( 'Responses', 'minn-admin' ), 'rows' => $answers ),
 						array( 'title' => __( 'Submission', 'minn-admin' ), 'rows' => $meta ),
