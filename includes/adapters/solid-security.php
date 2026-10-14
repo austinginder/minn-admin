@@ -4,8 +4,8 @@
  * posture rows.
  *
  * Solid Security records every lockout in {base_prefix}itsec_lockouts with
- * both local and GMT datetimes (the shim reads the *_gmt columns and emits
- * ISO Z). A lockout is host-, user- or username-typed; `lockout_active` is
+ * both local and GMT datetimes (the kernel resource reads the *_gmt columns
+ * and sends them with a Z). A lockout is host-, user- or username-typed; `lockout_active` is
  * their release flag, so status derives as locked (active + unexpired),
  * expired, or released. Release goes through their own
  * `$itsec_lockout->release_lockout()` (multisite-aware via base_prefix,
@@ -23,13 +23,7 @@
 defined( 'ABSPATH' ) || exit;
 
 function minn_admin_solid_security_active() {
-	global $wpdb;
-	if ( ! class_exists( 'ITSEC_Core' ) ) {
-		return false;
-	}
-	$table = $wpdb->base_prefix . 'itsec_lockouts';
-	$found = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
-	return $found && 0 === strcasecmp( (string) $found, $table );
+	return class_exists( 'ITSEC_Core' ) && Minn_Admin_Kernel_SQL::exists( array( 'table' => 'itsec_lockouts', 'network' => true ) );
 }
 
 function minn_admin_solid_security_can() {
@@ -77,8 +71,9 @@ function minn_admin_solid_security_type_label( $type ) {
 	return ucwords( str_replace( array( '-', '_' ), ' ', $type ) );
 }
 
-/** Display shape for one itsec_lockouts row. */
+/** Display shape for one itsec_lockouts row (dates as stored, GMT). */
 function minn_admin_solid_security_row( $r ) {
+	$r   = (object) $r;
 	$who = '';
 	if ( ! empty( $r->lockout_username ) ) {
 		$who = (string) $r->lockout_username;
@@ -103,10 +98,113 @@ function minn_admin_solid_security_row( $r ) {
 		'ip'      => $r->lockout_host ? (string) $r->lockout_host : '—',
 		'status'  => $status,
 		'locked'  => 'locked' === $status,
-		'date'    => str_replace( ' ', 'T', (string) $r->lockout_start_gmt ) . 'Z',
-		'expires' => str_replace( ' ', 'T', (string) $r->lockout_expire_gmt ) . 'Z',
+		'date'    => (string) $r->lockout_start_gmt,
+		'expires' => (string) $r->lockout_expire_gmt,
 	);
 }
+
+// One network table with no site column: network data, so the gate asks for
+// the network's owner (minn_admin_solid_security_can).
+minn_admin_resource( 'solid-security/lockouts', function () {
+	return array(
+		'active'  => 'minn_admin_solid_security_active',
+		'gates'   => array( 'view' => 'minn_admin_solid_security_can', 'manage' => 'minn_admin_solid_security_can' ),
+		'labels'  => array( 'not_found' => __( 'Lockout not found', 'minn-admin' ) ),
+		'source'  => array(
+			'table'   => 'itsec_lockouts',
+			'network' => true,
+			'key'     => 'lockout_id',
+			'columns' => array( 'lockout_id', 'lockout_type', 'lockout_start_gmt', 'lockout_expire_gmt', 'lockout_host', 'lockout_user', 'lockout_username', 'lockout_active' ),
+		),
+		'list'    => array(
+			'facets' => array(
+				array( 'param' => 'kind', 'values' => array(
+					'locked' => function () {
+						return array( 'lockout_active' => 1, 'lockout_expire_gmt' => array( 'op' => '>', 'value' => gmdate( 'Y-m-d H:i:s' ) ) );
+					},
+				) ),
+			),
+			'search' => array( 'columns' => array( 'lockout_host', 'lockout_username' ) ),
+			'range'  => array( 'column' => 'lockout_start_gmt', 'clock' => 'utc' ),
+			'order'  => array( 'column' => 'lockout_id' ),
+			'row'    => 'minn_admin_solid_security_row',
+			'fields' => array(
+				'id'      => 'int',
+				'message' => 'text',
+				'type'    => 'text',
+				'who'     => 'text',
+				'ip'      => 'text',
+				'status'  => array( 'type' => 'enum', 'values' => array( 'locked', 'expired', 'released' ) ),
+				'locked'  => 'bool',
+				'date'    => array( 'type' => 'datetime', 'stored' => 'utc', 'wire' => 'z' ),
+				'expires' => array( 'type' => 'datetime', 'stored' => 'utc', 'wire' => 'z' ),
+			),
+		),
+		'actions' => array(
+			// Through their own release_lockout(), which clears the active flag.
+			'release' => array(
+				'gate'   => 'manage',
+				'run'    => function ( $id ) {
+					global $itsec_lockout;
+					if ( ! $itsec_lockout || ! method_exists( $itsec_lockout, 'release_lockout' ) ) {
+						return new WP_Error( 'no_api', __( 'Solid Security\'s lockout API is not available.', 'minn-admin' ), array( 'status' => 500 ) );
+					}
+					return $itsec_lockout->release_lockout( $id );
+				},
+				'expect' => array( 'lockout_active' => array( 0 ) ),
+				'reply'  => function ( $id, $fresh ) {
+					$freed = minn_admin_solid_security_row( $fresh );
+					return array( 'message' => __( 'Released ', 'minn-admin' ) . ( '—' !== $freed['who'] ? $freed['who'] : $freed['ip'] ) );
+				},
+			),
+		),
+	);
+} );
+
+minn_admin_endpoint( 'solid-security/status', array(
+	'active' => 'minn_admin_solid_security_active',
+	'gate'   => 'minn_admin_solid_security_can',
+	'run'    => function () {
+		$lockouts = array( 'table' => 'itsec_lockouts', 'network' => true );
+		$active   = Minn_Admin_Kernel_SQL::count( $lockouts, array( 'lockout_active' => 1, 'lockout_expire_gmt' => array( 'op' => '>', 'value' => gmdate( 'Y-m-d H:i:s' ) ) ) );
+		$total    = Minn_Admin_Kernel_SQL::count( $lockouts );
+		$bans     = Minn_Admin_Kernel_SQL::exists( array( 'table' => 'itsec_bans', 'network' => true ) ) ? Minn_Admin_Kernel_SQL::count( array( 'table' => 'itsec_bans', 'network' => true ) ) : 0;
+		// Fourteen site-local days of lockouts; lockout_start_gmt is UTC.
+		$days     = Minn_Admin_Kernel_SQL::chart_days( array( 'table' => $lockouts, 'column' => 'lockout_start_gmt', 'clock' => 'utc' ) );
+		try {
+			$modules = (array) ITSEC_Modules::get_active_modules();
+		} catch ( \Throwable $e ) {
+			$modules = array();
+		}
+		$names = array(
+			'brute-force'         => __( 'Brute force', 'minn-admin' ),
+			'network-brute-force' => __( 'Network brute force', 'minn-admin' ),
+			'firewall'            => __( 'Firewall', 'minn-admin' ),
+			'two-factor'          => __( 'Two-factor', 'minn-admin' ),
+			'ban-users'           => __( 'Ban hosts', 'minn-admin' ),
+			'file-change'         => __( 'File change detection', 'minn-admin' ),
+			'malware-scheduling'  => __( 'Scheduled scans', 'minn-admin' ),
+		);
+		$on    = array();
+		foreach ( $names as $slug => $label ) {
+			if ( in_array( $slug, $modules, true ) ) {
+				$on[] = $label;
+			}
+		}
+		return array(
+			'rows'    => array(
+				array( 'label' => __( 'Locked out now', 'minn-admin' ), 'value' => $active ? (string) $active : 'Nobody' ),
+				array( 'label' => __( 'Lockouts all-time', 'minn-admin' ), 'value' => (string) $total ),
+				array( 'label' => __( 'Banned hosts', 'minn-admin' ), 'value' => (string) $bans ),
+				array( 'label' => __( 'Protection on', 'minn-admin' ), 'value' => $on ? implode( ' · ', $on ) : __( 'No protection modules active', 'minn-admin' ) ),
+			),
+			'chart'   => minn_admin_chart_build( $days, __( 'Lockouts', 'minn-admin' ) ),
+			'actions' => array(
+				array( 'label' => __( 'Open Solid Security ↗', 'minn-admin' ), 'href' => minn_admin_solid_security_admin_url() ),
+			),
+		);
+	},
+) );
 
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! minn_admin_solid_security_active() || ! minn_admin_solid_security_can() ) {
@@ -123,13 +221,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		// real gate (the LLA-R / Gravity Forms cap-model precedent).
 		'cap'        => 'read',
 		'status'     => array( 'route' => 'minn-admin/v1/solid-security/status' ),
-		'collection' => array(
-			'route'     => 'minn-admin/v1/solid-security/lockouts',
-			'pageQuery' => 'per_page=25&page={page}',
-			'search'    => 'search={q}',
-			'dateQuery' => 'after={from}&before={to}',
-			'itemsKey'  => 'items',
-			'totalKey'  => 'total',
+		'collection' => Minn_Admin_Kernel::collection( 'solid-security/lockouts', array(
 			'tabs'      => array(
 				'param'    => 'kind',
 				'static'   => array(
@@ -148,163 +240,15 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'skip' => array( 'message', 'locked' ),
 			),
 			'actions'   => array(
-				array(
-					'label'  => __( 'Release lockout', 'minn-admin' ),
-					'method' => 'POST',
-					'route'  => 'minn-admin/v1/solid-security/lockouts/{id}/release',
-					'when'   => array( 'key' => 'locked', 'equals' => true ),
-				),
+				Minn_Admin_Kernel::ui( 'solid-security/lockouts', 'release', array(
+					'label' => __( 'Release lockout', 'minn-admin' ),
+					'key'   => 'locked',
+					'when'  => true,
+				) ),
 			),
-		),
+		) ),
 	);
 	return $surfaces;
-} );
-
-add_action( 'rest_api_init', function () {
-	if ( ! minn_admin_solid_security_active() ) {
-		return;
-	}
-
-	register_rest_route( 'minn-admin/v1', '/solid-security/lockouts', array(
-		'methods'             => 'GET',
-		'permission_callback' => 'minn_admin_solid_security_can',
-		'callback'            => function ( WP_REST_Request $request ) {
-			global $wpdb;
-			$table    = $wpdb->base_prefix . 'itsec_lockouts';
-			$per_page = min( 100, max( 1, (int) ( $request['per_page'] ?: 25 ) ) );
-			$page     = max( 1, (int) ( $request['page'] ?: 1 ) );
-
-			$where = '1=1';
-			$args  = array();
-			if ( 'locked' === $request['kind'] ) {
-				$where .= " AND lockout_active = 1 AND lockout_expire_gmt > %s";
-				$args[] = gmdate( 'Y-m-d H:i:s' );
-			}
-			if ( $request['search'] ) {
-				$like   = '%' . $wpdb->esc_like( (string) $request['search'] ) . '%';
-				$where .= ' AND (lockout_host LIKE %s OR lockout_username LIKE %s)';
-				$args[] = $like;
-				$args[] = $like;
-			}
-			// A clicked chart bar: site-local bounds onto the GMT column.
-			list( $range_sql, $range_args ) = minn_admin_chart_range_clause( $request, 'lockout_start_gmt', 'utc' );
-			if ( $range_sql ) {
-				$where .= ' AND ' . implode( ' AND ', $range_sql );
-				$args   = array_merge( $args, $range_args );
-			}
-
-			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table prefix-derived; WHERE placeholder-built.
-			$total = (int) ( $args
-				? $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE {$where}", $args ) )
-				: $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE {$where}" ) );
-			$rows = $wpdb->get_results( $wpdb->prepare(
-				"SELECT * FROM {$table} WHERE {$where} ORDER BY lockout_id DESC LIMIT %d OFFSET %d",
-				array_merge( $args, array( $per_page, ( $page - 1 ) * $per_page ) )
-			) );
-			// phpcs:enable
-
-			return rest_ensure_response( array(
-				'items' => array_map( 'minn_admin_solid_security_row', (array) $rows ),
-				'total' => $total,
-			) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/solid-security/lockouts/(?P<id>\d+)/release', array(
-		'methods'             => 'POST',
-		'permission_callback' => 'minn_admin_solid_security_can',
-		'callback'            => function ( WP_REST_Request $request ) {
-			global $itsec_lockout, $wpdb;
-			$id = (int) Minn_Admin::path_param( $request );
-			if ( ! $itsec_lockout || ! method_exists( $itsec_lockout, 'release_lockout' ) ) {
-				return new WP_Error( 'no_api', __( 'Solid Security\'s lockout API is not available.', 'minn-admin' ), array( 'status' => 500 ) );
-			}
-			$row = $wpdb->get_row( $wpdb->prepare(
-				"SELECT * FROM {$wpdb->base_prefix}itsec_lockouts WHERE lockout_id = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$id
-			) );
-			if ( ! $row ) {
-				return new WP_Error( 'not_found', __( 'Lockout not found', 'minn-admin' ), array( 'status' => 404 ) );
-			}
-			$itsec_lockout->release_lockout( $id );
-			$freed = minn_admin_solid_security_row( $row );
-			return rest_ensure_response( array( 'ok' => true, 'message' => __( 'Released ', 'minn-admin' ) . ( '—' !== $freed['who'] ? $freed['who'] : $freed['ip'] ) ) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/solid-security/status', array(
-		'methods'             => 'GET',
-		'permission_callback' => 'minn_admin_solid_security_can',
-		'callback'            => function () {
-			global $wpdb;
-			$table  = $wpdb->base_prefix . 'itsec_lockouts';
-			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			$active = (int) $wpdb->get_var( $wpdb->prepare(
-				"SELECT COUNT(*) FROM {$table} WHERE lockout_active = 1 AND lockout_expire_gmt > %s",
-				gmdate( 'Y-m-d H:i:s' )
-			) );
-			$total = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
-			$bans  = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->base_prefix}itsec_bans" );
-			// Fourteen site-local days of lockouts. lockout_start_gmt is UTC,
-			// so the day it lands on is computed in SQL with the site's
-			// offset and grouped there.
-			$days   = minn_admin_chart_days();
-			$day_ex = minn_admin_chart_utc_day_sql( 'lockout_start_gmt' );
-			$series = $wpdb->get_results( $wpdb->prepare(
-				"SELECT {$day_ex} AS d, COUNT(*) AS c FROM {$table} WHERE lockout_start_gmt >= %s GROUP BY d",
-				minn_admin_chart_utc_since()
-			) );
-			// phpcs:enable
-			foreach ( (array) $series as $row ) {
-				minn_admin_chart_bump( $days, (string) $row->d, false, (int) $row->c );
-			}
-			$modules = array();
-			try {
-				$modules = (array) ITSEC_Modules::get_active_modules();
-			} catch ( \Throwable $e ) {
-				$modules = array();
-			}
-			$names   = array(
-				'brute-force'         => __( 'Brute force', 'minn-admin' ),
-				'network-brute-force' => __( 'Network brute force', 'minn-admin' ),
-				'firewall'            => __( 'Firewall', 'minn-admin' ),
-				'two-factor'          => __( 'Two-factor', 'minn-admin' ),
-				'ban-users'           => __( 'Ban hosts', 'minn-admin' ),
-				'file-change'         => __( 'File change detection', 'minn-admin' ),
-				'malware-scheduling'  => __( 'Scheduled scans', 'minn-admin' ),
-			);
-			$on = array();
-			foreach ( $names as $slug => $label ) {
-				if ( in_array( $slug, $modules, true ) ) {
-					$on[] = $label;
-				}
-			}
-			return rest_ensure_response( array(
-				'rows'    => array(
-					array(
-						'label' => __( 'Locked out now', 'minn-admin' ),
-						'value' => $active ? (string) $active : 'Nobody',
-					),
-					array(
-						'label' => __( 'Lockouts all-time', 'minn-admin' ),
-						'value' => (string) $total,
-					),
-					array(
-						'label' => __( 'Banned hosts', 'minn-admin' ),
-						'value' => (string) $bans,
-					),
-					array(
-						'label' => __( 'Protection on', 'minn-admin' ),
-						'value' => $on ? implode( ' · ', $on ) : __( 'No protection modules active', 'minn-admin' ),
-					),
-				),
-				'chart'   => minn_admin_chart_build( $days, __( 'Lockouts', 'minn-admin' ) ),
-				'actions' => array(
-					array( 'label' => __( 'Open Solid Security ↗', 'minn-admin' ), 'href' => minn_admin_solid_security_admin_url() ),
-				),
-			) );
-		},
-	) );
 } );
 
 /**

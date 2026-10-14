@@ -70,12 +70,13 @@ function minn_admin_aryo_can_view() {
  * else sees nothing. The object types come from Aryo's module table the
  * same way (aal_init_roles): each capability's list the viewer holds, all
  * of them for view_all_aryo_activity_log, so a type a third party logs
- * outside that table stays hidden, as Aryo hides it. Its literals are
- * escaped and carry no placeholders; a % is doubled for prepare().
+ * outside that table stays hidden, as Aryo hides it. Their clause is two
+ * lists of exact matches, read back as values; one that does not parse
+ * the way they build it shows nothing.
  *
- * @return string|false SQL without a leading AND.
+ * @return array|null Conditions, or null when Aryo shows this viewer nothing.
  */
-function minn_admin_aryo_scope_sql() {
+function minn_admin_aryo_scope() {
 	if ( ! class_exists( 'AAL_Log_Query' ) || ! method_exists( 'AAL_Log_Query', 'get_where_by_role' ) ) {
 		$modules = apply_filters(
 			'aal_init_roles',
@@ -102,24 +103,44 @@ function minn_admin_aryo_scope_sql() {
 		$table = is_array( $table ) ? $table : array();
 		$first = strtolower( (string) array_key_first( (array) wp_get_current_user()->caps ) );
 		$allow = is_super_admin() || current_user_can( 'view_all_aryo_activity_log' ) ? ( $table['administrator'] ?? array() ) : ( $table[ $first ] ?? array() );
-		$in = static function ( $column, $values ) {
-			$or = array();
-			foreach ( array_unique( array_filter( (array) $values, 'is_scalar' ) ) as $v ) {
-				if ( '' !== (string) $v ) {
-					$or[] = "`{$column}` = '" . esc_sql( (string) $v ) . "'";
-				}
-			}
-			return $or ? '( ' . implode( ' OR ', $or ) . ' )' : '';
+		$clean = function ( $values ) {
+			return array_values( array_unique( array_filter( array_map( 'strval', array_filter( (array) $values, 'is_scalar' ) ), 'strlen' ) ) );
 		};
-		$type_sql = $in( 'object_type', $types );
-		$cap_sql  = $in( 'user_caps', $allow );
-		return '' !== $type_sql && '' !== $cap_sql ? $type_sql . ' AND ' . $cap_sql : false;
+		$types = $clean( $types );
+		$allow = $clean( $allow );
+		return $types && $allow ? array( 'object_type' => $types, 'user_caps' => $allow ) : null;
 	}
-	$sql = ( new AAL_Log_Query() )->get_where_by_role();
-	if ( ! is_string( $sql ) || '' === trim( $sql ) ) {
-		return false;
+	return minn_admin_aryo_parse_scope( ( new AAL_Log_Query() )->get_where_by_role() );
+}
+
+/**
+ * Aryo's role clause read back as values: "AND (`object_type` = '…' OR …)
+ * AND (`user_caps` = '…' OR …)", each value as esc_sql() wrote it. Anything
+ * else, false included, is null: Aryo shows this viewer nothing.
+ *
+ * @param mixed $sql AAL_Log_Query::get_where_by_role().
+ * @return array|null
+ */
+function minn_admin_aryo_parse_scope( $sql ) {
+	$val = "'((?:[^'\\\\]|\\\\.)*)'";
+	$in  = function ( $col ) use ( $val ) {
+		return '\\((`' . $col . '` = ' . $val . '(?: OR `' . $col . '` = ' . $val . ')*)\\)';
+	};
+	if ( ! is_string( $sql ) || ! preg_match( '/^\\s*AND ' . $in( 'object_type' ) . ' AND ' . $in( 'user_caps' ) . '\\s*$/s', $sql, $m ) ) {
+		return null;
 	}
-	return str_replace( '%', '%%', (string) preg_replace( '/^\s*AND\s+/i', '', $sql ) );
+	global $wpdb;
+	$read = function ( $group ) use ( $val, $wpdb ) {
+		preg_match_all( '/= ' . $val . '/', $group, $hits );
+		// Undo esc_sql(): mysqli's escapes, then WordPress's % placeholder.
+		$codes = array( '0' => "\0", 'n' => "\n", 'r' => "\r", 'Z' => "\x1a" );
+		return array_map( function ( $v ) use ( $wpdb, $codes ) {
+			return $wpdb->remove_placeholder_escape( (string) preg_replace_callback( '/\\\\(.)/s', function ( $m ) use ( $codes ) {
+				return $codes[ $m[1] ] ?? $m[1];
+			}, $v ) );
+		}, $hits[1] );
+	};
+	return array( 'object_type' => $read( $m[1] ), 'user_caps' => $read( $m[4] ) );
 }
 
 function minn_admin_aryo_admin_url() {
@@ -149,25 +170,7 @@ function minn_admin_aryo_action_label( $action ) {
  * @return bool
  */
 function minn_admin_aryo_source_ready() {
-	static $ready = null;
-	if ( null !== $ready ) {
-		return $ready;
-	}
-	global $wpdb;
-	$table = $wpdb->prefix . 'aryo_activity_log';
-	// The same existence check the status model makes first. Asking SHOW
-	// COLUMNS of a table that is not there writes a database error into the
-	// surfaces payload under WP_DEBUG, which is how a subsite created after
-	// network activation reports a missing column.
-	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
-		$ready = false;
-		return $ready;
-	}
-	$col = $wpdb->get_var( $wpdb->prepare( "SHOW COLUMNS FROM `{$table}` LIKE %s", 'request_source' ) );
-	// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-	$ready = ! empty( $col );
-	return $ready;
+	return Minn_Admin_Kernel_SQL::has_column( 'aryo_activity_log', 'request_source' );
 }
 
 /**
@@ -241,97 +244,153 @@ function minn_admin_aryo_source_options() {
 	return $out;
 }
 
+/** One Aryo row as its row in the list. */
+function minn_admin_aryo_row( array $r ) {
+	$uid  = (int) $r['user_id'];
+	$user = $uid ? get_userdata( $uid ) : false;
+	$item = array(
+		'id'      => (int) $r['histid'],
+		'message' => trim( $r['object_type'] . ( $r['object_name'] ? ': ' . $r['object_name'] : '' ) ),
+		'who'     => $uid ? ( $user ? $user->user_login : '#' . $uid ) : 'Guest',
+		// In words, as the tabs above the list say it.
+		'action'  => minn_admin_aryo_action_label( $r['action'] ),
+		'type'    => $r['object_type'] . ( $r['object_subtype'] ? ' / ' . $r['object_subtype'] : '' ),
+		'ip'      => $r['hist_ip'],
+		'date'    => $r['hist_time'],
+	);
+	if ( array_key_exists( 'request_source', $r ) ) {
+		list( $channel, $app ) = minn_admin_aryo_parse_source( (string) $r['request_source'] );
+		$labels                = minn_admin_aryo_channel_labels();
+		$item['source']        = '' === $channel ? __( 'Browser', 'minn-admin' ) : ( $labels[ $channel ] ?? $channel );
+		if ( '' !== $app ) {
+			$item['app_password'] = $app;
+		}
+	}
+	return $item;
+}
+
+minn_admin_resource( 'aryo/events', function () {
+	return array(
+		'active' => function () {
+			return class_exists( 'AAL_Main' );
+		},
+		'gates'  => array( 'view' => 'minn_admin_aryo_can_view' ),
+		'source' => array(
+			'table'   => 'aryo_activity_log',
+			'key'     => 'histid',
+			// request_source once their 2.14 migration has added it.
+			'columns' => function () {
+				return array_merge( array( 'histid', 'action', 'object_type', 'object_subtype', 'object_name', 'user_id', 'hist_ip', 'hist_time' ), minn_admin_aryo_source_ready() ? array( 'request_source' ) : array() );
+			},
+			// Only the rows Aryo would show this viewer, on every read.
+			'where'   => 'minn_admin_aryo_scope',
+		),
+		'list'   => array(
+			'facets' => array(
+				array( 'param' => 'action', 'column' => 'action', 'type' => 'key' ),
+				// Where the change came from, matched as their own query matches it:
+				// no channel is the browser, an app password rides any channel.
+				array( 'param' => 'source', 'values' => function ( $v ) {
+					$v = sanitize_key( $v );
+					if ( '' === $v || ! minn_admin_aryo_source_ready() ) {
+						return null;
+					}
+					if ( 'browser' === $v ) {
+						return array( 'request_source' => array( 'any' => array( '', null ) ) );
+					}
+					if ( 'app_password' === $v ) {
+						return array( 'request_source' => array( 'any' => array( array( 'contains' => '|app:' ), array( 'starts' => 'app:' ) ) ) );
+					}
+					return array( 'request_source' => array( 'any' => array( $v, array( 'starts' => $v . '|' ) ) ) );
+				} ),
+			),
+			'search' => array(
+				'columns' => array( 'object_name', 'action', 'object_type' ),
+				// The pill shows an action in words ("Failed Login" for
+				// failed_login), so the words find it too: every action this
+				// viewer may read whose label carries the term.
+				'also'    => function ( $term ) {
+					$named = array();
+					foreach ( Minn_Admin_Kernel::distinct( 'aryo/events', 'action', array( 'action' => array( 'op' => '!=', 'value' => '' ) ) ) as $a ) {
+						$label = minn_admin_aryo_action_label( $a );
+						if ( false !== ( function_exists( 'mb_stripos' ) ? mb_stripos( $label, $term ) : stripos( $label, $term ) ) ) {
+							$named[] = $a;
+						}
+					}
+					return $named ? array( 'action' => $named ) : null;
+				},
+			),
+			// Aryo stores current_time('timestamp'): the site's wall clock read as an epoch.
+			'range'  => array( 'column' => 'hist_time', 'clock' => 'local-epoch' ),
+			'order'  => array( 'column' => 'hist_time' ),
+			'row'    => 'minn_admin_aryo_row',
+			'fields' => array(
+				'id'           => 'int',
+				'message'      => 'text',
+				'who'          => 'text',
+				'action'       => 'text',
+				'type'         => 'text',
+				'ip'           => 'text',
+				// Read back in the site's zone at the offset that date had, sent as UTC with a Z.
+				'date'         => array( 'type' => 'datetime', 'stored' => 'local-epoch', 'wire' => 'z' ),
+				'source'       => 'text',
+				'app_password' => 'text',
+			),
+		),
+	);
+} );
+
 /**
- * Status-card model for Aryo Activity Log.
+ * Status-card model for Aryo Activity Log, over the rows Aryo shows this viewer.
  *
  * @return array{rows:array,actions:array}
  */
 function minn_admin_aryo_status_model() {
-	global $wpdb;
-	$table = $wpdb->prefix . 'aryo_activity_log';
-	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
+	$open = array( array( 'label' => __( 'Open Activity Log ↗', 'minn-admin' ), 'href' => minn_admin_aryo_admin_url() ) );
+	$n    = Minn_Admin_Kernel::log_counts( 'aryo/events', array(
+		'top' => array( 'column' => 'action', 'where' => array( 'action' => array( 'op' => '!=', 'value' => '' ) ) ),
+	) );
+	if ( null === $n ) {
 		return array(
 			'rows'    => array( array( 'label' => __( 'Events', 'minn-admin' ), 'value' => '—', 'hint' => __( 'Log table not found', 'minn-admin' ) ) ),
-			'actions' => array( array( 'label' => __( 'Open Activity Log ↗', 'minn-admin' ), 'href' => minn_admin_aryo_admin_url() ) ),
+			'actions' => $open,
 		);
 	}
-	// The counts cover only the rows Aryo would show this viewer.
-	$scope = minn_admin_aryo_scope_sql();
-	$scope = false === $scope ? '1=0' : ( '' === $scope ? '1=1' : $scope );
-	// hist_time is site-local epoch — compare against current_time('timestamp').
-	$now     = (int) current_time( 'timestamp' );
-	$since_d = $now - DAY_IN_SECONDS;
-	$since_w = $now - ( 7 * DAY_IN_SECONDS );
-	$total   = (int) $wpdb->get_var( str_replace( '%%', '%', "SELECT COUNT(*) FROM {$table} WHERE {$scope}" ) );
-	$day     = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE hist_time >= %d AND {$scope}", $since_d ) );
-	$week    = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE hist_time >= %d AND {$scope}", $since_w ) );
-	$last    = $wpdb->get_var( str_replace( '%%', '%', "SELECT hist_time FROM {$table} WHERE {$scope} ORDER BY histid DESC LIMIT 1" ) );
-	$top     = $wpdb->get_row( $wpdb->prepare(
-		"SELECT action, COUNT(*) AS c FROM {$table}
-		 WHERE hist_time >= %d AND action != '' AND {$scope}
-		 GROUP BY action ORDER BY c DESC LIMIT 1",
-		$since_w
-	) );
-	// Fourteen site-local days of events. hist_time is the site's wall
-	// clock read as an epoch (current_time('timestamp')), so it buckets by
-	// plain day arithmetic with no offset (the local-epoch clock).
-	$days   = minn_admin_chart_days();
-	$day_ex = minn_admin_chart_epoch_day_sql( 'hist_time', 'local-epoch' );
-	$series = $wpdb->get_results( $wpdb->prepare(
-		"SELECT {$day_ex} AS d, COUNT(*) AS c FROM {$table} WHERE hist_time >= %d AND {$scope} GROUP BY d",
-		minn_admin_chart_epoch_since( 14, 'local-epoch' )
-	) );
-	// phpcs:enable
-	foreach ( (array) $series as $row ) {
-		minn_admin_chart_bump( $days, minn_admin_chart_epoch_bucket_day( $row->d ), false, (int) $row->c );
-	}
-
-	$last_label = '—';
-	if ( $last ) {
-		// Display relative to "now" in the same clock the row used (site local).
-		$last_label = sprintf(
-			/* translators: %s: human-readable time since the last event. */
-			__( '%s ago', 'minn-admin' ),
-			human_time_diff( (int) $last, $now )
-		);
-	}
-	$top_label = '—';
-	if ( $top && ! empty( $top->action ) ) {
-		$top_label = minn_admin_aryo_action_label( $top->action )
-			. ' (' . number_format_i18n( (int) $top->c ) . ')';
-	}
-
+	$rows   = Minn_Admin_Kernel::event_rows( $n );
+	$rows[] = array(
+		'label' => __( 'Top action (7d)', 'minn-admin' ),
+		'value' => $n['top'] ? minn_admin_aryo_action_label( $n['top']['value'] ) . ' (' . number_format_i18n( $n['top']['count'] ) . ')' : '—',
+	);
 	return array(
-		'rows'    => array(
-			array(
-				'label' => __( 'Events (24h)', 'minn-admin' ),
-				'value' => number_format_i18n( $day ),
-				'hint'  => sprintf(
-					/* translators: %s: number of events recorded in the last 7 days. */
-					__( '%s in the last 7 days', 'minn-admin' ),
-					number_format_i18n( $week )
-				),
-			),
-			array(
-				'label' => __( 'Events all-time', 'minn-admin' ),
-				'value' => number_format_i18n( $total ),
-			),
-			array(
-				'label' => __( 'Last event', 'minn-admin' ),
-				'value' => $last_label,
-			),
-			array(
-				'label' => __( 'Top action (7d)', 'minn-admin' ),
-				'value' => $top_label,
-			),
-		),
-		'chart'   => minn_admin_chart_build( $days, __( 'Events', 'minn-admin' ) ),
-		'actions' => array(
-			array( 'label' => __( 'Open Activity Log ↗', 'minn-admin' ), 'href' => minn_admin_aryo_admin_url() ),
-		),
+		'rows'    => array_values( $rows ),
+		'chart'   => minn_admin_chart_build( $n['days'], __( 'Events', 'minn-admin' ) ),
+		'actions' => $open,
 	);
 }
+
+minn_admin_endpoint( 'aryo/status', array(
+	'active' => function () {
+		return class_exists( 'AAL_Main' );
+	},
+	'gate'   => 'minn_admin_aryo_can_view',
+	'run'    => function () {
+		return minn_admin_aryo_status_model();
+	},
+) );
+
+minn_admin_endpoint( 'aryo/actions', array(
+	'active' => function () {
+		return class_exists( 'AAL_Main' );
+	},
+	'gate'   => 'minn_admin_aryo_can_view',
+	'run'    => function () {
+		$out = array();
+		foreach ( Minn_Admin_Kernel::distinct( 'aryo/events', 'action', array( 'action' => array( 'op' => '!=', 'value' => '' ) ) ) as $a ) {
+			$out[] = array( 'id' => $a, 'title' => minn_admin_aryo_action_label( $a ) );
+		}
+		return $out;
+	},
+) );
 
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! class_exists( 'AAL_Main' ) ) {
@@ -351,31 +410,25 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'icon'       => 'clock',
 		'cap'        => 'read', // real gating above + in the shim.
 		'status'     => array( 'route' => 'minn-admin/v1/aryo/status' ),
-		'collection' => array(
-			'route'     => 'minn-admin/v1/aryo/events',
-			'pageQuery' => 'per_page=25&page={page}',
-			'search'    => 'search={q}',
-			'dateQuery' => 'after={from}&before={to}',
-			'itemsKey'  => 'items',
-			'totalKey'  => 'total',
+		'collection' => Minn_Admin_Kernel::collection( 'aryo/events', array(
 			// Action is Aryo's first-class verb (logged_in / updated / installed…).
-			'tabs'      => array(
+			'tabs'    => array(
 				'route'    => 'minn-admin/v1/aryo/actions',
 				'valueKey' => 'id',
 				'labelKey' => 'title',
 				'param'    => 'action',
 				'allLabel' => __( 'All actions', 'minn-admin' ),
 			),
-			'columns'   => array(
+			'columns' => array(
 				array( 'key' => 'message', 'label' => __( 'Event', 'minn-admin' ), 'format' => 'title' ),
 				array( 'key' => 'who', 'label' => __( 'Who', 'minn-admin' ) ),
 				array( 'key' => 'action', 'label' => __( 'Action', 'minn-admin' ), 'format' => 'pill' ),
 				array( 'key' => 'date', 'label' => __( 'When', 'minn-admin' ), 'format' => 'ago' ),
 			),
-			'detail'    => array(
+			'detail'  => array(
 				'skip' => array( 'message' ),
 			),
-		),
+		) ),
 	);
 	if ( minn_admin_aryo_source_ready() ) {
 		// Where the change came from: the daily audit question, and the
@@ -393,161 +446,4 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		);
 	}
 	return $surfaces;
-} );
-
-add_action( 'rest_api_init', function () {
-	if ( ! class_exists( 'AAL_Main' ) ) {
-		return;
-	}
-
-	register_rest_route( 'minn-admin/v1', '/aryo/status', array(
-		'methods'             => 'GET',
-		'permission_callback' => 'minn_admin_aryo_can_view',
-		'callback'            => function () {
-			return rest_ensure_response( minn_admin_aryo_status_model() );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/aryo/actions', array(
-		'methods'             => 'GET',
-		'permission_callback' => 'minn_admin_aryo_can_view',
-		'callback'            => function () {
-			global $wpdb;
-			$table = $wpdb->prefix . 'aryo_activity_log';
-			$scope = minn_admin_aryo_scope_sql();
-			if ( false === $scope ) {
-				return rest_ensure_response( array() );
-			}
-			$scope = '' === $scope ? '' : ' AND ' . str_replace( '%%', '%', $scope );
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			$cols = $wpdb->get_col( "SELECT DISTINCT action FROM {$table} WHERE action != ''{$scope} ORDER BY action ASC" );
-			$out  = array();
-			foreach ( (array) $cols as $a ) {
-				$out[] = array(
-					'id'    => (string) $a,
-					'title' => minn_admin_aryo_action_label( $a ),
-				);
-			}
-			return rest_ensure_response( $out );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/aryo/events', array(
-		'methods'             => 'GET',
-		'permission_callback' => 'minn_admin_aryo_can_view',
-		'callback'            => function ( WP_REST_Request $request ) {
-			global $wpdb;
-			$table    = $wpdb->prefix . 'aryo_activity_log';
-			$per_page = min( 100, max( 1, (int) ( $request['per_page'] ?: 25 ) ) );
-			$page     = max( 1, (int) ( $request['page'] ?: 1 ) );
-			$where    = array( '1=1' );
-			$args     = array();
-			$scope    = minn_admin_aryo_scope_sql();
-			if ( false === $scope ) {
-				$where[] = '1=0';
-			} elseif ( '' !== $scope ) {
-				$where[] = $scope;
-			}
-
-			if ( $request['action'] ) {
-				$where[] = 'action = %s';
-				$args[]  = sanitize_key( (string) $request['action'] );
-			}
-			$source_ready = minn_admin_aryo_source_ready();
-			$source       = $source_ready ? sanitize_key( (string) $request['source'] ) : '';
-			if ( 'browser' === $source ) {
-				// No channel recorded: an ordinary wp-admin or front-end request.
-				$where[] = "( request_source = '' OR request_source IS NULL )";
-			} elseif ( 'app_password' === $source ) {
-				// Their own matching for "any Application Password".
-				$where[] = "( request_source LIKE '%|app:%' OR request_source LIKE 'app:%' )";
-			} elseif ( '' !== $source ) {
-				// Their own matching: the bare channel, or the channel with an app suffix.
-				$where[] = '( request_source = %s OR request_source LIKE %s )';
-				$args[]  = $source;
-				$args[]  = $wpdb->esc_like( $source ) . '|%';
-			}
-			if ( $request['search'] ) {
-				$q     = (string) $request['search'];
-				$like  = '%' . $wpdb->esc_like( $q ) . '%';
-				$match = '(object_name LIKE %s OR action LIKE %s OR object_type LIKE %s';
-				array_push( $args, $like, $like, $like );
-				// The pill shows an action in words ("Failed Login" for
-				// failed_login), so the words find it too: every action, among
-				// the rows this viewer may read, whose label carries the term.
-				// The row query below keeps the same scope.
-				if ( false !== $scope ) {
-					$in_scope = '' === $scope ? '' : ' AND ' . str_replace( '%%', '%', $scope );
-					$named    = array();
-					// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- prefix-derived table, Aryo's own scope clause.
-					foreach ( (array) $wpdb->get_col( "SELECT DISTINCT action FROM {$table} WHERE action != ''{$in_scope}" ) as $a ) {
-						$label = minn_admin_aryo_action_label( $a );
-						if ( false !== ( function_exists( 'mb_stripos' ) ? mb_stripos( $label, $q ) : stripos( $label, $q ) ) ) {
-							$named[] = (string) $a;
-						}
-					}
-					if ( $named ) {
-						$match .= ' OR action IN (' . implode( ', ', array_fill( 0, count( $named ), '%s' ) ) . ')';
-						$args   = array_merge( $args, $named );
-					}
-				}
-				$where[] = $match . ')';
-			}
-			// A clicked chart bar: site-local bounds onto the local-epoch column.
-			list( $range_sql, $range_args ) = minn_admin_chart_range_clause( $request, 'hist_time', 'local-epoch' );
-			$where = array_merge( $where, $range_sql );
-			$args  = array_merge( $args, $range_args );
-			$where_sql = implode( ' AND ', $where );
-
-			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table is prefix-derived; WHERE is placeholder-built.
-			$total = (int) ( $args
-				? $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE {$where_sql}", ...$args ) )
-				: $wpdb->get_var( str_replace( '%%', '%', "SELECT COUNT(*) FROM {$table} WHERE {$where_sql}" ) ) );
-			$source_col = $source_ready ? ', request_source' : '';
-			$rows = $wpdb->get_results( $wpdb->prepare(
-				"SELECT histid, action, object_type, object_subtype, object_name, user_id, hist_ip, hist_time{$source_col}
-				 FROM {$table} WHERE {$where_sql} ORDER BY hist_time DESC LIMIT %d OFFSET %d",
-				array_merge( $args, array( $per_page, ( $page - 1 ) * $per_page ) )
-			) );
-			// phpcs:enable
-
-			$labels = $source_ready ? minn_admin_aryo_channel_labels() : array();
-			$users  = array();
-			$items  = array();
-			$zone   = wp_timezone();
-			$utc    = new DateTimeZone( 'UTC' );
-			foreach ( (array) $rows as $r ) {
-				$uid = (int) $r->user_id;
-				if ( $uid && ! isset( $users[ $uid ] ) ) {
-					$u             = get_userdata( $uid );
-					$users[ $uid ] = $u ? $u->user_login : '#' . $uid;
-				}
-				$item = array(
-					'id'      => (int) $r->histid,
-					'message' => trim( $r->object_type . ( $r->object_name ? ': ' . $r->object_name : '' ) ),
-					'who'     => $uid ? $users[ $uid ] : 'Guest',
-					// In words, as the tabs above the list say it.
-					'action'  => minn_admin_aryo_action_label( $r->action ),
-					'type'    => $r->object_type . ( $r->object_subtype ? ' / ' . $r->object_subtype : '' ),
-					'ip'      => $r->hist_ip,
-					// Aryo stores current_time('timestamp'): the site's wall clock
-					// read as an epoch. Read it back in the site's zone, at the
-					// offset that date had (today's is an hour off for a stamp
-					// from the other side of a DST change), and send UTC with Z.
-					'date'    => ( new DateTimeImmutable( gmdate( 'Y-m-d H:i:s', (int) $r->hist_time ), $zone ) )->setTimezone( $utc )->format( 'Y-m-d\TH:i:s\Z' ),
-				);
-				if ( $source_ready ) {
-					list( $channel, $app ) = minn_admin_aryo_parse_source( isset( $r->request_source ) ? $r->request_source : '' );
-					$item['source'] = '' === $channel
-						? __( 'Browser', 'minn-admin' )
-						: ( isset( $labels[ $channel ] ) ? $labels[ $channel ] : $channel );
-					if ( '' !== $app ) {
-						$item['app_password'] = $app;
-					}
-				}
-				$items[] = $item;
-			}
-			return rest_ensure_response( array( 'items' => $items, 'total' => $total ) );
-		},
-	) );
 } );

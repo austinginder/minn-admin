@@ -4,8 +4,9 @@
  *
  * Simple History 5.x ships a full REST API (simple-history/v1/events with
  * standard WP pagination), so the list is a pure descriptor. The status
- * card is a thin Minn shim (prefix-scoped COUNTs on simple_history) so the
- * surface matches Solid / LLA-R / Wordfence daily-ops depth. Visibility
+ * card counts simple_history through the kernel, over the loggers this
+ * caller may read, so the surface matches Solid / LLA-R / Wordfence
+ * daily-ops depth. Visibility
  * follows Simple History's own view capability.
  *
  * last-sweep: 2026-09-19
@@ -93,21 +94,21 @@ function minn_admin_simple_history_admin_url() {
 }
 
 /**
- * The `logger IN (...)` fragment Simple History itself appends to every query.
+ * The loggers Simple History itself lets this caller read.
  *
- * Their Log_Query never reads the table without it: each logger declares a
+ * Their Log_Query never reads the table without them: each logger declares a
  * capability, so an Editor is shown posts and media but never the user,
  * options, plugin or core-update loggers. The collection route rides their own
- * REST endpoint and inherits that for free. Anything here that queries the
- * table directly has to reproduce it, or it reports on rows the same caller is
- * refused when they ask for them one by one.
+ * REST endpoint and inherits that for free. Anything here that reads the
+ * table directly has to hold to the same set, or it reports on rows the same
+ * caller is refused when they ask for them one by one.
  *
- * Returns null when their API is missing, so the caller can fall back to
- * refusing rather than to counting everything.
+ * Returns null when their API is missing, so the caller can refuse rather
+ * than count everything; an empty list when the caller may read no logger.
  *
- * @return string|null SQL fragment, already escaped by Simple History.
+ * @return string[]|null Logger slugs.
  */
-function minn_admin_simple_history_logger_scope() {
+function minn_admin_simple_history_loggers() {
 	if ( ! class_exists( 'Simple_History\\Simple_History' ) ) {
 		return null;
 	}
@@ -116,134 +117,77 @@ function minn_admin_simple_history_logger_scope() {
 		if ( ! method_exists( $sh, 'get_loggers_that_user_can_read' ) ) {
 			return null;
 		}
-		$sql = (string) $sh->get_loggers_that_user_can_read( get_current_user_id(), 'sql' );
-		// They return "(NULL)" when the user may read nothing, which matches no
-		// rows — the correct answer, not an empty filter.
-		return '' !== $sql ? $sql : null;
+		$slugs = array();
+		foreach ( (array) $sh->get_loggers_that_user_can_read( get_current_user_id(), 'array' ) as $logger ) {
+			if ( isset( $logger['instance'] ) && is_object( $logger['instance'] ) && method_exists( $logger['instance'], 'get_slug' ) ) {
+				$slugs[] = (string) $logger['instance']->get_slug();
+			}
+		}
+		return $slugs;
 	} catch ( \Throwable $e ) {
 		return null;
 	}
 }
 
 /**
- * Status-card model: 24h / 7d / all-time counts + level mix + last event.
+ * Status-card model: 24h / 7d / all-time counts + level mix + last event,
+ * over the loggers this caller may read.
  *
  * @return array{rows:array,actions:array}
  */
 function minn_admin_simple_history_status_model() {
-	global $wpdb;
-	$table = $wpdb->prefix . 'simple_history';
-	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- prefix-derived table.
-	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
+	$open    = array( array( 'label' => __( 'Open Simple History ↗', 'minn-admin' ), 'href' => minn_admin_simple_history_admin_url() ) );
+	$loggers = minn_admin_simple_history_loggers();
+	if ( null === $loggers ) {
 		return array(
-			'rows'    => array( array( 'label' => __( 'Events', 'minn-admin' ), 'value' => '—', 'hint' => __( 'History table not found', 'minn-admin' ) ) ),
-			'actions' => array( array( 'label' => __( 'Open Simple History ↗', 'minn-admin' ), 'href' => minn_admin_simple_history_admin_url() ) ),
+			'rows'    => array( array( 'label' => __( 'Events', 'minn-admin' ), 'value' => '—', 'hint' => __( 'Cannot determine which loggers you may read', 'minn-admin' ) ) ),
+			'actions' => $open,
 		);
 	}
 	// Count only what this caller is allowed to read, exactly as their own
 	// Log_Query does. Without it an Editor gets a live failed-login counter
 	// and an administrator-activity timeline from a screen the plugin blanks
 	// for them: failed logins are recorded by SimpleUserLogger, which asks
-	// for edit_users.
-	$scope = minn_admin_simple_history_logger_scope();
-	if ( null === $scope ) {
-		return array(
-			'rows'    => array( array( 'label' => __( 'Events', 'minn-admin' ), 'value' => '—', 'hint' => __( 'Cannot determine which loggers you may read', 'minn-admin' ) ) ),
-			'actions' => array( array( 'label' => __( 'Open Simple History ↗', 'minn-admin' ), 'href' => minn_admin_simple_history_admin_url() ) ),
-		);
-	}
-	$readable = " AND logger IN {$scope}";
-
-	// SH stores `date` as GMT (`current_time( 'mysql', 1 )`). Their REST
-	// layer exposes that as date_gmt and converts date_local via
-	// get_date_from_gmt. Comparing or parsing the column as site-local
-	// makes "Last event" equal the UTC offset (5 hours on
-	// America/Chicago in summer) while the list still says "just now".
-	$since_24h = gmdate( 'Y-m-d H:i:s', time() - DAY_IN_SECONDS );
-	$since_7d  = gmdate( 'Y-m-d H:i:s', time() - ( 7 * DAY_IN_SECONDS ) );
-
-	$total   = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE 1=1{$readable}" );
-	$day     = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE date >= %s{$readable}", $since_24h ) );
-	$week    = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE date >= %s{$readable}", $since_7d ) );
-	$errors  = (int) $wpdb->get_var( $wpdb->prepare(
-		"SELECT COUNT(*) FROM {$table} WHERE date >= %s AND level IN ('emergency','alert','critical','error'){$readable}",
-		$since_7d
-	) );
-	$warns   = (int) $wpdb->get_var( $wpdb->prepare(
-		"SELECT COUNT(*) FROM {$table} WHERE date >= %s AND level = 'warning'{$readable}",
-		$since_7d
-	) );
-	$last    = $wpdb->get_var( "SELECT date FROM {$table} WHERE 1=1{$readable} ORDER BY id DESC LIMIT 1" );
-	// Fourteen site-local days of events, errors split out. `date` is UTC, so
-	// the day it lands on is computed in SQL with the site's offset (the
-	// shared bucketer), grouped there so a busy log never streams every row.
+	// for edit_users. SH stores `date` as GMT (current_time( 'mysql', 1 )).
 	// Bars count EVENTS, the number their own counters report. Their list
 	// route folds repeats of one event into a single row with an occasions
-	// count (three plugin activations in a row are one row, "+2 more"), so
-	// a bar's total can exceed the rows a click narrows the list to. That is
-	// their screen's own arithmetic, not a windowing error.
-	$days   = minn_admin_chart_days();
-	$day_ex = minn_admin_chart_utc_day_sql( 'date' );
-	$series = $wpdb->get_results( $wpdb->prepare(
-		"SELECT {$day_ex} AS d, COUNT(*) AS c,
-			SUM(CASE WHEN level IN ('emergency','alert','critical','error') THEN 1 ELSE 0 END) AS e
-		 FROM {$table} WHERE date >= %s{$readable} GROUP BY d",
-		minn_admin_chart_utc_since()
+	// count, so a bar's total can exceed the rows a click narrows the list
+	// to. That is their screen's own arithmetic, not a windowing error.
+	$errors = array( 'emergency', 'alert', 'critical', 'error' );
+	$n      = Minn_Admin_Kernel::log_counts( array(
+		'table' => 'simple_history',
+		'key'   => 'id',
+		'where' => array( 'logger' => $loggers ),
+		'date'  => array( 'column' => 'date', 'clock' => 'utc' ),
+	), array(
+		'counts' => array(
+			'errors' => array( 'where' => array( 'level' => $errors ), 'window' => 7 * DAY_IN_SECONDS ),
+			'warns'  => array( 'where' => array( 'level' => 'warning' ), 'window' => 7 * DAY_IN_SECONDS ),
+		),
+		'chart'  => array( 'split' => 'level', 'secondary' => $errors ),
 	) );
-	// phpcs:enable
-	foreach ( (array) $series as $row ) {
-		// The soft bar is value + secondary, so the two series stay disjoint.
-		minn_admin_chart_bump( $days, (string) $row->d, false, (int) $row->c - (int) $row->e );
-		minn_admin_chart_bump( $days, (string) $row->d, true, (int) $row->e );
+	if ( null === $n ) {
+		return array(
+			'rows'    => array( array( 'label' => __( 'Events', 'minn-admin' ), 'value' => '—', 'hint' => __( 'History table not found', 'minn-admin' ) ) ),
+			'actions' => $open,
+		);
 	}
-
-	$last_label = '—';
-	if ( $last ) {
-		$ts = strtotime( $last . ' UTC' );
-		if ( $ts ) {
-			$last_label = sprintf(
-				/* translators: %s: human-readable time since the last event. */
-				__( '%s ago', 'minn-admin' ),
-				human_time_diff( $ts, time() )
-			);
-		} else {
-			$last_label = (string) $last;
-		}
-	}
-
 	$mix = array();
-	if ( $errors ) {
-		$mix[] = number_format_i18n( $errors ) . ' error' . ( 1 === $errors ? '' : 's' );
+	if ( $n['counts']['errors'] ) {
+		$mix[] = number_format_i18n( $n['counts']['errors'] ) . ' error' . ( 1 === $n['counts']['errors'] ? '' : 's' );
 	}
-	if ( $warns ) {
-		$mix[] = number_format_i18n( $warns ) . ' warning' . ( 1 === $warns ? '' : 's' );
+	if ( $n['counts']['warns'] ) {
+		$mix[] = number_format_i18n( $n['counts']['warns'] ) . ' warning' . ( 1 === $n['counts']['warns'] ? '' : 's' );
 	}
-
+	$rows   = Minn_Admin_Kernel::event_rows( $n );
+	$rows[] = array(
+		'label' => __( 'Severity (7d)', 'minn-admin' ),
+		'value' => $mix ? implode( ' · ', $mix ) : __( 'No errors or warnings', 'minn-admin' ),
+	);
 	return array(
-		'rows'    => array(
-			array(
-				'label' => __( 'Events (24h)', 'minn-admin' ),
-				'value' => number_format_i18n( $day ),
-				/* translators: %s: number of events logged in the last 7 days. */
-				'hint'  => sprintf( __( '%s in the last 7 days', 'minn-admin' ), number_format_i18n( $week ) ),
-			),
-			array(
-				'label' => __( 'Events all-time', 'minn-admin' ),
-				'value' => number_format_i18n( $total ),
-			),
-			array(
-				'label' => __( 'Last event', 'minn-admin' ),
-				'value' => $last_label,
-			),
-			array(
-				'label' => __( 'Severity (7d)', 'minn-admin' ),
-				'value' => $mix ? implode( ' · ', $mix ) : __( 'No errors or warnings', 'minn-admin' ),
-			),
-		),
-		'chart'   => minn_admin_chart_build( $days, __( 'Events', 'minn-admin' ), __( 'Errors', 'minn-admin' ) ),
-		'actions' => array(
-			array( 'label' => __( 'Open Simple History ↗', 'minn-admin' ), 'href' => minn_admin_simple_history_admin_url() ),
-		),
+		'rows'    => array_values( $rows ),
+		'chart'   => minn_admin_chart_build( $n['days'], __( 'Events', 'minn-admin' ), __( 'Errors', 'minn-admin' ) ),
+		'actions' => $open,
 	);
 }
 
@@ -445,15 +389,12 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	return $surfaces;
 } );
 
-add_action( 'rest_api_init', function () {
-	if ( ! defined( 'SIMPLE_HISTORY_VERSION' ) ) {
-		return;
-	}
-	register_rest_route( 'minn-admin/v1', '/simple-history/status', array(
-		'methods'             => 'GET',
-		'permission_callback' => 'minn_admin_simple_history_can',
-		'callback'            => function () {
-			return rest_ensure_response( minn_admin_simple_history_status_model() );
-		},
-	) );
-} );
+minn_admin_endpoint( 'simple-history/status', array(
+	'active' => function () {
+		return defined( 'SIMPLE_HISTORY_VERSION' );
+	},
+	'gate'   => 'minn_admin_simple_history_can',
+	'run'    => function () {
+		return minn_admin_simple_history_status_model();
+	},
+) );

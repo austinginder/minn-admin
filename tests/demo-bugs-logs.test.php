@@ -879,7 +879,8 @@ if ( ! defined( 'WSAL_VERSION' ) || ! function_exists( 'minn_admin_wsal_can_view
 // Runs last: All-In-One Security is not loaded here (its bundled task manager
 // re-runs its table migration on every load of an inactive copy), so a
 // stand-in AIO_WP_Security class gives this request the adapter's routes,
-// which read only the audit table. The class cannot be undone in this process.
+// which read only the audit table: the kernel registers what is active now.
+// The class cannot be undone in this process.
 $s10_aios_table = function_exists( 'minn_admin_aios_table' ) ? minn_admin_aios_table() : '';
 if ( ! $s10_noon ) {
 	$skip( 'S10 (All-In-One Security) this site\'s zone keeps one offset all year' );
@@ -889,13 +890,7 @@ if ( ! $s10_noon ) {
 	if ( ! function_exists( 'minn_admin_aios_active' ) || ! minn_admin_aios_active() ) {
 		// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a stand-in class for this request only.
 		eval( 'class AIO_WP_Security {}' );
-		foreach ( $GLOBALS['wp_filter']['rest_api_init']->callbacks as $aios_prio ) {
-			foreach ( $aios_prio as $aios_cb ) {
-				if ( $aios_cb['function'] instanceof Closure && 'all-in-one-security.php' === basename( ( new ReflectionFunction( $aios_cb['function'] ) )->getFileName() ) ) {
-					call_user_func( $aios_cb['function'] );
-				}
-			}
-		}
+		Minn_Admin_Kernel::register();
 	}
 	$s10_aios = 0;
 	try {

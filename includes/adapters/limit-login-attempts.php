@@ -81,8 +81,10 @@ function minn_admin_llar_rows() {
 			if ( ! is_array( $data ) ) {
 				$data = array( 'counter' => (int) $data );
 			}
+			// Their own screen's rule: locked while the address's lockout
+			// runs, whatever an older unlock flag on the row says.
 			$unlocked = ! empty( $data['unlocked'] );
-			$locked   = ! $unlocked && isset( $lockouts[ $ip ] ) && (int) $lockouts[ $ip ] > time();
+			$locked   = isset( $lockouts[ $ip ] ) && (int) $lockouts[ $ip ] > time();
 			$rows[]   = array(
 				'id'       => md5( $ip . '|' . $user ),
 				'message'  => __( 'Locked out: ', 'minn-admin' ) . $user,
@@ -90,7 +92,7 @@ function minn_admin_llar_rows() {
 				'ip'       => (string) $ip,
 				'attempts' => isset( $data['counter'] ) ? (int) $data['counter'] : 1,
 				'gateway'  => minn_admin_llar_gateway_label( isset( $data['gateway'] ) ? $data['gateway'] : '' ),
-				'status'   => $unlocked ? 'unlocked' : ( $locked ? 'locked' : 'expired' ),
+				'status'   => $locked ? 'locked' : ( $unlocked ? 'unlocked' : 'expired' ),
 				'locked'   => $locked,
 				// `date` is written with time(): a UTC epoch.
 				'date'     => ! empty( $data['date'] ) ? gmdate( 'Y-m-d\TH:i:s\Z', (int) $data['date'] ) : '',
@@ -126,6 +128,124 @@ function minn_admin_llar_admin_url() {
 	return admin_url( ( $top ? 'admin.php' : 'options-general.php' ) . '?page=limit-login-attempts' );
 }
 
+minn_admin_resource( 'llar/log', array(
+	'active' => 'minn_admin_llar_active',
+	'gates'  => array( 'view' => 'minn_admin_llar_can' ),
+	// The log lives in an option: the kernel filters and pages the rows.
+	'source' => array( 'rows' => 'minn_admin_llar_rows' ),
+	'list'   => array(
+		'facets' => array( array( 'param' => 'kind', 'values' => array( 'locked' => array( 'locked' => true ) ) ) ),
+		'search' => array( 'columns' => array( 'who', 'ip' ) ),
+		// A clicked chart bar, against each row's last-attempt instant.
+		'range'  => array( 'column' => 'date', 'clock' => 'epoch' ),
+		'fields' => array(
+			'id'       => 'text',
+			'message'  => 'text',
+			'who'      => 'text',
+			'ip'       => 'text',
+			'attempts' => 'int',
+			'gateway'  => 'text',
+			'status'   => array( 'type' => 'enum', 'values' => array( 'unlocked', 'locked', 'expired' ) ),
+			'locked'   => 'bool',
+			'date'     => 'text',
+		),
+	),
+) );
+
+minn_admin_endpoint( 'llar/status', array(
+	'active' => 'minn_admin_llar_active',
+	'gate'   => 'minn_admin_llar_can',
+	'run'    => function () {
+		$active = array();
+		foreach ( (array) \LLAR\Core\Config::get( 'lockouts' ) as $ip => $until ) {
+			if ( (int) $until > time() ) {
+				$active[] = (string) $ip;
+			}
+		}
+		$retries  = (int) \LLAR\Core\Config::get( 'allowed_retries' );
+		$duration = (int) \LLAR\Core\Config::get( 'lockout_duration' );
+		$total    = (int) \LLAR\Core\Config::get( 'lockouts_total' );
+		// Fourteen site-local days of lockouts: the same rows the list
+		// shows, counted on the day of their last attempt, so a bar's
+		// total is exactly what clicking it narrows the list to. Their
+		// retries_stats counter would draw attempts, which the list
+		// cannot narrow to (it holds lockouts, not attempts).
+		$days = minn_admin_chart_days();
+		foreach ( minn_admin_llar_rows() as $r ) {
+			$ts = $r['date'] ? strtotime( $r['date'] ) : false;
+			if ( false !== $ts ) {
+				minn_admin_chart_bump( $days, wp_date( 'Y-m-d', $ts ) );
+			}
+		}
+		return array(
+			'rows'    => array(
+				array(
+					'label' => __( 'Locked out now', 'minn-admin' ),
+					'value' => $active ? count( $active ) . ' IP' . ( 1 === count( $active ) ? '' : 's' ) : 'Nobody',
+					'hint'  => $active ? implode( ' · ', array_slice( $active, 0, 3 ) ) . ( count( $active ) > 3 ? ' …' : '' ) : '',
+				),
+				array(
+					'label' => __( 'Failed attempts (24h)', 'minn-admin' ),
+					'value' => (string) minn_admin_llar_retries_last_day(),
+				),
+				array(
+					'label' => __( 'Lockouts all-time', 'minn-admin' ),
+					'value' => (string) $total,
+				),
+				array(
+					'label' => __( 'Policy', 'minn-admin' ),
+					/* translators: 1: allowed retries before lockout, 2: human-readable lockout duration. */
+					'value' => $retries ? sprintf( __( '%1$d retries, then a %2$s lockout', 'minn-admin' ), $retries, human_time_diff( 0, max( 60, $duration ) ) ) : '—',
+				),
+			),
+			'chart'   => minn_admin_chart_build( $days, __( 'Lockouts', 'minn-admin' ) ),
+			'actions' => array(
+				array( 'label' => __( 'Open Limit Login Attempts ↗', 'minn-admin' ), 'href' => minn_admin_llar_admin_url() ),
+			),
+		);
+	},
+) );
+
+// Mirror the plugin's own ajax_unlock: drop the active lockout, mark the log
+// row unlocked, both through Config, and say done only once the log says so.
+minn_admin_endpoint( 'llar/log/(?P<id>[a-f0-9]{32})/unlock', array(
+	'methods' => 'POST',
+	'active'  => 'minn_admin_llar_active',
+	'gate'    => 'minn_admin_llar_can',
+	'run'     => function ( WP_REST_Request $request, array $ctx ) {
+		$log = \LLAR\Core\Config::get( 'logged' );
+		if ( ! is_array( $log ) ) {
+			return new WP_Error( 'minn_llar_missing', __( 'No lockout log.', 'minn-admin' ), array( 'status' => 404 ) );
+		}
+		foreach ( $log as $ip => $users ) {
+			foreach ( (array) $users as $user => $data ) {
+				if ( md5( $ip . '|' . $user ) !== $ctx['id'] ) {
+					continue;
+				}
+				$lockouts = (array) \LLAR\Core\Config::get( 'lockouts' );
+				if ( isset( $lockouts[ $ip ] ) ) {
+					unset( $lockouts[ $ip ] );
+					\LLAR\Core\Config::update( 'lockouts', $lockouts );
+				}
+				if ( ! is_array( $log[ $ip ][ $user ] ) ) {
+					$log[ $ip ][ $user ] = array( 'counter' => (int) $log[ $ip ][ $user ] );
+				}
+				$log[ $ip ][ $user ]['unlocked'] = true;
+				\LLAR\Core\Config::update( 'logged', $log );
+				// Unlocked means the address's lockout is gone (the flag alone
+				// can be left over from an earlier, expired lockout).
+				$after = \LLAR\Core\Config::get( 'logged' );
+				$still = (array) \LLAR\Core\Config::get( 'lockouts' );
+				if ( empty( $after[ $ip ][ $user ]['unlocked'] ) || ( isset( $still[ $ip ] ) && (int) $still[ $ip ] > time() ) ) {
+					return Minn_Admin_Kernel::fail( 'not_applied', __( 'The plugin reported success, but the change is not there.', 'minn-admin' ), 500 );
+				}
+				return array( 'ok' => true, 'message' => __( 'Unlocked ', 'minn-admin' ) . $ip );
+			}
+		}
+		return new WP_Error( 'minn_llar_missing', __( 'That lockout is no longer in the log.', 'minn-admin' ), array( 'status' => 404 ) );
+	},
+) );
+
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! minn_admin_llar_active() || ! minn_admin_llar_can() ) {
 		return $surfaces;
@@ -141,13 +261,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		// real gate (the Gravity Forms cap-model precedent).
 		'cap'        => 'read',
 		'status'     => array( 'route' => 'minn-admin/v1/llar/status' ),
-		'collection' => array(
-			'route'     => 'minn-admin/v1/llar/log',
-			'pageQuery' => 'per_page=25&page={page}',
-			'search'    => 'search={q}',
-			'dateQuery' => 'after={from}&before={to}',
-			'itemsKey'  => 'items',
-			'totalKey'  => 'total',
+		'collection' => Minn_Admin_Kernel::collection( 'llar/log', array(
 			'tabs'      => array(
 				'param'    => 'kind',
 				'static'   => array(
@@ -174,137 +288,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'when'   => array( 'key' => 'locked', 'equals' => true ),
 				),
 			),
-		),
+		) ),
 	);
 	return $surfaces;
-} );
-
-add_action( 'rest_api_init', function () {
-	if ( ! minn_admin_llar_active() ) {
-		return;
-	}
-
-	register_rest_route( 'minn-admin/v1', '/llar/log', array(
-		'methods'             => 'GET',
-		'permission_callback' => 'minn_admin_llar_can',
-		'callback'            => function ( WP_REST_Request $request ) {
-			$rows = minn_admin_llar_rows();
-			if ( 'locked' === $request['kind'] ) {
-				$rows = array_values( array_filter( $rows, function ( $r ) {
-					return $r['locked'];
-				} ) );
-			}
-			if ( $request['search'] ) {
-				$q    = strtolower( (string) $request['search'] );
-				$rows = array_values( array_filter( $rows, function ( $r ) use ( $q ) {
-					return false !== strpos( strtolower( $r['who'] ), $q ) || false !== strpos( strtolower( $r['ip'] ), $q );
-				} ) );
-			}
-			// A clicked chart bar. The log lives in an option, so the window is
-			// applied in PHP against each row's last-attempt instant (a UTC
-			// epoch the row already carries as an ISO Z string).
-			$from = minn_admin_chart_bound_epoch( (string) $request['after'] );
-			$to   = minn_admin_chart_bound_epoch( (string) $request['before'] );
-			if ( null !== $from || null !== $to ) {
-				$rows = array_values( array_filter( $rows, function ( $r ) use ( $from, $to ) {
-					$ts = $r['date'] ? strtotime( $r['date'] ) : false;
-					return false !== $ts && ( null === $from || $ts >= $from ) && ( null === $to || $ts <= $to );
-				} ) );
-			}
-			$per_page = min( 100, max( 1, (int) ( $request['per_page'] ?: 25 ) ) );
-			$page     = max( 1, (int) ( $request['page'] ?: 1 ) );
-			return rest_ensure_response( array(
-				'items' => array_slice( $rows, ( $page - 1 ) * $per_page, $per_page ),
-				'total' => count( $rows ),
-			) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/llar/status', array(
-		'methods'             => 'GET',
-		'permission_callback' => 'minn_admin_llar_can',
-		'callback'            => function () {
-			$lockouts = (array) \LLAR\Core\Config::get( 'lockouts' );
-			$active   = array();
-			foreach ( $lockouts as $ip => $until ) {
-				if ( (int) $until > time() ) {
-					$active[] = (string) $ip;
-				}
-			}
-			$retries  = (int) \LLAR\Core\Config::get( 'allowed_retries' );
-			$duration = (int) \LLAR\Core\Config::get( 'lockout_duration' );
-			$total    = (int) \LLAR\Core\Config::get( 'lockouts_total' );
-			// Fourteen site-local days of lockouts: the same rows the list
-			// shows, counted on the day of their last attempt, so a bar's
-			// total is exactly what clicking it narrows the list to. Their
-			// retries_stats counter would draw attempts, which the list
-			// cannot narrow to (it holds lockouts, not attempts).
-			$days = minn_admin_chart_days();
-			foreach ( minn_admin_llar_rows() as $r ) {
-				$ts = $r['date'] ? strtotime( $r['date'] ) : false;
-				if ( false !== $ts ) {
-					minn_admin_chart_bump( $days, wp_date( 'Y-m-d', $ts ) );
-				}
-			}
-			return rest_ensure_response( array(
-				'rows'    => array(
-					array(
-						'label' => __( 'Locked out now', 'minn-admin' ),
-						'value' => $active ? count( $active ) . ' IP' . ( 1 === count( $active ) ? '' : 's' ) : 'Nobody',
-						'hint'  => $active ? implode( ' · ', array_slice( $active, 0, 3 ) ) . ( count( $active ) > 3 ? ' …' : '' ) : '',
-					),
-					array(
-						'label' => __( 'Failed attempts (24h)', 'minn-admin' ),
-						'value' => (string) minn_admin_llar_retries_last_day(),
-					),
-					array(
-						'label' => __( 'Lockouts all-time', 'minn-admin' ),
-						'value' => (string) $total,
-					),
-					array(
-						'label' => __( 'Policy', 'minn-admin' ),
-						/* translators: 1: allowed retries before lockout, 2: human-readable lockout duration. */
-						'value' => $retries ? sprintf( __( '%1$d retries, then a %2$s lockout', 'minn-admin' ), $retries, human_time_diff( 0, max( 60, $duration ) ) ) : '—',
-					),
-				),
-				'chart'   => minn_admin_chart_build( $days, __( 'Lockouts', 'minn-admin' ) ),
-				'actions' => array(
-					array( 'label' => __( 'Open Limit Login Attempts ↗', 'minn-admin' ), 'href' => minn_admin_llar_admin_url() ),
-				),
-			) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/llar/log/(?P<id>[a-f0-9]{32})/unlock', array(
-		'methods'             => 'POST',
-		'permission_callback' => 'minn_admin_llar_can',
-		'callback'            => function ( WP_REST_Request $request ) {
-			$id  = (string) Minn_Admin::path_param( $request );
-			$log = \LLAR\Core\Config::get( 'logged' );
-			if ( ! is_array( $log ) ) {
-				return new WP_Error( 'minn_llar_missing', __( 'No lockout log.', 'minn-admin' ), array( 'status' => 404 ) );
-			}
-			foreach ( $log as $ip => $users ) {
-				foreach ( (array) $users as $user => $data ) {
-					if ( md5( $ip . '|' . $user ) !== $id ) {
-						continue;
-					}
-					// Mirror the plugin's own ajax_unlock: drop the active
-					// lockout, mark the log row unlocked, both through Config.
-					$lockouts = (array) \LLAR\Core\Config::get( 'lockouts' );
-					if ( isset( $lockouts[ $ip ] ) ) {
-						unset( $lockouts[ $ip ] );
-						\LLAR\Core\Config::update( 'lockouts', $lockouts );
-					}
-					if ( ! is_array( $log[ $ip ][ $user ] ) ) {
-						$log[ $ip ][ $user ] = array( 'counter' => (int) $log[ $ip ][ $user ] );
-					}
-					$log[ $ip ][ $user ]['unlocked'] = true;
-					\LLAR\Core\Config::update( 'logged', $log );
-					return rest_ensure_response( array( 'ok' => true, 'message' => __( 'Unlocked ', 'minn-admin' ) . $ip ) );
-				}
-			}
-			return new WP_Error( 'minn_llar_missing', __( 'That lockout is no longer in the log.', 'minn-admin' ), array( 'status' => 404 ) );
-		},
-	) );
 } );

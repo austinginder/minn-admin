@@ -2,15 +2,15 @@
 /**
  * Bundled adapter: WP Activity Log (wp-security-audit-log).
  *
- * The free plugin has no REST API — events live in {prefix}wsal_occurrences
- * with per-event context in {prefix}wsal_metadata — so this shim does
- * read-only, prefix-scoped SELECTs. Event titles resolve through WSAL's own
+ * The free plugin has no REST API — events live in {base_prefix}wsal_occurrences
+ * with per-event context in wsal_metadata — so the events are a kernel
+ * resource over that table, held to this site on every read. Event titles resolve through WSAL's own
  * alert registry (Alert::get_alert); metadata VALUES render as raw strings
  * only — some are serialized blobs and we never unserialize() third-party
  * data (json_decode/regex only, per the adapter ground rules).
  *
- * Status card (v0.16 Axis A): 24h / 7d / all-time counts + high+ severity
- * mix, prefix-scoped COUNTs only.
+ * Status card: 24h / 7d / all-time counts + high+ severity mix, over the
+ * same rows.
  *
  * last-sweep: 2026-09-19
  *
@@ -56,109 +56,226 @@ function minn_admin_wsal_admin_url() {
 }
 
 /**
- * SQL predicate for the WSAL tenant visible in the current site context.
+ * The WSAL tenant visible in the current site context, as conditions.
  *
  * WP Activity Log uses site_id=0 for a single site's log and for the distinct
  * network/global stream on multisite. Including zero on a subsite therefore
  * crosses the tenant boundary; single-site installs still need it for their
  * ordinary events.
  *
- * @return string Placeholder-bearing SQL generated only from WordPress state.
+ * @return array
  */
-function minn_admin_wsal_site_scope_sql() {
-	return is_multisite() ? 'site_id = %d' : 'site_id IN (0, %d)';
+function minn_admin_wsal_site_scope() {
+	return array( 'site_id' => is_multisite() ? get_current_blog_id() : array( 0, get_current_blog_id() ) );
+}
+
+/** WSAL severities are numeric constants; their names, or the raw value. */
+function minn_admin_wsal_severity_label( $s ) {
+	$map = array( 500 => 'critical', 400 => 'high', 300 => 'medium', 250 => 'low', 200 => 'info' );
+	return $map[ (int) $s ] ?? (string) $s;
+}
+
+/** Alert title from WSAL's registry; falls back to the raw event code. */
+function minn_admin_wsal_alert_title( $alert_id ) {
+	if ( class_exists( '\WSAL\Controllers\Alert' ) && method_exists( '\WSAL\Controllers\Alert', 'get_alert' ) ) {
+		$a = \WSAL\Controllers\Alert::get_alert( (int) $alert_id );
+		if ( is_array( $a ) && ! empty( $a['desc'] ) ) {
+			return $a['desc'];
+		}
+	}
+	return 'Event ' . (int) $alert_id;
 }
 
 /**
- * Status-card model for WP Activity Log (created_on is a UTC float epoch).
+ * The name a failed login tried. A failed login for a username that does not
+ * exist (1003) is stored with no user: the name is in the event's Users meta,
+ * a string or, from older builds, a serialized list.
+ */
+function minn_admin_wsal_tried_name( $value ) {
+	$value = Minn_Admin::decode_serialized( $value, $value );
+	if ( is_array( $value ) ) {
+		$value = implode( ', ', array_filter( $value, 'is_scalar' ) );
+	}
+	return is_scalar( $value ) && ! is_serialized( (string) $value ) ? trim( (string) $value ) : '';
+}
+
+/** Who acted, in the words the list and the detail both use. */
+function minn_admin_wsal_who( array $r, $tried ) {
+	// WSAL writes "Unknown User" for system and CLI actors, and "Unknown
+	// user" for a login event with no user id or name.
+	$who = (string) $r['username'];
+	if ( ( '' === $who || 0 === strcasecmp( $who, 'Unknown User' ) ) && $r['user_id'] ) {
+		$u   = get_userdata( (int) $r['user_id'] );
+		$who = $u ? $u->user_login : '#' . $r['user_id'];
+	}
+	if ( 0 === strcasecmp( $who, 'Unknown User' ) ) {
+		$who = '';
+	}
+	return '' !== (string) $tried ? (string) $tried : ( '' !== $who ? $who : 'System' );
+}
+
+$minn_wsal_meta = array( 'table' => 'wsal_metadata', 'network' => true );
+
+minn_admin_resource( 'wsal/events', function () use ( $minn_wsal_meta ) {
+	return array(
+		'active' => function () {
+			return defined( 'WSAL_VERSION' );
+		},
+		'gates'  => array( 'view' => 'minn_admin_wsal_can_view' ),
+		'labels' => array( 'not_found' => __( 'Event not found.', 'minn-admin' ) ),
+		// WSAL keeps ONE occurrences table for the whole network with site_id
+		// as the tenant column: every read here, the list, an event by id and
+		// the status card's counts, is this site's rows only (a subsite
+		// administrator walking the dense ids reads nothing of another's).
+		'source' => array(
+			'table'   => 'wsal_occurrences',
+			'network' => true,
+			'key'     => 'id',
+			'columns' => array( 'id', 'alert_id', 'created_on', 'username', 'user_id', 'severity', 'object', 'event_type', 'client_ip' ),
+			'where'   => 'minn_admin_wsal_site_scope',
+		),
+		'list'   => array(
+			'facets' => array(
+				// A severity by name, or by WSAL's own number.
+				array( 'param' => 'severity', 'values' => function ( $v ) {
+					$map = array( 'critical' => 500, 'high' => 400, 'medium' => 300, 'low' => 250, 'info' => 200 );
+					if ( isset( $map[ $v ] ) ) {
+						return array( 'severity' => $map[ $v ] );
+					}
+					return ctype_digit( $v ) ? array( 'severity' => (int) $v ) : null;
+				} ),
+			),
+			// Also the username a failed login tried, which the Who column
+			// shows for event 1003 (its Users meta).
+			'search' => array(
+				'columns' => array( 'username', 'object', 'event_type' ),
+				'meta'    => array( 'table' => 'wsal_metadata', 'network' => true, 'key' => 'occurrence_id', 'name' => 'name', 'only' => 'Users', 'value' => 'value' ),
+			),
+			'range'  => array( 'column' => 'created_on', 'clock' => 'epoch' ),
+			'order'  => array( 'column' => 'created_on' ),
+			// The names tried on this page's 1003 rows, in one query over ids
+			// the scoped list returned.
+			'batch'  => function ( array $rows ) use ( $minn_wsal_meta ) {
+				$ids = array();
+				foreach ( $rows as $r ) {
+					if ( 1003 === (int) $r['alert_id'] ) {
+						$ids[] = (int) $r['id'];
+					}
+				}
+				$tried = array();
+				if ( $ids ) {
+					foreach ( Minn_Admin_Kernel_SQL::select( $minn_wsal_meta, array( 'occurrence_id', 'value' ), array( 'name' => 'Users', 'occurrence_id' => $ids ) ) as $m ) {
+						$tried[ (int) $m['occurrence_id'] ] = minn_admin_wsal_tried_name( $m['value'] );
+					}
+				}
+				return $tried;
+			},
+			'row'    => function ( array $r, array $q ) {
+				return array(
+					'id'       => (int) $r['id'],
+					'message'  => minn_admin_wsal_alert_title( $r['alert_id'] ),
+					'username' => minn_admin_wsal_who( $r, $q['batch'][ (int) $r['id'] ] ?? '' ),
+					'severity' => minn_admin_wsal_severity_label( $r['severity'] ),
+					'date'     => $r['created_on'],
+					'object'   => $r['object'],
+					'ip'       => $r['client_ip'],
+				);
+			},
+			'fields' => array(
+				'id'       => 'int',
+				'message'  => 'text',
+				'username' => 'text',
+				'severity' => 'text',
+				// A UTC epoch, sent with a Z so the client never reads it as site-local.
+				'date'     => array( 'type' => 'datetime', 'stored' => 'epoch', 'wire' => 'z' ),
+				'object'   => 'text',
+				'ip'       => 'text',
+			),
+		),
+		'item'   => array(
+			'view' => function ( array $row ) use ( $minn_wsal_meta ) {
+				$pairs = Minn_Admin_Kernel_SQL::select( $minn_wsal_meta, array( 'name', 'value' ), array( 'occurrence_id' => (int) $row['id'] ), array( 'name' => 'ASC' ) );
+				$tried = '';
+				if ( 1003 === (int) $row['alert_id'] ) {
+					foreach ( $pairs as $p ) {
+						if ( 'Users' === $p['name'] && '' !== minn_admin_wsal_tried_name( $p['value'] ) ) {
+							$tried = minn_admin_wsal_tried_name( $p['value'] );
+						}
+					}
+				}
+				$title = minn_admin_wsal_alert_title( $row['alert_id'] );
+				$event = array(
+					array( 'label' => __( 'Event', 'minn-admin' ), 'value' => $title . ' (' . (int) $row['alert_id'] . ')' ),
+					// created_on is a UTC epoch; wp_date() prints it at the offset that date had.
+					array( 'label' => __( 'When', 'minn-admin' ), 'value' => wp_date( 'M j, Y g:i a', (int) $row['created_on'] ) ),
+					array( 'label' => __( 'Severity', 'minn-admin' ), 'value' => minn_admin_wsal_severity_label( $row['severity'] ) ),
+					array( 'label' => __( 'Object', 'minn-admin' ), 'value' => $row['object'] ),
+					array( 'label' => __( 'Type', 'minn-admin' ), 'value' => $row['event_type'] ),
+					array( 'label' => __( 'User', 'minn-admin' ), 'value' => '' !== $tried ? $tried : ( 0 === strcasecmp( (string) $row['username'], 'Unknown User' ) || '' === (string) $row['username'] ? 'System' : $row['username'] ) ),
+					array( 'label' => 'IP', 'value' => $row['client_ip'] ),
+				);
+				$context = array();
+				foreach ( $pairs as $p ) {
+					// Serialized/JSON blobs render as raw (truncated) strings — never
+					// unserialize third-party data. Most values are plain scalars.
+					$val       = (string) $p['value'];
+					$context[] = array( 'label' => $p['name'], 'value' => strlen( $val ) > 300 ? substr( $val, 0, 300 ) . '…' : $val );
+				}
+				return array(
+					'title'    => $title,
+					'sections' => array_filter( array(
+						array( 'title' => __( 'Event', 'minn-admin' ), 'rows' => array_values( array_filter( $event, function ( $r ) {
+							return '' !== (string) $r['value'];
+						} ) ) ),
+						$context ? array( 'title' => __( 'Context', 'minn-admin' ), 'rows' => $context ) : null,
+					) ),
+					'adminUrl' => minn_admin_wsal_admin_url(),
+				);
+			},
+		),
+	);
+} );
+
+/**
+ * Status-card model for WP Activity Log: 24h / 7d / all-time counts, the
+ * last event and the high + critical mix, over this site's rows.
  *
  * @return array{rows:array,actions:array}
  */
 function minn_admin_wsal_status_model() {
-	global $wpdb;
-	$table = $wpdb->base_prefix . 'wsal_occurrences';
-	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
+	$open = array( array( 'label' => __( 'Open WP Activity Log ↗', 'minn-admin' ), 'href' => minn_admin_wsal_admin_url() ) );
+	// 500 critical + 400 high, in the last week and split out of the chart.
+	$n = Minn_Admin_Kernel::log_counts( 'wsal/events', array(
+		'counts' => array( 'hot' => array( 'where' => array( 'severity' => array( 500, 400 ) ), 'window' => 7 * DAY_IN_SECONDS ) ),
+		'chart'  => array( 'split' => 'severity', 'secondary' => array( 500, 400 ) ),
+	) );
+	if ( null === $n ) {
 		return array(
 			'rows'    => array( array( 'label' => __( 'Events', 'minn-admin' ), 'value' => '—', 'hint' => __( 'Log table not found', 'minn-admin' ) ) ),
-			'actions' => array( array( 'label' => __( 'Open WP Activity Log ↗', 'minn-admin' ), 'href' => minn_admin_wsal_admin_url() ) ),
+			'actions' => $open,
 		);
 	}
-	$now     = time();
-	$since_d = $now - DAY_IN_SECONDS;
-	$since_w = $now - ( 7 * DAY_IN_SECONDS );
-	// WSAL keeps ONE occurrences table for the whole network with site_id as
-	// the tenant column, which is why the list and detail routes both scope to
-	// this site. Counting without it reported every other tenant's event
-	// volume, their critical/high volume and their last-event time to a main
-	// site administrator who is not a super admin.
-	$blog  = get_current_blog_id();
-	$scope = minn_admin_wsal_site_scope_sql();
-	$total = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE {$scope}", $blog ) );
-	$day   = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE created_on >= %f AND {$scope}", $since_d, $blog ) );
-	$week  = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE created_on >= %f AND {$scope}", $since_w, $blog ) );
-	// 500 critical + 400 high in the last week.
-	$hot = (int) $wpdb->get_var( $wpdb->prepare(
-		"SELECT COUNT(*) FROM {$table} WHERE created_on >= %f AND severity IN (500, 400) AND {$scope}",
-		$since_w,
-		$blog
-	) );
-	$last = $wpdb->get_var( $wpdb->prepare( "SELECT created_on FROM {$table} WHERE {$scope} ORDER BY id DESC LIMIT 1", $blog ) );
-	// Fourteen site-local days, high + critical split out. created_on is a
-	// UTC epoch, so the day is bucketed by integer arithmetic (the shared
-	// helper) and grouped in SQL so a busy log never streams every row.
-	$days   = minn_admin_chart_days();
-	$day_ex = minn_admin_chart_epoch_day_sql( 'created_on' );
-	$series = $wpdb->get_results( $wpdb->prepare(
-		"SELECT {$day_ex} AS d, COUNT(*) AS c, SUM(CASE WHEN severity IN (500, 400) THEN 1 ELSE 0 END) AS hot
-		 FROM {$table} WHERE created_on >= %d AND {$scope} GROUP BY d",
-		minn_admin_chart_epoch_since(),
-		$blog
-	) );
-	// phpcs:enable
-	foreach ( (array) $series as $row ) {
-		$d = minn_admin_chart_epoch_bucket_day( $row->d );
-		// The soft bar is value + secondary, so the two series stay disjoint.
-		minn_admin_chart_bump( $days, $d, false, (int) $row->c - (int) $row->hot );
-		minn_admin_chart_bump( $days, $d, true, (int) $row->hot );
-	}
-
-	$last_label = '—';
-	if ( $last ) {
-		$last_label = sprintf(
-			/* translators: %s: human-readable time since the last event. */
-			__( '%s ago', 'minn-admin' ),
-			human_time_diff( (int) floatval( $last ), time() )
-		);
-	}
-
+	$rows   = Minn_Admin_Kernel::event_rows( $n );
+	$rows[] = array(
+		'label' => __( 'High + critical (7d)', 'minn-admin' ),
+		'value' => number_format_i18n( $n['counts']['hot'] ),
+	);
 	return array(
-		'rows'    => array(
-			array(
-				'label' => __( 'Events (24h)', 'minn-admin' ),
-				'value' => number_format_i18n( $day ),
-				/* translators: %s: formatted number of events. */
-				'hint'  => sprintf( __( '%s in the last 7 days', 'minn-admin' ), number_format_i18n( $week ) ),
-			),
-			array(
-				'label' => __( 'Events all-time', 'minn-admin' ),
-				'value' => number_format_i18n( $total ),
-			),
-			array(
-				'label' => __( 'Last event', 'minn-admin' ),
-				'value' => $last_label,
-			),
-			array(
-				'label' => __( 'High + critical (7d)', 'minn-admin' ),
-				'value' => number_format_i18n( $hot ),
-			),
-		),
-		'chart'   => minn_admin_chart_build( $days, __( 'Events', 'minn-admin' ), __( 'High + critical', 'minn-admin' ) ),
-		'actions' => array(
-			array( 'label' => __( 'Open WP Activity Log ↗', 'minn-admin' ), 'href' => minn_admin_wsal_admin_url() ),
-		),
+		'rows'    => array_values( $rows ),
+		'chart'   => minn_admin_chart_build( $n['days'], __( 'Events', 'minn-admin' ), __( 'High + critical', 'minn-admin' ) ),
+		'actions' => $open,
 	);
 }
+
+minn_admin_endpoint( 'wsal/status', array(
+	'active' => function () {
+		return defined( 'WSAL_VERSION' );
+	},
+	'gate'   => 'minn_admin_wsal_can_view',
+	'run'    => function () {
+		return minn_admin_wsal_status_model();
+	},
+) );
 
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! defined( 'WSAL_VERSION' ) ) {
@@ -176,14 +293,8 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'icon'       => 'clock',
 		'cap'        => 'read', // real gating happens above + in the shim.
 		'status'     => array( 'route' => 'minn-admin/v1/wsal/status' ),
-		'collection' => array(
-			'route'     => 'minn-admin/v1/wsal/events',
-			'pageQuery' => 'per_page=25&page={page}',
-			'search'    => 'search={q}',
-			'dateQuery' => 'after={from}&before={to}',
-			'itemsKey'  => 'items',
-			'totalKey'  => 'total',
-			'tabs'      => array(
+		'collection' => Minn_Admin_Kernel::collection( 'wsal/events', array(
+			'tabs'    => array(
 				'param'    => 'severity',
 				'static'   => array(
 					array( 'critical', 'Critical' ),
@@ -194,218 +305,16 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				),
 				'allLabel' => 'All',
 			),
-			'columns'   => array(
+			'columns' => array(
 				array( 'key' => 'message', 'label' => __( 'Event', 'minn-admin' ), 'format' => 'title' ),
 				array( 'key' => 'username', 'label' => __( 'Who', 'minn-admin' ) ),
 				array( 'key' => 'severity', 'label' => __( 'Severity', 'minn-admin' ), 'format' => 'pill' ),
 				array( 'key' => 'date', 'label' => __( 'When', 'minn-admin' ), 'format' => 'ago' ),
 			),
-			'detail'    => array(
+			'detail'  => array(
 				'sectionsRoute' => 'minn-admin/v1/wsal/events/{id}',
 			),
-		),
+		) ),
 	);
 	return $surfaces;
-} );
-
-add_action( 'rest_api_init', function () {
-	if ( ! defined( 'WSAL_VERSION' ) ) {
-		return;
-	}
-
-	// WSAL severities are numeric constants; label map with raw fallback.
-	$severity_label = function ( $s ) {
-		$map = array( 500 => 'critical', 400 => 'high', 300 => 'medium', 250 => 'low', 200 => 'info' );
-		return $map[ (int) $s ] ?? (string) $s;
-	};
-
-	// Alert title from WSAL's registry; falls back to the raw event code.
-	$alert_title = function ( $alert_id ) {
-		if ( class_exists( '\WSAL\Controllers\Alert' ) && method_exists( '\WSAL\Controllers\Alert', 'get_alert' ) ) {
-			$a = \WSAL\Controllers\Alert::get_alert( (int) $alert_id );
-			if ( is_array( $a ) && ! empty( $a['desc'] ) ) {
-				return $a['desc'];
-			}
-		}
-		return 'Event ' . (int) $alert_id;
-	};
-
-	// A failed login for a username that does not exist (1003) is stored with
-	// no user: the name that was tried is in the event's Users meta, a string
-	// or, from older builds, a serialized list.
-	$tried_name = function ( $value ) {
-		$value = Minn_Admin::decode_serialized( $value, $value );
-		if ( is_array( $value ) ) {
-			$value = implode( ', ', array_filter( $value, 'is_scalar' ) );
-		}
-		return is_scalar( $value ) && ! is_serialized( (string) $value ) ? trim( (string) $value ) : '';
-	};
-
-	register_rest_route( 'minn-admin/v1', '/wsal/events', array(
-		'methods'             => 'GET',
-		'permission_callback' => 'minn_admin_wsal_can_view',
-		'callback'            => function ( WP_REST_Request $request ) use ( $severity_label, $alert_title, $tried_name ) {
-			global $wpdb;
-			$table    = $wpdb->base_prefix . 'wsal_occurrences';
-			$per_page = min( 100, max( 1, (int) ( $request['per_page'] ?: 25 ) ) );
-			$page     = max( 1, (int) ( $request['page'] ?: 1 ) );
-			$where    = array( minn_admin_wsal_site_scope_sql() );
-			$args     = array( get_current_blog_id() );
-
-			if ( $request['severity'] ) {
-				$sev_map = array( 'critical' => 500, 'high' => 400, 'medium' => 300, 'low' => 250, 'info' => 200 );
-				$where[] = 'severity = %s';
-				$args[]  = (string) ( $sev_map[ $request['severity'] ] ?? $request['severity'] );
-			}
-			if ( $request['search'] ) {
-				$like       = '%' . $wpdb->esc_like( $request['search'] ) . '%';
-				$meta_table = $wpdb->base_prefix . 'wsal_metadata';
-				// Also the username a failed login tried, which the Who column
-				// shows for event 1003 (its Users meta). The site scope above
-				// still applies to every row this matches.
-				$where[] = "(username LIKE %s OR object LIKE %s OR event_type LIKE %s OR id IN (SELECT occurrence_id FROM {$meta_table} WHERE name = 'Users' AND value LIKE %s))";
-				array_push( $args, $like, $like, $like, $like );
-			}
-			// A clicked chart bar: site-local bounds onto the UTC epoch column.
-			list( $range_sql, $range_args ) = minn_admin_chart_range_clause( $request, 'created_on', 'epoch' );
-			$where = array_merge( $where, $range_sql );
-			$args  = array_merge( $args, $range_args );
-
-			$where_sql = implode( ' AND ', $where );
-			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table is prefix-derived, WHERE is placeholder-built above.
-			$total = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE {$where_sql}", $args ) );
-			$rows  = $wpdb->get_results( $wpdb->prepare(
-				"SELECT id, alert_id, created_on, username, user_id, severity, object, event_type, client_ip
-				 FROM {$table} WHERE {$where_sql} ORDER BY created_on DESC LIMIT %d OFFSET %d",
-				array_merge( $args, array( $per_page, ( $page - 1 ) * $per_page ) )
-			) );
-			// The names tried on this page's 1003 rows, in one query over ids
-			// the scoped SELECT above returned.
-			$tried = array();
-			$ids   = array();
-			foreach ( (array) $rows as $r ) {
-				if ( 1003 === (int) $r->alert_id ) {
-					$ids[] = (int) $r->id;
-				}
-			}
-			if ( $ids ) {
-				$meta = $wpdb->base_prefix . 'wsal_metadata';
-				$in   = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
-				foreach ( (array) $wpdb->get_results( $wpdb->prepare(
-					"SELECT occurrence_id, value FROM {$meta} WHERE name = 'Users' AND occurrence_id IN ({$in})",
-					$ids
-				) ) as $m ) {
-					$tried[ (int) $m->occurrence_id ] = $tried_name( $m->value );
-				}
-			}
-			// phpcs:enable
-
-			$items = array();
-			foreach ( (array) $rows as $r ) {
-				// WSAL writes "Unknown User" for system and CLI actors, and
-				// "Unknown user" for a login event with no user id or name.
-				$who     = $r->username;
-				$unknown = 0 === strcasecmp( (string) $who, 'Unknown User' );
-				if ( ( ! $who || $unknown ) && $r->user_id ) {
-					$u   = get_userdata( (int) $r->user_id );
-					$who = $u ? $u->user_login : '#' . $r->user_id;
-				}
-				if ( 0 === strcasecmp( (string) $who, 'Unknown User' ) ) {
-					$who = ''; // Falls through to 'System'.
-				}
-				if ( ! empty( $tried[ (int) $r->id ] ) ) {
-					$who = $tried[ (int) $r->id ];
-				}
-				$items[] = array(
-					'id'       => (int) $r->id,
-					'message'  => $alert_title( $r->alert_id ),
-					'username' => $who ?: 'System',
-					'severity' => $severity_label( $r->severity ),
-					// Trailing Z so the client does not treat UTC as site-local.
-					'date'     => gmdate( 'Y-m-d\TH:i:s\Z', (int) $r->created_on ),
-					'object'   => $r->object,
-					'ip'       => $r->client_ip,
-				);
-			}
-			return rest_ensure_response( array( 'items' => $items, 'total' => $total ) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/wsal/events/(?P<id>\d+)', array(
-		'methods'             => 'GET',
-		'permission_callback' => 'minn_admin_wsal_can_view',
-		'callback'            => function ( WP_REST_Request $request ) use ( $severity_label, $alert_title, $tried_name ) {
-			global $wpdb;
-			$occ   = $wpdb->base_prefix . 'wsal_occurrences';
-			$meta  = $wpdb->base_prefix . 'wsal_metadata';
-			$scope = minn_admin_wsal_site_scope_sql();
-			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			// Scope to this site, exactly like the list route above. Without
-			// it, a subsite administrator on a network-activated install can
-			// walk the dense auto-increment ids and read every other tenant's
-			// audit rows — acting username, client IP and all metadata, which
-			// includes the ATTEMPTED username on failed logins. (Stream guards
-			// the same shape for the same reason; 404 rather than 403 so the
-			// endpoint does not confirm out-of-scope ids exist.)
-			$row = $wpdb->get_row( $wpdb->prepare(
-				"SELECT * FROM {$occ} WHERE id = %d AND {$scope}",
-				(int) Minn_Admin::path_param( $request ),
-				get_current_blog_id()
-			) );
-			if ( ! $row ) {
-				return new WP_Error( 'not_found', __( 'Event not found.', 'minn-admin' ), array( 'status' => 404 ) );
-			}
-			$pairs = $wpdb->get_results( $wpdb->prepare(
-				"SELECT name, value FROM {$meta} WHERE occurrence_id = %d ORDER BY name", (int) Minn_Admin::path_param( $request )
-			) );
-			// phpcs:enable
-
-			$user = 0 === strcasecmp( (string) $row->username, 'Unknown User' ) ? '' : $row->username;
-			if ( 1003 === (int) $row->alert_id ) {
-				foreach ( (array) $pairs as $p ) {
-					if ( 'Users' === $p->name && '' !== $tried_name( $p->value ) ) {
-						$user = $tried_name( $p->value );
-					}
-				}
-			}
-			$event = array(
-				array( 'label' => __( 'Event', 'minn-admin' ), 'value' => $alert_title( $row->alert_id ) . ' (' . (int) $row->alert_id . ')' ),
-				// created_on is a UTC epoch; wp_date() prints it at the offset that date had.
-				array( 'label' => __( 'When', 'minn-admin' ), 'value' => wp_date( 'M j, Y g:i a', (int) $row->created_on ) ),
-				array( 'label' => __( 'Severity', 'minn-admin' ), 'value' => $severity_label( $row->severity ) ),
-				array( 'label' => __( 'Object', 'minn-admin' ), 'value' => $row->object ),
-				array( 'label' => __( 'Type', 'minn-admin' ), 'value' => $row->event_type ),
-				array( 'label' => __( 'User', 'minn-admin' ), 'value' => $user ?: 'System' ),
-				array( 'label' => 'IP', 'value' => $row->client_ip ),
-			);
-
-			$context = array();
-			foreach ( (array) $pairs as $p ) {
-				// Serialized/JSON blobs render as raw (truncated) strings — never
-				// unserialize third-party data. Most values are plain scalars.
-				$val = (string) $p->value;
-				if ( strlen( $val ) > 300 ) {
-					$val = substr( $val, 0, 300 ) . '…';
-				}
-				$context[] = array( 'label' => $p->name, 'value' => $val );
-			}
-
-			return rest_ensure_response( array(
-				'title'    => $alert_title( $row->alert_id ),
-				'sections' => array_filter( array(
-					array( 'title' => __( 'Event', 'minn-admin' ), 'rows' => array_values( array_filter( $event, function ( $r ) { return '' !== (string) $r['value']; } ) ) ),
-					$context ? array( 'title' => __( 'Context', 'minn-admin' ), 'rows' => $context ) : null,
-				) ),
-				'adminUrl' => admin_url( 'admin.php?page=wsal-auditlog' ),
-			) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/wsal/status', array(
-		'methods'             => 'GET',
-		'permission_callback' => 'minn_admin_wsal_can_view',
-		'callback'            => function () {
-			return rest_ensure_response( minn_admin_wsal_status_model() );
-		},
-	) );
 } );

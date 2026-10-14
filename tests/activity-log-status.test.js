@@ -38,10 +38,9 @@ const isActive = ( slug ) => {
 		return false;
 	}
 };
-const pluginInstalled = ( slug ) => {
-	const list = wp( 'plugin list --field=name' );
-	return list.split( /\r?\n/ ).map( ( s ) => s.trim() ).includes( slug );
-};
+// Installed is a folder under plugins/. Asking WP-CLI boots every plugin on
+// the lab, which can outlast any reasonable timeout and read as "absent".
+const pluginInstalled = ( slug ) => require( 'fs' ).existsSync( path.join( WP, 'wp-content', 'plugins', slug ) );
 
 ( async () => {
 	const { browser, page, errors } = await launch();

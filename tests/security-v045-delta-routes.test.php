@@ -295,15 +295,9 @@ if ( class_exists( 'AAL_Log_Query' ) ) {
 	if ( ! class_exists( 'AAL_Main' ) ) {
 		// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a stand-in class for this request only.
 		eval( 'class AAL_Main {}' );
-		// rest_api_init has usually run by now; hand the adapter its turn.
+		// rest_api_init has usually run by now; the kernel registers what is active now.
 		if ( did_action( 'rest_api_init' ) ) {
-			foreach ( $GLOBALS['wp_filter']['rest_api_init']->callbacks as $aal_prio ) {
-				foreach ( $aal_prio as $aal_cb ) {
-					if ( $aal_cb['function'] instanceof Closure && 'aryo-activity-log.php' === basename( ( new ReflectionFunction( $aal_cb['function'] ) )->getFileName() ) ) {
-						call_user_func( $aal_cb['function'] );
-					}
-				}
-			}
+			Minn_Admin_Kernel::register();
 		}
 	}
 	add_role( 'minn_d45_manager', 'D45 manager', array( 'read' => true, 'manage_options' => true, 'edit_posts' => true ) );

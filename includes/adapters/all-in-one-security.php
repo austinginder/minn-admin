@@ -4,8 +4,8 @@
  *
  * AIOS keeps a general audit feed in {base_prefix}aiowps_audit_log (its own
  * table, base_prefix like Solid Security's itsec_lockouts). No REST surface,
- * so this shim does read-only, prefix-scoped SELECTs and joins the
- * activity-log family (Wordfence / WSAL / Stream shape). Event context lives
+ * so the feed is a kernel resource over that table, held to this site, and
+ * joins the activity-log family (Wordfence / WSAL / Stream shape). Event context lives
  * in a JSON `details` column: json_decode only, never unserialize; the detail
  * view renders the decoded top level as a kv-table (v0.18.0 row type).
  *
@@ -57,35 +57,14 @@ function minn_admin_aios_table() {
  * AIOS's own audit viewer appends `site_id = get_current_blog_id()` for
  * anyone who is not a super admin (admin/wp-security-list-audit.php), and
  * applies the same guard to its deletes. This shim gates on manage_options,
- * which a SUBSITE administrator holds, so without the same predicate it would
+ * which a SUBSITE administrator holds, so without the same condition it would
  * hand a tenant every other tenant's acting usernames, client IPs and, on
  * failed logins, the ATTEMPTED usernames from neighbouring sites.
  *
- * @return array{0:string,1:array} SQL fragment to append, and its args.
+ * @return array Conditions.
  */
 function minn_admin_aios_site_scope() {
-	if ( Minn_Admin::network_owner() ) {
-		return array( '', array() );
-	}
-	return array( ' AND site_id = %d', array( get_current_blog_id() ) );
-}
-
-/** Temporary lockouts live on the blog prefix (not base_prefix). */
-function minn_admin_aios_lockdown_table() {
-	if ( defined( 'AIOWPSEC_TBL_LOGIN_LOCKOUT' ) ) {
-		return AIOWPSEC_TBL_LOGIN_LOCKOUT;
-	}
-	global $wpdb;
-	return $wpdb->prefix . 'aiowps_login_lockdown';
-}
-
-/** Permanent blocks table (blog prefix). Unblock = DELETE the row. */
-function minn_admin_aios_perm_block_table() {
-	if ( defined( 'AIOWPSEC_TBL_PERM_BLOCK' ) ) {
-		return AIOWPSEC_TBL_PERM_BLOCK;
-	}
-	global $wpdb;
-	return $wpdb->prefix . 'aiowps_permanent_block';
+	return Minn_Admin::network_owner() ? array() : array( 'site_id' => get_current_blog_id() );
 }
 
 function minn_admin_aios_admin_url() {
@@ -110,36 +89,26 @@ function minn_admin_aios_perm_block_url() {
  * @return array{locked:int,blocks:int,failed_24h:int}
  */
 function minn_admin_aios_login_posture() {
-	global $wpdb;
 	$out = array(
 		'locked'     => 0,
 		'blocks'     => 0,
 		'failed_24h' => 0,
 	);
-
-	$lock = minn_admin_aios_lockdown_table();
-	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table from constant/prefix.
-	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $lock ) ) === $lock ) {
-		// Match AIOWPSecurity_Utility::get_locked_ips(): still locked while released is in the future.
-		$out['locked'] = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$lock} WHERE released > UNIX_TIMESTAMP()" );
+	// Match AIOWPSecurity_Utility::get_locked_ips(): still locked while released is in the future.
+	if ( Minn_Admin_Kernel_SQL::exists( 'aiowps_login_lockdown' ) ) {
+		$out['locked'] = Minn_Admin_Kernel_SQL::count( 'aiowps_login_lockdown', array( 'released' => array( 'op' => '>', 'value' => time() ) ) );
 	}
-
-	$perm = minn_admin_aios_perm_block_table();
-	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $perm ) ) === $perm ) {
-		// Unblock deletes the row; every remaining row is blocked.
-		$out['blocks'] = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$perm}" );
+	// Unblock deletes the row; every remaining row is blocked.
+	if ( Minn_Admin_Kernel_SQL::exists( 'aiowps_permanent_block' ) ) {
+		$out['blocks'] = Minn_Admin_Kernel_SQL::count( 'aiowps_permanent_block' );
 	}
-
-	$audit = minn_admin_aios_table();
-	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $audit ) ) === $audit ) {
-		list( $scope_sql, $scope_args ) = minn_admin_aios_site_scope();
-		$out['failed_24h'] = (int) $wpdb->get_var( $wpdb->prepare(
-			"SELECT COUNT(*) FROM {$audit} WHERE event_type = %s AND created >= %d{$scope_sql}",
-			array_merge( array( 'failed_login', time() - DAY_IN_SECONDS ), $scope_args )
-		) );
+	$audit = array( 'table' => 'aiowps_audit_log', 'network' => true );
+	if ( Minn_Admin_Kernel_SQL::exists( $audit ) ) {
+		$out['failed_24h'] = Minn_Admin_Kernel_SQL::count( $audit, array_merge( minn_admin_aios_site_scope(), array(
+			'event_type' => 'failed_login',
+			'created'    => Minn_Admin_Kernel::since( 'epoch', DAY_IN_SECONDS ),
+		) ) );
 	}
-	// phpcs:enable
-
 	return $out;
 }
 
@@ -204,6 +173,169 @@ function minn_admin_aios_level( $level ) {
 	return in_array( $level, array( 'info', 'warning', 'fatal', 'error', 'debug', 'trace' ), true ) ? $level : 'info';
 }
 
+/**
+ * The detail of one audit event: the row, then the top level of its JSON
+ * `details` as Context rows. json_decode only, never unserialize; AIOS's
+ * serialized `stacktrace` (a debug artifact, not a readable trace) is never
+ * surfaced.
+ */
+function minn_admin_aios_event_view( array $row ) {
+	$who   = (string) $row['username'];
+	$event = array(
+		array( 'label' => __( 'Event', 'minn-admin' ), 'value' => minn_admin_aios_event_label( $row['event_type'] ) ),
+		// created is a UTC epoch; wp_date() prints it at the offset that date had.
+		array( 'label' => __( 'When', 'minn-admin' ), 'value' => wp_date( 'M j, Y g:i a', (int) $row['created'] ) ),
+		array( 'label' => __( 'Level', 'minn-admin' ), 'value' => minn_admin_aios_level( $row['level'] ), 'type' => 'pill' ),
+		array( 'label' => __( 'User', 'minn-admin' ), 'value' => '' !== $who ? $who : 'System' ),
+		array( 'label' => 'IP', 'value' => (string) $row['ip'] ),
+	);
+	if ( ! empty( $row['country_code'] ) ) {
+		$event[] = array( 'label' => __( 'Country', 'minn-admin' ), 'value' => (string) $row['country_code'] );
+	}
+	$filled   = function ( $r ) {
+		return '' !== (string) $r['value'];
+	};
+	$sections = array( array( 'title' => __( 'Event', 'minn-admin' ), 'rows' => array_values( array_filter( $event, $filled ) ) ) );
+	// The activity-log family renders detail as a contact card, which
+	// surfaces labeled scalar rows as fields; nested values are skipped.
+	$decoded = json_decode( (string) ( $row['details'] ?? '' ), true );
+	if ( is_array( $decoded ) ) {
+		// AIOS commonly wraps under the event key: unwrap one level.
+		if ( 1 === count( $decoded ) && is_array( reset( $decoded ) ) ) {
+			$decoded = reset( $decoded );
+		}
+		$context = array();
+		foreach ( $decoded as $k => $v ) {
+			$label = ucfirst( trim( str_replace( array( '-', '_' ), ' ', (string) $k ) ) );
+			if ( is_bool( $v ) ) {
+				$context[] = array( 'label' => $label, 'value' => $v ? __( 'Yes', 'minn-admin' ) : __( 'No', 'minn-admin' ) );
+			} elseif ( is_scalar( $v ) ) {
+				$val       = (string) $v;
+				$context[] = array( 'label' => $label, 'value' => strlen( $val ) > 200 ? substr( $val, 0, 200 ) . '…' : $val );
+			}
+		}
+		$context = array_values( array_filter( $context, $filled ) );
+		if ( $context ) {
+			$sections[] = array( 'title' => __( 'Context', 'minn-admin' ), 'rows' => $context );
+		}
+	}
+	return array(
+		'title'    => minn_admin_aios_event_label( $row['event_type'] ),
+		'sections' => $sections,
+		'adminUrl' => minn_admin_aios_admin_url(),
+	);
+}
+
+minn_admin_resource( 'aios/events', function () {
+	$columns = array( 'id', 'username', 'ip', 'level', 'event_type', 'created' );
+	return array(
+		'active' => 'minn_admin_aios_active',
+		'gates'  => array( 'view' => 'minn_admin_aios_can' ),
+		'labels' => array( 'not_found' => __( 'Event not found.', 'minn-admin' ) ),
+		// One table for the whole network; every read is this site's rows
+		// unless the caller owns the network (404, never 403, out of scope).
+		'source' => array(
+			'table'   => 'aiowps_audit_log',
+			'network' => true,
+			'key'     => 'id',
+			'columns' => $columns,
+			'detail'  => function () use ( $columns ) {
+				$audit = array( 'table' => 'aiowps_audit_log', 'network' => true );
+				return array_merge( $columns, array( 'details' ), Minn_Admin_Kernel_SQL::has_column( $audit, 'country_code' ) ? array( 'country_code' ) : array() );
+			},
+			'where'   => 'minn_admin_aios_site_scope',
+		),
+		'list'   => array(
+			// Their own vocabulary: a level they do not log reads as info.
+			'facets' => array(
+				array( 'param' => 'level', 'values' => function ( $v ) {
+					return array( 'level' => minn_admin_aios_level( $v ) );
+				} ),
+			),
+			'search' => array( 'columns' => array( 'username', 'event_type', 'ip' ) ),
+			'range'  => array( 'column' => 'created', 'clock' => 'epoch' ),
+			'order'  => array( 'column' => 'created' ),
+			'row'    => function ( array $r ) {
+				return array(
+					'id'       => (int) $r['id'],
+					'message'  => minn_admin_aios_event_label( $r['event_type'] ),
+					'username' => '' !== (string) $r['username'] ? (string) $r['username'] : 'System',
+					'ip'       => (string) $r['ip'],
+					'level'    => minn_admin_aios_level( $r['level'] ),
+					'date'     => $r['created'],
+				);
+			},
+			'fields' => array(
+				'id'       => 'int',
+				'message'  => 'text',
+				'username' => 'text',
+				'ip'       => 'text',
+				'level'    => 'text',
+				// A UTC epoch, sent with a Z.
+				'date'     => array( 'type' => 'datetime', 'stored' => 'epoch', 'wire' => 'z' ),
+			),
+		),
+		'item'   => array( 'view' => 'minn_admin_aios_event_view' ),
+	);
+} );
+
+minn_admin_endpoint( 'aios/status', array(
+	'active' => 'minn_admin_aios_active',
+	'gate'   => 'minn_admin_aios_can',
+	'run'    => function () {
+		$open = array( array( 'label' => __( 'Open All-In-One Security ↗', 'minn-admin' ), 'href' => minn_admin_aios_admin_url() ) );
+		$warn = array( 'warning', 'error', 'fatal' );
+		$n    = Minn_Admin_Kernel::log_counts( 'aios/events', array(
+			'counts' => array( 'warn' => array( 'where' => array( 'level' => $warn ), 'window' => 7 * DAY_IN_SECONDS ) ),
+			'chart'  => array( 'split' => 'level', 'secondary' => $warn ),
+		) );
+		if ( null === $n ) {
+			return array(
+				'rows'    => array( array( 'label' => __( 'Events', 'minn-admin' ), 'value' => '—', 'hint' => __( 'Audit log table not found', 'minn-admin' ) ) ),
+				'actions' => $open,
+			);
+		}
+		$posture = minn_admin_aios_login_posture();
+		$events  = Minn_Admin_Kernel::event_rows( $n );
+		$rows    = array(
+			$events['day'],
+			$events['total'],
+			array(
+				'label' => __( 'Warnings (7d)', 'minn-admin' ),
+				'value' => number_format_i18n( $n['counts']['warn'] ),
+				'hint'  => $n['counts']['warn'] ? __( 'warning, error or fatal', 'minn-admin' ) : __( 'all clear', 'minn-admin' ),
+			),
+			array(
+				'label' => __( 'Failed logins (24h)', 'minn-admin' ),
+				'value' => number_format_i18n( $posture['failed_24h'] ),
+				'hint'  => __( 'from the audit log', 'minn-admin' ),
+			),
+			array(
+				'label' => __( 'Locked out now', 'minn-admin' ),
+				'value' => $posture['locked'] ? number_format_i18n( $posture['locked'] ) : __( 'Nobody', 'minn-admin' ),
+				'hint'  => $posture['locked'] ? __( 'temporary login lockdowns', 'minn-admin' ) : __( 'no active lockdowns', 'minn-admin' ),
+			),
+			array(
+				'label' => __( 'Permanent blocks', 'minn-admin' ),
+				'value' => number_format_i18n( $posture['blocks'] ),
+				'hint'  => $posture['blocks'] ? __( 'blocked IPs', 'minn-admin' ) : __( 'none', 'minn-admin' ),
+			),
+			$events['last'],
+		);
+		if ( $posture['locked'] > 0 ) {
+			$open[] = array( 'label' => __( 'View locked IPs ↗', 'minn-admin' ), 'href' => minn_admin_aios_lockout_url() );
+		}
+		if ( $posture['blocks'] > 0 ) {
+			$open[] = array( 'label' => __( 'View permanent blocks ↗', 'minn-admin' ), 'href' => minn_admin_aios_perm_block_url() );
+		}
+		return array(
+			'rows'    => $rows,
+			'chart'   => minn_admin_chart_build( $n['days'], __( 'Events', 'minn-admin' ), __( 'Warnings', 'minn-admin' ) ),
+			'actions' => $open,
+		);
+	},
+) );
+
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	// Enforce what the 'cap' => 'read' comment claims, the way
 	// solid-security.php and limit-login-attempts.php already do.
@@ -219,13 +351,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'icon'       => 'shield',
 		'cap'        => 'read', // real gate is adapter-side minn_admin_aios_can().
 		'status'     => array( 'route' => 'minn-admin/v1/aios/status' ),
-		'collection' => array(
-			'route'     => 'minn-admin/v1/aios/events',
-			'pageQuery' => 'per_page=25&page={page}',
-			'itemsKey'  => 'items',
-			'totalKey'  => 'total',
-			'search'    => 'search={q}',
-			'dateQuery' => 'after={from}&before={to}',
+		'collection' => Minn_Admin_Kernel::collection( 'aios/events', array(
 			'tabs'      => array(
 				'param'    => 'level',
 				'static'   => array(
@@ -245,253 +371,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'detail'    => array(
 				'sectionsRoute' => 'minn-admin/v1/aios/events/{id}',
 			),
-		),
+		) ),
 	);
 	return $surfaces;
-} );
-
-add_action( 'rest_api_init', function () {
-	if ( ! minn_admin_aios_active() ) {
-		return;
-	}
-
-	register_rest_route( 'minn-admin/v1', '/aios/events', array(
-		'methods'             => 'GET',
-		'permission_callback' => 'minn_admin_aios_can',
-		'callback'            => function ( WP_REST_Request $request ) {
-			global $wpdb;
-			$table = minn_admin_aios_table();
-			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- prefix-derived table; WHERE built from placeholders.
-			if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
-				return rest_ensure_response( array( 'items' => array(), 'total' => 0 ) );
-			}
-			$per_page = min( 100, max( 1, (int) ( $request['per_page'] ?: 25 ) ) );
-			$page     = max( 1, (int) ( $request['page'] ?: 1 ) );
-			list( $scope_sql, $scope_args ) = minn_admin_aios_site_scope();
-			$where    = array( '1=1' );
-			$args     = array();
-			if ( $scope_sql ) {
-				$where[] = 'site_id = %d';
-				$args    = array_merge( $args, $scope_args );
-			}
-			if ( $request['level'] ) {
-				$where[] = 'level = %s';
-				$args[]  = minn_admin_aios_level( $request['level'] );
-			}
-			if ( $request['search'] ) {
-				$like    = '%' . $wpdb->esc_like( $request['search'] ) . '%';
-				$where[] = '(username LIKE %s OR event_type LIKE %s OR ip LIKE %s)';
-				array_push( $args, $like, $like, $like );
-			}
-			// A clicked chart bar: site-local bounds onto the UTC epoch column.
-			list( $range_sql, $range_args ) = minn_admin_chart_range_clause( $request, 'created', 'epoch' );
-			$where = array_merge( $where, $range_sql );
-			$args  = array_merge( $args, $range_args );
-			$where_sql = implode( ' AND ', $where );
-			$count_sql = "SELECT COUNT(*) FROM {$table} WHERE {$where_sql}";
-			$total     = (int) ( $args ? $wpdb->get_var( $wpdb->prepare( $count_sql, $args ) ) : $wpdb->get_var( $count_sql ) );
-			$rows      = $wpdb->get_results( $wpdb->prepare(
-				"SELECT id, username, ip, level, event_type, created FROM {$table}
-				 WHERE {$where_sql} ORDER BY created DESC, id DESC LIMIT %d OFFSET %d",
-				array_merge( $args, array( $per_page, ( $page - 1 ) * $per_page ) )
-			) );
-			// phpcs:enable
-
-			$items = array();
-			foreach ( (array) $rows as $r ) {
-				$who = (string) $r->username;
-				$items[] = array(
-					'id'       => (int) $r->id,
-					'message'  => minn_admin_aios_event_label( $r->event_type ),
-					'username' => '' !== $who ? $who : 'System',
-					'ip'       => (string) $r->ip,
-					'level'    => minn_admin_aios_level( $r->level ),
-					// Trailing Z: created is a UTC epoch, not site-local.
-					'date'     => gmdate( 'Y-m-d\TH:i:s\Z', (int) $r->created ),
-				);
-			}
-			return rest_ensure_response( array( 'items' => $items, 'total' => $total ) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/aios/events/(?P<id>\d+)', array(
-		'methods'             => 'GET',
-		'permission_callback' => 'minn_admin_aios_can',
-		'callback'            => function ( WP_REST_Request $request ) {
-			global $wpdb;
-			$table = minn_admin_aios_table();
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			// Scope like the list route. 404 rather than 403 so the endpoint
-			// never confirms that an out-of-scope id exists.
-			list( $scope_sql, $scope_args ) = minn_admin_aios_site_scope();
-			$row = $wpdb->get_row( $wpdb->prepare(
-				"SELECT * FROM {$table} WHERE id = %d{$scope_sql}",
-				array_merge( array( (int) Minn_Admin::path_param( $request ) ), $scope_args )
-			) );
-			if ( ! $row ) {
-				return new WP_Error( 'not_found', __( 'Event not found.', 'minn-admin' ), array( 'status' => 404 ) );
-			}
-			$who   = (string) $row->username;
-			$event = array(
-				array( 'label' => __( 'Event', 'minn-admin' ), 'value' => minn_admin_aios_event_label( $row->event_type ) ),
-				// created is a UTC epoch; wp_date() prints it at the offset that date had.
-				array( 'label' => __( 'When', 'minn-admin' ), 'value' => wp_date( 'M j, Y g:i a', (int) $row->created ) ),
-				array( 'label' => __( 'Level', 'minn-admin' ), 'value' => minn_admin_aios_level( $row->level ), 'type' => 'pill' ),
-				array( 'label' => __( 'User', 'minn-admin' ), 'value' => '' !== $who ? $who : 'System' ),
-				array( 'label' => 'IP', 'value' => (string) $row->ip ),
-			);
-			if ( ! empty( $row->country_code ) ) {
-				$event[] = array( 'label' => __( 'Country', 'minn-admin' ), 'value' => (string) $row->country_code );
-			}
-			$sections = array(
-				array( 'title' => __( 'Event', 'minn-admin' ), 'rows' => array_values( array_filter( $event, function ( $r ) {
-					return '' !== (string) $r['value'];
-				} ) ) ),
-			);
-
-			// `details` is JSON — decode (never unserialize) and flatten the
-			// top level into scalar Context rows. The activity-log family
-			// renders detail as a contact card (renderActivityDetail), which
-			// surfaces labeled scalar rows as fields; a kv-table object row is
-			// for the plain-sections surfaces (mail family), not this card.
-			$decoded = json_decode( (string) $row->details, true );
-			if ( is_array( $decoded ) ) {
-				// AIOS commonly wraps under the event key: unwrap one level.
-				if ( 1 === count( $decoded ) && is_array( reset( $decoded ) ) ) {
-					$decoded = reset( $decoded );
-				}
-				$context = array();
-				foreach ( $decoded as $k => $v ) {
-					$label = ucfirst( trim( str_replace( array( '-', '_' ), ' ', (string) $k ) ) );
-					if ( is_bool( $v ) ) {
-						$context[] = array( 'label' => $label, 'value' => $v ? __( 'Yes', 'minn-admin' ) : __( 'No', 'minn-admin' ) );
-					} elseif ( is_scalar( $v ) ) {
-						$val = (string) $v;
-						$context[] = array( 'label' => $label, 'value' => strlen( $val ) > 200 ? substr( $val, 0, 200 ) . '…' : $val );
-					}
-					// Nested values are skipped: the card is for short facts.
-				}
-				$context = array_values( array_filter( $context, function ( $r ) {
-					return '' !== (string) $r['value'];
-				} ) );
-				if ( $context ) {
-					$sections[] = array( 'title' => __( 'Context', 'minn-admin' ), 'rows' => $context );
-				}
-			}
-
-			// AIOS stores `stacktrace` as a PHP-serialized array (a debug
-			// artifact, not a readable trace) — deliberately not surfaced: it
-			// would be a giant blob, and we never unserialize third-party data.
-
-			return rest_ensure_response( array(
-				'title'    => minn_admin_aios_event_label( $row->event_type ),
-				'sections' => $sections,
-				'adminUrl' => minn_admin_aios_admin_url(),
-			) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/aios/status', array(
-		'methods'             => 'GET',
-		'permission_callback' => 'minn_admin_aios_can',
-		'callback'            => function () {
-			global $wpdb;
-			$table = minn_admin_aios_table();
-			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
-				return rest_ensure_response( array(
-					'rows'    => array( array( 'label' => __( 'Events', 'minn-admin' ), 'value' => '—', 'hint' => __( 'Audit log table not found', 'minn-admin' ) ) ),
-					'actions' => array( array( 'label' => __( 'Open All-In-One Security ↗', 'minn-admin' ), 'href' => minn_admin_aios_admin_url() ) ),
-				) );
-			}
-			$now   = time();
-			list( $scope_sql, $scope_args ) = minn_admin_aios_site_scope();
-			$scoped = function ( $extra, $extra_args ) use ( $wpdb, $table, $scope_sql, $scope_args ) {
-				$sql  = "SELECT COUNT(*) FROM {$table} WHERE 1=1{$extra}{$scope_sql}";
-				$args = array_merge( $extra_args, $scope_args );
-				return (int) ( $args ? $wpdb->get_var( $wpdb->prepare( $sql, $args ) ) : $wpdb->get_var( $sql ) );
-			};
-			$total = $scoped( '', array() );
-			$day   = $scoped( ' AND created >= %d', array( $now - DAY_IN_SECONDS ) );
-			$week  = $scoped( ' AND created >= %d', array( $now - 7 * DAY_IN_SECONDS ) );
-			$warn  = $scoped( " AND created >= %d AND level IN ('warning','error','fatal')", array( $now - 7 * DAY_IN_SECONDS ) );
-			$last_sql  = "SELECT created FROM {$table} WHERE 1=1{$scope_sql} ORDER BY id DESC LIMIT 1";
-			$last  = $scope_args ? $wpdb->get_var( $wpdb->prepare( $last_sql, $scope_args ) ) : $wpdb->get_var( $last_sql );
-			// Fourteen site-local days, warnings split out. `created` is a UTC
-			// epoch: bucketed by integer arithmetic, grouped in SQL, scoped
-			// to this site exactly like every count above.
-			$days   = minn_admin_chart_days();
-			$day_ex = minn_admin_chart_epoch_day_sql( 'created' );
-			$series = $wpdb->get_results( $wpdb->prepare(
-				"SELECT {$day_ex} AS d, COUNT(*) AS c,
-					SUM(CASE WHEN level IN ('warning','error','fatal') THEN 1 ELSE 0 END) AS w
-				 FROM {$table} WHERE created >= %d{$scope_sql} GROUP BY d",
-				array_merge( array( minn_admin_chart_epoch_since() ), $scope_args )
-			) );
-			// phpcs:enable
-			foreach ( (array) $series as $row ) {
-				$d = minn_admin_chart_epoch_bucket_day( $row->d );
-				// The soft bar is value + secondary, so the two series stay disjoint.
-				minn_admin_chart_bump( $days, $d, false, (int) $row->c - (int) $row->w );
-				minn_admin_chart_bump( $days, $d, true, (int) $row->w );
-			}
-			$posture = minn_admin_aios_login_posture();
-			$rows    = array(
-				array(
-					'label' => __( 'Events (24h)', 'minn-admin' ),
-					'value' => number_format_i18n( $day ),
-					'hint'  => sprintf(
-						/* translators: %s: number of events recorded in the last 7 days. */
-						__( '%s in the last 7 days', 'minn-admin' ),
-						number_format_i18n( $week )
-					),
-				),
-				array( 'label' => __( 'Events all-time', 'minn-admin' ), 'value' => number_format_i18n( $total ) ),
-				array(
-					'label' => __( 'Warnings (7d)', 'minn-admin' ),
-					'value' => number_format_i18n( $warn ),
-					'hint'  => $warn ? __( 'warning, error or fatal', 'minn-admin' ) : __( 'all clear', 'minn-admin' ),
-				),
-				array(
-					'label' => __( 'Failed logins (24h)', 'minn-admin' ),
-					'value' => number_format_i18n( $posture['failed_24h'] ),
-					'hint'  => __( 'from the audit log', 'minn-admin' ),
-				),
-				array(
-					'label' => __( 'Locked out now', 'minn-admin' ),
-					'value' => $posture['locked'] ? number_format_i18n( $posture['locked'] ) : __( 'Nobody', 'minn-admin' ),
-					'hint'  => $posture['locked'] ? __( 'temporary login lockdowns', 'minn-admin' ) : __( 'no active lockdowns', 'minn-admin' ),
-				),
-				array(
-					'label' => __( 'Permanent blocks', 'minn-admin' ),
-					'value' => number_format_i18n( $posture['blocks'] ),
-					'hint'  => $posture['blocks'] ? __( 'blocked IPs', 'minn-admin' ) : __( 'none', 'minn-admin' ),
-				),
-				array(
-					'label' => __( 'Last event', 'minn-admin' ),
-					'value' => $last
-						? sprintf(
-							/* translators: %s: human-readable time since the last event. */
-							__( '%s ago', 'minn-admin' ),
-							human_time_diff( (int) $last, time() )
-						)
-						: '—',
-				),
-			);
-			$actions = array(
-				array( 'label' => __( 'Open All-In-One Security ↗', 'minn-admin' ), 'href' => minn_admin_aios_admin_url() ),
-			);
-			if ( $posture['locked'] > 0 ) {
-				$actions[] = array( 'label' => __( 'View locked IPs ↗', 'minn-admin' ), 'href' => minn_admin_aios_lockout_url() );
-			}
-			if ( $posture['blocks'] > 0 ) {
-				$actions[] = array( 'label' => __( 'View permanent blocks ↗', 'minn-admin' ), 'href' => minn_admin_aios_perm_block_url() );
-			}
-			return rest_ensure_response( array(
-				'rows'    => $rows,
-				'chart'   => minn_admin_chart_build( $days, __( 'Events', 'minn-admin' ), __( 'Warnings', 'minn-admin' ) ),
-				'actions' => $actions,
-			) );
-		},
-	) );
 } );

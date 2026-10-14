@@ -4,10 +4,9 @@
  *
  * Wordfence has no REST log surface, but its {prefix}wfLogins table is a
  * clean record of every login and failed attempt (who, from where, when) —
- * the security half of "what happened on my site". This shim exposes it as
- * an Activity Log family member: read-only, prefix-scoped SELECTs, the
- * binary IP decoded through Wordfence's OWN inet_ntop so we never reinvent
- * its packing. Firewall config and scans stay in wp-admin; that's the
+ * the security half of "what happened on my site". It is a kernel
+ * resource in the Activity Log family, read-only, the binary IP decoded
+ * through Wordfence's OWN inet_ntop so we never reinvent its packing. Firewall config and scans stay in wp-admin; that's the
  * plugin's product, not a log.
  *
  * @package minn-admin
@@ -40,7 +39,6 @@ function minn_admin_wordfence_can() {
 }
 
 function minn_admin_wordfence_active() {
-	global $wpdb;
 	if ( ! defined( 'WORDFENCE_VERSION' ) && ! class_exists( 'wordfence' ) ) {
 		return false;
 	}
@@ -50,13 +48,15 @@ function minn_admin_wordfence_active() {
 	if ( ! Minn_Admin::network_owner() ) {
 		return false;
 	}
-	// Case-insensitive existence check: on case-folding MySQL setups
-	// (macOS, lower_case_table_names) SHOW TABLES returns wp_wflogins while
-	// Wordfence names it wfLogins — a strict === would wrongly report it
-	// absent. The SELECTs themselves resolve fine either way.
-	$table = $wpdb->base_prefix . 'wfLogins';
-	$found = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
-	return $found && 0 === strcasecmp( (string) $found, $table );
+	// The kernel's check ignores case: on case-folding MySQL setups (macOS,
+	// lower_case_table_names) SHOW TABLES returns wp_wflogins while
+	// Wordfence names it wfLogins.
+	return Minn_Admin_Kernel_SQL::exists( array( 'table' => 'wfLogins', 'network' => true ) );
+}
+
+/** Network-shared table (see minn_admin_wordfence_active), so network data. */
+function minn_admin_wordfence_can_read_log() {
+	return minn_admin_wordfence_can() && Minn_Admin::network_owner();
 }
 
 /**
@@ -97,13 +97,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'cap'        => 'read',
 		// Status card reuses the System posture rows (firewall + last scan).
 		'status'     => array( 'route' => 'minn-admin/v1/wordfence/status' ),
-		'collection' => array(
-			'route'     => 'minn-admin/v1/wordfence/logins',
-			'pageQuery' => 'per_page=25&page={page}',
-			'search'    => 'search={q}',
-			'dateQuery' => 'after={from}&before={to}',
-			'itemsKey'  => 'items',
-			'totalKey'  => 'total',
+		'collection' => Minn_Admin_Kernel::collection( 'wordfence/logins', array(
 			'tabs'      => array(
 				'param'  => 'kind',
 				'static' => array(
@@ -122,71 +116,108 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'detail'    => array(
 				'skip' => array( 'message' ),
 			),
-		),
+		) ),
 	);
 	return $surfaces;
 } );
 
+minn_admin_resource( 'wordfence/logins', array(
+	'active' => 'minn_admin_wordfence_active',
+	'gates'  => array( 'view' => 'minn_admin_wordfence_can_read_log' ),
+	'source' => array(
+		'table'   => 'wfLogins',
+		'network' => true,
+		'key'     => 'id',
+		'columns' => array( 'id', 'ctime', 'fail', 'action', 'username', 'userID', 'IP' ),
+	),
+	'list'   => array(
+		// A sign-out is logged with fail = 0 but is no sign-in: their own
+		// dashboard leaves `logout` out of its successful logins, and so does this.
+		'facets' => array(
+			array( 'param' => 'kind', 'values' => function ( $v ) {
+				$kinds = array(
+					'failed'  => array( 'fail' => 1 ),
+					'success' => array( 'fail' => 0, 'action' => array( 'op' => '!=', 'value' => 'logout' ) ),
+				);
+				return $kinds[ sanitize_key( $v ) ] ?? null;
+			} ),
+		),
+		'search' => array( 'columns' => array( 'username' ) ),
+		'range'  => array( 'column' => 'ctime', 'clock' => 'epoch' ),
+		'order'  => array( 'column' => 'ctime' ),
+		'row'    => function ( array $r ) {
+			// The binary address through Wordfence's own unpacking.
+			$ip    = class_exists( 'wfUtils' ) && method_exists( 'wfUtils', 'inet_ntop' ) ? @wfUtils::inet_ntop( $r['IP'] ) : ''; // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			$label = minn_admin_wordfence_action_label( $r['action'], (int) $r['fail'] );
+			return array(
+				'id'      => (int) $r['id'],
+				'message' => $label . ( $r['username'] ? ': ' . $r['username'] : '' ),
+				'who'     => $r['username'] ? $r['username'] : '—',
+				'ip'      => $ip ? $ip : '—',
+				// A sign-out is neither (their dashboard counts it as no sign-in).
+				'result'  => ( (int) $r['fail'] ) ? 'failed' : ( 'logout' === $r['action'] ? 'signed-out' : 'success' ),
+				// The event page reads this as the level: their code ("loginOK") in words.
+				'action'  => $label,
+				'date'    => $r['ctime'],
+			);
+		},
+		'fields' => array(
+			'id'      => 'int',
+			'message' => 'text',
+			'who'     => 'text',
+			'ip'      => 'text',
+			'result'  => array( 'type' => 'enum', 'values' => array( 'failed', 'signed-out', 'success' ) ),
+			'action'  => 'text',
+			// ctime is a UTC float epoch.
+			'date'    => array( 'type' => 'datetime', 'stored' => 'epoch', 'wire' => 'z' ),
+		),
+	),
+) );
+
 /** Status-card model: login totals + System-page firewall/scan posture. */
 function minn_admin_wordfence_status_model() {
-	global $wpdb;
-	$table = $wpdb->base_prefix . 'wfLogins';
-	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-	$failed_24h = (int) $wpdb->get_var( $wpdb->prepare(
-		"SELECT COUNT(*) FROM {$table} WHERE fail = 1 AND ctime >= %d",
-		time() - DAY_IN_SECONDS
+	$logins = array( 'table' => 'wfLogins', 'network' => true );
+	$since  = Minn_Admin_Kernel::since( 'epoch', DAY_IN_SECONDS );
+	$failed = Minn_Admin_Kernel_SQL::count( $logins, array( 'fail' => 1, 'ctime' => $since ) );
+	$ok     = Minn_Admin_Kernel_SQL::count( $logins, array( 'fail' => 0, 'action' => array( 'op' => '!=', 'value' => 'logout' ), 'ctime' => $since ) );
+	// Fourteen site-local days of logins, failures split out. Sign-outs are
+	// in neither series (Wordfence logs them with fail = 0, never 1).
+	$days = Minn_Admin_Kernel_SQL::chart_days( array(
+		'table'     => $logins,
+		'column'    => 'ctime',
+		'clock'     => 'epoch',
+		'where'     => array( 'action' => array( 'op' => '!=', 'value' => 'logout' ) ),
+		'split'     => 'fail',
+		'secondary' => array( 1 ),
 	) );
-	// A sign-out is logged with fail = 0 but is no sign-in: their own
-	// dashboard leaves `logout` out of its successful logins, and so does this.
-	$ok_24h = (int) $wpdb->get_var( $wpdb->prepare(
-		"SELECT COUNT(*) FROM {$table} WHERE fail = 0 AND action <> 'logout' AND ctime >= %d",
-		time() - DAY_IN_SECONDS
-	) );
-	// Fourteen site-local days of logins, failures split out. ctime is a UTC
-	// float epoch: bucketed by integer arithmetic and grouped in SQL.
-	$days   = minn_admin_chart_days();
-	$day_ex = minn_admin_chart_epoch_day_sql( 'ctime' );
-	$series = $wpdb->get_results( $wpdb->prepare(
-		"SELECT {$day_ex} AS d, SUM(CASE WHEN fail = 0 AND action <> 'logout' THEN 1 ELSE 0 END) AS s, SUM(CASE WHEN fail = 1 THEN 1 ELSE 0 END) AS f
-		 FROM {$table} WHERE ctime >= %d GROUP BY d",
-		minn_admin_chart_epoch_since()
-	) );
-	// phpcs:enable
-	foreach ( (array) $series as $row ) {
-		$d = minn_admin_chart_epoch_bucket_day( $row->d );
-		// The soft bar is value + secondary, so the two series stay disjoint.
-		minn_admin_chart_bump( $days, $d, false, (int) $row->s );
-		minn_admin_chart_bump( $days, $d, true, (int) $row->f );
-	}
 
 	$rows = array(
 		array(
 			'label' => __( 'Failed logins (24h)', 'minn-admin' ),
-			'value' => number_format_i18n( $failed_24h ),
+			'value' => number_format_i18n( $failed ),
 			/* translators: %s: number of successful logins. */
-			'hint'  => $ok_24h ? sprintf( __( '%s successful', 'minn-admin' ), number_format_i18n( $ok_24h ) ) : __( 'No successful logins in the window', 'minn-admin' ),
+			'hint'  => $ok ? sprintf( __( '%s successful', 'minn-admin' ), number_format_i18n( $ok ) ) : __( 'No successful logins in the window', 'minn-admin' ),
 		),
 	);
 	// Reuse the System posture helpers so the card and health strip never drift.
-	foreach ( minn_admin_wordfence_checks() as $check ) {
+	$checks = minn_admin_wordfence_checks();
+	foreach ( $checks as $check ) {
 		$rows[] = array(
 			'label' => $check['label'],
 			'value' => 'pass' === $check['status'] ? __( 'OK', 'minn-admin' ) : ( 'fail' === $check['status'] ? __( 'Attention', 'minn-admin' ) : __( 'Watch', 'minn-admin' ) ),
 			'hint'  => $check['detail'],
 		);
 	}
-
 	$actions = array(
 		array( 'label' => __( 'Open Wordfence ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=Wordfence' ) ),
 	);
-	foreach ( minn_admin_wordfence_checks() as $check ) {
+	foreach ( $checks as $check ) {
 		// Route on the destination, never the label: the label is translated.
 		if ( ! empty( $check['href'] ) && false !== strpos( $check['href'], 'WordfenceScan' ) ) {
 			$actions[] = array( 'label' => __( 'Scan ↗', 'minn-admin' ), 'href' => $check['href'] );
 			break;
 		}
 	}
-
 	return array(
 		'rows'    => $rows,
 		'chart'   => minn_admin_chart_build( $days, __( 'Successful', 'minn-admin' ), __( 'Failed', 'minn-admin' ) ),
@@ -194,87 +225,13 @@ function minn_admin_wordfence_status_model() {
 	);
 }
 
-add_action( 'rest_api_init', function () {
-	if ( ! minn_admin_wordfence_active() ) {
-		return;
-	}
-
-	register_rest_route( 'minn-admin/v1', '/wordfence/logins', array(
-		'methods'             => 'GET',
-		'permission_callback' => function () {
-			// Network-shared table (see minn_admin_wordfence_active).
-			return minn_admin_wordfence_can() && Minn_Admin::network_owner();
-		},
-		'callback'            => function ( WP_REST_Request $request ) {
-			global $wpdb;
-			$table    = $wpdb->base_prefix . 'wfLogins';
-			$per_page = min( 100, max( 1, (int) ( $request['per_page'] ?: 25 ) ) );
-			$page     = max( 1, (int) ( $request['page'] ?: 1 ) );
-			$kind     = sanitize_key( (string) $request['kind'] );
-
-			$where = '1=1';
-			$args  = array();
-			if ( 'failed' === $kind ) {
-				$where = 'fail = 1';
-			} elseif ( 'success' === $kind ) {
-				$where = "fail = 0 AND action <> 'logout'";
-			}
-			if ( $request['search'] ) {
-				$like   = '%' . $wpdb->esc_like( (string) $request['search'] ) . '%';
-				$where .= ' AND username LIKE %s';
-				$args[] = $like;
-			}
-			// A clicked chart bar: site-local bounds onto the UTC epoch column.
-			list( $range_sql, $range_args ) = minn_admin_chart_range_clause( $request, 'ctime', 'epoch' );
-			if ( $range_sql ) {
-				$where .= ' AND ' . implode( ' AND ', $range_sql );
-				$args   = array_merge( $args, $range_args );
-			}
-
-			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table prefix-derived; WHERE placeholder-built.
-			$total = (int) ( $args
-				? $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE {$where}", $args ) )
-				: $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE {$where}" ) );
-			$rows = $wpdb->get_results( $wpdb->prepare(
-				"SELECT id, ctime, fail, action, username, userID, IP FROM {$table} WHERE {$where} ORDER BY ctime DESC LIMIT %d OFFSET %d",
-				array_merge( $args, array( $per_page, ( $page - 1 ) * $per_page ) )
-			) );
-			// phpcs:enable
-
-			$decode = class_exists( 'wfUtils' ) && method_exists( 'wfUtils', 'inet_ntop' );
-			$items  = array();
-			foreach ( (array) $rows as $r ) {
-				$ip = $decode ? @wfUtils::inet_ntop( $r->IP ) : '';
-				$items[] = array(
-					'id'      => (int) $r->id,
-					'message' => minn_admin_wordfence_action_label( $r->action, (int) $r->fail )
-						. ( $r->username ? ': ' . $r->username : '' ),
-					'who'     => $r->username ? $r->username : '—',
-					'ip'      => $ip ? $ip : '—',
-					// A sign-out is neither (their dashboard counts it as no sign-in).
-					'result'  => ( (int) $r->fail ) ? 'failed' : ( 'logout' === $r->action ? 'signed-out' : 'success' ),
-					// The event page reads this as the level: their code
-					// ("loginOK") in words.
-					'action'  => minn_admin_wordfence_action_label( $r->action, (int) $r->fail ),
-					// ctime is a UTC float epoch.
-					'date'    => gmdate( 'Y-m-d\TH:i:s\Z', (int) $r->ctime ),
-				);
-			}
-			return rest_ensure_response( array( 'items' => $items, 'total' => $total ) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/wordfence/status', array(
-		'methods'             => 'GET',
-		'permission_callback' => function () {
-			// Network-shared table (see minn_admin_wordfence_active).
-			return minn_admin_wordfence_can() && Minn_Admin::network_owner();
-		},
-		'callback'            => function () {
-			return rest_ensure_response( minn_admin_wordfence_status_model() );
-		},
-	) );
-} );
+minn_admin_endpoint( 'wordfence/status', array(
+	'active' => 'minn_admin_wordfence_active',
+	'gate'   => 'minn_admin_wordfence_can_read_log',
+	'run'    => function () {
+		return minn_admin_wordfence_status_model();
+	},
+) );
 
 /**
  * Security posture health rows for the System page: firewall mode, last

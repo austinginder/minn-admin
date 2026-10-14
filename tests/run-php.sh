@@ -83,6 +83,7 @@ run preview-policy-delta single --user=admin
 run definition-saves single --user=admin
 run duplicate-copy single --user=admin
 run kernel-conformance single --user=admin
+run activity-log-kernel single --user=admin
 run language-packs single
 run notice-link-label single
 run removed-owners single --user=admin
