@@ -21,7 +21,10 @@
   "kernel_core_lines": 0,
   "collection_adapters": 59,
   "collection_lines": 33261,
-  "collection_routes": 287
+  "collection_routes": 287,
+  "code_lines": 41220,
+  "kernel_code_lines": 0,
+  "collection_code_lines": 26426
  },
  {
   "at": "2026-08-30T06:59:05-04:00",
@@ -45,7 +48,10 @@
   "kernel_core_lines": 0,
   "collection_adapters": 61,
   "collection_lines": 35652,
-  "collection_routes": 302
+  "collection_routes": 302,
+  "code_lines": 43528,
+  "kernel_code_lines": 0,
+  "collection_code_lines": 28254
  },
  {
   "at": "2026-09-01T04:37:57-04:00",
@@ -69,7 +75,10 @@
   "kernel_core_lines": 0,
   "collection_adapters": 61,
   "collection_lines": 36178,
-  "collection_routes": 304
+  "collection_routes": 304,
+  "code_lines": 43929,
+  "kernel_code_lines": 0,
+  "collection_code_lines": 28655
  },
  {
   "at": "2026-09-03T08:17:52-04:00",
@@ -93,7 +102,10 @@
   "kernel_core_lines": 0,
   "collection_adapters": 68,
   "collection_lines": 40683,
-  "collection_routes": 341
+  "collection_routes": 341,
+  "code_lines": 49322,
+  "kernel_code_lines": 0,
+  "collection_code_lines": 32342
  },
  {
   "at": "2026-09-10T23:41:43-04:00",
@@ -117,7 +129,10 @@
   "kernel_core_lines": 0,
   "collection_adapters": 68,
   "collection_lines": 41850,
-  "collection_routes": 343
+  "collection_routes": 343,
+  "code_lines": 50300,
+  "kernel_code_lines": 0,
+  "collection_code_lines": 33078
  },
  {
   "at": "2026-09-14T22:03:40-04:00",
@@ -141,7 +156,10 @@
   "kernel_core_lines": 0,
   "collection_adapters": 70,
   "collection_lines": 45562,
-  "collection_routes": 372
+  "collection_routes": 372,
+  "code_lines": 53297,
+  "kernel_code_lines": 0,
+  "collection_code_lines": 36087
  },
  {
   "at": "2026-09-17T13:16:23-04:00",
@@ -165,7 +183,10 @@
   "kernel_core_lines": 0,
   "collection_adapters": 71,
   "collection_lines": 46801,
-  "collection_routes": 379
+  "collection_routes": 379,
+  "code_lines": 56074,
+  "kernel_code_lines": 0,
+  "collection_code_lines": 37061
  },
  {
   "at": "2026-09-27T06:07:29-04:00",
@@ -189,7 +210,10 @@
   "kernel_core_lines": 0,
   "collection_adapters": 75,
   "collection_lines": 49229,
-  "collection_routes": 404
+  "collection_routes": 404,
+  "code_lines": 59284,
+  "kernel_code_lines": 0,
+  "collection_code_lines": 38968
  },
  {
   "at": "2026-10-05T16:36:15-04:00",
@@ -213,7 +237,10 @@
   "kernel_core_lines": 0,
   "collection_adapters": 75,
   "collection_lines": 49960,
-  "collection_routes": 403
+  "collection_routes": 403,
+  "code_lines": 63441,
+  "kernel_code_lines": 0,
+  "collection_code_lines": 39411
  },
  {
   "at": "2026-10-11T00:53:16-04:00",
@@ -237,7 +264,10 @@
   "kernel_core_lines": 0,
   "collection_adapters": 75,
   "collection_lines": 50419,
-  "collection_routes": 403
+  "collection_routes": 403,
+  "code_lines": 64079,
+  "kernel_code_lines": 0,
+  "collection_code_lines": 39630
  },
  {
   "at": "2026-10-14T03:57:39-04:00",
@@ -261,7 +291,10 @@
   "kernel_core_lines": 0,
   "collection_adapters": 75,
   "collection_lines": 52151,
-  "collection_routes": 405
+  "collection_routes": 405,
+  "code_lines": 65764,
+  "kernel_code_lines": 0,
+  "collection_code_lines": 40640
  },
  {
   "at": "2026-10-14T11:32:25.797Z",
@@ -285,6 +318,9 @@
   "kernel_core_lines": 1244,
   "collection_adapters": 75,
   "collection_lines": 51657,
-  "collection_routes": 331
+  "collection_routes": 331,
+  "code_lines": 65147,
+  "kernel_code_lines": 799,
+  "collection_code_lines": 40023
  }
 ]

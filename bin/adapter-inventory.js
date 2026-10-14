@@ -10,7 +10,8 @@
  *   node bin/adapter-inventory.js --record "label"   # also append a snapshot
  *                                                    # to bin/adapter-inventory/history.json
  *
- * Per adapter: lines, hand-written REST routes, permission callbacks,
+ * Per adapter: lines, lines of code (no blank or comment-only lines, so a
+ * comment never counts as code), hand-written REST routes, permission callbacks,
  * capability checks, raw SQL reads and writes, the screen shapes it declares,
  * kernel resources (minn_admin_resource() calls) and kernel handlers
  * (minn_admin_endpoint() calls). Each hand-written route also gets a kind and
@@ -135,6 +136,34 @@ function routesOf( src ) {
 	return out;
 }
 
+// Lines that hold code: not blank, not inside or wholly a comment. A line
+// with code and a trailing comment counts.
+function codeLines( src ) {
+	let n = 0;
+	let block = false;
+	for ( const raw of src.split( '\n' ) ) {
+		let line = raw.trim();
+		if ( block ) {
+			const end = line.indexOf( '*/' );
+			if ( end < 0 ) continue;
+			block = false;
+			line = line.slice( end + 2 ).trim();
+		}
+		while ( line.startsWith( '/*' ) ) {
+			const end = line.indexOf( '*/', 2 );
+			if ( end < 0 ) {
+				block = true;
+				line = '';
+				break;
+			}
+			line = line.slice( end + 2 ).trim();
+		}
+		if ( '' === line || line.startsWith( '//' ) || line.startsWith( '#' ) || '<?php' === line ) continue;
+		n++;
+	}
+	return n;
+}
+
 function measure( file, src, families ) {
 	const name = path.basename( file );
 	const lines = src.split( '\n' ).length;
@@ -157,6 +186,7 @@ function measure( file, src, families ) {
 		plugin: fam.plugin,
 		shape: shapes.join( '+' ),
 		lines,
+		code_lines: codeLines( src ),
 		routes,
 		// Of the hand-written routes: the shapes a declaration covers, and
 		// the ones that keep their logic as a kernel handler.
@@ -177,10 +207,12 @@ const families = familyMap();
 const adapterFiles = listFiles( ADAPTERS ).filter( ( f ) => f.endsWith( '.php' ) ).sort();
 const rows = adapterFiles.map( ( f ) => measure( f, read( f ), families ) );
 
-const kernelLines = KERNEL_PATHS.flatMap( ( p ) => {
+const kernelFiles = KERNEL_PATHS.flatMap( ( p ) => {
 	const dir = p.endsWith( '/' ) ? p : path.dirname( p );
 	return listFiles( dir ).filter( ( f ) => f.startsWith( p ) && f.endsWith( '.php' ) );
-} ).reduce( ( n, f ) => n + read( f ).split( '\n' ).length, 0 );
+} );
+const kernelLines = kernelFiles.reduce( ( n, f ) => n + read( f ).split( '\n' ).length, 0 );
+const kernelCode = kernelFiles.reduce( ( n, f ) => n + codeLines( read( f ) ), 0 );
 
 const sum = ( k, list = rows ) => list.reduce( ( n, r ) => n + r[ k ], 0 );
 const collection = rows.filter( ( r ) => r.shape.includes( 'collection' ) );
@@ -197,6 +229,7 @@ const snapshot = {
 	label: record || '',
 	adapters: rows.length,
 	lines: sum( 'lines' ),
+	code_lines: sum( 'code_lines' ),
 	routes: sum( 'routes' ),
 	permission_callbacks: sum( 'permission_callbacks' ),
 	cap_checks: sum( 'cap_checks' ),
@@ -209,8 +242,10 @@ const snapshot = {
 	kernel_adapters: rows.filter( ( r ) => r.status === 'kernel' ).length,
 	partial_adapters: rows.filter( ( r ) => r.status === 'partial' ).length,
 	kernel_core_lines: kernelLines,
+	kernel_code_lines: kernelCode,
 	collection_adapters: collection.length,
 	collection_lines: sum( 'lines', collection ),
+	collection_code_lines: sum( 'code_lines', collection ),
 	collection_routes: sum( 'routes', collection ),
 };
 
