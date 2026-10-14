@@ -595,7 +595,7 @@ add_action( 'rest_api_init', function () {
 			// Next 14 site-local days, starting today: the shape of the week ahead.
 			$chart_days = array();
 			for ( $i = 0; $i < 14; $i++ ) {
-				$d                = wp_date( 'Y-m-d', time() + $i * DAY_IN_SECONDS );
+				$d                = minn_admin_chart_day( $i );
 				$chart_days[ $d ] = array( 'label' => $d, 'value' => 0, 'secondary' => 0 );
 			}
 			// slot is a naive epoch on the site's own clock read as UTC (their

@@ -604,7 +604,7 @@ add_action( 'rest_api_init', function () {
 			// Next 14 site-local days, starting today: the shape of the week ahead.
 			$chart_days = array();
 			for ( $i = 0; $i < 14; $i++ ) {
-				$d                = wp_date( 'Y-m-d', time() + $i * DAY_IN_SECONDS );
+				$d                = minn_admin_chart_day( $i );
 				$chart_days[ $d ] = array( 'label' => $d, 'value' => 0, 'secondary' => 0 );
 			}
 			$chart_to = ( new DateTimeImmutable( 'today', $tz ) )->modify( '+14 days' )->setTimezone( new DateTimeZone( 'UTC' ) )->format( 'Y-m-d H:i:s' );

@@ -879,14 +879,14 @@ add_action( 'rest_api_init', function () {
 			// Next 14 site-local days, starting today: the shape of the week ahead.
 			$chart_days = array();
 			for ( $i = 0; $i < 14; $i++ ) {
-				$d                = wp_date( 'Y-m-d', time() + $i * DAY_IN_SECONDS );
+				$d                = minn_admin_chart_day( $i );
 				$chart_days[ $d ] = array( 'label' => $d, 'value' => 0, 'secondary' => 0 );
 			}
 			// start_date is LatePoint's site-local day column, so it buckets directly.
 			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			$chart_rows = $wpdb->get_results( $wpdb->prepare(
 				"SELECT start_date, status, COUNT(*) AS c FROM {$bookings} WHERE status IN ('approved','pending','payment_pending') AND start_date >= %s AND start_date <= %s{$scoped} GROUP BY start_date, status",
-				array_merge( array( $today, wp_date( 'Y-m-d', time() + 13 * DAY_IN_SECONDS ) ), $params )
+				array_merge( array( $today, minn_admin_chart_day( 13 ) ), $params )
 			) );
 			// phpcs:enable
 			foreach ( (array) $chart_rows as $cr ) {

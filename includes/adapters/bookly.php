@@ -556,13 +556,13 @@ add_action( 'rest_api_init', function () {
 			// Next 14 site-local days, starting today: the shape of the week ahead.
 			$chart_days = array();
 			for ( $i = 0; $i < 14; $i++ ) {
-				$d                = wp_date( 'Y-m-d', time() + $i * DAY_IN_SECONDS );
+				$d                = minn_admin_chart_day( $i );
 				$chart_days[ $d ] = array( 'label' => $d, 'value' => 0, 'secondary' => 0 );
 			}
 			// start_date is WP-local, so DATE() buckets on the site's own days.
 			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			$chart_sql  = "SELECT DATE(a.start_date) AS d, ca.status, COUNT(*) AS c{$join}{$where} AND ca.status IN ('approved','pending','waitlisted') AND DATE(a.start_date) >= %s AND DATE(a.start_date) <= %s GROUP BY DATE(a.start_date), ca.status";
-			$chart_rows = $wpdb->get_results( $wpdb->prepare( $chart_sql, array_merge( $params, array( $today, wp_date( 'Y-m-d', time() + 13 * DAY_IN_SECONDS ) ) ) ) );
+			$chart_rows = $wpdb->get_results( $wpdb->prepare( $chart_sql, array_merge( $params, array( $today, minn_admin_chart_day( 13 ) ) ) ) );
 			// phpcs:enable
 			foreach ( (array) $chart_rows as $cr ) {
 				$d = (string) $cr->d;
