@@ -260,8 +260,11 @@ add_action( 'rest_api_init', function () {
 			$total = (int) $wpdb->get_var( $args
 				? $wpdb->prepare( "SELECT COUNT(*) FROM {$items_t} e {$where}", ...$args ) // phpcs:ignore
 				: "SELECT COUNT(*) FROM {$items_t} e {$where}" ); // phpcs:ignore
+			// Newest submission first by the date Formidable stored, so an
+			// entry added out of order (an import) lands where it belongs; the
+			// id breaks ties so pages never overlap.
 			$rows  = $wpdb->get_results( $wpdb->prepare(
-				"SELECT e.id, e.form_id, e.created_at FROM {$items_t} e {$where} ORDER BY e.id DESC LIMIT %d OFFSET %d", // phpcs:ignore
+				"SELECT e.id, e.form_id, e.created_at FROM {$items_t} e {$where} ORDER BY e.created_at DESC, e.id DESC LIMIT %d OFFSET %d", // phpcs:ignore
 				...array_merge( $args, array( $per_page, ( $page - 1 ) * $per_page ) )
 			) );
 

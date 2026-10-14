@@ -396,8 +396,11 @@ add_action( 'rest_api_init', function () {
 			$total = (int) $wpdb->get_var( $args
 				? $wpdb->prepare( "SELECT COUNT(*) FROM {$entry} e {$where}", ...$args ) // phpcs:ignore
 				: "SELECT COUNT(*) FROM {$entry} e {$where}" ); // phpcs:ignore
+			// Newest submission first by the date Forminator stored, so an
+			// entry added out of order (an import) lands where it belongs; the
+			// id breaks ties so pages never overlap.
 			$rows  = $wpdb->get_results( $wpdb->prepare(
-				"SELECT e.entry_id, e.form_id, e.date_created, e.is_spam, e.status FROM {$entry} e {$where} ORDER BY e.entry_id DESC LIMIT %d OFFSET %d", // phpcs:ignore
+				"SELECT e.entry_id, e.form_id, e.date_created, e.is_spam, e.status FROM {$entry} e {$where} ORDER BY e.date_created DESC, e.entry_id DESC LIMIT %d OFFSET %d", // phpcs:ignore
 				...array_merge( $args, array( $per_page, ( $page - 1 ) * $per_page ) )
 			) );
 
