@@ -1,7 +1,8 @@
 <?php
 /**
  * Repros for the forms-family bugs found seeding the live demo: what the
- * entry lists and entry pages answer (D-04, D-07, D-08, D-10 to D-14).
+ * entry lists and entry pages answer (D-04, D-07, D-08, D-10 to D-14, their
+ * siblings, and the review's N2, S2, I6, I22 and S9).
  *
  * Each section seeds its own rows on this site, through the vendor's API
  * where it has one and its own tables where it does not, reads the routes
@@ -276,6 +277,22 @@ if ( ! class_exists( 'GFAPI' ) || empty( $surfaces['gravity-forms'] ) ) {
 			$after = $gf_list();
 			$check( 'D-07: the list pill and the entry page agree', (string) ( $page['status'] ?? '' ) === $pill_of( $gf_surface, $after[ $gf_emma ] ?? array() ),
 				( $page['status'] ?? '' ) . ' vs ' . $pill_of( $gf_surface, $after[ $gf_emma ] ?? array() ) );
+
+			// N2: the client copies the route's item onto the cached list
+			// row, so the item carries the row's pill and star as they now
+			// stand, not only GF's raw flags.
+			$pitem = (array) ( $page['item'] ?? array() );
+			$check( 'N2: the GF entry item carries the row\'s state and star', isset( $pitem['state'], $pitem['starred'] )
+				&& $pill_of( $gf_surface, $after[ $gf_emma ] ?? array() ) === $pitem['state'] && ( $after[ $gf_emma ][ $star_col ] ?? null ) === $pitem['starred'],
+				wp_json_encode( array_intersect_key( $pitem, array( 'state' => 1, 'starred' => 1, 'is_read' => 1 ) ) ) );
+
+			// I6: the default cell prints a dash for an empty value, so an
+			// unstarred row needs a value that renders as nothing.
+			$blank = function ( $v ) {
+				return null !== $v && '' !== (string) $v && '' === trim( wp_strip_all_tags( (string) $v ) );
+			};
+			$check( 'I6: an unstarred GF row\'s star cell renders blank, not a dash', '' !== $star_col && $blank( $emma[ $star_col ] ?? null ),
+				wp_json_encode( $emma[ $star_col ] ?? null ) );
 		}
 	} finally {
 		foreach ( $gf_entries as $id ) {
@@ -343,6 +360,18 @@ if ( ! function_exists( 'minn_admin_cfdb7_ready' ) || ! minn_admin_cfdb7_ready()
 			$check( 'D-08: the CFDB7 entry shows the answers as typed, entities decoded',
 				$typed['your-name'] === ( $rows['Name']['value'] ?? null ) && $typed['your-message'] === ( $rows['Message']['value'] ?? null ),
 				wp_json_encode( array( $rows['Name']['value'] ?? null, $rows['Message']['value'] ?? null ) ) );
+
+			// S2: opening marked the entry read; the page's Mark as unread
+			// gates on the route's copy of the row over the list's.
+			$unmark = null;
+			foreach ( (array) $surfaces['cfdb7']['collection']['actions'] as $a ) {
+				if ( isset( $a['route'] ) && '/unread' === substr( $a['route'], -7 ) ) {
+					$unmark = $a;
+				}
+			}
+			$check( 'S2: CFDB7 offers Mark as unread once opening marked the entry read',
+				$unmark && 'unread' === ( $row['status'] ?? '' ) && $visible( $unmark, $page_item( $row, $det ) ),
+				'page item status ' . ( $page_item( $row, $det )['status'] ?? '?' ) );
 		}
 	} finally {
 		if ( $cf_id > 1 ) {
@@ -442,6 +471,7 @@ if ( ! function_exists( 'minn_admin_elementor_forms_ready' ) || ! minn_admin_ele
 	$el_page = 0;
 	$el_sub  = 0;
 	$el_q    = \ElementorPro\Modules\Forms\Submissions\Database\Query::get_instance();
+	global $wpdb;
 	try {
 		$el_page = $id_of( wp_insert_post( array( 'post_type' => 'page', 'post_status' => 'draft', 'post_title' => 'Minn demo bugs ' . $token ) ) );
 		$el_sub  = $el_page ? $id_of( $el_q->add_submission(
@@ -471,6 +501,24 @@ if ( ! function_exists( 'minn_admin_elementor_forms_ready' ) || ! minn_admin_ele
 			$check( 'D-10: Elementor drops Mark as read once opening marked the entry read',
 				$mark && 'unread' === ( $listed['status'] ?? '' ) && ! empty( $raw['data']['is_read'] ) && ! $visible( $mark, $page_item( $listed, $det ) ),
 				'page item status ' . ( $page_item( $listed, $det )['status'] ?? '?' ) );
+
+			// I22: when Elementor's update does not land, the entry is still
+			// unread and the page must keep saying so. The write is refused
+			// here by blanking that one UPDATE, which wpdb answers with false.
+			$el_q->update_submission( $el_sub, array( 'is_read' => 0 ) );
+			$refuse = function ( $sql ) use ( $wpdb ) {
+				return ( 0 === stripos( ltrim( $sql ), 'UPDATE' ) && false !== strpos( $sql, $wpdb->prefix . 'e_submissions`' ) && false !== strpos( $sql, 'is_read' ) ) ? '' : $sql;
+			};
+			add_filter( 'query', $refuse );
+			try {
+				list( , $det2 ) = $call( 'GET', '/minn-admin/v1/elementor/submissions/' . $el_sub );
+			} finally {
+				remove_filter( 'query', $refuse );
+			}
+			$raw2 = $el_q->get_submission( $el_sub );
+			$check( 'I22: Elementor keeps an entry unread when its update did not land',
+				empty( $raw2['data']['is_read'] ) && 'unread' === ( $det2['item']['status'] ?? '' ) && $visible( $mark, $page_item( $listed, $det2 ) ),
+				'stored is_read ' . wp_json_encode( $raw2['data']['is_read'] ?? null ) . ', item status ' . ( $det2['item']['status'] ?? '?' ) );
 		}
 	} finally {
 		if ( $el_sub > 1 ) {
@@ -596,6 +644,103 @@ if ( ! function_exists( 'minn_admin_everest_active' ) || ! minn_admin_everest_ac
 		if ( $evf_id > 1 ) {
 			$wpdb->delete( $wpdb->prefix . 'evf_entrymeta', array( 'entry_id' => $evf_id ), array( '%d' ) );
 			$wpdb->delete( $wpdb->prefix . 'evf_entries', array( 'entry_id' => $evf_id ), array( '%d' ) );
+		}
+	}
+}
+
+/* ===== Forminator and Formidable: S9 (the D-13 sort) ===== */
+// Two entries each: the newest has the LOWER id, the one added later
+// carries an older date, the way an import lands. Rows go in with the
+// vendor's own columns; neither plugin's API takes a submission date.
+$sorts = function ( $label, $route, $new, $old ) use ( $call, $check, $ids_of, $token ) {
+	list( , $all ) = $call( 'GET', $route, array( 'search' => $token ) );
+	$check( "S9: {$label} sorts entries by submission date", array( $new, $old ) === $ids_of( $all['items'] ?? array() ), implode( ',', $ids_of( $all['items'] ?? array() ) ) );
+	list( , $p1 ) = $call( 'GET', $route, array( 'search' => $token, 'per_page' => 1, 'page' => 1 ) );
+	list( , $p2 ) = $call( 'GET', $route, array( 'search' => $token, 'per_page' => 1, 'page' => 2 ) );
+	$check( "S9: {$label} pages follow that order and keep the total", array( $new ) === $ids_of( $p1['items'] ?? array() ) && array( $old ) === $ids_of( $p2['items'] ?? array() )
+		&& 2 === (int) ( $p1['total'] ?? 0 ) && 2 === (int) ( $p2['total'] ?? 0 ), wp_json_encode( array( $ids_of( $p1['items'] ?? array() ), $ids_of( $p2['items'] ?? array() ), $p1['total'] ?? null ) ) );
+};
+
+if ( ! class_exists( 'Forminator_Form_Entry_Model' ) || empty( $surfaces['forminator'] ) ) {
+	$skip( 'Forminator (S9): Forminator is not active here' );
+} else {
+	global $wpdb;
+	$fm_ids = array();
+	try {
+		$fm_form = (int) $wpdb->get_var( "SELECT ID FROM {$wpdb->posts} WHERE post_type = 'forminator_forms' ORDER BY ID ASC LIMIT 1" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// Forminator stamps date_created with date_i18n: site-local.
+		$fm_add = function ( $name, $date ) use ( $wpdb, $fm_form, $token, $id_of ) {
+			$ok = $wpdb->insert( $wpdb->prefix . 'frmt_form_entry', array(
+				'entry_type'   => 'custom-forms',
+				'form_id'      => $fm_form,
+				'is_spam'      => 0,
+				'status'       => 'active',
+				'date_created' => $date,
+				'date_updated' => $date,
+			) );
+			$id = $ok ? $id_of( (int) $wpdb->insert_id ) : 0;
+			if ( $id ) {
+				$wpdb->insert( $wpdb->prefix . 'frmt_form_entry_meta', array( 'entry_id' => $id, 'meta_key' => 'name-1', 'meta_value' => $name . ' ' . $token, 'date_created' => $date, 'date_updated' => $date ) ); // phpcs:ignore WordPress.DB.SlowDBQuery
+			}
+			return $id;
+		};
+		$fm_new = $fm_form ? $fm_add( 'Ada Newer', current_time( 'mysql' ) ) : 0;
+		$fm_old = $fm_form ? $fm_add( 'Bea Imported', '2026-01-05 09:00:00' ) : 0;
+		$fm_ids = array_filter( array( $fm_new, $fm_old ) );
+		$check( 'Forminator fixtures: two entries', $fm_new && $fm_old && $fm_old > $fm_new, "{$fm_new}, {$fm_old}" );
+		if ( $fm_new && $fm_old ) {
+			$sorts( 'Forminator', '/minn-admin/v1/forminator/entries', $fm_new, $fm_old );
+		}
+	} finally {
+		foreach ( $fm_ids as $id ) {
+			if ( $id > 1 ) {
+				$wpdb->delete( $wpdb->prefix . 'frmt_form_entry_meta', array( 'entry_id' => $id ), array( '%d' ) );
+				$wpdb->delete( $wpdb->prefix . 'frmt_form_entry', array( 'entry_id' => $id ), array( '%d' ) );
+			}
+		}
+	}
+}
+
+if ( ! class_exists( 'FrmField' ) || empty( $surfaces['formidable'] ) ) {
+	$skip( 'Formidable (S9): Formidable is not active here' );
+} else {
+	global $wpdb;
+	$fd_ids = array();
+	try {
+		$fd_form  = (int) $wpdb->get_var( "SELECT id FROM {$wpdb->prefix}frm_forms WHERE is_template = 0 AND status = 'published' ORDER BY id ASC LIMIT 1" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$fd_field = $fd_form ? array_keys( minn_admin_formidable_fields( $fd_form ) ) : array();
+		// Formidable stamps created_at with current_time( 'mysql', 1 ): UTC.
+		$fd_add = function ( $name, $date ) use ( $wpdb, $fd_form, $fd_field, $token, $id_of ) {
+			$ok = $wpdb->insert( $wpdb->prefix . 'frm_items', array(
+				'item_key'       => substr( $token . wp_generate_password( 6, false ), 0, 20 ),
+				'name'           => $name,
+				'form_id'        => $fd_form,
+				'post_id'        => 0,
+				'user_id'        => 0,
+				'parent_item_id' => 0,
+				'is_draft'       => 0,
+				'created_at'     => $date,
+				'updated_at'     => $date,
+			) );
+			$id = $ok ? $id_of( (int) $wpdb->insert_id ) : 0;
+			if ( $id ) {
+				$wpdb->insert( $wpdb->prefix . 'frm_item_metas', array( 'item_id' => $id, 'field_id' => (int) $fd_field[0], 'meta_value' => $name . ' ' . $token, 'created_at' => $date ) );
+			}
+			return $id;
+		};
+		$fd_new = $fd_field ? $fd_add( 'Ada Newer', current_time( 'mysql', true ) ) : 0;
+		$fd_old = $fd_field ? $fd_add( 'Bea Imported', '2026-01-05 14:00:00' ) : 0;
+		$fd_ids = array_filter( array( $fd_new, $fd_old ) );
+		$check( 'Formidable fixtures: two entries', $fd_new && $fd_old && $fd_old > $fd_new, "{$fd_new}, {$fd_old}" );
+		if ( $fd_new && $fd_old ) {
+			$sorts( 'Formidable', '/minn-admin/v1/formidable/entries', $fd_new, $fd_old );
+		}
+	} finally {
+		foreach ( $fd_ids as $id ) {
+			if ( $id > 1 ) {
+				$wpdb->delete( $wpdb->prefix . 'frm_item_metas', array( 'item_id' => $id ), array( '%d' ) );
+				$wpdb->delete( $wpdb->prefix . 'frm_items', array( 'id' => $id ), array( '%d' ) );
+			}
 		}
 	}
 }
