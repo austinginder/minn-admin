@@ -27457,7 +27457,8 @@
 	// A flat, copy-pasteable report of everything on the page — what a
 	// developer drops into a support ticket or a gist.
 	function systemReportText( s ) {
-		const lines = [ `# System report — ${ esc( B.site.name ) }`, '' ];
+		// Plain text for the clipboard: an HTML escape here copied "&amp;".
+		const lines = [ `# System report — ${ B.site.name || '' }`, '' ];
 		s.checks.forEach( ( c ) => lines.push( `${ c.status === 'pass' ? '✓' : c.status === 'warn' ? '!' : '✗' } ${ c.label}: ${ c.detail }` ) );
 		if ( s.licenses && s.licenses.items.length ) {
 			lines.push( '', '## Licenses (stored state, not live)' );
