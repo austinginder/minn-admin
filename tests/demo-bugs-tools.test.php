@@ -491,6 +491,22 @@ if ( ! defined( 'CODE_SNIPPETS_VERSION' ) || ! function_exists( 'Code_Snippets\\
 			$check( 'D-34 fixture snippet created', false, $st . ' ' . wp_json_encode( $d ) );
 		} else {
 			$cs_stored = \Code_Snippets\get_snippet( $cs_id );
+
+			// S11: Code Snippets stamps modified with gmdate(). An edit at 02:30
+			// UTC is the evening before west of UTC; the fixture is made the
+			// latest change so the status card names it.
+			$s11_ts = strtotime( gmdate( 'Y-m-d', time() + 2 * DAY_IN_SECONDS ) . ' 02:30:00 UTC' );
+			$wpdb->update( $wpdb->prefix . 'snippets', array( 'modified' => gmdate( 'Y-m-d H:i:s', $s11_ts ) ), array( 'id' => $cs_id ) );
+			list( , $s11 ) = $call( 'GET', '/minn-admin/v1/code-snippets/status' );
+			$s11_row = null;
+			foreach ( (array) ( $s11['rows'] ?? array() ) as $r ) {
+				if ( 'Last change' === ( $r['label'] ?? '' ) ) {
+					$s11_row = $r;
+				}
+			}
+			$s11_want = wp_date( get_option( 'date_format' ), $s11_ts );
+			$check( 'S11 the status card\'s Last change is dated in the site\'s zone and format', $s11_row && $cs_name === ( $s11_row['value'] ?? '' ) && $s11_want === ( $s11_row['hint'] ?? '' ), wp_json_encode( $s11_row ) . ' want ' . $s11_want );
+
 			if ( ! defined( 'DISALLOW_FILE_EDIT' ) ) {
 				define( 'DISALLOW_FILE_EDIT', true );
 			}

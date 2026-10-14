@@ -299,11 +299,14 @@ add_action( 'rest_api_init', function () {
 				);
 			}
 			$last = $wpdb->get_row( "SELECT name, modified FROM {$table} WHERE active >= 0 ORDER BY modified DESC LIMIT 1" ); // phpcs:ignore
-			if ( $last && $last->modified && '0000-00-00 00:00:00' !== $last->modified ) {
+			// modified is stamped with gmdate(), so the day is the site's,
+			// not the UTC one a substr() of the stamp would give.
+			$last_ts = $last && $last->modified && '0000-00-00 00:00:00' !== $last->modified ? strtotime( $last->modified . ' UTC' ) : false;
+			if ( $last_ts ) {
 				$rows[] = array(
 					'label' => __( 'Last change', 'minn-admin' ),
 					'value' => (string) $last->name,
-					'hint'  => substr( (string) $last->modified, 0, 10 ),
+					'hint'  => wp_date( get_option( 'date_format' ), $last_ts ),
 				);
 			}
 			if ( defined( 'CODE_SNIPPETS_SAFE_MODE' ) && CODE_SNIPPETS_SAFE_MODE ) {
