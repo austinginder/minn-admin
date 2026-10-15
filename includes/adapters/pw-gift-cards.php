@@ -444,6 +444,13 @@ minn_admin_resource( 'pwgc/gift-cards', function () {
 					if ( ! $to ) {
 						return minn_admin_gift_no_recipient( 'minn_pwgc_no_recipient' );
 					}
+					// The recipient is what the buyer typed, and WooCommerce's email
+					// keeps only the parts is_email() accepts, sending nothing when
+					// none is left: report whom it can reach, or that it cannot.
+					$to = implode( ', ', array_filter( array_map( 'trim', explode( ',', $to ) ), 'is_email' ) );
+					if ( '' === $to ) {
+						return new WP_Error( 'minn_pwgc_bad_recipient', __( "This gift card's recipient is not an email address WooCommerce can send to, so nothing was resent.", 'minn-admin' ), array( 'status' => 400 ) );
+					}
 					$from = method_exists( $card, 'get_from' ) ? (string) $card->get_from() : '';
 					$name = method_exists( $card, 'get_recipient_name' ) ? (string) $card->get_recipient_name() : '';
 					$msg  = method_exists( $card, 'get_message' ) ? (string) $card->get_message() : '';
