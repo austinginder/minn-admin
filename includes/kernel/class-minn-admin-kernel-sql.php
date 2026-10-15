@@ -635,6 +635,140 @@ class Minn_Admin_Kernel_SQL {
 	}
 
 	/**
+	 * Grouped totals: rows of group values and the totals over each group,
+	 * under conditions, in an order, at most $limit (a traffic report's top
+	 * pages, a day's views). Every column a declared identifier, every value a
+	 * placeholder, the order only by what the query selects.
+	 *
+	 * @param string|array $table  Table spec (joins as from(), each named "alias.column").
+	 * @param array        $group  What rows group by: 'col' or 'c.col' (named by the column),
+	 *                             'c.col' => 'name', or 'name' => array( 'day' => col, 'clock'
+	 *                             => date | local | utc | epoch | local-epoch ) for the day
+	 *                             it falls on, as chart_days() reads it (Y-m-d, '' for none;
+	 *                             'date' is a DATE column); the clock is required.
+	 * @param array        $totals Name => array( 'count' => '*' | col ), array( 'distinct' =>
+	 *                             col ) (COUNT DISTINCT), array( 'sum' => col ) (0 for none),
+	 *                             array( 'max' => col ) or array( 'min' => col ).
+	 * @param array        $where  Conditions.
+	 * @param array        $order  Name => ASC | DESC, a group's or a total's; the groups break
+	 *                             ties, so a limit cuts the same rows every time.
+	 * @param int          $limit  At most this many rows (1 to 5,000: two years of days, twice;
+	 *                             below 1 is 1).
+	 * @return array[] Rows keyed by the group and total names.
+	 */
+	public static function totals( $table, array $group, array $totals, array $where = array(), array $order = array(), $limit = 100 ) {
+		global $wpdb;
+		$sel   = array();
+		$by    = array();
+		$exprs = array();
+		$days  = array();
+		foreach ( $group as $k => $g ) {
+			if ( is_array( $g ) ) {
+				// A day without its clock would be read on a guessed one.
+				if ( ! isset( $g['clock'] ) ) {
+					throw new InvalidArgumentException( 'minn_kernel_clock=' );
+				}
+				$name          = self::ident( (string) $k );
+				$clock         = (string) $g['clock'];
+				$expr          = self::day_sql( self::col( (string) ( $g['day'] ?? '' ) ), $clock );
+				$days[ $name ] = 'epoch' === $clock || 'local-epoch' === $clock;
+			} else {
+				$src  = is_int( $k ) ? (string) $g : (string) $k;
+				$bare = explode( "\0", $src, 2 )[0];
+				$name = self::ident( is_int( $k ) ? ( false === strpos( $bare, '.' ) ? $bare : substr( $bare, strpos( $bare, '.' ) + 1 ) ) : (string) $g );
+				$expr = self::col( $src );
+			}
+			if ( isset( $exprs[ $name ] ) ) {
+				throw new InvalidArgumentException( 'minn_kernel_total=' . $name );
+			}
+			$exprs[ $name ] = $expr;
+			$by[]           = $expr;
+			$sel[]          = "{$expr} AS `{$name}`";
+		}
+		foreach ( $totals as $k => $t ) {
+			$name = self::ident( (string) $k );
+			$kind = is_array( $t ) && 1 === count( $t ) ? (string) array_key_first( $t ) : '';
+			$of   = is_array( $t ) ? (string) reset( $t ) : '';
+			if ( isset( $exprs[ $name ] ) || ! in_array( $kind, array( 'count', 'distinct', 'sum', 'max', 'min' ), true ) ) {
+				throw new InvalidArgumentException( 'minn_kernel_total=' . $name );
+			}
+			if ( 'count' === $kind ) {
+				$expr = '*' === $of ? 'COUNT(*)' : 'COUNT(' . self::col( $of ) . ')';
+			} elseif ( 'distinct' === $kind ) {
+				$expr = 'COUNT(DISTINCT ' . self::col( $of ) . ')';
+			} elseif ( 'sum' === $kind ) {
+				$expr = 'COALESCE(SUM(' . self::col( $of ) . '),0)';
+			} else {
+				$expr = strtoupper( $kind ) . '(' . self::col( $of ) . ')';
+			}
+			$exprs[ $name ] = $expr;
+			$sel[]          = "{$expr} AS `{$name}`";
+		}
+		if ( ! $sel ) {
+			throw new InvalidArgumentException( 'minn_kernel_total=' );
+		}
+		// Refused whether or not the vendor's table is there.
+		$ord = array();
+		foreach ( $order as $name => $dir ) {
+			$name = (string) $name;
+			if ( ! isset( $exprs[ $name ] ) ) {
+				throw new InvalidArgumentException( 'minn_kernel_total_order=' . $name );
+			}
+			$ord[] = $exprs[ $name ] . ( 'DESC' === strtoupper( (string) $dir ) ? ' DESC' : ' ASC' );
+		}
+		if ( ! self::exists( $table ) ) {
+			return array();
+		}
+		foreach ( $by as $expr ) {
+			$ord[] = $expr . ' ASC';
+		}
+		list( $sql, $args ) = self::where( $where, 'e' );
+		$q = 'SELECT ' . implode( ', ', $sel ) . ' FROM ' . self::from( $table )
+			. ( $sql ? ' WHERE ' . implode( ' AND ', $sql ) : '' )
+			. ( $by ? ' GROUP BY ' . implode( ', ', $by ) : '' )
+			. ( $ord ? ' ORDER BY ' . implode( ', ', array_unique( $ord ) ) : '' )
+			. ' LIMIT ' . max( 1, min( 5000, (int) $limit ) );
+		$rows = $wpdb->get_results( self::prepare( $q, $args ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$out  = array();
+		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
+			foreach ( $days as $name => $epoch ) {
+				if ( null === $row[ $name ] ) {
+					$row[ $name ] = '';
+				} elseif ( $epoch ) {
+					$row[ $name ] = minn_admin_chart_epoch_bucket_day( $row[ $name ] );
+				}
+			}
+			$out[] = $row;
+		}
+		return $out;
+	}
+
+	/**
+	 * The SQL for the day a column falls on, by its clock, as chart_days()
+	 * buckets it: a DATE column as it is, the date part of a datetime, the
+	 * site day of a UTC datetime, or of an epoch (a day number; 'local-epoch'
+	 * reads it unshifted, which for a real epoch is its UTC day).
+	 *
+	 * @param string $col   Qualified column.
+	 * @param string $clock date | local | utc | epoch | local-epoch.
+	 * @return string
+	 */
+	private static function day_sql( $col, $clock ) {
+		switch ( $clock ) {
+			case 'date':
+				return $col;
+			case 'local':
+				return "DATE({$col})";
+			case 'utc':
+				return minn_admin_chart_utc_day_sql( $col );
+			case 'epoch':
+			case 'local-epoch':
+				return minn_admin_chart_epoch_day_sql( $col, $clock );
+		}
+		throw new InvalidArgumentException( 'minn_kernel_clock=' . $clock );
+	}
+
+	/**
 	 * The sum of a column under conditions; 0 for none. A count is summed
 	 * whole; money is summed with $decimals, each row rounded to them first,
 	 * as a store shows each one: read as an exact decimal, so a text column
@@ -949,15 +1083,7 @@ class Minn_Admin_Kernel_SQL {
 		$col   = self::col( $c['column'] );
 		$clock = (string) ( $c['clock'] ?? 'utc' );
 		$days  = self::empty_days( $ahead, (string) ( $c['label'] ?? '' ) );
-		if ( 'utc' === $clock ) {
-			$day = minn_admin_chart_utc_day_sql( $col );
-		} elseif ( 'epoch' === $clock || 'local-epoch' === $clock ) {
-			$day = minn_admin_chart_epoch_day_sql( $col, $clock );
-		} elseif ( 'date' === $clock ) {
-			$day = $col;
-		} else {
-			$day = "DATE({$col})";
-		}
+		$day   = self::day_sql( $col, in_array( $clock, array( 'date', 'utc', 'epoch', 'local-epoch' ), true ) ? $clock : 'local' );
 		$since = $ahead ? Minn_Admin_Kernel::at( $clock, 0 ) : Minn_Admin_Kernel::at( $clock, -13 );
 		$bound = array( $c['column'] . "\0since" => array( 'op' => '>=', 'value' => $since ) );
 		if ( $ahead ) {

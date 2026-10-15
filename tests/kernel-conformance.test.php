@@ -24,7 +24,8 @@
  *    collection route that reads its row back, edits on the item route,
  *    card sums and counts, key-bound writes and the database's own clock;
  *    then the gift card shapes: a filter taking several values at once,
- *    groups of conditions ('#any') in SQL and PHP, and money sums.
+ *    groups of conditions ('#any') in SQL and PHP, and money sums; then the
+ *    traffic shapes: grouped totals over joins and the days rows fall on.
  * 2. Every real declaration: each action has a declared gate and a
  *    post-condition, each descriptor action that points at a kernel route
  *    names a declared action with its method and a state the action accepts,
@@ -1524,6 +1525,95 @@ $s_gone  = Minn_Admin_Kernel_SQL::sum( 'minn_conf_no_table', 'amount', array(), 
 $s_text  = Minn_Admin_Kernel_SQL::sum( 'minn_conf_cards', 'note', array( 'owner' => 10 ), 2 );
 $check( "a money sum rounds each row to the store's decimals before adding them (10.00 + 5.01 + 2.50 + 1.12), held to the source's conditions; a whole sum stays a whole number", is_float( $s_money ) && abs( $s_money - 18.63 ) < 0.0001 && 19 === $s_whole && abs( $s_where - 16.13 ) < 0.0001 && 0.0 === $s_gone, wp_json_encode( array( $s_money, $s_whole, $s_where, $s_gone ) ) );
 $check( 'a money sum over a text column rounds each value as an exact decimal (5.005 to 5.01, 0.125 to 0.13), as PHP and the store do', abs( $s_text - 8.64 ) < 0.0001, wp_json_encode( $s_text ) );
+
+// --- 1g. Traffic shapes: grouped totals, day buckets ------------------------
+if ( ! method_exists( 'Minn_Admin_Kernel_SQL', 'totals' ) ) {
+	$check( 'the SQL layer reads grouped totals', false, 'no Minn_Admin_Kernel_SQL::totals()' );
+} else {
+	$th = $wpdb->prefix . 'minn_conf_hits';
+	$tp = $wpdb->prefix . 'minn_conf_paths';
+	$wpdb->query( "CREATE TEMPORARY TABLE {$th} ( id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, day DATE NOT NULL, at DATETIME NOT NULL, ts BIGINT NOT NULL, path_id BIGINT NOT NULL, visitor VARCHAR(20) NOT NULL, views INT NULL ) ENGINE=InnoDB" ); // phpcs:ignore
+	$wpdb->query( "CREATE TEMPORARY TABLE {$tp} ( id BIGINT UNSIGNED NOT NULL PRIMARY KEY, path VARCHAR(60) NOT NULL ) ENGINE=InnoDB" ); // phpcs:ignore
+	foreach ( array( 1 => '/a', 2 => '/b', 3 => '/c' ) as $pid => $pp ) {
+		$wpdb->insert( $tp, array( 'id' => $pid, 'path' => $pp ) );
+	}
+	// 20:00 UTC: the next day for a site ten hours ahead, so a day group
+	// that lost its shift reads the wrong day.
+	$t_eve = gmmktime( 20, 0, 0, 3, 10, 2026 );
+	foreach ( array(
+		array( '2026-03-10', 1, 'u1', 2 ),
+		array( '2026-03-10', 1, 'u1', 3 ),
+		array( '2026-03-10', 1, 'u2', null ),
+		array( '2026-03-11', 2, 'u1', 4 ),
+		array( '2026-03-11', 2, 'u3', 1 ),
+		array( '2026-03-11', 3, 'u4', 5 ),
+		array( '2026-03-12', 9, 'u5', 1 ),
+		array( '2026-03-12', 4, 'u6', null ),
+	) as $h ) {
+		$ts = $t_eve + ( (int) substr( $h[0], 8, 2 ) - 10 ) * DAY_IN_SECONDS;
+		$wpdb->insert( $th, array( 'day' => $h[0], 'at' => gmdate( 'Y-m-d H:i:s', $ts ), 'ts' => $ts, 'path_id' => $h[1], 'visitor' => $h[2], 'views' => $h[3] ) );
+	}
+	$t_src = array( 'table' => 'minn_conf_hits', 'joins' => array( 'p' => array( 'table' => 'minn_conf_paths', 'on' => array( 'id' => 'e.path_id' ) ) ) );
+	$t_top = Minn_Admin_Kernel_SQL::totals(
+		$t_src,
+		array( 'path_id' ),
+		array( 'hits' => array( 'count' => '*' ), 'visitors' => array( 'distinct' => 'visitor' ), 'views' => array( 'sum' => 'views' ), 'path' => array( 'max' => 'p.path' ) ),
+		array( 'day' => array( 'op' => '<=', 'value' => '2026-03-11' ) ),
+		array( 'hits' => 'DESC', 'visitors' => 'DESC' ),
+		2
+	);
+	$t_want = array(
+		array( 'path_id' => '1', 'hits' => '3', 'visitors' => '2', 'views' => '5', 'path' => '/a' ),
+		array( 'path_id' => '2', 'hits' => '2', 'visitors' => '2', 'views' => '5', 'path' => '/b' ),
+	);
+	$check( 'grouped totals count, count distinct, sum and take a joined column per group, under conditions, in the declared order, at most the limit', $t_want === $t_top, wp_json_encode( $t_top ) );
+	$t_null = Minn_Admin_Kernel_SQL::totals( 'minn_conf_hits', array( 'path_id' ), array( 'v' => array( 'sum' => 'views' ) ), array( 'path_id' => 4 ) );
+	$check( 'a sum over a group whose values are all NULL is 0, not nothing', array( array( 'path_id' => '4', 'v' => '0' ) ) === $t_null, wp_json_encode( $t_null ) );
+	$t_tie = array_column( Minn_Admin_Kernel_SQL::totals( 'minn_conf_hits', array( 'path_id' ), array( 'v' => array( 'sum' => 'views' ) ), array(), array( 'v' => 'DESC' ), 10 ), 'path_id' );
+	$t_sql = (string) $wpdb->last_query;
+	$check( 'rows that tie on the order are broken by the groups, so a limit always cuts the same ones', array( '1', '2', '3', '9', '4' ) === $t_tie && false !== strpos( $t_sql, 'ORDER BY COALESCE(SUM(e.views),0) DESC, e.path_id ASC' ), wp_json_encode( array( $t_tie, $t_sql ) ) );
+	$t_zone = function () {
+		return '';
+	};
+	$t_ten  = function () {
+		return 10;
+	};
+	add_filter( 'pre_option_timezone_string', $t_zone );
+	add_filter( 'pre_option_gmt_offset', $t_ten );
+	$t_days = array();
+	foreach ( array( 'date' => 'day', 'local' => 'at', 'local-epoch' => 'ts', 'epoch' => 'ts', 'utc' => 'at' ) as $clock => $col ) {
+		$t_days[ $clock ] = array_column( Minn_Admin_Kernel_SQL::totals( 'minn_conf_hits', array( 'd' => array( 'day' => $col, 'clock' => $clock ) ), array( 'n' => array( 'count' => '*' ) ), array(), array( 'd' => 'ASC' ), 10 ), 'n', 'd' );
+	}
+	remove_filter( 'pre_option_timezone_string', $t_zone );
+	remove_filter( 'pre_option_gmt_offset', $t_ten );
+	$t_utc  = array( '2026-03-10' => '3', '2026-03-11' => '3', '2026-03-12' => '2' );
+	$t_site = array( '2026-03-11' => '3', '2026-03-12' => '3', '2026-03-13' => '2' );
+	$check( "a day group reads a DATE column as it is, a datetime's date, an epoch's UTC day unshifted, and the site day of an epoch or a UTC datetime (ten hours ahead, the next day), each as Y-m-d", $t_utc === $t_days['date'] && $t_utc === $t_days['local'] && $t_utc === $t_days['local-epoch'] && $t_site === $t_days['epoch'] && $t_site === $t_days['utc'], wp_json_encode( $t_days ) );
+	$t_inj = Minn_Admin_Kernel_SQL::totals( 'minn_conf_hits', array( 'visitor' ), array( 'n' => array( 'count' => '*' ) ), array( 'visitor' => "u1' OR 1=1 -- " ), array(), 10 );
+	$check( 'a value in a grouped total is a placeholder, never SQL', array() === $t_inj, wp_json_encode( $t_inj ) );
+	$t_bad = array();
+	foreach ( array(
+		array( 'minn_conf_hits', array( 'path_id' ), array( 'n' => array( 'avg' => 'views' ) ), array() ),
+		array( 'minn_conf_hits', array( 'path_id' ), array( 'path_id' => array( 'count' => '*' ) ), array() ),
+		array( 'minn_conf_hits', array( 'path_id' ), array( 'n' => array( 'count' => '*' ) ), array( 'views' => 'DESC' ) ),
+		array( 'minn_conf_no_table', array( 'path_id' ), array( 'n' => array( 'count' => '*' ) ), array( 'views' => 'DESC' ) ),
+		array( 'minn_conf_hits', array( 'd' => array( 'day' => 'at', 'clock' => 'mars' ) ), array( 'n' => array( 'count' => '*' ) ), array() ),
+		array( 'minn_conf_hits', array( 'd' => array( 'day' => 'at' ) ), array( 'n' => array( 'count' => '*' ) ), array() ),
+		array( 'minn_conf_hits', array( 'path_id' ), array( 'n' => array( 'sum' => 'views; DROP TABLE x' ) ), array() ),
+		array( 'minn_conf_hits', array(), array(), array() ),
+	) as $b ) {
+		try {
+			Minn_Admin_Kernel_SQL::totals( $b[0], $b[1], $b[2], array(), $b[3], 10 );
+			$t_bad[] = 'ran';
+		} catch ( InvalidArgumentException $e ) {
+			$t_bad[] = 'refused';
+		}
+	}
+	$check( 'a total of an unknown kind, a name used twice, an order by what is not selected (whether or not the table is there), an unknown or missing clock, a column that is no identifier, and nothing to select are refused', array_fill( 0, 8, 'refused' ) === $t_bad, wp_json_encode( $t_bad ) );
+	$t_kw = Minn_Admin_Kernel_SQL::totals( 'minn_conf_hits', array( 'path_id' => 'key' ), array( 'rank' => array( 'count' => '*' ) ), array( 'path_id' => 9 ) );
+	$check( 'a total or group named like a reserved word is still one', array( array( 'key' => '9', 'rank' => '1' ) ) === $t_kw, wp_json_encode( $t_kw ) );
+	$check( 'grouped totals over a table that is not there are none, and the limit holds between 1 and 5,000', array() === Minn_Admin_Kernel_SQL::totals( 'minn_conf_no_table', array( 'x' ), array( 'n' => array( 'count' => '*' ) ) ) && 1 === count( Minn_Admin_Kernel_SQL::totals( 'minn_conf_hits', array( 'path_id' ), array( 'n' => array( 'count' => '*' ) ), array(), array(), 0 ) ) );
+}
 
 // --- 2. Every real declaration ----------------------------------------------
 $real = array_filter( Minn_Admin_Kernel::resources(), function ( $r ) {
