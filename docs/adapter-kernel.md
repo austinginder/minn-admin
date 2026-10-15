@@ -309,6 +309,16 @@ gained `sum()` and `counts()`, the SQL layer `insert()` and `update()` (vendor t
 the key never written, every value checked against its column so MySQL never cuts or casts
 it), and the database's own clock (`'stored' => 'db'`, read by the database for each date).
 
+The search and reviews port added a sort a person picks: a list declares `sort` with the
+columns a column header may order by (a public name may map to a column or to a joined
+alias's), `?orderby=<name>&order=asc|desc` picks one, descending unless `asc`, and any other
+value keeps the declared order. A table sorts in SQL with the key breaking ties in the same
+direction, its columns held to the source's own when it is declared; an array source sorts
+in PHP, numbers before text, ties in the order the rows came; a callable source that
+declares a sort applies the pick it reads in `$q['sort']`. `collection()` hands the client
+the matching `sortQuery`, and a sort the kernel cannot apply is dropped with a notice
+that says why.
+
 What the kernel does not have yet: the save path for edit forms (changed fields only,
 a base stamp and a 409 on a stale copy), which the entry-edit adapters will need when
 they port (the post type and taxonomy definitions use the same stamp and partial save

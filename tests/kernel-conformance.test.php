@@ -1538,6 +1538,126 @@ $s_text  = Minn_Admin_Kernel_SQL::sum( 'minn_conf_cards', 'note', array( 'owner'
 $check( "a money sum rounds each row to the store's decimals before adding them (10.00 + 5.01 + 2.50 + 1.12), held to the source's conditions; a whole sum stays a whole number", is_float( $s_money ) && abs( $s_money - 18.63 ) < 0.0001 && 19 === $s_whole && abs( $s_where - 16.13 ) < 0.0001 && 0.0 === $s_gone, wp_json_encode( array( $s_money, $s_whole, $s_where, $s_gone ) ) );
 $check( 'a money sum over a text column rounds each value as an exact decimal (5.005 to 5.01, 0.125 to 0.13), as PHP and the store do', abs( $s_text - 8.64 ) < 0.0001, wp_json_encode( $s_text ) );
 
+// --- 1f2. A sort a person picks: declared columns only ---------------------
+$so_seen  = 'not asked';
+$so_wrong = array();
+add_action( 'doing_it_wrong_run', function ( $fn, $msg ) use ( &$so_wrong ) {
+	if ( false !== strpos( (string) $msg, 'minn-conformance/cards-' ) && false !== strpos( (string) $msg, 'sort' ) ) {
+		$so_wrong[] = (string) $msg;
+	}
+}, 10, 2 );
+// A second table to join (a temporary table cannot be opened twice in one query).
+$gc2 = $wpdb->prefix . 'minn_conf_cards2';
+$wpdb->query( "CREATE TEMPORARY TABLE {$gc2} ( id BIGINT UNSIGNED NOT NULL PRIMARY KEY, amount DECIMAL(15,6) NOT NULL ) ENGINE=InnoDB" ); // phpcs:ignore
+foreach ( $gc_seed as $s ) {
+	$wpdb->insert( $gc2, array( 'id' => $s[0], 'amount' => $s[4] ) );
+}
+$so_list = array( 'sort' => array( 'columns' => array( 'amount', 'kind', 'label' => 'note', 'joined' => 'o.amount' ) ), 'fields' => array( 'id' => 'int' ) );
+Minn_Admin_Kernel::resource( 'minn-conformance/cards-sorted', array(
+	'gates'  => array( 'view' => '__return_true' ),
+	'source' => array(
+		'table'   => 'minn_conf_cards',
+		'key'     => 'id',
+		'columns' => array( 'id', 'amount', 'kind', 'note' ),
+		'joins'   => array( 'o' => array( 'table' => 'minn_conf_cards2', 'on' => array( 'id' => 'e.id' ) ) ),
+		'where'   => array( 'owner' => 10 ),
+	),
+	'list'   => array_merge( $so_list, array(
+		'order'  => array( 'column' => 'id', 'dir' => 'ASC' ),
+		'filter' => array( 'param' => 'view', 'values' => array( 'all' => array(), 'rev' => array() ), 'order' => array( 'rev' => 'DESC' ) ),
+	) ),
+) );
+Minn_Admin_Kernel::resource( 'minn-conformance/cards-sorted-rows', array(
+	'gates'  => array( 'view' => '__return_true' ),
+	'source' => array( 'rows' => $gc_rows ),
+	'list'   => $so_list,
+) );
+Minn_Admin_Kernel::resource( 'minn-conformance/cards-sorted-call', array(
+	'gates'  => array( 'view' => '__return_true' ),
+	'source' => array(
+		'list' => function ( array $q ) use ( $gc_rows, &$so_seen ) {
+			$so_seen = $q['sort'] ?? null;
+			$rows    = $gc_rows();
+			return array( $rows, count( $rows ) );
+		},
+		'get'  => function () {
+			return null;
+		},
+	),
+	'list'   => array( 'sort' => array( 'columns' => array( 'amount', 'label' => 'note' ), 'param' => 'sortby', 'dir' => 'sortdir' ), 'fields' => array( 'id' => 'int' ) ),
+) );
+$so_bad_base = array(
+	'gates'  => array( 'view' => '__return_true' ),
+	'source' => array( 'table' => 'minn_conf_cards', 'key' => 'id', 'columns' => array( 'id', 'amount' ), 'where' => array( 'owner' => 10 ) ),
+);
+foreach ( array(
+	'cards-badsort'   => array( 'columns' => array( 'label' => 'note; DROP TABLE x' ) ),
+	'cards-notmine'   => array( 'columns' => array( 'label' => 'note' ) ),
+	'cards-noalias'   => array( 'columns' => array( 'other' => 'x.amount' ) ),
+	'cards-takenkey'  => array( 'columns' => array( 'amount' ), 'param' => 'page' ),
+) as $so_id => $so_sort ) {
+	Minn_Admin_Kernel::resource( 'minn-conformance/' . $so_id, $so_bad_base + array( 'list' => array( 'order' => array( 'column' => 'id', 'dir' => 'ASC' ), 'sort' => $so_sort, 'fields' => array( 'id' => 'int' ) ) ) );
+}
+$so_cases = array(
+	array( array(), array( 1, 2, 3, 4, 6 ), array( 1, 2, 3, 4, 6 ) ),
+	array( array( 'orderby' => 'amount', 'order' => 'asc' ), array( 6, 4, 3, 2, 1 ), array( 6, 4, 3, 2, 1 ) ),
+	array( array( 'orderby' => 'label', 'order' => 'asc' ), array( 6, 2, 4, 3, 1 ), array( 6, 2, 4, 3, 1 ) ),
+	array( array( 'orderby' => 'label', 'order' => 'desc' ), array( 1, 3, 4, 2, 6 ), array( 1, 3, 4, 2, 6 ) ),
+	array( array( 'orderby' => 'label' ), array( 1, 3, 4, 2, 6 ), array( 1, 3, 4, 2, 6 ) ),
+	array( array( 'orderby' => 'label', 'order' => 'sideways' ), array( 1, 3, 4, 2, 6 ), array( 1, 3, 4, 2, 6 ) ),
+	array( array( 'orderby' => 'joined', 'order' => 'asc' ), array( 6, 4, 3, 2, 1 ), array( 6, 4, 3, 2, 1 ) ),
+	array( array( 'orderby' => 'kind', 'order' => 'asc' ), array( 1, 3, 6, 2, 4 ), array( 1, 3, 6, 2, 4 ) ),
+	array( array( 'orderby' => 'note', 'order' => 'asc' ), array( 1, 2, 3, 4, 6 ), array( 1, 2, 3, 4, 6 ) ),
+	array( array( 'orderby' => 'id', 'order' => 'desc' ), array( 1, 2, 3, 4, 6 ), array( 1, 2, 3, 4, 6 ) ),
+	array( array( 'orderby' => 'amount desc, id', 'order' => 'asc' ), array( 1, 2, 3, 4, 6 ), array( 1, 2, 3, 4, 6 ) ),
+	array( array( 'orderby' => array( 'amount' ), 'order' => 'asc' ), array( 1, 2, 3, 4, 6 ), array( 1, 2, 3, 4, 6 ) ),
+);
+$so_got = array();
+$so_ok  = true;
+foreach ( $so_cases as $c ) {
+	$sql_ids  = $gc_ids( 'cards-sorted', $c[0] );
+	$row_ids  = $gc_ids( 'cards-sorted-rows', $c[0] );
+	$so_got[] = array( $c[0], $sql_ids, $row_ids );
+	$so_ok    = $so_ok && $c[1] === $sql_ids && $c[2] === $row_ids;
+}
+$check( "a list sorts by a declared column a person picks (?orderby=<name>&order=asc|desc, descending unless asc), a public name maps to its column or a joined alias's, and any other value, a column it does not name, or one that is not text keeps the declared order, in SQL and in PHP alike", $so_ok, wp_json_encode( $so_got ) );
+$so_tie     = $gc_ids( 'cards-sorted', array( 'orderby' => 'kind', 'order' => 'desc' ) );
+$so_tie_php = $gc_ids( 'cards-sorted-rows', array( 'orderby' => 'kind', 'order' => 'desc' ) );
+$check( 'rows that tie are ordered by the key in the sort\'s direction in SQL, and keep the order they came in PHP', array( 4, 2, 6, 3, 1 ) === $so_tie && array( 2, 4, 1, 3, 6 ) === $so_tie_php, wp_json_encode( array( $so_tie, $so_tie_php ) ) );
+$so_rev    = $gc_ids( 'cards-sorted', array( 'view' => 'rev' ) );
+$so_rev_by = $gc_ids( 'cards-sorted', array( 'view' => 'rev', 'orderby' => 'kind', 'order' => 'asc' ) );
+$check( "a filter value's own order applies when no sort is picked, and a pick overrides it", array( 6, 4, 3, 2, 1 ) === $so_rev && array( 1, 3, 6, 2, 4 ) === $so_rev_by, wp_json_encode( array( $so_rev, $so_rev_by ) ) );
+list( $st, $d ) = $call( 'GET', '/minn-admin/v1/minn-conformance/cards-sorted', array( 'orderby' => 'amount', 'order' => 'asc', 'per_page' => 2, 'page' => 2 ) );
+$check( 'a sorted list pages and counts as one list', 200 === $st && 5 === ( $d['total'] ?? 0 ) && array( 3, 2 ) === array_column( (array) ( $d['items'] ?? array() ), 'id' ), $st . ' ' . wp_json_encode( $d ) );
+$gc_ids( 'cards-sorted-call', array( 'sortby' => 'label', 'sortdir' => 'asc' ) );
+$so_call = $so_seen;
+$gc_ids( 'cards-sorted-call', array( 'orderby' => 'amount', 'order' => 'asc' ) );
+$so_none = $so_seen;
+$check( "a callable source reads the pick in \$q['sort'] (by, its column, dir) under the declaration's own request keys, and none under any other", array( 'by' => 'label', 'column' => 'note', 'dir' => 'ASC' ) === $so_call && null === $so_none, wp_json_encode( array( $so_call, $so_none ) ) );
+$so_bad_ids = array();
+foreach ( array( 'cards-badsort', 'cards-notmine', 'cards-noalias', 'cards-takenkey' ) as $so_id ) {
+	$so_bad_ids[ $so_id ] = array( $gc_ids( $so_id, array( 'orderby' => 'label', 'order' => 'asc' ) ), Minn_Admin_Kernel::collection( 'minn-conformance/' . $so_id )['sortQuery'] ?? null );
+}
+$so_bad_ok = 4 === count( array_filter( $so_bad_ids, function ( $v ) {
+	return array( 1, 2, 3, 4, 6 ) === $v[0] && null === $v[1];
+} ) );
+$check( "a sort whose column is no identifier, not the table's own, behind an alias it does not join, or whose request key another list parameter uses is dropped with a notice that says why, the list keeping its order and the client given no sortQuery", $so_bad_ok && count( $so_wrong ) >= 4, wp_json_encode( array( $so_bad_ids, $so_wrong ) ) );
+$so_coll    = Minn_Admin_Kernel::collection( 'minn-conformance/cards-sorted' );
+$so_coll_c  = Minn_Admin_Kernel::collection( 'minn-conformance/cards-sorted-call' );
+$so_no_coll = Minn_Admin_Kernel::collection( 'minn-conformance/cards' );
+$check( 'collection() hands the client the sortQuery for its own request keys, and none for a list with no sort', 'orderby={by}&order={dir}' === ( $so_coll['sortQuery'] ?? '' ) && 'sortby={by}&sortdir={dir}' === ( $so_coll_c['sortQuery'] ?? '' ) && ! isset( $so_no_coll['sortQuery'] ), wp_json_encode( array( $so_coll['sortQuery'] ?? null, $so_coll_c['sortQuery'] ?? null ) ) );
+$so_mixed = array( array( 'id' => 1, 'v' => '1.10' ), array( 'id' => 2, 'v' => '1.5' ), array( 'id' => 3, 'v' => '1.7a' ), array( 'id' => 4, 'v' => '200' ), array( 'id' => 5, 'v' => '1e3' ), array( 'id' => 6, 'v' => '1f' ) );
+Minn_Admin_Kernel::resource( 'minn-conformance/cards-mixed', array(
+	'gates'  => array( 'view' => '__return_true' ),
+	'source' => array( 'rows' => function () use ( $so_mixed ) {
+		return $so_mixed;
+	} ),
+	'list'   => array( 'sort' => array( 'columns' => array( 'v' ) ), 'fields' => array( 'id' => 'int' ) ),
+) );
+$so_mix_asc  = $gc_ids( 'cards-mixed', array( 'orderby' => 'v', 'order' => 'asc' ) );
+$so_mix_desc = $gc_ids( 'cards-mixed', array( 'orderby' => 'v', 'order' => 'desc' ) );
+$check( 'an array source sorts numbers before text, numbers by value and text naturally, one order whichever way it runs', array( 1, 2, 4, 5, 3, 6 ) === $so_mix_asc && array( 6, 3, 5, 4, 2, 1 ) === $so_mix_desc, wp_json_encode( array( $so_mix_asc, $so_mix_desc ) ) );
+
 // --- 1g. Traffic shapes: grouped totals, day buckets ------------------------
 if ( ! method_exists( 'Minn_Admin_Kernel_SQL', 'totals' ) ) {
 	$check( 'the SQL layer reads grouped totals', false, 'no Minn_Admin_Kernel_SQL::totals()' );

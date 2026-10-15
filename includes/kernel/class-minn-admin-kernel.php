@@ -70,6 +70,17 @@
  *                  // and/or 'also' => callable( string $term ): ?conditions; a row matches any of them
  *       'range'    => array( 'column' => 'date_created', 'clock' => 'utc' ),
  *       'order'    => array( 'column' => 'entry_id', 'dir' => 'DESC' ),
+ *       'sort'     => array( 'columns' => array( 'name', 'weight' ), 'param' => 'orderby', 'dir' => 'order' ),
+ *                  // the columns a person may sort by (a column header): 'columns' lists
+ *                  // them, or maps a public name to a column ('hits' => 'e.count');
+ *                  // ?orderby=<name>&order=asc|desc picks one (descending unless asc),
+ *                  // anything else keeps 'order'. A table sorts in SQL, the key breaking
+ *                  // ties in the same direction, and its columns must be the source's own
+ *                  // (or a joined alias's); an array source sorts in PHP, numbers before
+ *                  // text, ties in the order the rows came; a callable source that
+ *                  // declares a sort applies the pick it reads in $q['sort'] ( by, column,
+ *                  // dir ). 'param' and 'dir' rename the two request keys. collection()
+ *                  // hands the client the matching sortQuery
  *       'keys'     => array( 'items' => 'items', 'total' => 'total' ),
  *       'batch'    => callable( array $rows ): mixed,   // once per page, before 'row' (a batched
  *                                                     // lookup); its answer rides in $q['batch']
@@ -329,6 +340,13 @@ class Minn_Admin_Kernel {
 		}
 		if ( ! empty( $res['list']['filter']['many'] ) && ( isset( $res['list']['filter']['default'] ) || isset( $res['list']['filter']['order'] ) ) ) {
 			_doing_it_wrong( 'minn_admin_resource', esc_html( "{$res['id']} declares a default or an order on a filter taking several values, which it never applies." ), 'Minn Admin 0.46.0' );
+		}
+		if ( isset( $res['list']['sort'] ) ) {
+			$why = self::sort_problem( $res['list']['sort'], $res );
+			if ( '' !== $why ) {
+				_doing_it_wrong( 'minn_admin_resource', esc_html( "{$res['id']} declares a sort it cannot apply ({$why}), so its list keeps its declared order." ), 'Minn Admin 0.46.0' );
+				unset( $res['list']['sort'] );
+			}
 		}
 		$base_eps = array();
 		if ( ! empty( $res['list'] ) ) {
@@ -755,6 +773,18 @@ class Minn_Admin_Kernel {
 				$q['where'][ $l['tab']['column'] . "\0tab" ] = $tab;
 			}
 		}
+		// A sort a person picked, among the declared columns only.
+		if ( ! empty( $l['sort'] ) ) {
+			$map = '' === self::sort_problem( $l['sort'], $res ) ? self::sort_map( $l['sort'] ) : null;
+			$by  = self::param( $r, (string) ( $l['sort']['param'] ?? 'orderby' ) );
+			if ( $map && '' !== $by && isset( $map[ $by ] ) ) {
+				$q['sort'] = array(
+					'by'     => $by,
+					'column' => $map[ $by ],
+					'dir'    => 'asc' === strtolower( self::param( $r, (string) ( $l['sort']['dir'] ?? 'order' ) ) ) ? 'ASC' : 'DESC',
+				);
+			}
+		}
 		$q['facets'] = array();
 		foreach ( (array) ( $l['facets'] ?? array() ) as $i => $f ) {
 			$v = self::param( $r, (string) $f['param'] );
@@ -917,8 +947,8 @@ class Minn_Admin_Kernel {
 				'columns' => self::cols( $src['columns'] ),
 				'sql'     => $sql,
 				'args'    => $args,
-				'order'   => $l['order']['column'] ?? $src['key'],
-				'dir'     => $q['dir'] ?? ( $l['order']['dir'] ?? 'DESC' ),
+				'order'   => $q['sort']['column'] ?? ( $l['order']['column'] ?? $src['key'] ),
+				'dir'     => $q['sort']['dir'] ?? ( $q['dir'] ?? ( $l['order']['dir'] ?? 'DESC' ) ),
 				'limit'   => $q['per_page'],
 				'offset'  => ( $q['page'] - 1 ) * $q['per_page'],
 			) );
@@ -972,7 +1002,110 @@ class Minn_Admin_Kernel {
 			}
 			$kept[] = $row;
 		}
+		if ( ! empty( $q['sort'] ) ) {
+			$kept = self::sort_rows( $kept, self::bare( $q['sort']['column'] ), $q['sort']['dir'] );
+		}
 		return array( array_slice( $kept, ( $q['page'] - 1 ) * $q['per_page'], $q['per_page'] ), count( $kept ) );
+	}
+
+	/**
+	 * A declared sort's columns as public name => column, or null when it
+	 * names none that can be ordered by (a name that is not a key, a column
+	 * that is not an identifier).
+	 *
+	 * @param mixed $sort The list's 'sort'.
+	 * @return array|null
+	 */
+	private static function sort_map( $sort ) {
+		if ( ! is_array( $sort ) || empty( $sort['columns'] ) || ! is_array( $sort['columns'] ) ) {
+			return null;
+		}
+		$cols = $sort['columns'];
+		$map  = array();
+		foreach ( $cols as $name => $col ) {
+			$name = is_int( $name ) ? $col : $name;
+			if ( ! is_string( $name ) || ! is_string( $col ) || '' === $name || sanitize_key( $name ) !== $name ) {
+				return null;
+			}
+			try {
+				Minn_Admin_Kernel_SQL::col( $col );
+			} catch ( InvalidArgumentException $e ) {
+				return null;
+			}
+			$map[ $name ] = $col;
+		}
+		return $map;
+	}
+
+	/**
+	 * Why a declared sort cannot be applied, or '' when it can: its request
+	 * keys must be keys no other list parameter uses, every column an
+	 * identifier, and on a table each column the source's own (a declared
+	 * column, the key, or a joined alias's).
+	 *
+	 * @param mixed $sort The list's 'sort'.
+	 * @param array $res  The resource.
+	 * @return string
+	 */
+	private static function sort_problem( $sort, array $res ) {
+		$map = self::sort_map( $sort );
+		if ( ! $map ) {
+			return __( 'no columns, or one that is not an identifier', 'minn-admin' );
+		}
+		$l     = $res['list'];
+		$param = $sort['param'] ?? 'orderby';
+		$dir   = $sort['dir'] ?? 'order';
+		$taken = array( 'page', 'per_page', $l['search']['param'] ?? 'search', $l['filter']['param'] ?? 'status', 'after', 'before' );
+		foreach ( (array) ( $l['facets'] ?? array() ) as $f ) {
+			$taken[] = (string) ( $f['param'] ?? '' );
+		}
+		if ( ! empty( $l['tab']['param'] ) ) {
+			$taken[] = (string) $l['tab']['param'];
+		}
+		foreach ( array( $param, $dir ) as $key ) {
+			if ( ! is_string( $key ) || '' === $key || sanitize_key( $key ) !== $key || in_array( $key, $taken, true ) ) {
+				return __( 'a request key that is not a free key', 'minn-admin' );
+			}
+		}
+		if ( $param === $dir ) {
+			return __( 'one request key for both', 'minn-admin' );
+		}
+		$src = $res['source'];
+		if ( ! empty( $src['table'] ) && is_array( $src['columns'] ?? null ) ) {
+			$own = array_merge( array( (string) $src['key'] ), array_map( array( __CLASS__, 'bare' ), array_keys( array_filter( $src['columns'], 'is_string' ) ) ), array_map( 'strval', array_filter( $src['columns'], 'is_string' ) ) );
+			foreach ( $map as $col ) {
+				$alias = false === strpos( $col, '.' ) ? 'e' : strstr( $col, '.', true );
+				$bare  = self::bare( $col );
+				if ( 'e' === $alias ? ! in_array( $bare, $own, true ) : ! isset( $src['joins'][ $alias ] ) ) {
+					/* translators: %s: a column name. */
+					return sprintf( __( 'column %s is not the source\'s', 'minn-admin' ), $col );
+				}
+			}
+		}
+		return '';
+	}
+
+	/**
+	 * Rows ordered by one column: numbers before text, numbers by value, text
+	 * without regard to case; rows that tie keep the order they came in.
+	 */
+	private static function sort_rows( array $rows, $col, $dir ) {
+		$keyed = array();
+		foreach ( array_values( $rows ) as $i => $row ) {
+			$v       = $row[ $col ] ?? '';
+			$v       = is_scalar( $v ) ? trim( (string) $v ) : '';
+			$num     = '' !== $v && is_numeric( $v );
+			$keyed[] = array( $i, $row, $num ? 0 : 1, $num ? 0 + $v : strtolower( $v ) );
+		}
+		usort( $keyed, function ( $a, $b ) use ( $dir ) {
+			$c = $a[2] <=> $b[2];
+			if ( 0 === $c ) {
+				$c = 0 === $a[2] ? $a[3] <=> $b[3] : strnatcmp( $a[3], $b[3] );
+			}
+			$c = 'ASC' === $dir ? $c : -$c;
+			return 0 !== $c ? $c : $a[0] <=> $b[0];
+		} );
+		return array_column( $keyed, 1 );
 	}
 
 	/** A search clause: LIKE over declared columns, EXISTS over a meta table, or the declaration's own conditions; any of them. */
@@ -1174,6 +1307,9 @@ class Minn_Admin_Kernel {
 		$out['pageQuery'] = 'per_page=' . (int) ( $l['per_page'] ?? 25 ) . '&page={page}';
 		if ( ! empty( $l['search'] ) ) {
 			$out['search'] = ( $l['search']['param'] ?? 'search' ) . '={q}';
+		}
+		if ( ! empty( $l['sort'] ) && '' === self::sort_problem( $l['sort'], $res ) ) {
+			$out['sortQuery'] = ( $l['sort']['param'] ?? 'orderby' ) . '={by}&' . ( $l['sort']['dir'] ?? 'order' ) . '={dir}';
 		}
 		$out['itemsKey'] = $keys['items'];
 		$out['totalKey'] = $keys['total'];
