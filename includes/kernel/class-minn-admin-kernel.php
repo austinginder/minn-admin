@@ -533,7 +533,10 @@ class Minn_Admin_Kernel {
 		$data['status'] = ( $status >= 400 && $status <= 599 ) ? $status : 500;
 		// A vendor message that quotes a query or a server path is replaced.
 		$message = (string) $e->get_error_message();
-		if ( preg_match( '/\b(SELECT|INSERT|UPDATE|DELETE|REPLACE)\b[\s\S]*\b(FROM|INTO|SET|WHERE)\b/i', $message )
+		// SQL as a database prints it, not words that happen to be verbs
+		// ("could not delete the set", "Select a state from the list").
+		if ( preg_match( '/\b(?:SELECT\b[\s\S]{0,400}?\bFROM\s+[`\w]|INSERT\s+INTO\s+[`\w]|UPDATE\s+[`\w.]+\s+SET\s|DELETE\s+FROM\s+[`\w]|REPLACE\s+INTO\s+[`\w])/', $message )
+			|| preg_match( '/You have an error in your SQL syntax|WordPress database error|Unknown column|Table \S+ doesn\'t exist/i', $message )
 			|| false !== strpos( $message, wp_normalize_path( ABSPATH ) ) || false !== strpos( $message, ABSPATH ) ) {
 			$message = __( 'That did not work. Nothing was reported as done.', 'minn-admin' );
 		}
@@ -658,7 +661,7 @@ class Minn_Admin_Kernel {
 
 	/** A table source's table, as the SQL layer names it. */
 	private static function table_of( array $src ) {
-		return array( 'table' => (string) $src['table'], 'network' => ! empty( $src['network'] ), 'joins' => (array) ( $src['joins'] ?? array() ) );
+		return array( 'table' => is_array( $src['table'] ) ? $src['table'] : (string) $src['table'], 'network' => ! empty( $src['network'] ), 'joins' => (array) ( $src['joins'] ?? array() ) );
 	}
 
 	/**
@@ -1039,7 +1042,7 @@ class Minn_Admin_Kernel {
 		$c   = $res['create'];
 		$src = $res['source'];
 		// A table proves the row is new by its key: above every key before.
-		$before = empty( $src['table'] ) ? null : (int) Minn_Admin_Kernel_SQL::latest( array( 'table' => (string) $src['table'], 'network' => ! empty( $src['network'] ) ), $src['key'], array(), $src['key'] );
+		$before = empty( $src['table'] ) ? null : (int) Minn_Admin_Kernel_SQL::latest( array( 'table' => is_array( $src['table'] ) ? $src['table'] : (string) $src['table'], 'network' => ! empty( $src['network'] ) ), $src['key'], array(), $src['key'] );
 		$ran    = call_user_func( $c['run'], $r );
 		if ( $ran instanceof WP_REST_Response ) {
 			$ran = $ran->is_error() ? $ran->as_error() : $ran->get_data();

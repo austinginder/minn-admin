@@ -1627,6 +1627,37 @@ if ( ! method_exists( 'Minn_Admin_Kernel_SQL', 'totals' ) ) {
 	$check( 'grouped totals over a table that is not there are none, and the limit holds between 1 and 5,000', array() === Minn_Admin_Kernel_SQL::totals( 'minn_conf_no_table', array( 'x' ), array( 'n' => array( 'count' => '*' ) ) ) && 1 === count( Minn_Admin_Kernel_SQL::totals( 'minn_conf_hits', array( 'path_id' ), array( 'n' => array( 'count' => '*' ) ), array(), array(), 0 ) ) );
 }
 
+// A vendor's full table name, as the SQL layer names it.
+$nm_site = Minn_Admin_Kernel_SQL::named( $wpdb->prefix . 'minn_conf_hits' );
+$nm_net  = Minn_Admin_Kernel_SQL::named( $wpdb->base_prefix . 'minn_conf_net' );
+$check( "a vendor's full table name reads as the site's table, or the network's on the base prefix", 'minn_conf_hits' === $nm_site && Minn_Admin_Kernel_SQL::table( $nm_site ) === $wpdb->prefix . 'minn_conf_hits' && ( $wpdb->prefix === $wpdb->base_prefix ? 'minn_conf_net' === $nm_net : array( 'table' => 'minn_conf_net', 'network' => true ) === $nm_net ) && 'other_table' === Minn_Admin_Kernel_SQL::named( 'other_table' ), wp_json_encode( array( $nm_site, $nm_net ) ) );
+
+// What an error says survives unless it quotes a query or a server path.
+$cl_keep = array( 'UpdraftPlus could not delete the set.', 'Select a state from the list', 'Could not delete: Unable to remove file from Dropbox', 'Insert a value into the field' );
+$cl_drop = array( 'SELECT * FROM wp_users WHERE 1', 'DELETE FROM `wp_minn` WHERE id = 1', "You have an error in your SQL syntax; check the manual near 'x'", 'failed in ' . ABSPATH . 'wp-config.php' );
+$cl_ok   = true;
+foreach ( $cl_keep as $m ) {
+	$cl_ok = $cl_ok && $m === Minn_Admin_Kernel::clean_error( new WP_Error( 'x', $m, array( 'status' => 400 ) ) )->get_error_message();
+}
+foreach ( $cl_drop as $m ) {
+	$cl_ok = $cl_ok && $m !== Minn_Admin_Kernel::clean_error( new WP_Error( 'x', $m, array( 'status' => 400 ) ) )->get_error_message();
+}
+$check( "an error keeps a vendor's own words, and loses one that quotes SQL as a database prints it or a server path", $cl_ok );
+// A site prefix WordPress allows ("1wp_") is a table name MySQL takes; the
+// declared part still has to be an identifier.
+$tb_prefix      = $wpdb->prefix;
+$wpdb->prefix   = '1wp_';
+$tb_digit       = Minn_Admin_Kernel_SQL::table( 'minn_conf_hits' );
+$wpdb->prefix   = $tb_prefix;
+$tb_nested      = Minn_Admin_Kernel_SQL::table( array( 'table' => array( 'table' => 'minn_conf_net', 'network' => true ) ) );
+try {
+	Minn_Admin_Kernel_SQL::table( '1bad name' );
+	$tb_bad = 'ran';
+} catch ( InvalidArgumentException $e ) {
+	$tb_bad = 'refused';
+}
+$check( "a table on a prefix that starts with a digit is read; a spec in the table's place is the network's table; a declared name that is no identifier is refused", '1wp_minn_conf_hits' === $tb_digit && $wpdb->base_prefix . 'minn_conf_net' === $tb_nested && 'refused' === $tb_bad, wp_json_encode( array( $tb_digit, $tb_nested, $tb_bad ) ) );
+
 // --- 2. Every real declaration ----------------------------------------------
 $real = array_filter( Minn_Admin_Kernel::resources(), function ( $r ) {
 	return 0 !== strpos( $r['id'], 'minn-conformance/' );

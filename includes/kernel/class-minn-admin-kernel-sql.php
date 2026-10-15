@@ -55,9 +55,26 @@ class Minn_Admin_Kernel_SQL {
 	}
 
 	/**
+	 * A prefixed table name as MySQL takes one unquoted: what a site's
+	 * prefix may be (WordPress allows "1wp_") added to a declared name that
+	 * ident() already held.
+	 *
+	 * @param string $name Full name.
+	 * @return string
+	 */
+	private static function full( $name ) {
+		$name = (string) $name;
+		if ( ! preg_match( '/^[A-Za-z0-9_]{1,64}$/', $name ) || ctype_digit( $name ) ) {
+			throw new InvalidArgumentException( 'minn_kernel_table=' . $name );
+		}
+		return $name;
+	}
+
+	/**
 	 * The prefixed table a declaration names.
 	 *
-	 * @param string|array $table Table without the prefix, or table + network.
+	 * @param string|array $table Table without the prefix, or table + network,
+	 *                            whose table may itself be a spec named() gave.
 	 * @return string
 	 */
 	public static function table( $table ) {
@@ -69,11 +86,38 @@ class Minn_Admin_Kernel_SQL {
 			if ( ! in_array( $core, array( 'posts', 'postmeta', 'users', 'usermeta', 'comments', 'commentmeta', 'terms', 'term_taxonomy', 'term_relationships', 'options' ), true ) ) {
 				throw new InvalidArgumentException( 'minn_kernel_core_table=' . $core );
 			}
-			return self::ident( $wpdb->$core );
+			return self::full( $wpdb->$core );
 		}
 		$network = is_array( $table ) && ! empty( $table['network'] );
-		$name    = is_array( $table ) ? (string) ( $table['table'] ?? '' ) : (string) $table;
-		return self::ident( ( $network ? $wpdb->base_prefix : $wpdb->prefix ) . self::ident( $name ) );
+		$name    = is_array( $table ) ? ( $table['table'] ?? '' ) : $table;
+		// A spec in the table's place (named() answered the network's).
+		if ( is_array( $name ) ) {
+			$network = $network || ! empty( $name['network'] );
+			$name    = $name['table'] ?? '';
+		}
+		return self::full( ( $network ? $wpdb->base_prefix : $wpdb->prefix ) . self::ident( (string) $name ) );
+	}
+
+	/**
+	 * A table a vendor names in full ("wp_2_bricks_form_submissions", from
+	 * its own get_table_name()) as this layer names it: without the site's
+	 * prefix, or as the network's when it lives on the base prefix. A name on
+	 * neither is kept whole and so read under this site's prefix: a table
+	 * that is not there (an empty list), never another one.
+	 *
+	 * @param string $full The prefixed table name.
+	 * @return string|array Table spec.
+	 */
+	public static function named( $full ) {
+		global $wpdb;
+		$full = (string) $full;
+		if ( '' !== $wpdb->prefix && 0 === strpos( $full, $wpdb->prefix ) ) {
+			return substr( $full, strlen( $wpdb->prefix ) );
+		}
+		if ( '' !== $wpdb->base_prefix && 0 === strpos( $full, $wpdb->base_prefix ) ) {
+			return array( 'table' => substr( $full, strlen( $wpdb->base_prefix ) ), 'network' => true );
+		}
+		return $full;
 	}
 
 	/**
