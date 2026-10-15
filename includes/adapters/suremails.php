@@ -83,6 +83,134 @@ function minn_admin_suremails_response_peek( $raw ) {
 	return $raw;
 }
 
+/** One logged email's detail: the delivery, the message, the provider's reply. */
+function minn_admin_suremails_view( array $r ) {
+	$row      = (object) $r;
+	$delivery = array(
+		array( 'label' => __( 'Status', 'minn-admin' ), 'value' => (string) $row->status, 'type' => 'pill' ),
+		array( 'label' => __( 'To', 'minn-admin' ), 'value' => minn_admin_suremails_recipients( $row->email_to ) ),
+		array( 'label' => __( 'From', 'minn-admin' ), 'value' => (string) $row->email_from ),
+	);
+	if ( '' !== (string) $row->connection ) {
+		$delivery[] = array( 'label' => __( 'Connection', 'minn-admin' ), 'value' => (string) $row->connection );
+	}
+	$iso = minn_admin_db_local_to_utc_iso( $row->created_at );
+	if ( '' !== $iso ) {
+		$delivery[] = array( 'label' => __( 'Date', 'minn-admin' ), 'value' => $iso );
+	}
+	$body     = (string) $row->body;
+	$sections = array(
+		array( 'title' => __( 'Delivery', 'minn-admin' ), 'rows' => $delivery ),
+		array(
+			'title' => __( 'Message', 'minn-admin' ),
+			'rows'  => array(
+				array( 'label' => __( 'Subject', 'minn-admin' ), 'value' => (string) $row->subject ),
+				preg_match( '/<\/?[a-z][^>]*>/i', $body )
+					? array( 'label' => __( 'Body', 'minn-admin' ), 'value' => $body, 'type' => 'html-preview' )
+					: array( 'label' => __( 'Body', 'minn-admin' ), 'value' => $body, 'type' => 'code' ),
+			),
+		),
+	);
+	$peek = minn_admin_suremails_response_peek( $row->response );
+	if ( '' !== $peek ) {
+		$sections[] = array( 'title' => __( 'Provider reply', 'minn-admin' ), 'rows' => array( array( 'label' => __( 'Response', 'minn-admin' ), 'value' => $peek ) ) );
+	}
+	return array( 'sections' => $sections );
+}
+
+function minn_admin_suremails_can() {
+	return current_user_can( 'manage_options' );
+}
+
+// created_at is the site's wall clock (current_time( 'mysql' )).
+minn_admin_resource( 'suremails/emails', function () {
+	return array(
+		'active'  => 'minn_admin_suremails_active',
+		'gates'   => array( 'view' => 'minn_admin_suremails_can' ),
+		'labels'  => array( 'not_found' => __( 'Email not found', 'minn-admin' ) ),
+		'source'  => array(
+			'table'   => 'suremails_email_log',
+			'key'     => 'id',
+			'columns' => array( 'id', 'email_to', 'subject', 'status', 'created_at' ),
+			'detail'  => array( '*' ),
+		),
+		'list'    => array(
+			'facets' => array( array( 'param' => 'status', 'column' => 'status', 'type' => 'key' ) ),
+			'search' => array( 'columns' => array( 'subject', 'email_from', 'email_to' ) ),
+			'range'  => array( 'column' => 'created_at', 'clock' => 'local' ),
+			'order'  => array( 'column' => 'created_at' ),
+			'row'    => function ( array $r ) {
+				return array(
+					'id'         => (int) $r['id'],
+					'subject'    => (string) $r['subject'],
+					'to'         => minn_admin_suremails_recipients( $r['email_to'] ),
+					'status'     => (string) $r['status'],
+					'created_at' => $r['created_at'],
+				);
+			},
+			'fields' => array(
+				'id'         => 'int',
+				'subject'    => 'text',
+				'to'         => 'text',
+				'status'     => 'text',
+				// Site-local, sent as an absolute UTC time with a Z.
+				'created_at' => array( 'type' => 'datetime', 'stored' => 'site', 'wire' => 'z' ),
+			),
+		),
+		'reads'   => array( 'view' => array( 'view' => 'minn_admin_suremails_view', 'fields' => array( 'sections' => 'raw' ) ) ),
+		'actions' => array(
+			// SureMails keeps no per-entry delete of its own (only its expiry).
+			'delete' => array(
+				'method' => 'DELETE',
+				'gate'   => 'view',
+				'run'    => function ( $id ) {
+					return Minn_Admin_Kernel_SQL::delete( 'suremails_email_log', 'id', $id );
+				},
+				'expect' => 'gone',
+				'reply'  => function () {
+					return array( 'deleted' => true );
+				},
+				'done'   => __( 'Log entry deleted.', 'minn-admin' ),
+			),
+		),
+	);
+} );
+
+minn_admin_endpoint( 'suremails/status', array(
+	'active' => 'minn_admin_suremails_active',
+	'gate'   => 'minn_admin_suremails_can',
+	'run'    => function () {
+		$open = array( array( 'label' => __( 'Open SureMails ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=suremails' ) ) );
+		if ( ! Minn_Admin_Kernel_SQL::exists( 'suremails_email_log' ) ) {
+			return array(
+				'rows'    => array( array( 'label' => __( 'Email log', 'minn-admin' ), 'value' => '—', 'hint' => __( 'SureMails has not logged any sends yet', 'minn-admin' ) ) ),
+				'actions' => $open,
+			);
+		}
+		$id     = 'suremails/emails';
+		$failed = Minn_Admin_Kernel::count( $id, array( 'status' => 'failed' ) );
+		return array(
+			'rows'    => array(
+				array(
+					'label' => __( 'Logged emails', 'minn-admin' ),
+					'value' => number_format_i18n( Minn_Admin_Kernel::count( $id ) ),
+					/* translators: %s: number of failed emails. */
+					'hint'  => $failed ? sprintf( __( '%s failed', 'minn-admin' ), number_format_i18n( $failed ) ) : __( 'All logged sends', 'minn-admin' ),
+				),
+			),
+			// Fourteen site-local days, sent and failed apart; a clicked bar
+			// sends its day back to the list.
+			'chart'   => array(
+				'title'     => __( 'Last 14 days', 'minn-admin' ),
+				'primary'   => 'Sent',
+				'secondary' => 'Failed',
+				'points'    => array_values( Minn_Admin_Kernel::days( $id, array( 'column' => 'created_at', 'clock' => 'local', 'split' => 'status', 'secondary' => array( 'failed' ), 'label' => 'M j' ) ) ),
+			),
+			'actions' => $open,
+		);
+	},
+) );
+
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! minn_admin_suremails_active() ) {
 		return $surfaces;
@@ -95,15 +223,8 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'icon'       => 'send',
 		'cap'        => 'manage_options',
 		'status'     => array( 'route' => 'minn-admin/v1/suremails/status' ),
-		'collection' => array(
-			'route'     => 'minn-admin/v1/suremails/emails',
-			// A status-chart bar narrows the log to that day (the chart's
-			// points carry from/to; the route reads after/before).
-			'dateQuery' => 'after={from}&before={to}',
-			'pageQuery' => 'per_page=25&page={page}',
-			'search'    => 'search={q}',
-			'itemsKey'  => 'items',
-			'totalKey'  => 'total',
+		// A status-chart bar narrows the log to that day.
+		'collection' => Minn_Admin_Kernel::collection( 'suremails/emails', array(
 			'tabs'      => array(
 				'param'    => 'status',
 				'static'   => array(
@@ -122,232 +243,12 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'sectionsRoute' => 'minn-admin/v1/suremails/emails/{id}/view',
 			),
 			'actions'   => array(
-				array(
-					'label'   => __( 'Delete', 'minn-admin' ),
-					'route'   => 'minn-admin/v1/suremails/emails/{id}',
-					'method'  => 'DELETE',
-					'confirm' => __( 'Delete this log entry permanently? There is no trash.', 'minn-admin' ),
-					'danger'  => true,
-				),
+				Minn_Admin_Kernel::ui( 'suremails/emails', 'delete', array( 'label' => __( 'Delete', 'minn-admin' ), 'confirm' => __( 'Delete this log entry permanently? There is no trash.', 'minn-admin' ), 'danger' => true ) ),
 			),
 			'bulk'      => array(
-				array(
-					'label'   => __( 'Delete', 'minn-admin' ),
-					'route'   => 'minn-admin/v1/suremails/emails/{id}',
-					'method'  => 'DELETE',
-					'confirm' => __( 'Delete the selected log entries permanently?', 'minn-admin' ),
-					'danger'  => true,
-				),
+				Minn_Admin_Kernel::ui( 'suremails/emails', 'delete', array( 'label' => __( 'Delete', 'minn-admin' ), 'confirm' => __( 'Delete the selected log entries permanently?', 'minn-admin' ), 'danger' => true ) ),
 			),
-		),
+		) ),
 	);
 	return $surfaces;
-} );
-
-add_action( 'rest_api_init', function () {
-	if ( ! minn_admin_suremails_active() ) {
-		return;
-	}
-	$perm = function () {
-		return current_user_can( 'manage_options' );
-	};
-	$has_table = function () {
-		global $wpdb;
-		$t = minn_admin_suremails_table();
-		return $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $t ) ) === $t;
-	};
-
-	register_rest_route( 'minn-admin/v1', '/suremails/emails', array(
-		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) use ( $has_table ) {
-			if ( ! $has_table() ) {
-				return rest_ensure_response( array( 'items' => array(), 'total' => 0 ) );
-			}
-			global $wpdb;
-			$table    = minn_admin_suremails_table();
-			$per_page = min( 100, max( 1, (int) $request->get_param( 'per_page' ) ?: 25 ) );
-			$page     = max( 1, (int) $request->get_param( 'page' ) ?: 1 );
-			$status   = sanitize_key( (string) $request->get_param( 'status' ) );
-			$search   = sanitize_text_field( (string) $request->get_param( 'search' ) );
-			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			$where  = array( '1=1' );
-			$params = array();
-			if ( $status ) {
-				$where[]  = 'status = %s';
-				$params[] = $status;
-			}
-			// A status-chart bar narrows the list to that day. The bounds are
-			// minted on the site's clock (the same one the chart buckets in
-			// and the column is stored in), so this compares like for like.
-			foreach ( array( 'after' => '>=', 'before' => '<=' ) as $param => $op ) {
-				$bound = (string) $request->get_param( $param );
-				if ( '' === $bound ) {
-					continue;
-				}
-				$where[]  = "created_at {$op} %s";
-				$params[] = $bound;
-			}
-			if ( '' !== $search ) {
-				$like     = '%' . $wpdb->esc_like( $search ) . '%';
-				$where[]  = '( subject LIKE %s OR email_from LIKE %s OR email_to LIKE %s )';
-				array_push( $params, $like, $like, $like );
-			}
-			$where_sql = 'WHERE ' . implode( ' AND ', $where );
-			$count_sql = "SELECT COUNT(*) FROM {$table} {$where_sql}";
-			$total     = (int) ( $params ? $wpdb->get_var( $wpdb->prepare( $count_sql, $params ) ) : $wpdb->get_var( $count_sql ) );
-			// Newest first by when it was logged, so a row added out of order
-			// (an import, a restored backup) lands where it belongs; the id
-			// breaks ties so pages never overlap.
-			$rows      = $wpdb->get_results( $wpdb->prepare(
-				"SELECT id, email_to, subject, status, created_at FROM {$table} {$where_sql} ORDER BY created_at DESC, id DESC LIMIT %d OFFSET %d",
-				array_merge( $params, array( $per_page, ( $page - 1 ) * $per_page ) )
-			) );
-			// phpcs:enable
-			$items = array_map( function ( $r ) {
-				return array(
-					'id'         => (int) $r->id,
-					'subject'    => (string) $r->subject,
-					'to'         => minn_admin_suremails_recipients( $r->email_to ),
-					'status'     => (string) $r->status,
-					// created_at is site-local: convert to an absolute ISO-Z
-					// so the client never shifts it by gmt_offset.
-					'created_at' => minn_admin_db_local_to_utc_iso( $r->created_at ),
-				);
-			}, $rows ? $rows : array() );
-			return rest_ensure_response( array( 'items' => $items, 'total' => $total ) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/suremails/emails/(?P<id>\d+)/view', array(
-		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) {
-			global $wpdb;
-			$table = minn_admin_suremails_table();
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", (int) Minn_Admin::path_param( $request ) ) );
-			if ( ! $row ) {
-				return new WP_Error( 'not_found', __( 'Email not found', 'minn-admin' ), array( 'status' => 404 ) );
-			}
-			$delivery = array(
-				array( 'label' => __( 'Status', 'minn-admin' ), 'value' => (string) $row->status, 'type' => 'pill' ),
-				array( 'label' => __( 'To', 'minn-admin' ), 'value' => minn_admin_suremails_recipients( $row->email_to ) ),
-				array( 'label' => __( 'From', 'minn-admin' ), 'value' => (string) $row->email_from ),
-			);
-			if ( '' !== (string) $row->connection ) {
-				$delivery[] = array( 'label' => __( 'Connection', 'minn-admin' ), 'value' => (string) $row->connection );
-			}
-			$iso = minn_admin_db_local_to_utc_iso( $row->created_at );
-			if ( '' !== $iso ) {
-				$delivery[] = array( 'label' => __( 'Date', 'minn-admin' ), 'value' => $iso );
-			}
-			$body     = (string) $row->body;
-			$sections = array(
-				array( 'title' => __( 'Delivery', 'minn-admin' ), 'rows' => $delivery ),
-				array(
-					'title' => __( 'Message', 'minn-admin' ),
-					'rows'  => array(
-						array( 'label' => __( 'Subject', 'minn-admin' ), 'value' => (string) $row->subject ),
-						preg_match( '/<\/?[a-z][^>]*>/i', $body )
-							? array( 'label' => __( 'Body', 'minn-admin' ), 'value' => $body, 'type' => 'html-preview' )
-							: array( 'label' => __( 'Body', 'minn-admin' ), 'value' => $body, 'type' => 'code' ),
-					),
-				),
-			);
-			$peek = minn_admin_suremails_response_peek( $row->response );
-			if ( '' !== $peek ) {
-				$sections[] = array(
-					'title' => __( 'Provider reply', 'minn-admin' ),
-					'rows'  => array( array( 'label' => __( 'Response', 'minn-admin' ), 'value' => $peek ) ),
-				);
-			}
-			return rest_ensure_response( array( 'sections' => $sections ) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/suremails/emails/(?P<id>\d+)', array(
-		'methods'             => 'DELETE',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) {
-			global $wpdb;
-			$table = minn_admin_suremails_table();
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			$deleted = $wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE id = %d", (int) Minn_Admin::path_param( $request ) ) );
-			if ( ! $deleted ) {
-				return new WP_Error( 'not_found', __( 'Email not found', 'minn-admin' ), array( 'status' => 404 ) );
-			}
-			return rest_ensure_response( array( 'deleted' => true, 'message' => __( 'Log entry deleted.', 'minn-admin' ) ) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/suremails/status', array(
-		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function () use ( $has_table ) {
-			$admin_url = admin_url( 'admin.php?page=suremails' );
-			if ( ! $has_table() ) {
-				return rest_ensure_response( array(
-					'rows'    => array( array( 'label' => __( 'Email log', 'minn-admin' ), 'value' => '—', 'hint' => __( 'SureMails has not logged any sends yet', 'minn-admin' ) ) ),
-					'actions' => array( array( 'label' => __( 'Open SureMails ↗', 'minn-admin' ), 'href' => $admin_url ) ),
-				) );
-			}
-			global $wpdb;
-			$table  = minn_admin_suremails_table();
-			$total  = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" ); // phpcs:ignore
-			$failed = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE status = 'failed'" ); // phpcs:ignore
-
-			// 14-day sent/failed chart. created_at is site-local, so
-			// DATE(created_at) is already the site's day: build the day keys
-			// on the site's clock too.
-			$since = minn_admin_chart_local_since();
-			$byday = array();
-			for ( $i = 13; $i >= 0; $i-- ) {
-				$d           = minn_admin_chart_day( -$i );
-				// The bounds a clicked bar sends back, on the site's clock.
-				$byday[ $d ] = array(
-					'label'     => gmdate( 'M j', strtotime( $d ) ),
-					'value'     => 0,
-					'secondary' => 0,
-					'from'      => $d . ' 00:00:00',
-					'to'        => $d . ' 23:59:59',
-				);
-			}
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			$rows = $wpdb->get_results( $wpdb->prepare(
-				"SELECT DATE(created_at) AS d, status, COUNT(*) AS c FROM {$table} WHERE created_at >= %s GROUP BY DATE(created_at), status",
-				$since
-			) );
-			foreach ( (array) $rows as $r ) {
-				$d = (string) $r->d;
-				if ( ! isset( $byday[ $d ] ) ) {
-					continue;
-				}
-				if ( 'failed' === $r->status ) {
-					$byday[ $d ]['secondary'] = (int) $r->c;
-				} else {
-					$byday[ $d ]['value'] += (int) $r->c;
-				}
-			}
-			return rest_ensure_response( array(
-				'rows'    => array(
-					array(
-						'label' => __( 'Logged emails', 'minn-admin' ),
-						'value' => number_format_i18n( $total ),
-						'hint'  => $failed
-							/* translators: %s: number of failed emails. */
-							? sprintf( __( '%s failed', 'minn-admin' ), number_format_i18n( $failed ) )
-							: __( 'All logged sends', 'minn-admin' ),
-					),
-				),
-				'chart'   => array(
-					'title'     => __( 'Last 14 days', 'minn-admin' ),
-					'primary'   => 'Sent',
-					'secondary' => 'Failed',
-					'points'    => array_values( $byday ),
-				),
-				'actions' => array( array( 'label' => __( 'Open SureMails ↗', 'minn-admin' ), 'href' => $admin_url ) ),
-			) );
-		},
-	) );
 } );

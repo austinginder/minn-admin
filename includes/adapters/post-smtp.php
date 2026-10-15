@@ -87,21 +87,15 @@ function minn_admin_post_smtp_status( $success ) {
 	return ( '' === $success || '1' === $success || minn_admin_post_smtp_is_fallback_sent( $success ) ) ? 'sent' : 'failed';
 }
 
-/** SQL twin of minn_admin_post_smtp_status()'s sent test. */
-function minn_admin_post_smtp_sent_sql() {
-	global $wpdb;
-	return $wpdb->prepare(
-		"(success IS NULL OR success = '' OR success = '1' OR success LIKE %s)",
-		$wpdb->esc_like( MINN_ADMIN_POST_SMTP_FALLBACK_SENT ) . '%'
-	);
+/** The `success` values that read as sent, as a rule: minn_admin_post_smtp_status()'s test. */
+function minn_admin_post_smtp_sent_rule() {
+	return array( null, '', '1', array( 'starts' => MINN_ADMIN_POST_SMTP_FALLBACK_SENT ) );
 }
 
 /** Server-built model for the surface status card. */
 function minn_admin_post_smtp_status_model() {
-	global $wpdb;
-	$table = $wpdb->prefix . 'post_smtp_logs';
-	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
+	$open = array( array( 'label' => __( 'Open Post SMTP ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=postman' ) ) );
+	if ( ! Minn_Admin_Kernel_SQL::exists( 'post_smtp_logs' ) ) {
 		return array(
 			'rows'    => array( array( 'label' => __( 'Email log', 'minn-admin' ), 'value' => 'Not ready', 'hint' => __( 'Post SMTP has not created its log table yet', 'minn-admin' ) ) ),
 			'actions' => array(
@@ -109,42 +103,11 @@ function minn_admin_post_smtp_status_model() {
 			),
 		);
 	}
-	$sent_sql = minn_admin_post_smtp_sent_sql();
-	$total    = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
-	$failed   = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE NOT {$sent_sql}" );
-	// `time` is a WP-local epoch (Aryo trap) — compare and bucket the same way.
-	$since_local = current_time( 'timestamp' ) - 14 * DAY_IN_SECONDS;
-	$rows_raw    = $wpdb->get_results( $wpdb->prepare(
-		"SELECT time, success FROM {$table} WHERE time >= %d ORDER BY time ASC",
-		$since_local
-	) );
-	// phpcs:enable
-	$by_day = array();
-	for ( $i = 13; $i >= 0; $i-- ) {
-		$d            = date_i18n( 'Y-m-d', current_time( 'timestamp' ) - $i * DAY_IN_SECONDS );
-		// The bounds a clicked bar sends back. `time` is a WP-LOCAL epoch, so
-		// these are site-local datetimes and the route converts them the same
-		// way; Minn never interprets them.
-		$by_day[ $d ] = array(
-			'label'     => $d,
-			'value'     => 0,
-			'secondary' => 0,
-			'from'      => $d . ' 00:00:00',
-			'to'        => $d . ' 23:59:59',
-		);
-	}
-	foreach ( (array) $rows_raw as $row ) {
-		// date_i18n over a WP-local epoch matches how they stamped the row.
-		$d = date_i18n( 'Y-m-d', (int) $row->time );
-		if ( ! isset( $by_day[ $d ] ) ) {
-			continue;
-		}
-		if ( 'sent' === minn_admin_post_smtp_status( $row->success ) ) {
-			$by_day[ $d ]['value']++;
-		} else {
-			$by_day[ $d ]['secondary']++;
-		}
-	}
+	$id     = 'post-smtp/emails';
+	$failed = Minn_Admin_Kernel::count( $id, array( 'success' => array( 'none' => minn_admin_post_smtp_sent_rule() ) ) );
+	// `time` is a WP-local epoch (Aryo trap): the chart buckets it on that clock.
+	$days = Minn_Admin_Kernel::days( $id, array( 'column' => 'time', 'clock' => 'local-epoch', 'split' => 'success', 'secondary' => array( 'none' => minn_admin_post_smtp_sent_rule() ) ) );
+
 	$transport = '';
 	if ( class_exists( 'PostmanOptions' ) ) {
 		try {
@@ -161,7 +124,7 @@ function minn_admin_post_smtp_status_model() {
 		'rows'    => array(
 			array(
 				'label' => __( 'Logged emails', 'minn-admin' ),
-				'value' => number_format_i18n( $total ),
+				'value' => number_format_i18n( Minn_Admin_Kernel::count( $id ) ),
 				'hint'  => $failed
 					/* translators: %s: number of failed sends. */
 					? sprintf( _n( '%s failed', '%s failed', $failed, 'minn-admin' ), number_format_i18n( $failed ) )
@@ -177,14 +140,9 @@ function minn_admin_post_smtp_status_model() {
 			'title'     => __( 'Last 14 days', 'minn-admin' ),
 			'primary'   => 'Sent',
 			'secondary' => 'Failed',
-			'points'    => array_values( $by_day ),
+			'points'    => array_values( $days ),
 		),
-		'actions' => array(
-			array(
-				'label' => __( 'Open Post SMTP ↗', 'minn-admin' ),
-				'href'  => admin_url( 'admin.php?page=postman' ),
-			),
-		),
+		'actions' => $open,
 	);
 }
 
@@ -279,220 +237,166 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	return $surfaces;
 } );
 
-add_action( 'rest_api_init', function () {
-	if ( ! minn_admin_post_smtp_active() ) {
-		return;
+/** Addresses on record for a resend: never unserialized, each one checked. */
+function minn_admin_post_smtp_resend_to( array $r ) {
+	if ( ! preg_match_all( '/[\w.+\-]+@[\w.\-]+\.[A-Za-z]{2,}/', (string) ( $r['original_to'] ?: $r['to_header'] ), $m ) ) {
+		return array();
 	}
+	return array_values( array_unique( array_filter( $m[0], 'is_email' ) ) );
+}
 
-	$perm  = function () {
-		return minn_admin_post_smtp_can();
-	};
-	$table = $GLOBALS['wpdb']->prefix . 'post_smtp_logs';
+/** One logged email's sections: status pill, sandboxed HTML body, failure text as a code row. */
+function minn_admin_post_smtp_view( array $r ) {
+	$status   = minn_admin_post_smtp_status( $r['success'] );
+	$delivery = array(
+		array( 'label' => __( 'Status', 'minn-admin' ), 'value' => $status, 'type' => 'pill' ),
+		array( 'label' => __( 'To', 'minn-admin' ), 'value' => minn_admin_post_smtp_recipients( $r['original_to'] ?: $r['to_header'] ) ),
+		array( 'label' => __( 'From', 'minn-admin' ), 'value' => minn_admin_post_smtp_recipients( $r['from_header'] ) ),
+	);
+	if ( '' !== (string) $r['transport_uri'] ) {
+		$delivery[] = array( 'label' => __( 'Transport', 'minn-admin' ), 'value' => (string) $r['transport_uri'] );
+	}
+	if ( minn_admin_post_smtp_is_fallback_sent( $r['success'] ) ) {
+		$delivery[] = array( 'label' => __( 'Delivered by', 'minn-admin' ), 'value' => __( 'Backup mailer (the primary connection failed)', 'minn-admin' ) );
+	}
+	$delivery[] = array( 'label' => __( 'Date', 'minn-admin' ), 'value' => minn_admin_post_smtp_iso( $r['time'] ) );
+	$body       = (string) $r['original_message'];
+	$sections   = array(
+		array( 'title' => __( 'Delivery', 'minn-admin' ), 'rows' => $delivery ),
+		array(
+			'title' => __( 'Message', 'minn-admin' ),
+			'rows'  => array(
+				array( 'label' => __( 'Subject', 'minn-admin' ), 'value' => (string) $r['original_subject'] ),
+				preg_match( '/<\/?[a-z][^>]*>/i', $body )
+					? array( 'label' => __( 'Body', 'minn-admin' ), 'value' => $body, 'type' => 'html-preview' )
+					: array( 'label' => __( 'Body', 'minn-admin' ), 'value' => $body, 'type' => 'code' ),
+			),
+		),
+	);
+	if ( 'failed' === $status ) {
+		$fail = array( array( 'label' => __( 'Error', 'minn-admin' ), 'value' => (string) $r['success'], 'type' => 'code' ) );
+		if ( '' !== (string) $r['solution'] ) {
+			$fail[] = array( 'label' => __( 'Suggested fix', 'minn-admin' ), 'value' => (string) $r['solution'] );
+		}
+		$sections[] = array( 'title' => __( 'Failure', 'minn-admin' ), 'rows' => $fail );
+	}
+	return array( 'sections' => $sections );
+}
 
-	register_rest_route( 'minn-admin/v1', '/post-smtp/emails', array(
-		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) use ( $table ) {
-			global $wpdb;
-			if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
-				return rest_ensure_response( array( 'items' => array(), 'total' => 0 ) );
-			}
-			$per_page = min( 100, max( 1, (int) $request->get_param( 'per_page' ) ?: 25 ) );
-			$page     = max( 1, (int) $request->get_param( 'page' ) ?: 1 );
-			$status   = sanitize_key( (string) $request->get_param( 'status' ) );
-
-			$sent_sql = minn_admin_post_smtp_sent_sql();
-			$where    = '1=1';
-			$args     = array();
-			if ( 'sent' === $status ) {
-				$where = $sent_sql;
-			} elseif ( 'failed' === $status ) {
-				$where = "NOT {$sent_sql}";
-			}
-			// A status-chart bar narrows the list to that day. The bounds are
-			// site-local datetimes (the chart minted them that way) and `time`
-			// is a WP-local epoch, so strtotime on the site's clock is the
-			// right conversion, not get_gmt_from_date.
-			foreach ( array( 'after' => '>=', 'before' => '<=' ) as $param => $op ) {
-				$bound = (string) $request->get_param( $param );
-				if ( '' === $bound ) {
-					continue;
-				}
-				$stamp = strtotime( $bound );
-				if ( false === $stamp ) {
-					continue;
-				}
-				$where .= " AND time {$op} %d";
-				$args[] = $stamp;
-			}
-			if ( $request['search'] ) {
-				// Subject + recipient columns only (session_transcript can hold SMTP AUTH).
-				$like   = '%' . $wpdb->esc_like( (string) $request['search'] ) . '%';
-				$where .= ' AND (original_subject LIKE %s OR original_to LIKE %s OR to_header LIKE %s OR from_header LIKE %s)';
-				$args[] = $like;
-				$args[] = $like;
-				$args[] = $like;
-				$args[] = $like;
-			}
-
-			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table prefix-derived; WHERE placeholder-built.
-			$total = (int) ( $args
-				? $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE {$where}", $args ) )
-				: $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE {$where}" ) );
-			$rows = $wpdb->get_results( $wpdb->prepare(
-				"SELECT id, original_subject, original_to, to_header, success, time FROM {$table} WHERE {$where} ORDER BY id DESC LIMIT %d OFFSET %d",
-				array_merge( $args, array( $per_page, ( $page - 1 ) * $per_page ) )
-			) );
-			// phpcs:enable
-
-			$items = array_map( function ( $row ) {
+minn_admin_resource( 'post-smtp/emails', function () {
+	return array(
+		'active'  => 'minn_admin_post_smtp_active',
+		'gates'   => array( 'view' => 'minn_admin_post_smtp_can' ),
+		'labels'  => array( 'not_found' => __( 'Email not found', 'minn-admin' ) ),
+		'source'  => array(
+			'table'   => 'post_smtp_logs',
+			'key'     => 'id',
+			'columns' => array( 'id', 'original_subject', 'original_to', 'to_header', 'success', 'time' ),
+			'detail'  => array( 'id', 'original_subject', 'original_to', 'to_header', 'from_header', 'original_message', 'success', 'solution', 'transport_uri', 'time' ),
+		),
+		'list'    => array(
+			'facets' => array(
+				array( 'param' => 'status', 'values' => array(
+					'sent'   => array( 'success' => array( 'any' => minn_admin_post_smtp_sent_rule() ) ),
+					'failed' => array( 'success' => array( 'none' => minn_admin_post_smtp_sent_rule() ) ),
+				) ),
+			),
+			// Subject and recipient columns only (session_transcript can hold SMTP AUTH).
+			'search' => array( 'columns' => array( 'original_subject', 'original_to', 'to_header', 'from_header' ) ),
+			'range'  => array( 'column' => 'time', 'clock' => 'local-epoch' ),
+			'order'  => array( 'column' => 'id' ),
+			'row'    => function ( array $r ) {
 				return array(
-					'id'      => (int) $row->id,
-					'subject' => $row->original_subject ? $row->original_subject : __( '(no subject)', 'minn-admin' ),
-					'to'      => minn_admin_post_smtp_recipients( $row->original_to ?: $row->to_header ),
-					'status'  => minn_admin_post_smtp_status( $row->success ),
-					'date'    => minn_admin_post_smtp_iso( $row->time ),
+					'id'      => (int) $r['id'],
+					'subject' => $r['original_subject'] ? $r['original_subject'] : __( '(no subject)', 'minn-admin' ),
+					'to'      => minn_admin_post_smtp_recipients( $r['original_to'] ?: $r['to_header'] ),
+					'status'  => minn_admin_post_smtp_status( $r['success'] ),
+					'date'    => $r['time'],
 				);
-			}, $rows ? $rows : array() );
-
-			return rest_ensure_response( array( 'items' => $items, 'total' => $total ) );
-		},
-	) );
-
-	// Sections view (v0.18.0 row types): status pill, sandboxed HTML body,
-	// failure text as a code row. Flat /emails/{id} stays for API consumers.
-	register_rest_route( 'minn-admin/v1', '/post-smtp/emails/(?P<id>\d+)/view', array(
-		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) use ( $table ) {
-			global $wpdb;
-			$row = $wpdb->get_row( $wpdb->prepare(
-				"SELECT id, original_subject, original_to, to_header, from_header, original_message, success, solution, transport_uri, time FROM {$table} WHERE id = %d", // phpcs:ignore
-				(int) Minn_Admin::path_param( $request )
-			) );
-			if ( ! $row ) {
-				return new WP_Error( 'not_found', __( 'Email not found', 'minn-admin' ), array( 'status' => 404 ) );
-			}
-			$status   = minn_admin_post_smtp_status( $row->success );
-			$delivery = array(
-				array( 'label' => __( 'Status', 'minn-admin' ), 'value' => $status, 'type' => 'pill' ),
-				array( 'label' => __( 'To', 'minn-admin' ), 'value' => minn_admin_post_smtp_recipients( $row->original_to ?: $row->to_header ) ),
-				array( 'label' => __( 'From', 'minn-admin' ), 'value' => minn_admin_post_smtp_recipients( $row->from_header ) ),
-			);
-			if ( '' !== (string) $row->transport_uri ) {
-				$delivery[] = array( 'label' => __( 'Transport', 'minn-admin' ), 'value' => (string) $row->transport_uri );
-			}
-			if ( minn_admin_post_smtp_is_fallback_sent( $row->success ) ) {
-				$delivery[] = array( 'label' => __( 'Delivered by', 'minn-admin' ), 'value' => __( 'Backup mailer (the primary connection failed)', 'minn-admin' ) );
-			}
-			$delivery[] = array( 'label' => __( 'Date', 'minn-admin' ), 'value' => minn_admin_post_smtp_iso( $row->time ) );
-			$body     = (string) $row->original_message;
-			$sections = array(
-				array( 'title' => __( 'Delivery', 'minn-admin' ), 'rows' => $delivery ),
-				array(
-					'title' => __( 'Message', 'minn-admin' ),
-					'rows'  => array(
-						array( 'label' => __( 'Subject', 'minn-admin' ), 'value' => (string) $row->original_subject ),
-						preg_match( '/<\/?[a-z][^>]*>/i', $body )
-							? array( 'label' => __( 'Body', 'minn-admin' ), 'value' => $body, 'type' => 'html-preview' )
-							: array( 'label' => __( 'Body', 'minn-admin' ), 'value' => $body, 'type' => 'code' ),
-					),
-				),
-			);
-			if ( 'failed' === $status ) {
-				$fail = array( array( 'label' => __( 'Error', 'minn-admin' ), 'value' => (string) $row->success, 'type' => 'code' ) );
-				if ( '' !== (string) $row->solution ) {
-					$fail[] = array( 'label' => __( 'Suggested fix', 'minn-admin' ), 'value' => (string) $row->solution );
-				}
-				$sections[] = array( 'title' => __( 'Failure', 'minn-admin' ), 'rows' => $fail );
-			}
-			return rest_ensure_response( array( 'sections' => $sections ) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/post-smtp/emails/(?P<id>\d+)', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) use ( $table ) {
-				global $wpdb;
-				$row = $wpdb->get_row( $wpdb->prepare(
-					"SELECT id, original_subject, original_to, to_header, from_header, original_message, success, solution, transport_uri, time FROM {$table} WHERE id = %d", // phpcs:ignore
-					(int) Minn_Admin::path_param( $request )
-				) );
-				if ( ! $row ) {
-					return new WP_Error( 'not_found', __( 'Email not found', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				$status = minn_admin_post_smtp_status( $row->success );
-				return rest_ensure_response( array(
-					'id'        => (int) $row->id,
-					'subject'   => $row->original_subject,
-					'to'        => minn_admin_post_smtp_recipients( $row->original_to ?: $row->to_header ),
-					'from'      => minn_admin_post_smtp_recipients( $row->from_header ),
+			},
+			'fields' => array(
+				'id'      => 'int',
+				'subject' => 'text',
+				'to'      => 'text',
+				'status'  => 'text',
+				'date'    => array( 'type' => 'datetime', 'stored' => 'local-epoch', 'wire' => 'z' ),
+			),
+		),
+		// The flat item stays for API consumers; the app reads the sections.
+		'item'    => array(
+			'view'   => function ( array $r ) {
+				$status = minn_admin_post_smtp_status( $r['success'] );
+				return array(
+					'id'        => (int) $r['id'],
+					'subject'   => $r['original_subject'],
+					'to'        => minn_admin_post_smtp_recipients( $r['original_to'] ?: $r['to_header'] ),
+					'from'      => minn_admin_post_smtp_recipients( $r['from_header'] ),
 					'status'    => $status,
-					'error'     => 'failed' === $status ? (string) $row->success : '',
-					'solution'  => (string) $row->solution,
-					'transport' => (string) $row->transport_uri,
-					'date'      => minn_admin_post_smtp_iso( $row->time ),
-					'message'   => $row->original_message,
-				) );
+					'error'     => 'failed' === $status ? (string) $r['success'] : '',
+					'solution'  => (string) $r['solution'],
+					'transport' => (string) $r['transport_uri'],
+					'date'      => $r['time'],
+					'message'   => $r['original_message'],
+				);
 			},
+			'fields' => array(
+				'id'        => 'int',
+				'subject'   => 'text',
+				'to'        => 'text',
+				'from'      => 'text',
+				'status'    => 'text',
+				'error'     => 'text',
+				'solution'  => 'text',
+				'transport' => 'text',
+				'date'      => array( 'type' => 'datetime', 'stored' => 'local-epoch', 'wire' => 'z' ),
+				'message'   => 'text',
+			),
 		),
-		array(
-			'methods'             => 'DELETE',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) use ( $table ) {
-				global $wpdb;
-				// Permanent delete by id (same shape as WP Mail Logging / FluentSMTP).
-				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$deleted = $wpdb->query( $wpdb->prepare(
-					"DELETE FROM {$table} WHERE id = %d",
-					(int) Minn_Admin::path_param( $request )
-				) );
-				if ( ! $deleted ) {
-					return new WP_Error( 'not_found', __( 'Email not found', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				return rest_ensure_response( array( 'deleted' => true, 'message' => __( 'Log entry deleted.', 'minn-admin' ) ) );
-			},
+		'reads'   => array( 'view' => array( 'view' => 'minn_admin_post_smtp_view', 'fields' => array( 'sections' => 'raw' ) ) ),
+		'actions' => array(
+			// Their own delete_logs(), which takes the entry's logmeta rows
+			// with it; the id is an int the kernel loaded.
+			'delete' => array(
+				'method' => 'DELETE',
+				'gate'   => 'view',
+				'run'    => function ( $id ) {
+					if ( class_exists( 'PostmanEmailQueryLog' ) && method_exists( 'PostmanEmailQueryLog', 'delete_logs' ) ) {
+						return ( new PostmanEmailQueryLog() )->delete_logs( array( (int) $id ) );
+					}
+					return Minn_Admin_Kernel_SQL::delete( 'post_smtp_logs', 'id', $id );
+				},
+				'expect' => 'gone',
+				'reply'  => function () {
+					return array( 'deleted' => true );
+				},
+				'done'   => __( 'Log entry deleted.', 'minn-admin' ),
+			),
+			// wp_mail with the stored subject and body (the FluentSMTP
+			// pattern); their stored headers stay out so nothing unserializes.
+			'resend' => array(
+				'gate'   => 'view',
+				'run'    => function ( $id, array $r ) {
+					$to = minn_admin_post_smtp_resend_to( $r );
+					if ( ! $to ) {
+						return new WP_Error( 'no_recipients', __( 'No recipient address on record for this email.', 'minn-admin' ), array( 'status' => 422 ) );
+					}
+					$is_html = (bool) preg_match( '/<\/?[a-z][\s\S]*>/i', (string) $r['original_message'] );
+					if ( ! wp_mail( $to, (string) $r['original_subject'], (string) $r['original_message'], $is_html ? array( 'Content-Type: text/html; charset=UTF-8' ) : array() ) ) {
+						return new WP_Error( 'send_failed', 'wp_mail() reported the message could not be sent.', array( 'status' => 500 ) );
+					}
+					return implode( ', ', $to );
+				},
+				'expect' => 'ran',
+				'reply'  => function ( $id, $fresh, $to ) {
+					return array( 'resent' => true, 'to' => $to, 'message' => __( 'Resent to ', 'minn-admin' ) . $to );
+				},
+			),
 		),
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/post-smtp/emails/(?P<id>\d+)/resend', array(
-		'methods'             => 'POST',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) use ( $table ) {
-			global $wpdb;
-			$row = $wpdb->get_row( $wpdb->prepare(
-				"SELECT id, original_subject, original_to, to_header, original_message FROM {$table} WHERE id = %d", // phpcs:ignore
-				(int) Minn_Admin::path_param( $request )
-			) );
-			if ( ! $row ) {
-				return new WP_Error( 'not_found', __( 'Email not found', 'minn-admin' ), array( 'status' => 404 ) );
-			}
-			// Addresses only — never unserialize their recipient blobs.
-			if ( ! preg_match_all( '/[\w.+\-]+@[\w.\-]+\.[A-Za-z]{2,}/', (string) ( $row->original_to ?: $row->to_header ), $m ) ) {
-				return new WP_Error( 'no_recipients', __( 'No recipient address on record for this email.', 'minn-admin' ), array( 'status' => 422 ) );
-			}
-			$to      = array_values( array_unique( array_filter( $m[0], 'is_email' ) ) );
-			$is_html = (bool) preg_match( '/<\/?[a-z][\s\S]*>/i', (string) $row->original_message );
-			$headers = $is_html ? array( 'Content-Type: text/html; charset=UTF-8' ) : array();
-			$sent    = wp_mail( $to, (string) $row->original_subject, (string) $row->original_message, $headers );
-			if ( ! $sent ) {
-				return new WP_Error( 'send_failed', 'wp_mail() reported the message could not be sent.', array( 'status' => 500 ) );
-			}
-			return rest_ensure_response( array(
-				'resent'  => true,
-				'to'      => implode( ', ', $to ),
-				'message' => __( 'Resent to ', 'minn-admin' ) . implode( ', ', $to ),
-			) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/post-smtp/status', array(
-		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function () {
-			return rest_ensure_response( minn_admin_post_smtp_status_model() );
-		},
-	) );
+	);
 } );
+
+minn_admin_endpoint( 'post-smtp/status', array(
+	'active' => 'minn_admin_post_smtp_active',
+	'gate'   => 'minn_admin_post_smtp_can',
+	'run'    => 'minn_admin_post_smtp_status_model',
+) );

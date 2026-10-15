@@ -89,6 +89,149 @@ function minn_admin_site_mailer_recipients( $raw ) {
 	return $raw;
 }
 
+/** One logged email's detail. Only the body answers to their keep-content switch, as on their own screen. */
+function minn_admin_site_mailer_view( array $r ) {
+	$row      = (object) $r;
+	$delivery = array(
+		array( 'label' => __( 'Status', 'minn-admin' ), 'value' => minn_admin_site_mailer_status( $row->status ), 'type' => 'pill' ),
+		array( 'label' => __( 'To', 'minn-admin' ), 'value' => minn_admin_site_mailer_recipients( $row->to ) ),
+	);
+	if ( '' !== (string) $row->source ) {
+		$delivery[] = array( 'label' => __( 'Source', 'minn-admin' ), 'value' => (string) $row->source );
+	}
+	$iso = minn_admin_db_local_to_utc_iso( $row->created_at );
+	if ( '' !== $iso ) {
+		$delivery[] = array( 'label' => __( 'Date', 'minn-admin' ), 'value' => $iso );
+	}
+	$body         = (string) $row->message;
+	$message_rows = array( array( 'label' => __( 'Subject', 'minn-admin' ), 'value' => (string) $row->subject ) );
+	if ( minn_admin_site_mailer_shows_content() && '' !== $body ) {
+		$message_rows[] = preg_match( '/<\/?[a-z][^>]*>/i', $body )
+			? array( 'label' => __( 'Body', 'minn-admin' ), 'value' => $body, 'type' => 'html-preview' )
+			: array( 'label' => __( 'Body', 'minn-admin' ), 'value' => $body, 'type' => 'code' );
+	}
+	return array(
+		'sections' => array(
+			array( 'title' => __( 'Delivery', 'minn-admin' ), 'rows' => $delivery ),
+			array( 'title' => __( 'Message', 'minn-admin' ), 'rows' => $message_rows ),
+		),
+	);
+}
+
+function minn_admin_site_mailer_can() {
+	return current_user_can( 'manage_options' );
+}
+
+// The status ENUM is finer than the two tabs: each tab is its members.
+const MINN_ADMIN_SITE_MAILER_DELIVERED = array( 'delivered', 'sent' );
+const MINN_ADMIN_SITE_MAILER_FAILED    = array( 'failed', 'bounce', 'dropped' );
+
+// created_at is the site's wall clock.
+minn_admin_resource( 'site-mailer/emails', function () {
+	return array(
+		'active'  => 'minn_admin_site_mailer_active',
+		'gates'   => array( 'view' => 'minn_admin_site_mailer_can' ),
+		'labels'  => array( 'not_found' => __( 'Email not found', 'minn-admin' ) ),
+		'source'  => array(
+			'table'   => 'site_mail_logs',
+			'key'     => 'id',
+			'columns' => array( 'id', 'to', 'subject', 'status', 'created_at' ),
+			'detail'  => array( '*' ),
+		),
+		'list'    => array(
+			'facets' => array(
+				array( 'param' => 'status', 'values' => array(
+					'delivered' => array( 'status' => MINN_ADMIN_SITE_MAILER_DELIVERED ),
+					'failed'    => array( 'status' => MINN_ADMIN_SITE_MAILER_FAILED ),
+				) ),
+			),
+			'search' => array(
+				'columns' => array( 'subject', 'to' ),
+				// `to` holds wp_json_encode() output, which writes a non-ASCII
+				// letter as \uXXXX and a slash as \/: the term in that form too.
+				'also'    => function ( $term ) {
+					return array( 'to' => array( 'contains' => substr( (string) wp_json_encode( $term ), 1, -1 ) ) );
+				},
+			),
+			'range'  => array( 'column' => 'created_at', 'clock' => 'local' ),
+			'order'  => array( 'column' => 'created_at' ),
+			'row'    => function ( array $r ) {
+				return array(
+					'id'         => (int) $r['id'],
+					'subject'    => (string) $r['subject'],
+					'to'         => minn_admin_site_mailer_recipients( $r['to'] ),
+					'status'     => minn_admin_site_mailer_status( $r['status'] ),
+					'created_at' => $r['created_at'],
+				);
+			},
+			'fields' => array(
+				'id'         => 'int',
+				'subject'    => 'text',
+				'to'         => 'text',
+				'status'     => 'text',
+				'created_at' => array( 'type' => 'datetime', 'stored' => 'site', 'wire' => 'z' ),
+			),
+		),
+		'reads'   => array( 'view' => array( 'view' => 'minn_admin_site_mailer_view', 'fields' => array( 'sections' => 'raw' ) ) ),
+		'actions' => array(
+			// Not their Log_Entry::delete_logs(): it deletes by api_id, which is
+			// '' on every row their cloud never accepted, so one of those would
+			// take every other with it. By the row's own key instead.
+			'delete' => array(
+				'method' => 'DELETE',
+				'gate'   => 'view',
+				'run'    => function ( $id ) {
+					return Minn_Admin_Kernel_SQL::delete( 'site_mail_logs', 'id', $id );
+				},
+				'expect' => 'gone',
+				'reply'  => function () {
+					return array( 'deleted' => true );
+				},
+				'done'   => __( 'Log entry deleted.', 'minn-admin' ),
+			),
+		),
+	);
+} );
+
+minn_admin_endpoint( 'site-mailer/status', array(
+	'active' => 'minn_admin_site_mailer_active',
+	'gate'   => 'minn_admin_site_mailer_can',
+	'run'    => function () {
+		$open = array( array( 'label' => __( 'Open Site Mailer ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=site-mailer' ) ) );
+		if ( ! Minn_Admin_Kernel_SQL::exists( 'site_mail_logs' ) ) {
+			return array(
+				'rows'    => array( array( 'label' => __( 'Email log', 'minn-admin' ), 'value' => '—', 'hint' => __( 'Site Mailer has not logged any sends yet', 'minn-admin' ) ) ),
+				'actions' => $open,
+			);
+		}
+		$id     = 'site-mailer/emails';
+		$failed = Minn_Admin_Kernel::count( $id, array( 'status' => MINN_ADMIN_SITE_MAILER_FAILED ) );
+		$opened = Minn_Admin_Kernel::count( $id, array( 'opened' => 1 ) );
+		return array(
+			'rows'    => array(
+				array(
+					'label' => __( 'Logged emails', 'minn-admin' ),
+					'value' => number_format_i18n( Minn_Admin_Kernel::count( $id ) ),
+					/* translators: %s: number of failed emails. */
+					'hint'  => $failed ? sprintf( __( '%s failed', 'minn-admin' ), number_format_i18n( $failed ) ) : __( 'All delivered', 'minn-admin' ),
+				),
+				array(
+					'label' => __( 'Delivered', 'minn-admin' ),
+					'value' => number_format_i18n( Minn_Admin_Kernel::count( $id, array( 'status' => MINN_ADMIN_SITE_MAILER_DELIVERED ) ) ),
+					'hint'  => $opened ? number_format_i18n( $opened ) . ' opened' : '',
+				),
+			),
+			'chart'   => array(
+				'title'     => __( 'Last 14 days', 'minn-admin' ),
+				'primary'   => 'Delivered',
+				'secondary' => 'Failed',
+				'points'    => array_values( Minn_Admin_Kernel::days( $id, array( 'column' => 'created_at', 'clock' => 'local', 'split' => 'status', 'secondary' => MINN_ADMIN_SITE_MAILER_FAILED, 'label' => 'M j' ) ) ),
+			),
+			'actions' => $open,
+		);
+	},
+) );
+
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! minn_admin_site_mailer_active() ) {
 		return $surfaces;
@@ -148,218 +291,4 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		),
 	);
 	return $surfaces;
-} );
-
-add_action( 'rest_api_init', function () {
-	if ( ! minn_admin_site_mailer_active() ) {
-		return;
-	}
-	$perm = function () {
-		return current_user_can( 'manage_options' );
-	};
-	$has_table = function () {
-		global $wpdb;
-		$t = minn_admin_site_mailer_table();
-		return $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $t ) ) === $t;
-	};
-
-	register_rest_route( 'minn-admin/v1', '/site-mailer/emails', array(
-		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) use ( $has_table ) {
-			if ( ! $has_table() ) {
-				return rest_ensure_response( array( 'items' => array(), 'total' => 0 ) );
-			}
-			global $wpdb;
-			$table    = minn_admin_site_mailer_table();
-			$per_page = min( 100, max( 1, (int) $request->get_param( 'per_page' ) ?: 25 ) );
-			$page     = max( 1, (int) $request->get_param( 'page' ) ?: 1 );
-			$status   = sanitize_key( (string) $request->get_param( 'status' ) );
-			$search   = sanitize_text_field( (string) $request->get_param( 'search' ) );
-			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			$where  = array( '1=1' );
-			$params = array();
-			// The status ENUM is finer than the two tabs: map tab → members.
-			if ( 'delivered' === $status ) {
-				$where[] = "status IN ('delivered','sent')";
-			} elseif ( 'failed' === $status ) {
-				$where[] = "status IN ('failed','bounce','dropped')";
-			}
-			if ( '' !== $search ) {
-				// `to` holds wp_json_encode() output, which writes a non-ASCII
-				// letter as \uXXXX and a slash as \/, so the term is matched in
-				// that form too: the list shows the address decoded.
-				$like    = '%' . $wpdb->esc_like( $search ) . '%';
-				$json    = '%' . $wpdb->esc_like( substr( (string) wp_json_encode( $search ), 1, -1 ) ) . '%';
-				$where[] = '( subject LIKE %s OR `to` LIKE %s OR `to` LIKE %s )';
-				array_push( $params, $like, $like, $json );
-			}
-			// A status-chart bar narrows the list to that day. The bounds are
-			// minted on the site's clock (the same one the chart buckets in
-			// and the column is stored in), so this compares like for like and
-			// nothing has to convert.
-			foreach ( array( 'after' => '>=', 'before' => '<=' ) as $param => $op ) {
-				$bound = (string) $request->get_param( $param );
-				if ( '' === $bound ) {
-					continue;
-				}
-				$where[]  = "created_at {$op} %s";
-				$params[] = $bound;
-			}
-			$where_sql = 'WHERE ' . implode( ' AND ', $where );
-			$count_sql = "SELECT COUNT(*) FROM {$table} {$where_sql}";
-			$total     = (int) ( $params ? $wpdb->get_var( $wpdb->prepare( $count_sql, $params ) ) : $wpdb->get_var( $count_sql ) );
-			// Newest first by when it was logged, so a row added out of order
-			// (an import, a restored backup) lands where it belongs; the id
-			// breaks ties so pages never overlap.
-			$rows      = $wpdb->get_results( $wpdb->prepare(
-				"SELECT id, `to`, subject, status, created_at FROM {$table} {$where_sql} ORDER BY created_at DESC, id DESC LIMIT %d OFFSET %d",
-				array_merge( $params, array( $per_page, ( $page - 1 ) * $per_page ) )
-			) );
-			// phpcs:enable
-			$items = array_map( function ( $r ) {
-				return array(
-					'id'         => (int) $r->id,
-					'subject'    => (string) $r->subject,
-					'to'         => minn_admin_site_mailer_recipients( $r->to ),
-					'status'     => minn_admin_site_mailer_status( $r->status ),
-					'created_at' => minn_admin_db_local_to_utc_iso( $r->created_at ),
-				);
-			}, $rows ? $rows : array() );
-			return rest_ensure_response( array( 'items' => $items, 'total' => $total ) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/site-mailer/emails/(?P<id>\d+)/view', array(
-		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) {
-			global $wpdb;
-			$table = minn_admin_site_mailer_table();
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", (int) Minn_Admin::path_param( $request ) ) );
-			if ( ! $row ) {
-				return new WP_Error( 'not_found', __( 'Email not found', 'minn-admin' ), array( 'status' => 404 ) );
-			}
-			$delivery = array(
-				array( 'label' => __( 'Status', 'minn-admin' ), 'value' => minn_admin_site_mailer_status( $row->status ), 'type' => 'pill' ),
-				array( 'label' => __( 'To', 'minn-admin' ), 'value' => minn_admin_site_mailer_recipients( $row->to ) ),
-			);
-			if ( '' !== (string) $row->source ) {
-				$delivery[] = array( 'label' => __( 'Source', 'minn-admin' ), 'value' => (string) $row->source );
-			}
-			$iso = minn_admin_db_local_to_utc_iso( $row->created_at );
-			if ( '' !== $iso ) {
-				$delivery[] = array( 'label' => __( 'Date', 'minn-admin' ), 'value' => $iso );
-			}
-			$body         = (string) $row->message;
-			$message_rows = array(
-				array( 'label' => __( 'Subject', 'minn-admin' ), 'value' => (string) $row->subject ),
-			);
-			// The subject, the delivery details and the list all stay; only the
-			// body answers to their content switch, which is exactly what their
-			// own screen does when it is off.
-			if ( minn_admin_site_mailer_shows_content() && '' !== $body ) {
-				$message_rows[] = preg_match( '/<\/?[a-z][^>]*>/i', $body )
-					? array( 'label' => __( 'Body', 'minn-admin' ), 'value' => $body, 'type' => 'html-preview' )
-					: array( 'label' => __( 'Body', 'minn-admin' ), 'value' => $body, 'type' => 'code' );
-			}
-			$sections = array(
-				array( 'title' => __( 'Delivery', 'minn-admin' ), 'rows' => $delivery ),
-				array( 'title' => __( 'Message', 'minn-admin' ), 'rows' => $message_rows ),
-			);
-			return rest_ensure_response( array( 'sections' => $sections ) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/site-mailer/emails/(?P<id>\d+)', array(
-		'methods'             => 'DELETE',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) {
-			global $wpdb;
-			$table = minn_admin_site_mailer_table();
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			$deleted = $wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE id = %d", (int) Minn_Admin::path_param( $request ) ) );
-			if ( ! $deleted ) {
-				return new WP_Error( 'not_found', __( 'Email not found', 'minn-admin' ), array( 'status' => 404 ) );
-			}
-			return rest_ensure_response( array( 'deleted' => true, 'message' => __( 'Log entry deleted.', 'minn-admin' ) ) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/site-mailer/status', array(
-		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function () use ( $has_table ) {
-			$admin_url = admin_url( 'admin.php?page=site-mailer' );
-			if ( ! $has_table() ) {
-				return rest_ensure_response( array(
-					'rows'    => array( array( 'label' => __( 'Email log', 'minn-admin' ), 'value' => '—', 'hint' => __( 'Site Mailer has not logged any sends yet', 'minn-admin' ) ) ),
-					'actions' => array( array( 'label' => __( 'Open Site Mailer ↗', 'minn-admin' ), 'href' => $admin_url ) ),
-				) );
-			}
-			global $wpdb;
-			$table     = minn_admin_site_mailer_table();
-			$total     = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" ); // phpcs:ignore
-			$delivered = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE status IN ('delivered','sent')" ); // phpcs:ignore
-			$failed    = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE status IN ('failed','bounce','dropped')" ); // phpcs:ignore
-			$opened    = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE opened = 1" ); // phpcs:ignore
-
-			// created_at is site-local, so DATE(created_at) is already the
-			// site's day: build the day keys on the site's clock too.
-			$since = minn_admin_chart_local_since();
-			$byday = array();
-			for ( $i = 13; $i >= 0; $i-- ) {
-				$d           = minn_admin_chart_day( -$i );
-				// The bounds a clicked bar sends back, on the site's clock.
-				$byday[ $d ] = array(
-					'label'     => gmdate( 'M j', strtotime( $d ) ),
-					'value'     => 0,
-					'secondary' => 0,
-					'from'      => $d . ' 00:00:00',
-					'to'        => $d . ' 23:59:59',
-				);
-			}
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			$rows = $wpdb->get_results( $wpdb->prepare(
-				"SELECT DATE(created_at) AS d, status, COUNT(*) AS c FROM {$table} WHERE created_at >= %s GROUP BY DATE(created_at), status",
-				$since
-			) );
-			foreach ( (array) $rows as $r ) {
-				$d = (string) $r->d;
-				if ( ! isset( $byday[ $d ] ) ) {
-					continue;
-				}
-				if ( 'failed' === minn_admin_site_mailer_status( $r->status ) ) {
-					$byday[ $d ]['secondary'] += (int) $r->c;
-				} else {
-					$byday[ $d ]['value'] += (int) $r->c;
-				}
-			}
-			return rest_ensure_response( array(
-				'rows'    => array(
-					array(
-						'label' => __( 'Logged emails', 'minn-admin' ),
-						'value' => number_format_i18n( $total ),
-						'hint'  => $failed
-							/* translators: %s: number of failed emails. */
-							? sprintf( __( '%s failed', 'minn-admin' ), number_format_i18n( $failed ) )
-							: __( 'All delivered', 'minn-admin' ),
-					),
-					array(
-						'label' => __( 'Delivered', 'minn-admin' ),
-						'value' => number_format_i18n( $delivered ),
-						'hint'  => $opened ? number_format_i18n( $opened ) . ' opened' : '',
-					),
-				),
-				'chart'   => array(
-					'title'     => __( 'Last 14 days', 'minn-admin' ),
-					'primary'   => 'Delivered',
-					'secondary' => 'Failed',
-					'points'    => array_values( $byday ),
-				),
-				'actions' => array( array( 'label' => __( 'Open Site Mailer ↗', 'minn-admin' ), 'href' => $admin_url ) ),
-			) );
-		},
-	) );
 } );

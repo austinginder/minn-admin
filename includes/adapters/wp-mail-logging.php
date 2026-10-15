@@ -10,7 +10,7 @@
  * the mailer); `receiver` can hold several comma/newline-separated
  * addresses. Resend goes through the plugin's OWN resender service (its
  * DI container), so attachment paths and header cleaning stay its logic.
- * Deletes mirror its own log screen (a prefix-scoped DELETE by id).
+ * Deletes are its own log screen's (WPML_Mail::find_one( $id )->delete()).
  *
  * Caps mirror the plugin: manage_options, or the capability its
  * "can see submission data" setting names.
@@ -21,13 +21,7 @@
 defined( 'ABSPATH' ) || exit;
 
 function minn_admin_wpml_active() {
-	global $wpdb;
-	if ( ! class_exists( 'No3x\\WPML\\WPML_Init' ) ) {
-		return false;
-	}
-	$table = $wpdb->prefix . 'wpml_mails';
-	$found = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
-	return $found && 0 === strcasecmp( (string) $found, $table );
+	return class_exists( 'No3x\\WPML\\WPML_Init' ) && Minn_Admin_Kernel_SQL::exists( 'wpml_mails' );
 }
 
 /**
@@ -191,55 +185,26 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	return $surfaces;
 } );
 
+/** The `error` values of a delivered email: none (empty = handed to the mailer). */
+const MINN_ADMIN_WPML_SENT = array( null, '' );
+
 /** Status-card model: log totals + 14-day sent/failed chart. */
 function minn_admin_wpml_status_model() {
-	global $wpdb;
-	$table = $wpdb->prefix . 'wpml_mails';
-	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-	if ( ! $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) ) {
+	if ( ! Minn_Admin_Kernel_SQL::exists( 'wpml_mails' ) ) {
 		return array(
 			'rows'    => array( array( 'label' => __( 'Email log', 'minn-admin' ), 'value' => 'Not ready', 'hint' => __( 'WP Mail Logging has not created its table yet', 'minn-admin' ) ) ),
 			'actions' => array(),
 		);
 	}
-	$total  = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
-	$failed = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE error IS NOT NULL AND error != ''" );
+	$id     = 'wpml/emails';
+	$failed = Minn_Admin_Kernel::count( $id, array( 'error' => array( 'none' => MINN_ADMIN_WPML_SENT ) ) );
 	// timestamp is site-local current_time('mysql').
-	$since  = date_i18n( 'Y-m-d H:i:s', current_time( 'timestamp' ) - 14 * DAY_IN_SECONDS );
-	$days   = $wpdb->get_results( $wpdb->prepare(
-		"SELECT DATE(timestamp) AS d,
-			SUM(CASE WHEN error IS NULL OR error = '' THEN 1 ELSE 0 END) AS sent,
-			SUM(CASE WHEN error IS NOT NULL AND error != '' THEN 1 ELSE 0 END) AS failed
-		 FROM {$table} WHERE timestamp >= %s GROUP BY DATE(timestamp) ORDER BY d ASC",
-		$since
-	) );
-	// phpcs:enable
-	$by_day = array();
-	for ( $i = 13; $i >= 0; $i-- ) {
-		$d            = date_i18n( 'Y-m-d', current_time( 'timestamp' ) - $i * DAY_IN_SECONDS );
-		// The bounds a clicked bar sends back. `timestamp` is
-		// current_time('mysql'), i.e. SITE-LOCAL, so these compare directly.
-		$by_day[ $d ] = array(
-			'label'     => $d,
-			'value'     => 0,
-			'secondary' => 0,
-			'from'      => $d . ' 00:00:00',
-			'to'        => $d . ' 23:59:59',
-		);
-	}
-	foreach ( (array) $days as $row ) {
-		$d = (string) $row->d;
-		if ( ! isset( $by_day[ $d ] ) ) {
-			continue;
-		}
-		$by_day[ $d ]['value']     = (int) $row->sent;
-		$by_day[ $d ]['secondary'] = (int) $row->failed;
-	}
+	$days = Minn_Admin_Kernel::days( $id, array( 'column' => 'timestamp', 'clock' => 'local', 'split' => 'error', 'secondary' => array( 'none' => MINN_ADMIN_WPML_SENT ) ) );
 	return array(
 		'rows'    => array(
 			array(
 				'label' => __( 'Logged emails', 'minn-admin' ),
-				'value' => number_format_i18n( $total ),
+				'value' => number_format_i18n( Minn_Admin_Kernel::count( $id ) ),
 				'hint'  => $failed ? number_format_i18n( $failed ) . ' failed' : __( 'All logged sends', 'minn-admin' ),
 			),
 		),
@@ -247,7 +212,7 @@ function minn_admin_wpml_status_model() {
 			'title'     => __( 'Last 14 days', 'minn-admin' ),
 			'primary'   => 'Sent',
 			'secondary' => 'Failed',
-			'points'    => array_values( $by_day ),
+			'points'    => array_values( $days ),
 		),
 		'actions' => array(
 			array( 'label' => __( 'Open WP Mail Logging ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=wpml_plugin_log' ) ),
@@ -255,205 +220,178 @@ function minn_admin_wpml_status_model() {
 	);
 }
 
-add_action( 'rest_api_init', function () {
-	if ( ! minn_admin_wpml_active() ) {
-		return;
+/** Whether a stored email failed: their `error` column holds the reason. */
+function minn_admin_wpml_failed( array $r ) {
+	return ! ( null === $r['error'] || '' === $r['error'] );
+}
+
+/**
+ * One email's sections: status pill, sandboxed HTML body, their raw header
+ * blob as a code row (a newline string, not pairs: a kv-table would imply
+ * structure the store doesn't have).
+ */
+function minn_admin_wpml_view( array $r ) {
+	$failed   = minn_admin_wpml_failed( $r );
+	$delivery = array(
+		array( 'label' => __( 'Status', 'minn-admin' ), 'value' => $failed ? 'failed' : 'sent', 'type' => 'pill' ),
+		array( 'label' => __( 'To', 'minn-admin' ), 'value' => minn_admin_wpml_receivers( $r['receiver'] ) ),
+	);
+	$host = '0' === (string) $r['host'] ? '' : (string) $r['host'];
+	if ( '' !== $host && minn_admin_wpml_displays( 'display-host' ) ) {
+		$delivery[] = array( 'label' => __( 'Host', 'minn-admin' ), 'value' => $host );
 	}
+	$attachments = trim( (string) $r['attachments'], "0 \n" );
+	if ( '' !== $attachments ) {
+		$delivery[] = array( 'label' => __( 'Attachments', 'minn-admin' ), 'value' => $attachments );
+	}
+	$delivery[] = array( 'label' => __( 'Date', 'minn-admin' ), 'value' => (string) $r['timestamp'] );
+	$body       = (string) $r['message'];
+	$sections   = array(
+		array( 'title' => __( 'Delivery', 'minn-admin' ), 'rows' => $delivery ),
+		array(
+			'title' => __( 'Message', 'minn-admin' ),
+			'rows'  => array(
+				array( 'label' => __( 'Subject', 'minn-admin' ), 'value' => minn_admin_wpml_subject( $r['subject'] ) ),
+				preg_match( '/<\/?[a-z][^>]*>/i', $body )
+					// Remote images stay blocked unless their own "Always
+					// Load Remote Images" setting (1.17+) says otherwise.
+					? array( 'label' => __( 'Body', 'minn-admin' ), 'value' => $body, 'type' => 'html-preview', 'remote' => minn_admin_wpml_displays( 'load-remote-images' ) )
+					: array( 'label' => __( 'Body', 'minn-admin' ), 'value' => $body, 'type' => 'code' ),
+			),
+		),
+	);
+	$headers = trim( (string) $r['headers'] );
+	if ( '' !== $headers ) {
+		$sections[] = array(
+			'title' => __( 'Headers', 'minn-admin' ),
+			'rows'  => array( array( 'label' => __( 'Raw headers', 'minn-admin' ), 'value' => $headers, 'type' => 'code' ) ),
+		);
+	}
+	if ( $failed ) {
+		$sections[] = array(
+			'title' => __( 'Failure', 'minn-admin' ),
+			'rows'  => array( array( 'label' => __( 'Error', 'minn-admin' ), 'value' => (string) $r['error'], 'type' => 'code' ) ),
+		);
+	}
+	return array( 'sections' => $sections );
+}
 
-	$table = $GLOBALS['wpdb']->prefix . 'wpml_mails';
-
-	register_rest_route( 'minn-admin/v1', '/wpml/emails', array(
-		'methods'             => 'GET',
-		'permission_callback' => 'minn_admin_wpml_can',
-		'callback'            => function ( WP_REST_Request $request ) use ( $table ) {
-			global $wpdb;
-			$per_page = min( 100, max( 1, (int) $request->get_param( 'per_page' ) ?: 25 ) );
-			$page     = max( 1, (int) $request->get_param( 'page' ) ?: 1 );
-			$status   = sanitize_key( (string) $request->get_param( 'status' ) );
-
-			$where = '1=1';
-			$args  = array();
-			if ( 'sent' === $status ) {
-				$where = "(error IS NULL OR error = '')";
-			} elseif ( 'failed' === $status ) {
-				$where = "error IS NOT NULL AND error != ''";
-			}
-			// A status-chart bar narrows the list to that day. Both the bounds
-			// and the column are site-local, so this is a plain comparison.
-			foreach ( array( 'after' => '>=', 'before' => '<=' ) as $param => $op ) {
-				$bound = (string) $request->get_param( $param );
-				if ( '' === $bound ) {
-					continue;
-				}
-				$where .= " AND timestamp {$op} %s";
-				$args[] = $bound;
-			}
-			if ( $request['search'] ) {
-				$like   = '%' . $wpdb->esc_like( (string) $request['search'] ) . '%';
-				$where .= ' AND (receiver LIKE %s OR subject LIKE %s)';
-				$args[] = $like;
-				$args[] = $like;
-			}
-
-			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table prefix-derived; WHERE placeholder-built.
-			$total = (int) ( $args
-				? $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE {$where}", $args ) )
-				: $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE {$where}" ) );
-			$rows = $wpdb->get_results( $wpdb->prepare(
-				"SELECT mail_id, timestamp, receiver, subject, error FROM {$table} WHERE {$where} ORDER BY mail_id DESC LIMIT %d OFFSET %d",
-				array_merge( $args, array( $per_page, ( $page - 1 ) * $per_page ) )
-			) );
-			// phpcs:enable
-
-			$items = array_map( function ( $row ) {
+minn_admin_resource( 'wpml/emails', function () {
+	return array(
+		'active'  => 'minn_admin_wpml_active',
+		'gates'   => array( 'view' => 'minn_admin_wpml_can' ),
+		'labels'  => array( 'not_found' => __( 'Email not found', 'minn-admin' ) ),
+		'source'  => array(
+			'table'   => 'wpml_mails',
+			'key'     => 'mail_id',
+			'columns' => array( 'mail_id', 'timestamp', 'receiver', 'subject', 'error' ),
+			'detail'  => array( '*' ),
+		),
+		'list'    => array(
+			'facets' => array(
+				array( 'param' => 'status', 'values' => array(
+					'sent'   => array( 'error' => array( 'any' => MINN_ADMIN_WPML_SENT ) ),
+					'failed' => array( 'error' => array( 'none' => MINN_ADMIN_WPML_SENT ) ),
+				) ),
+			),
+			'search' => array( 'columns' => array( 'receiver', 'subject' ) ),
+			// Both the bounds and the column are site-local.
+			'range'  => array( 'column' => 'timestamp', 'clock' => 'local' ),
+			'order'  => array( 'column' => 'mail_id' ),
+			'row'    => function ( array $r ) {
 				return array(
-					'id'        => (int) $row->mail_id,
-					'subject'   => $row->subject ? minn_admin_wpml_subject( $row->subject ) : __( '(no subject)', 'minn-admin' ),
-					'to'        => minn_admin_wpml_receivers( $row->receiver ),
-					'status'    => ( null === $row->error || '' === $row->error ) ? 'sent' : 'failed',
-					'timestamp' => $row->timestamp,
+					'id'        => (int) $r['mail_id'],
+					'subject'   => $r['subject'] ? minn_admin_wpml_subject( $r['subject'] ) : __( '(no subject)', 'minn-admin' ),
+					'to'        => minn_admin_wpml_receivers( $r['receiver'] ),
+					'status'    => minn_admin_wpml_failed( $r ) ? 'failed' : 'sent',
+					'timestamp' => $r['timestamp'],
 				);
-			}, $rows ? $rows : array() );
-
-			return rest_ensure_response( array( 'items' => $items, 'total' => $total ) );
-		},
-	) );
-
-	// Sections view (v0.18.0 row types): status pill, sandboxed HTML body,
-	// their raw header blob as a code row (a newline string, not pairs — a
-	// kv-table would imply structure the store doesn't have). Flat
-	// /emails/{id} stays for API consumers.
-	register_rest_route( 'minn-admin/v1', '/wpml/emails/(?P<id>\d+)/view', array(
-		'methods'             => 'GET',
-		'permission_callback' => 'minn_admin_wpml_can',
-		'callback'            => function ( WP_REST_Request $request ) use ( $table ) {
-			global $wpdb;
-			$row = $wpdb->get_row( $wpdb->prepare(
-				"SELECT * FROM {$table} WHERE mail_id = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				(int) Minn_Admin::path_param( $request )
-			) );
-			if ( ! $row ) {
-				return new WP_Error( 'not_found', __( 'Email not found', 'minn-admin' ), array( 'status' => 404 ) );
-			}
-			$failed   = ! ( null === $row->error || '' === $row->error );
-			$delivery = array(
-				array( 'label' => __( 'Status', 'minn-admin' ), 'value' => $failed ? 'failed' : 'sent', 'type' => 'pill' ),
-				array( 'label' => __( 'To', 'minn-admin' ), 'value' => minn_admin_wpml_receivers( $row->receiver ) ),
-			);
-			$host = '0' === (string) $row->host ? '' : (string) $row->host;
-			if ( '' !== $host && minn_admin_wpml_displays( 'display-host' ) ) {
-				$delivery[] = array( 'label' => __( 'Host', 'minn-admin' ), 'value' => $host );
-			}
-			$attachments = trim( (string) $row->attachments, "0 \n" );
-			if ( '' !== $attachments ) {
-				$delivery[] = array( 'label' => __( 'Attachments', 'minn-admin' ), 'value' => $attachments );
-			}
-			$delivery[] = array( 'label' => __( 'Date', 'minn-admin' ), 'value' => (string) $row->timestamp );
-			$body     = (string) $row->message;
-			$sections = array(
-				array( 'title' => __( 'Delivery', 'minn-admin' ), 'rows' => $delivery ),
-				array(
-					'title' => __( 'Message', 'minn-admin' ),
-					'rows'  => array(
-						array( 'label' => __( 'Subject', 'minn-admin' ), 'value' => minn_admin_wpml_subject( $row->subject ) ),
-						preg_match( '/<\/?[a-z][^>]*>/i', $body )
-							// Remote images stay blocked unless their own "Always
-							// Load Remote Images" setting (1.17+) says otherwise.
-							? array( 'label' => __( 'Body', 'minn-admin' ), 'value' => $body, 'type' => 'html-preview', 'remote' => minn_admin_wpml_displays( 'load-remote-images' ) )
-							: array( 'label' => __( 'Body', 'minn-admin' ), 'value' => $body, 'type' => 'code' ),
-					),
-				),
-			);
-			$headers = trim( (string) $row->headers );
-			if ( '' !== $headers ) {
-				$sections[] = array(
-					'title' => __( 'Headers', 'minn-admin' ),
-					'rows'  => array( array( 'label' => __( 'Raw headers', 'minn-admin' ), 'value' => $headers, 'type' => 'code' ) ),
-				);
-			}
-			if ( $failed ) {
-				$sections[] = array(
-					'title' => __( 'Failure', 'minn-admin' ),
-					'rows'  => array( array( 'label' => __( 'Error', 'minn-admin' ), 'value' => (string) $row->error, 'type' => 'code' ) ),
-				);
-			}
-			return rest_ensure_response( array( 'sections' => $sections ) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/wpml/emails/(?P<id>\d+)', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => 'minn_admin_wpml_can',
-			'callback'            => function ( WP_REST_Request $request ) use ( $table ) {
-				global $wpdb;
-				$row = $wpdb->get_row( $wpdb->prepare(
-					"SELECT * FROM {$table} WHERE mail_id = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-					(int) Minn_Admin::path_param( $request )
-				) );
-				if ( ! $row ) {
-					return new WP_Error( 'not_found', __( 'Email not found', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				return rest_ensure_response( array(
-					'id'          => (int) $row->mail_id,
-					'subject'     => minn_admin_wpml_subject( $row->subject ),
-					'to'          => minn_admin_wpml_receivers( $row->receiver ),
-					'status'      => ( null === $row->error || '' === $row->error ) ? 'sent' : 'failed',
-					'error'       => (string) $row->error,
-					'headers'     => trim( (string) $row->headers ),
-					'attachments' => trim( (string) $row->attachments, "0 \n" ),
-					'host'        => minn_admin_wpml_displays( 'display-host' ) && '0' !== (string) $row->host ? (string) $row->host : '',
-					'timestamp'   => $row->timestamp,
-					'message'     => (string) $row->message,
-				) );
 			},
+			'fields' => array(
+				'id'        => 'int',
+				'subject'   => 'text',
+				'to'        => 'text',
+				'status'    => 'text',
+				'timestamp' => array( 'type' => 'datetime', 'stored' => 'site', 'wire' => 'sql' ),
+			),
 		),
-		array(
-			'methods'             => 'DELETE',
-			'permission_callback' => 'minn_admin_wpml_can',
-			'callback'            => function ( WP_REST_Request $request ) use ( $table ) {
-				global $wpdb;
-				// Mirrors the plugin's own log-screen delete: permanent, by id.
-				$deleted = $wpdb->query( $wpdb->prepare(
-					"DELETE FROM {$table} WHERE mail_id = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-					(int) Minn_Admin::path_param( $request )
-				) );
-				if ( ! $deleted ) {
-					return new WP_Error( 'not_found', __( 'Email not found', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				return rest_ensure_response( array( 'deleted' => true, 'message' => __( 'Log entry deleted.', 'minn-admin' ) ) );
+		// The flat item stays for API consumers; the app reads the sections.
+		'item'    => array(
+			'view'   => function ( array $r ) {
+				return array(
+					'id'          => (int) $r['mail_id'],
+					'subject'     => minn_admin_wpml_subject( $r['subject'] ),
+					'to'          => minn_admin_wpml_receivers( $r['receiver'] ),
+					'status'      => minn_admin_wpml_failed( $r ) ? 'failed' : 'sent',
+					'error'       => (string) $r['error'],
+					'headers'     => trim( (string) $r['headers'] ),
+					'attachments' => trim( (string) $r['attachments'], "0 \n" ),
+					'host'        => minn_admin_wpml_displays( 'display-host' ) && '0' !== (string) $r['host'] ? (string) $r['host'] : '',
+					'timestamp'   => $r['timestamp'],
+					'message'     => (string) $r['message'],
+				);
 			},
+			'fields' => array(
+				'id'          => 'int',
+				'subject'     => 'text',
+				'to'          => 'text',
+				'status'      => 'text',
+				'error'       => 'text',
+				'headers'     => 'text',
+				'attachments' => 'text',
+				'host'        => 'text',
+				'timestamp'   => array( 'type' => 'datetime', 'stored' => 'site', 'wire' => 'sql' ),
+				'message'     => 'text',
+			),
 		),
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/wpml/status', array(
-		'methods'             => 'GET',
-		'permission_callback' => 'minn_admin_wpml_can',
-		'callback'            => function () {
-			return rest_ensure_response( minn_admin_wpml_status_model() );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/wpml/emails/(?P<id>\d+)/resend', array(
-		'methods'             => 'POST',
-		'permission_callback' => 'minn_admin_wpml_can',
-		'callback'            => function ( WP_REST_Request $request ) {
+		'reads'   => array( 'view' => array( 'view' => 'minn_admin_wpml_view', 'fields' => array( 'sections' => 'raw' ) ) ),
+		'actions' => array(
+			// Their own log screen's delete.
+			'delete' => array(
+				'method' => 'DELETE',
+				'gate'   => 'view',
+				'run'    => function ( $id ) {
+					if ( class_exists( '\\No3x\\WPML\\Model\\WPML_Mail' ) ) {
+						$mail = \No3x\WPML\Model\WPML_Mail::find_one( $id );
+						return $mail ? $mail->delete() : false;
+					}
+					return Minn_Admin_Kernel_SQL::delete( 'wpml_mails', 'mail_id', $id );
+				},
+				'expect' => 'gone',
+				'reply'  => function () {
+					return array( 'deleted' => true );
+				},
+				'done'   => __( 'Log entry deleted.', 'minn-admin' ),
+			),
 			// The plugin's OWN resend pipeline: model + resender out of its
 			// DI container, so recipient splitting, header cleaning and
 			// attachment path resolution stay its code, not a re-guess.
-			try {
-				$mail = \No3x\WPML\Model\WPML_Mail::find_one( (int) Minn_Admin::path_param( $request ) );
-				if ( ! $mail ) {
-					return new WP_Error( 'not_found', __( 'Email not found', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				\No3x\WPML\WPML_Init::getInstance()->getService( 'emailResender' )->resendMail( $mail );
-			} catch ( \Throwable $e ) {
-				return new WP_Error( 'resend_failed', __( 'WP Mail Logging could not resend: ', 'minn-admin' ) . $e->getMessage(), array( 'status' => 500 ) );
-			}
-			return rest_ensure_response( array(
-				'resent'  => true,
-				'message' => __( 'Handed back to the mailer — the new attempt appears as its own log entry.', 'minn-admin' ),
-			) );
-		},
-	) );
+			'resend' => array(
+				'gate'   => 'view',
+				'run'    => function ( $id ) {
+					try {
+						$mail = \No3x\WPML\Model\WPML_Mail::find_one( $id );
+						if ( ! $mail ) {
+							return new WP_Error( 'not_found', __( 'Email not found', 'minn-admin' ), array( 'status' => 404 ) );
+						}
+						\No3x\WPML\WPML_Init::getInstance()->getService( 'emailResender' )->resendMail( $mail );
+					} catch ( \Throwable $e ) {
+						return new WP_Error( 'resend_failed', __( 'WP Mail Logging could not resend: ', 'minn-admin' ) . $e->getMessage(), array( 'status' => 500 ) );
+					}
+					return true;
+				},
+				'expect' => 'ran',
+				'reply'  => function () {
+					return array( 'resent' => true );
+				},
+				'done'   => __( 'Handed back to the mailer — the new attempt appears as its own log entry.', 'minn-admin' ),
+			),
+		),
+	);
 } );
+
+minn_admin_endpoint( 'wpml/status', array(
+	'active' => 'minn_admin_wpml_active',
+	'gate'   => 'minn_admin_wpml_can',
+	'run'    => 'minn_admin_wpml_status_model',
+) );
