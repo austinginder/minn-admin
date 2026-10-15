@@ -95,19 +95,7 @@ function minn_admin_formidable_answers( $entry_id ) {
 		$entry = FrmEntry::getOne( (int) $entry_id, true );
 		if ( $entry && isset( $entry->metas ) ) {
 			foreach ( (array) $entry->metas as $fid => $v ) {
-				if ( is_array( $v ) ) {
-					$flat = array();
-					array_walk_recursive( $v, function ( $leaf ) use ( &$flat ) {
-						// Same rule as the other flatteners: an absolute path
-						// on this server is the upload's location, not its
-						// answer, and printing it leaks the directory layout.
-						if ( '' !== trim( (string) $leaf ) && ! minn_admin_is_server_path( $leaf ) ) {
-							$flat[] = (string) $leaf;
-						}
-					} );
-					$v = implode( ', ', $flat );
-				}
-				$out[ (int) $fid ] = trim( (string) $v );
+				$out[ (int) $fid ] = trim( (string) ( is_array( $v ) ? minn_admin_forms_flat( $v ) : $v ) );
 			}
 		}
 	} catch ( \Throwable $e ) {
@@ -142,19 +130,9 @@ function minn_admin_formidable_get( $id ) {
 function minn_admin_formidable_row( array $row ) {
 	$form_id = (int) $row['form_id'];
 	$titles  = minn_admin_formidable_titles();
-	$answers = minn_admin_formidable_answers( (int) $row['id'] );
-	$parts   = array();
-	foreach ( minn_admin_formidable_fields( $form_id ) as $fid => $label ) {
-		if ( isset( $answers[ $fid ] ) && '' !== $answers[ $fid ] ) {
-			$parts[] = $answers[ $fid ];
-		}
-		if ( count( $parts ) >= 3 ) {
-			break;
-		}
-	}
 	return array(
 		'id'         => (int) $row['id'],
-		'summary'    => $parts ? implode( ' · ', $parts ) : __( '(empty entry)', 'minn-admin' ),
+		'summary'    => minn_admin_forms_summary( minn_admin_formidable_answers( (int) $row['id'] ), minn_admin_formidable_fields( $form_id ) ),
 		'form_title' => isset( $titles[ $form_id ] ) ? $titles[ $form_id ] : '#' . $form_id,
 		'date'       => $row['created_at'],
 	);
@@ -164,41 +142,13 @@ function minn_admin_formidable_row( array $row ) {
 function minn_admin_formidable_view( array $entry ) {
 	$id      = (int) $entry['id'];
 	$form_id = (int) $entry['form_id'];
-	$fields  = minn_admin_formidable_fields( $form_id );
-	$answers = minn_admin_formidable_answers( $id );
 	$titles  = minn_admin_formidable_titles();
-
-	$rows = array();
-	foreach ( $fields as $fid => $label ) {
-		$rows[] = array(
-			'label' => $label,
-			'value' => isset( $answers[ $fid ] ) && '' !== $answers[ $fid ] ? $answers[ $fid ] : '—',
-		);
-	}
-	foreach ( $answers as $fid => $value ) {
-		if ( ! isset( $fields[ $fid ] ) && '' !== $value ) {
-			$rows[] = array(
-				'label' => __( 'Field ', 'minn-admin' ) . $fid,
-				'value' => $value,
-			);
-		}
-	}
-	$meta = array(
-		array( 'label' => __( 'Form', 'minn-admin' ), 'value' => isset( $titles[ $form_id ] ) ? $titles[ $form_id ] : '#' . $form_id ),
-		array( 'label' => __( 'Entry', 'minn-admin' ), 'value' => '#' . $id ),
-		array( 'label' => __( 'Submitted', 'minn-admin' ), 'value' => date_i18n( 'M j, Y g:i a', strtotime( get_date_from_gmt( $entry['created_at'] ) ) ) ),
-	);
+	$rows    = minn_admin_forms_answer_rows( minn_admin_formidable_fields( $form_id ), minn_admin_formidable_answers( $id ) );
+	$meta    = minn_admin_forms_meta( isset( $titles[ $form_id ] ) ? $titles[ $form_id ] : '#' . $form_id, $id, date_i18n( 'M j, Y g:i a', strtotime( get_date_from_gmt( $entry['created_at'] ) ) ) );
 	if ( ! empty( $entry['ip'] ) ) {
 		$meta[] = array( 'label' => 'IP', 'value' => (string) $entry['ip'] );
 	}
-	return array(
-		'kind'     => 'entry',
-		'sections' => array(
-			array( 'title' => __( 'Answers', 'minn-admin' ), 'rows' => $rows ),
-			array( 'title' => __( 'Submission', 'minn-admin' ), 'rows' => $meta ),
-		),
-		'adminUrl' => admin_url( 'admin.php?page=formidable-entries&frm_action=show&id=' . $id ),
-	);
+	return minn_admin_forms_entry( $rows, $meta, admin_url( 'admin.php?page=formidable-entries&frm_action=show&id=' . $id ) );
 }
 
 /** Server-built model for the surface status card. */
@@ -215,23 +165,19 @@ function minn_admin_formidable_status_model() {
 	$week = Minn_Admin_Kernel_SQL::count( 'frm_items', $submitted + array(
 		'created_at' => array( 'op' => '>=', 'value' => gmdate( 'Y-m-d H:i:s', time() - ( 7 * DAY_IN_SECONDS ) ) ),
 	) );
-	return array(
-		'rows'    => array(
-			array(
-				'label' => __( 'Entries', 'minn-admin' ),
-				'value' => number_format_i18n( $n['received'] ),
-				'hint'  => sprintf(
-					/* translators: %s: number of entries received in the last 7 days. */
-					__( '%s in the last 7 days', 'minn-admin' ),
-					number_format_i18n( $week )
-				),
+	return minn_admin_forms_card(
+		array(
+			'label' => __( 'Entries', 'minn-admin' ),
+			'value' => number_format_i18n( $n['received'] ),
+			'hint'  => sprintf(
+				/* translators: %s: number of entries received in the last 7 days. */
+				__( '%s in the last 7 days', 'minn-admin' ),
+				number_format_i18n( $week )
 			),
-			array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => number_format_i18n( count( minn_admin_formidable_titles() ) ) ),
 		),
-		'chart'   => minn_admin_chart_build( $n['days'], __( 'Entries', 'minn-admin' ) ),
-		'actions' => array(
-			array( 'label' => __( 'Open Formidable ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=formidable-entries' ) ),
-		),
+		count( minn_admin_formidable_titles() ),
+		$n['days'],
+		array( 'label' => __( 'Open Formidable ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=formidable-entries' ) )
 	);
 }
 
@@ -283,18 +229,10 @@ minn_admin_resource( 'formidable/entries', function () {
 		'item'    => array( 'view' => 'minn_admin_formidable_view' ),
 		'actions' => array(
 			// Formidable has no entry trash: delete is permanent from any state.
-			'delete' => array(
-				'method'    => 'DELETE',
-				'gate'      => 'delete',
-				// Their complete flow: metas deleted, their hooks fire.
-				'run'       => function ( $id ) {
-					return FrmEntry::destroy( $id ) ? true : new WP_Error( 'delete_failed', __( 'Formidable could not delete the entry.', 'minn-admin' ), array( 'status' => 500 ) );
-				},
-				'expect'    => 'gone',
-				'fail_code' => 'delete_failed',
-				'fail'      => __( 'Formidable could not delete the entry.', 'minn-admin' ),
-				'done'      => __( 'Entry deleted permanently.', 'minn-admin' ),
-			),
+			// Their complete flow: metas deleted, their hooks fire.
+			'delete' => minn_admin_forms_delete( function ( $id ) {
+				return FrmEntry::destroy( $id ) ? true : new WP_Error( 'delete_failed', __( 'Formidable could not delete the entry.', 'minn-admin' ), array( 'status' => 500 ) );
+			}, __( 'Formidable could not delete the entry.', 'minn-admin' ), array( 'gate' => 'delete' ) ),
 		),
 	);
 } );
@@ -330,65 +268,24 @@ minn_admin_endpoint( 'formidable/status', array(
 	'run'    => 'minn_admin_formidable_status_model',
 ) );
 
-add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
-	if ( ! minn_admin_formidable_active() || ! minn_admin_formidable_can() ) {
-		return $surfaces;
-	}
-	$ui = function ( $slug, $ui ) {
-		return Minn_Admin_Kernel::ui( 'formidable/entries', $slug, $ui );
-	};
-
-	$surfaces['formidable'] = array(
-		'label'      => __( 'Forms', 'minn-admin' ),
-		'family'     => 'forms',
-		'group'      => 'workspace', // inbox-shaped (see gravity-forms.php)
-		'sub'        => 'Formidable',
-		'plugin'     => array( 'formidable', 'formidable-pro' ),
-		'icon'       => 'inbox',
-		'cap'        => 'read', // real gate is the filter above (their cap model)
-		'status'     => array( 'route' => 'minn-admin/v1/formidable/status' ),
-		// Route, paging, search and the status-chart day range come from the
-		// resource, so they cannot drift from it.
-		'collection' => Minn_Admin_Kernel::collection( 'formidable/entries', array(
-			'viewLabel' => __( 'Entries', 'minn-admin' ),
-			'tabs'      => array(
-				'route'    => 'minn-admin/v1/formidable/forms',
-				'valueKey' => 'id',
-				'labelKey' => 'title',
-				'param'    => 'form_id',
-				'allLabel' => __( 'All entries', 'minn-admin' ),
-			),
-			'columns'   => array(
-				array( 'key' => 'summary', 'label' => __( 'Entry', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
-				array( 'key' => 'form_title', 'label' => __( 'Form', 'minn-admin' ) ),
-				// created_at is current_time( 'mysql', 1 ) — UTC.
-				array( 'key' => 'date', 'label' => __( 'When', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
-			),
-			'detail'    => array(
-				'sectionsRoute' => 'minn-admin/v1/formidable/entries/{id}',
-			),
-			'actions'   => array(
-				$ui( 'delete', array( 'label' => __( 'Delete permanently', 'minn-admin' ), 'confirm' => __( 'Delete this entry permanently? Formidable has no entry trash — there is no undo.', 'minn-admin' ), 'danger' => true ) ),
-			),
-			'bulk'      => array(
-				$ui( 'delete', array( 'label' => __( 'Delete permanently', 'minn-admin' ), 'confirm' => __( 'Delete the selected entries permanently? There is no undo.', 'minn-admin' ), 'danger' => true ) ),
-			),
-		) ),
-		'manage'     => array(
-			'viewLabel' => __( 'Forms', 'minn-admin' ),
-			'route'     => 'minn-admin/v1/formidable/forms?manage=1',
-			'columns'   => array(
-				array( 'key' => 'title', 'label' => __( 'Form', 'minn-admin' ), 'format' => 'title' ),
-				array( 'key' => 'entries', 'label' => __( 'Entries', 'minn-admin' ), 'format' => 'num' ),
-			),
-			'detail'    => array(),
-			'actions'   => array(
-				array(
-					'label' => __( 'Edit in Formidable ↗', 'minn-admin' ),
-					'href'  => admin_url( 'admin.php?page=formidable&frm_action=edit&id={id}' ),
-				),
-			),
+minn_admin_add_surface( 'formidable', function () {
+	return minn_admin_formidable_active() && minn_admin_formidable_can();
+}, function () {
+	$ui = minn_admin_forms_ui( 'formidable/entries' );
+	return minn_admin_forms_surface( 'formidable/entries', array(
+		'sub'     => 'Formidable',
+		'plugin'  => array( 'formidable', 'formidable-pro' ),
+		'api'     => 'formidable',
+		// The row carries no status, so there is no Status column; created_at
+		// is current_time( 'mysql', 1 ), UTC.
+		'pill'    => false,
+		'utc'     => true,
+		'actions' => array(
+			$ui( 'delete', array( 'label' => __( 'Delete permanently', 'minn-admin' ), 'confirm' => __( 'Delete this entry permanently? Formidable has no entry trash — there is no undo.', 'minn-admin' ), 'danger' => true ) ),
 		),
-	);
-	return $surfaces;
+		'bulk'    => array(
+			$ui( 'delete', array( 'label' => __( 'Delete permanently', 'minn-admin' ), 'confirm' => __( 'Delete the selected entries permanently? There is no undo.', 'minn-admin' ), 'danger' => true ) ),
+		),
+		'manage'  => minn_admin_forms_manage( 'formidable', __( 'Edit in Formidable ↗', 'minn-admin' ), admin_url( 'admin.php?page=formidable&frm_action=edit&id={id}' ) ),
+	) );
 } );

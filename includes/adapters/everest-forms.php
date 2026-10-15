@@ -173,15 +173,9 @@ function minn_admin_everest_titles() {
  */
 function minn_admin_everest_flat_value( $v ) {
 	if ( is_array( $v ) ) {
-		$flat = array();
-		array_walk_recursive( $v, function ( $leaf ) use ( &$flat ) {
-			// An upload answer carries the file's path on disk beside its
-			// address; the row only ever needed the address.
-			if ( '' !== trim( (string) $leaf ) && ! minn_admin_is_server_path( $leaf ) ) {
-				$flat[] = (string) $leaf;
-			}
-		} );
-		return implode( ', ', $flat );
+		// An upload answer carries the file's path on disk beside its
+		// address; the row only ever needed the address.
+		return minn_admin_forms_flat( $v );
 	}
 	$v = (string) $v;
 	if ( '' === $v ) {
@@ -289,13 +283,7 @@ function minn_admin_everest_status_model() {
 	$scope = minn_admin_everest_allowed_form_ids();
 	$open  = array( 'label' => __( 'Open Everest Forms ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=evf-entries' ) );
 	if ( is_array( $scope ) && ! $scope ) {
-		return array(
-			'rows'    => array(
-				array( 'label' => __( 'Unread entries', 'minn-admin' ), 'value' => '0', 'hint' => __( '0 total', 'minn-admin' ) ),
-				array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => '0' ),
-			),
-			'actions' => array( $open ),
-		);
+		return minn_admin_forms_none( array( $open ), __( '0 total', 'minn-admin' ) );
 	}
 	// date_created is UTC: the chart buckets each row onto the site's day.
 	$n = Minn_Admin_Kernel::inbox_counts( array(
@@ -309,18 +297,7 @@ function minn_admin_everest_status_model() {
 	// "Unread" is everything received but not opened, a NULL included.
 	$unread = max( 0, $n['received'] - $n['unread'] );
 	$forms  = is_array( $scope ) ? count( $scope ) : count( minn_admin_everest_titles() );
-	$hint   = number_format_i18n( $n['received'] ) . ' total';
-	if ( $n['spam'] ) {
-		$hint .= ', ' . number_format_i18n( $n['spam'] ) . ' spam';
-	}
-	return array(
-		'rows'    => array(
-			array( 'label' => __( 'Unread entries', 'minn-admin' ), 'value' => number_format_i18n( $unread ), 'hint' => $hint ),
-			array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => number_format_i18n( $forms ) ),
-		),
-		'chart'   => minn_admin_chart_build( $n['days'], __( 'Entries', 'minn-admin' ), __( 'Spam', 'minn-admin' ) ),
-		'actions' => array( $open ),
-	);
+	return minn_admin_forms_card( minn_admin_forms_unread( $unread, $n['received'], $n['spam'] ), $forms, $n['days'], $open, __( 'Spam', 'minn-admin' ) );
 }
 
 /**
@@ -390,29 +367,12 @@ function minn_admin_everest_row( array $row ) {
 	$form_id = (int) $row['form_id'];
 	$titles  = minn_admin_everest_titles();
 	$answers = minn_admin_everest_answers( (int) $row['entry_id'] );
-	$parts   = array();
-	foreach ( minn_admin_everest_fields( $form_id ) as $slug => $label ) {
-		if ( isset( $answers[ $slug ] ) && '' !== $answers[ $slug ] ) {
-			$parts[] = $answers[ $slug ];
-		}
-		if ( count( $parts ) >= 3 ) {
-			break;
-		}
-	}
-	// Fallback when the form no longer carries those fields.
-	if ( ! $parts ) {
-		foreach ( $answers as $val ) {
-			if ( '' !== $val ) {
-				$parts[] = $val;
-			}
-			if ( count( $parts ) >= 3 ) {
-				break;
-			}
-		}
-	}
+	$fields  = minn_admin_everest_fields( $form_id );
 	return array(
 		'id'         => (int) $row['entry_id'],
-		'summary'    => $parts ? implode( ' · ', $parts ) : __( '(empty entry)', 'minn-admin' ),
+		// Every stored answer says something, so a form that no longer
+		// carries any of them falls back to the answers as stored.
+		'summary'    => minn_admin_forms_summary( $answers, array_intersect_key( $answers, $fields ) ? $fields : null ),
 		'form_title' => isset( $titles[ $form_id ] ) ? $titles[ $form_id ] : '#' . $form_id,
 		'status'     => (string) $row['status'],
 		'state'      => minn_admin_everest_state( $row['status'] ),
@@ -424,30 +384,12 @@ function minn_admin_everest_row( array $row ) {
 function minn_admin_everest_view( array $row ) {
 	$id      = (int) $row['entry_id'];
 	$form_id = (int) $row['form_id'];
-	$fields  = minn_admin_everest_fields( $form_id );
-	$answers = minn_admin_everest_answers( $id );
 	$titles  = minn_admin_everest_titles();
-	$rows    = array();
-	foreach ( $fields as $slug => $label ) {
-		$rows[] = array(
-			'label' => $label,
-			'value' => isset( $answers[ $slug ] ) && '' !== $answers[ $slug ] ? $answers[ $slug ] : '—',
-		);
-	}
-	foreach ( $answers as $slug => $value ) {
-		if ( ! isset( $fields[ $slug ] ) && '' !== $value ) {
-			$rows[] = array(
-				'label' => ucfirst( str_replace( array( '-', '_' ), ' ', $slug ) ),
-				'value' => $value,
-			);
-		}
-	}
+	$rows    = minn_admin_forms_answer_rows( minn_admin_everest_fields( $form_id ), minn_admin_everest_answers( $id ), function ( $slug ) {
+		return ucfirst( str_replace( array( '-', '_' ), ' ', $slug ) );
+	} );
 	// date_created is UTC; the meta card shows the site's time.
-	$meta = array(
-		array( 'label' => __( 'Form', 'minn-admin' ), 'value' => isset( $titles[ $form_id ] ) ? $titles[ $form_id ] : '#' . $form_id ),
-		array( 'label' => __( 'Entry', 'minn-admin' ), 'value' => '#' . $id ),
-		array( 'label' => __( 'Submitted', 'minn-admin' ), 'value' => date_i18n( 'M j, Y g:i a', strtotime( get_date_from_gmt( $row['date_created'] ) ) ) ),
-	);
+	$meta = minn_admin_forms_meta( isset( $titles[ $form_id ] ) ? $titles[ $form_id ] : '#' . $form_id, $id, date_i18n( 'M j, Y g:i a', strtotime( get_date_from_gmt( $row['date_created'] ) ) ) );
 	if ( ! empty( $row['user_ip_address'] ) ) {
 		$meta[] = array( 'label' => 'IP', 'value' => (string) $row['user_ip_address'] );
 	}
@@ -455,16 +397,8 @@ function minn_admin_everest_view( array $row ) {
 	if ( empty( $row['viewed'] ) ) {
 		Minn_Admin_Kernel_SQL::update( 'evf_entries', 'entry_id', (int) $id, array( 'viewed' => 1 ) );
 	}
-	return array(
-		'kind'     => 'entry',
-		// The page's pill; a raw "publish" read as a published post.
-		'status'   => minn_admin_everest_state( $row['status'] ),
-		'sections' => array(
-			array( 'title' => __( 'Answers', 'minn-admin' ), 'rows' => $rows ),
-			array( 'title' => __( 'Submission', 'minn-admin' ), 'rows' => $meta ),
-		),
-		'adminUrl' => admin_url( 'admin.php?page=evf-entries&form_id=' . $form_id . '&view-entry=' . $id ),
-	);
+	// The page's pill; a raw "publish" read as a published post.
+	return minn_admin_forms_entry( $rows, $meta, admin_url( 'admin.php?page=evf-entries&form_id=' . $form_id . '&view-entry=' . $id ), array( 'status' => minn_admin_everest_state( $row['status'] ) ) );
 }
 
 /** An action's reply carries the status the entry holds now. */
@@ -515,15 +449,11 @@ minn_admin_resource( 'everest/entries', function () {
 			'range'  => array( 'column' => 'date_created', 'clock' => 'utc' ),
 			'order'  => array( 'column' => 'entry_id', 'dir' => 'DESC' ),
 			'row'    => 'minn_admin_everest_row',
-			'fields' => array(
-				'id'         => 'int',
-				'summary'    => 'text',
-				'form_title' => 'text',
-				'status'     => 'text',
-				'state'      => 'text',
+			'fields' => minn_admin_forms_fields( array(
+				'state' => 'text',
 				// current_time( 'mysql', true ): the descriptor's column says utc.
-				'date'       => array( 'type' => 'datetime', 'stored' => 'utc', 'wire' => 'naked' ),
-			),
+				'date'  => array( 'type' => 'datetime', 'stored' => 'utc', 'wire' => 'naked' ),
+			) ),
 		),
 		'item'      => array( 'view' => 'minn_admin_everest_view' ),
 		'actions'   => array(
@@ -578,20 +508,14 @@ minn_admin_resource( 'everest/entries', function () {
 				'done'   => __( 'Entry marked not spam.', 'minn-admin' ),
 			),
 			// Permanent delete is for trash or spam only (Received goes to trash first).
-			'delete'  => array(
-				'method'    => 'DELETE',
-				'gate'      => 'delete',
-				'when'      => array( 'status' => array( 'trash', 'spam' ) ),
-				'code'      => 'not_trashed',
-				'refuse'    => __( 'Move the entry to trash (or spam) before deleting permanently.', 'minn-admin' ),
-				'run'       => function ( $id, $row ) {
-					return minn_admin_everest_set_status( $id, 'delete', (int) $row['form_id'] );
-				},
-				'expect'    => 'gone',
-				'fail_code' => 'delete_failed',
-				'fail'      => __( 'Everest Forms reported success but the entry still exists.', 'minn-admin' ),
-				'done'      => __( 'Entry deleted permanently.', 'minn-admin' ),
-			),
+			'delete'  => minn_admin_forms_delete( function ( $id, $row ) {
+				return minn_admin_everest_set_status( $id, 'delete', (int) $row['form_id'] );
+			}, __( 'Everest Forms reported success but the entry still exists.', 'minn-admin' ), array(
+				'gate'   => 'delete',
+				'when'   => array( 'status' => array( 'trash', 'spam' ) ),
+				'code'   => 'not_trashed',
+				'refuse' => __( 'Move the entry to trash (or spam) before deleting permanently.', 'minn-admin' ),
+			) ),
 		),
 	);
 } );
@@ -634,84 +558,35 @@ minn_admin_endpoint( 'everest/forms', array(
 	},
 ) );
 
-add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
-	if ( ! minn_admin_everest_active() || ! minn_admin_everest_can() ) {
-		return $surfaces;
-	}
-	$ui = function ( $slug, $ui ) {
-		return Minn_Admin_Kernel::ui( 'everest/entries', $slug, $ui );
-	};
-
-	$surfaces['everest-forms'] = array(
-		'label'      => __( 'Forms', 'minn-admin' ),
-		'family'     => 'forms',
-		'group'      => 'workspace', // inbox-shaped (see gravity-forms.php)
-		'sub'        => 'Everest Forms',
-		'plugin'     => 'everest-forms',
-		'icon'       => 'inbox',
-		'cap'        => 'read', // real gate is the filter above (their cap model)
-		'status'     => array( 'route' => 'minn-admin/v1/everest/status' ),
-		// Route, paging, search, the status-chart day range and the filter
-		// query come from the resource, so they cannot drift from it.
-		'collection' => Minn_Admin_Kernel::collection( 'everest/entries', array(
-			'viewLabel' => __( 'Entries', 'minn-admin' ),
-			'filter'    => array(
-				'label'   => __( 'Status', 'minn-admin' ),
-				'options' => array(
-					array( 'publish', 'Received' ),
-					array( 'spam', 'Spam' ),
-					array( 'trash', 'Trash' ),
-				),
-			),
-			'tabs'      => array(
-				'route'    => 'minn-admin/v1/everest/forms',
-				'valueKey' => 'id',
-				'labelKey' => 'title',
-				'param'    => 'form_id',
-				'allLabel' => __( 'All entries', 'minn-admin' ),
-			),
-			'columns'   => array(
-				array( 'key' => 'summary', 'label' => __( 'Entry', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
-				array( 'key' => 'form_title', 'label' => __( 'Form', 'minn-admin' ) ),
-				// `state` is the shown status; `status` stays Everest's own
-				// for the action gates.
-				array( 'key' => 'state', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '96px' ),
-				array( 'key' => 'date', 'label' => __( 'When', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
-			),
-			'detail'    => array(
-				'sectionsRoute' => 'minn-admin/v1/everest/entries/{id}',
-			),
-			'actions'   => array(
-				$ui( 'spam', array( 'label' => __( 'Mark as spam', 'minn-admin' ), 'confirm' => __( 'Mark this entry as spam? Find it under the Spam filter.', 'minn-admin' ), 'danger' => true, 'when' => 'publish' ) ),
-				$ui( 'unspam', array( 'label' => __( 'Not spam', 'minn-admin' ), 'when' => 'spam' ) ),
-				$ui( 'trash', array( 'label' => __( 'Trash entry', 'minn-admin' ), 'confirm' => __( 'Move this entry to trash?', 'minn-admin' ), 'danger' => true, 'when' => 'publish' ) ),
-				$ui( 'restore', array( 'label' => __( 'Restore', 'minn-admin' ), 'when' => 'trash' ) ),
-				$ui( 'delete', array( 'label' => __( 'Delete permanently', 'minn-admin' ), 'confirm' => __( 'Delete this entry permanently? There is no undo.', 'minn-admin' ), 'danger' => true, 'when' => 'trash' ) ),
-				$ui( 'delete', array( 'label' => __( 'Delete permanently', 'minn-admin' ), 'confirm' => __( 'Delete this entry permanently? There is no undo.', 'minn-admin' ), 'danger' => true, 'when' => 'spam' ) ),
-			),
-			'bulk'      => array(
-				$ui( 'spam', array( 'label' => __( 'Mark as spam', 'minn-admin' ), 'confirm' => __( 'Mark the selected entries as spam?', 'minn-admin' ), 'danger' => true, 'when' => 'publish' ) ),
-				$ui( 'trash', array( 'label' => __( 'Trash', 'minn-admin' ), 'confirm' => __( 'Move the selected entries to trash?', 'minn-admin' ), 'danger' => true, 'when' => 'publish' ) ),
-				$ui( 'restore', array( 'label' => __( 'Restore', 'minn-admin' ), 'when' => 'trash' ) ),
-				$ui( 'delete', array( 'label' => __( 'Delete permanently', 'minn-admin' ), 'confirm' => __( 'Delete the selected entries permanently?', 'minn-admin' ), 'danger' => true, 'when' => 'trash' ) ),
-			),
-		) ),
-		'manage'     => array(
-			'viewLabel' => __( 'Forms', 'minn-admin' ),
-			'route'     => 'minn-admin/v1/everest/forms?manage=1',
-			'columns'   => array(
-				array( 'key' => 'title', 'label' => __( 'Form', 'minn-admin' ), 'format' => 'title' ),
-				array( 'key' => 'entries', 'label' => __( 'Entries', 'minn-admin' ), 'format' => 'num' ),
-				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill' ),
-			),
-			'detail'    => array(),
-			'actions'   => array(
-				array(
-					'label' => __( 'Edit in Everest Forms ↗', 'minn-admin' ),
-					'href'  => admin_url( 'admin.php?page=evf-builder&tab=fields&form_id={id}' ),
-				),
-			),
+minn_admin_add_surface( 'everest-forms', function () {
+	return minn_admin_everest_active() && minn_admin_everest_can();
+}, function () {
+	$ui = minn_admin_forms_ui( 'everest/entries' );
+	return minn_admin_forms_surface( 'everest/entries', array(
+		'sub'     => 'Everest Forms',
+		'plugin'  => 'everest-forms',
+		'api'     => 'everest',
+		'filter'  => array( 'publish' => 'Received', 'spam' => 'Spam', 'trash' => 'Trash' ),
+		// `state` is the shown status; `status` stays Everest's own for the
+		// action gates.
+		'pill'    => 'state',
+		'utc'     => true,
+		'actions' => array(
+			$ui( 'spam', array( 'label' => __( 'Mark as spam', 'minn-admin' ), 'confirm' => __( 'Mark this entry as spam? Find it under the Spam filter.', 'minn-admin' ), 'danger' => true, 'when' => 'publish' ) ),
+			$ui( 'unspam', array( 'label' => __( 'Not spam', 'minn-admin' ), 'when' => 'spam' ) ),
+			$ui( 'trash', array( 'label' => __( 'Trash entry', 'minn-admin' ), 'confirm' => __( 'Move this entry to trash?', 'minn-admin' ), 'danger' => true, 'when' => 'publish' ) ),
+			$ui( 'restore', array( 'label' => __( 'Restore', 'minn-admin' ), 'when' => 'trash' ) ),
+			$ui( 'delete', array( 'label' => __( 'Delete permanently', 'minn-admin' ), 'confirm' => __( 'Delete this entry permanently? There is no undo.', 'minn-admin' ), 'danger' => true, 'when' => 'trash' ) ),
+			$ui( 'delete', array( 'label' => __( 'Delete permanently', 'minn-admin' ), 'confirm' => __( 'Delete this entry permanently? There is no undo.', 'minn-admin' ), 'danger' => true, 'when' => 'spam' ) ),
 		),
-	);
-	return $surfaces;
+		'bulk'    => array(
+			$ui( 'spam', array( 'label' => __( 'Mark as spam', 'minn-admin' ), 'confirm' => __( 'Mark the selected entries as spam?', 'minn-admin' ), 'danger' => true, 'when' => 'publish' ) ),
+			$ui( 'trash', array( 'label' => __( 'Trash', 'minn-admin' ), 'confirm' => __( 'Move the selected entries to trash?', 'minn-admin' ), 'danger' => true, 'when' => 'publish' ) ),
+			$ui( 'restore', array( 'label' => __( 'Restore', 'minn-admin' ), 'when' => 'trash' ) ),
+			$ui( 'delete', array( 'label' => __( 'Delete permanently', 'minn-admin' ), 'confirm' => __( 'Delete the selected entries permanently?', 'minn-admin' ), 'danger' => true, 'when' => 'trash' ) ),
+		),
+		'manage'  => minn_admin_forms_manage( 'everest', __( 'Edit in Everest Forms ↗', 'minn-admin' ), admin_url( 'admin.php?page=evf-builder&tab=fields&form_id={id}' ), array(
+			array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill' ),
+		) ),
+	) );
 } );

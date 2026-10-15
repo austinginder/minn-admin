@@ -219,13 +219,7 @@ function minn_admin_wpforms_status_model() {
 	// traffic every other form gets.
 	$allowed = minn_admin_wpforms_allowed_form_ids();
 	if ( is_array( $allowed ) && ! $allowed ) {
-		return array(
-			'rows'    => array(
-				array( 'label' => __( 'Unread entries', 'minn-admin' ), 'value' => '0' ),
-				array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => '0' ),
-			),
-			'actions' => array(),
-		);
+		return minn_admin_forms_none( array() );
 	}
 	// date is UTC: the chart groups onto the site's day in SQL. Entries
 	// arrive from unauthenticated submissions, so a per-row fetch is unbounded.
@@ -238,19 +232,12 @@ function minn_admin_wpforms_status_model() {
 		'spam'     => array( 'status' => 'spam' ),
 		'chart'    => array( 'column' => 'date', 'clock' => 'utc', 'where' => array( 'status' => array( '', 'spam' ) ), 'split' => 'status', 'secondary' => array( 'spam' ) ),
 	) );
-	$hint = number_format_i18n( $n['received'] ) . ' total';
-	if ( $n['spam'] ) {
-		$hint .= ', ' . number_format_i18n( $n['spam'] ) . ' spam';
-	}
-	return array(
-		'rows'    => array(
-			array( 'label' => __( 'Unread entries', 'minn-admin' ), 'value' => number_format_i18n( $n['unread'] ), 'hint' => $hint ),
-			array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => number_format_i18n( count( minn_admin_wpforms_visible_form_titles() ) ) ),
-		),
-		'chart'   => minn_admin_chart_build( $n['days'], __( 'Entries', 'minn-admin' ), __( 'Spam', 'minn-admin' ) ),
-		'actions' => array(
-			array( 'label' => __( 'Open WPForms ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=wpforms-entries' ) ),
-		),
+	return minn_admin_forms_card(
+		minn_admin_forms_unread( $n['unread'], $n['received'], $n['spam'] ),
+		count( minn_admin_wpforms_visible_form_titles() ),
+		$n['days'],
+		array( 'label' => __( 'Open WPForms ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=wpforms-entries' ) ),
+		__( 'Spam', 'minn-admin' )
 	);
 }
 
@@ -297,38 +284,30 @@ function minn_admin_wpforms_view( array $raw ) {
 		$answers[] = array( 'label' => $label, 'value' => '' !== $value ? $value : '—' );
 	}
 	$titles = minn_admin_wpforms_visible_form_titles();
-	$meta   = array(
-		array( 'label' => __( 'Form', 'minn-admin' ), 'value' => isset( $titles[ (int) $row->form_id ] ) ? $titles[ (int) $row->form_id ] : ( '#' . (int) $row->form_id ) ),
-		array( 'label' => __( 'Entry', 'minn-admin' ), 'value' => '#' . (int) $row->entry_id ),
+	// `date` is UTC: shown on the site's clock, as the other form adapters
+	// show theirs (the page prints this as is).
+	$meta   = minn_admin_forms_meta(
+		isset( $titles[ (int) $row->form_id ] ) ? $titles[ (int) $row->form_id ] : ( '#' . (int) $row->form_id ),
+		(int) $row->entry_id,
+		$row->date ? date_i18n( 'M j, Y g:i a', strtotime( get_date_from_gmt( $row->date ) ) ) : null
 	);
-	if ( $row->date ) {
-		// `date` is UTC: shown on the site's clock, as the other form
-		// adapters show theirs (the page prints this as is).
-		$meta[] = array( 'label' => __( 'Submitted', 'minn-admin' ), 'value' => date_i18n( 'M j, Y g:i a', strtotime( get_date_from_gmt( $row->date ) ) ) );
-	}
 	if ( '' !== (string) $row->ip_address ) {
 		$meta[] = array( 'label' => __( 'IP address', 'minn-admin' ), 'value' => (string) $row->ip_address );
 	}
 	if ( (int) $row->starred ) {
 		$meta[] = array( 'label' => __( 'Starred', 'minn-admin' ), 'value' => '★' );
 	}
-	return array(
-		'kind'     => 'entry',
+	return minn_admin_forms_entry( $answers, $meta, admin_url( 'admin.php?page=wpforms-entries&view=details&entry_id=' . (int) $row->entry_id ), array(
 		// The row as it stands now, after opening marked it viewed: the
 		// page's actions gate on it, not on the list's copy.
-		'item'     => array(
+		'item' => array(
 			'id'      => (int) $row->entry_id,
 			'status'  => minn_admin_wpforms_display_status( $row ),
 			'starred' => (int) $row->starred ? '★' : '',
 		),
-		'sections' => array(
-			array( 'title' => __( 'Answers', 'minn-admin' ), 'rows' => $answers ),
-			array( 'title' => __( 'Submission', 'minn-admin' ), 'rows' => $meta ),
-		),
-		'adminUrl' => admin_url( 'admin.php?page=wpforms-entries&view=details&entry_id=' . (int) $row->entry_id ),
 		// Editable answers (adapters/wpforms-entry-edit.php).
-		'edit'     => function_exists( 'minn_admin_wpforms_edit_block' ) ? minn_admin_wpforms_edit_block( $row ) : null,
-	);
+		'edit' => function_exists( 'minn_admin_wpforms_edit_block' ) ? minn_admin_wpforms_edit_block( $row ) : null,
+	) );
 }
 
 /**
@@ -403,14 +382,10 @@ minn_admin_resource( 'wpforms/entries', function () use ( $minn_admin_wpforms_in
 			// added out of order (an import) lands where it belongs.
 			'order'  => array( 'column' => 'date', 'dir' => 'DESC' ),
 			'row'    => 'minn_admin_wpforms_row',
-			'fields' => array(
-				'id'         => 'int',
-				'summary'    => 'text',
-				'form_title' => 'text',
-				'starred'    => 'text',
-				'status'     => 'text',
-				'date'       => array( 'type' => 'datetime', 'stored' => 'utc', 'wire' => 'iso-utc' ),
-			),
+			'fields' => minn_admin_forms_fields( array(
+				'starred' => 'text',
+				'date'    => array( 'type' => 'datetime', 'stored' => 'utc', 'wire' => 'iso-utc' ),
+			) ),
 		),
 		'item'      => array( 'view' => 'minn_admin_wpforms_view' ),
 		'actions'   => array(
@@ -429,20 +404,15 @@ minn_admin_resource( 'wpforms/entries', function () use ( $minn_admin_wpforms_in
 				},
 			),
 			// Their delete cleans entry_fields and entry_meta and fires hooks.
-			'delete' => array(
-				'method'    => 'DELETE',
-				'gate'      => 'delete',
-				'run'       => function ( $id ) {
-					return wpforms()->obj( 'entry' )->delete( $id ) ? true : new WP_Error( 'delete_failed', __( 'WPForms could not delete this entry.', 'minn-admin' ), array( 'status' => 500 ) );
-				},
-				'expect'    => 'gone',
-				'fail_code' => 'delete_failed',
-				'fail'      => __( 'WPForms could not delete this entry.', 'minn-admin' ),
-				'reply'     => function () {
+			'delete' => minn_admin_forms_delete( function ( $id ) {
+				return wpforms()->obj( 'entry' )->delete( $id ) ? true : new WP_Error( 'delete_failed', __( 'WPForms could not delete this entry.', 'minn-admin' ), array( 'status' => 500 ) );
+			}, __( 'WPForms could not delete this entry.', 'minn-admin' ), array(
+				'gate'  => 'delete',
+				'reply' => function () {
 					return array( 'deleted' => true );
 				},
-				'done'      => __( 'Entry deleted.', 'minn-admin' ),
-			),
+				'done'  => __( 'Entry deleted.', 'minn-admin' ),
+			) ),
 		),
 	);
 } );
@@ -598,10 +568,10 @@ minn_admin_endpoint( 'wpforms/status', array(
 	'run'    => 'minn_admin_wpforms_status_model',
 ) );
 
-add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
-	if ( ! minn_admin_wpforms_active() || ! minn_admin_wpforms_can() ) {
-		return $surfaces;
-	}
+minn_admin_add_surface( 'wpforms', function () {
+	return minn_admin_wpforms_active() && minn_admin_wpforms_can();
+}, function () {
+	// Read, unread, spam, trash and restore ride the status endpoint above.
 	$status = function ( $label, $op, $when, $extra = array() ) {
 		$a = array(
 			'label'  => $label,
@@ -614,88 +584,37 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		}
 		return array_merge( $a, $extra );
 	};
-	$ui = function ( $slug, $ui ) {
-		return Minn_Admin_Kernel::ui( 'wpforms/entries', $slug, $ui );
-	};
-
-	$surfaces['wpforms'] = array(
-		'label'      => __( 'Forms', 'minn-admin' ),
-		'family'     => 'forms',
-		'group'      => 'workspace', // inbox-shaped (see gravity-forms.php)
-		'sub'        => 'WPForms',
-		'plugin'     => array( 'wpforms-lite', 'wpforms' ),
-		'icon'       => 'inbox',
-		'cap'        => 'read', // real gate is minn_admin_wpforms_can().
-		'status'     => array( 'route' => 'minn-admin/v1/wpforms/status' ),
-		// Route, paging, search, the status-chart day range and the filter
-		// query come from the resource, so they cannot drift from it.
-		'collection' => Minn_Admin_Kernel::collection( 'wpforms/entries', array(
-			'viewLabel' => __( 'Entries', 'minn-admin' ),
-			'tabs'      => array(
-				'route'    => 'minn-admin/v1/wpforms/forms',
-				'valueKey' => 'id',
-				'labelKey' => 'title',
-				'param'    => 'form_id',
-				'allLabel' => __( 'All entries', 'minn-admin' ),
-			),
-			'filter'    => array(
-				'label'   => __( 'Status', 'minn-admin' ),
-				'options' => array(
-					array( 'inbox', 'Received' ),
-					array( 'unread', 'Unread' ),
-					array( 'read', 'Read' ),
-					array( 'starred', 'Starred' ),
-					array( 'spam', 'Spam' ),
-					array( 'trash', 'Trash' ),
-				),
-			),
-			'columns'   => array(
-				array( 'key' => 'summary', 'label' => __( 'Entry', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
-				array( 'key' => 'form_title', 'label' => __( 'Form', 'minn-admin' ) ),
-				array( 'key' => 'starred', 'label' => '★', 'width' => '40px' ),
-				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '96px' ),
-				array( 'key' => 'date', 'label' => __( 'When', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
-			),
-			'detail'    => array(
-				'sectionsRoute' => 'minn-admin/v1/wpforms/entries/{id}',
-			),
-			'actions'   => array(
-				$status( __( 'Mark read', 'minn-admin' ), 'read', 'unread' ),
-				$status( __( 'Mark unread', 'minn-admin' ), 'unread', 'read' ),
-				$ui( 'star', array( 'label' => __( 'Star', 'minn-admin' ), 'body' => array( 'on' => 1 ), 'key' => 'starred', 'when' => '' ) ),
-				$ui( 'star', array( 'label' => __( 'Unstar', 'minn-admin' ), 'body' => array( 'on' => 0 ), 'key' => 'starred', 'when' => '★' ) ),
-				$status( __( 'Mark spam', 'minn-admin' ), 'spam', 'read' ),
-				$status( __( 'Not spam', 'minn-admin' ), 'restore', 'spam' ),
-				$status( __( 'Trash', 'minn-admin' ), 'trash', 'read' ),
-				$status( __( 'Restore', 'minn-admin' ), 'restore', 'trash' ),
-				$ui( 'delete', array( 'label' => __( 'Delete permanently', 'minn-admin' ), 'confirm' => __( 'Delete this entry permanently? There is no undo.', 'minn-admin' ), 'danger' => true, 'key' => 'status', 'when' => 'trash' ) ),
-			),
-			'bulk'      => array(
-				$status( __( 'Mark read', 'minn-admin' ), 'read', null ),
-				$status( __( 'Trash', 'minn-admin' ), 'trash', null, array( 'danger' => true ) ),
-			),
-		) ),
+	$ui = minn_admin_forms_ui( 'wpforms/entries' );
+	return minn_admin_forms_surface( 'wpforms/entries', array(
+		'sub'     => 'WPForms',
+		'plugin'  => array( 'wpforms-lite', 'wpforms' ),
+		'api'     => 'wpforms',
+		'filter'  => array( 'inbox' => 'Received', 'unread' => 'Unread', 'read' => 'Read', 'starred' => 'Starred', 'spam' => 'Spam', 'trash' => 'Trash' ),
+		'more'    => array( array( 'key' => 'starred', 'label' => '★', 'width' => '40px' ) ),
+		'utc'     => true,
+		'actions' => array(
+			$status( __( 'Mark read', 'minn-admin' ), 'read', 'unread' ),
+			$status( __( 'Mark unread', 'minn-admin' ), 'unread', 'read' ),
+			$ui( 'star', array( 'label' => __( 'Star', 'minn-admin' ), 'body' => array( 'on' => 1 ), 'key' => 'starred', 'when' => '' ) ),
+			$ui( 'star', array( 'label' => __( 'Unstar', 'minn-admin' ), 'body' => array( 'on' => 0 ), 'key' => 'starred', 'when' => '★' ) ),
+			$status( __( 'Mark spam', 'minn-admin' ), 'spam', 'read' ),
+			$status( __( 'Not spam', 'minn-admin' ), 'restore', 'spam' ),
+			$status( __( 'Trash', 'minn-admin' ), 'trash', 'read' ),
+			$status( __( 'Restore', 'minn-admin' ), 'restore', 'trash' ),
+			$ui( 'delete', array( 'label' => __( 'Delete permanently', 'minn-admin' ), 'confirm' => __( 'Delete this entry permanently? There is no undo.', 'minn-admin' ), 'danger' => true, 'key' => 'status', 'when' => 'trash' ) ),
+		),
+		'bulk'    => array(
+			$status( __( 'Mark read', 'minn-admin' ), 'read', null ),
+			$status( __( 'Trash', 'minn-admin' ), 'trash', null, array( 'danger' => true ) ),
+		),
 		// The forms themselves: each opens its notifications and confirmations
 		// page (wpforms-emails.php); building forms stays in WPForms.
-		'manage'     => array(
-			'viewLabel' => __( 'Forms', 'minn-admin' ),
-			'route'     => 'minn-admin/v1/wpforms/forms?manage=1',
-			'itemsKey'  => 'items',
-			'totalKey'  => 'total',
-			'columns'   => array(
-				array( 'key' => 'title', 'label' => __( 'Form', 'minn-admin' ), 'format' => 'title' ),
-				array( 'key' => 'entries', 'label' => __( 'Entries', 'minn-admin' ), 'format' => 'num' ),
-				array( 'key' => 'date', 'label' => __( 'Updated', 'minn-admin' ), 'format' => 'ago' ),
-			),
-			'detail'    => array(),
-			'open'      => array( 'route' => 'wpforms/form/{id}' ),
-			'actions'   => array(
-				array(
-					'label' => __( 'Edit in WPForms ↗', 'minn-admin' ),
-					'href'  => admin_url( 'admin.php?page=wpforms-builder&view=fields&form_id={id}' ),
-				),
-			),
-		),
-	);
-	return $surfaces;
+		'manage'  => minn_admin_forms_manage( 'wpforms', __( 'Edit in WPForms ↗', 'minn-admin' ), admin_url( 'admin.php?page=wpforms-builder&view=fields&form_id={id}' ), array(
+			array( 'key' => 'date', 'label' => __( 'Updated', 'minn-admin' ), 'format' => 'ago' ),
+		), array(
+			'itemsKey' => 'items',
+			'totalKey' => 'total',
+			'open'     => array( 'route' => 'wpforms/form/{id}' ),
+		) ),
+	) );
 } );

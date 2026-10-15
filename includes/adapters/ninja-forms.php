@@ -141,18 +141,9 @@ function minn_admin_ninja_forms_answers( $post_id ) {
 		// apostrophe as &#039;) and decodes them wherever it reads one back;
 		// Minn escapes on output, so read them decoded too.
 		$v = minn_admin_ninja_forms_decode( $v );
-		if ( is_array( $v ) ) {
-			$flat = array();
-			array_walk_recursive( $v, function ( $leaf ) use ( &$flat ) {
-				// An upload answer carries the file's path on disk beside its
-				// address; the row only ever needed the address.
-				if ( '' !== trim( (string) $leaf ) && ! minn_admin_is_server_path( $leaf ) ) {
-					$flat[] = (string) $leaf;
-				}
-			} );
-			$v = implode( ', ', $flat );
-		}
-		$out[ (int) $m[1] ] = trim( (string) $v );
+		// An upload answer carries the file's path on disk beside its
+		// address; the row only ever needed the address.
+		$out[ (int) $m[1] ] = trim( (string) ( is_array( $v ) ? minn_admin_forms_flat( $v ) : $v ) );
 	}
 	return $out;
 }
@@ -248,19 +239,9 @@ function minn_admin_ninja_forms_list( array $q ) {
 function minn_admin_ninja_forms_row( array $row ) {
 	$form_id = (int) $row['form_id'];
 	$titles  = minn_admin_ninja_forms_titles();
-	$answers = minn_admin_ninja_forms_answers( $row['id'] );
-	$parts   = array();
-	foreach ( minn_admin_ninja_forms_fields( $form_id ) as $fid => $label ) {
-		if ( isset( $answers[ $fid ] ) && '' !== $answers[ $fid ] ) {
-			$parts[] = $answers[ $fid ];
-		}
-		if ( count( $parts ) >= 3 ) {
-			break;
-		}
-	}
 	return array(
 		'id'         => (int) $row['id'],
-		'summary'    => $parts ? implode( ' · ', $parts ) : __( '(empty entry)', 'minn-admin' ),
+		'summary'    => minn_admin_forms_summary( minn_admin_ninja_forms_answers( $row['id'] ), minn_admin_ninja_forms_fields( $form_id ) ),
 		'form_title' => isset( $titles[ $form_id ] ) ? $titles[ $form_id ] : '#' . $form_id,
 		'status'     => (string) $row['status'],
 		'state'      => minn_admin_ninja_forms_state( $row['status'] ),
@@ -273,42 +254,15 @@ function minn_admin_ninja_forms_row( array $row ) {
 function minn_admin_ninja_forms_view( array $row ) {
 	$post    = get_post( (int) $row['id'] );
 	$form_id = (int) $row['form_id'];
-	$fields  = minn_admin_ninja_forms_fields( $form_id );
-	$answers = minn_admin_ninja_forms_answers( $post->ID );
 	$titles  = minn_admin_ninja_forms_titles();
-	$rows    = array();
-	foreach ( $fields as $fid => $label ) {
-		$rows[] = array(
-			'label' => $label,
-			'value' => isset( $answers[ $fid ] ) && '' !== $answers[ $fid ] ? $answers[ $fid ] : '—',
-		);
-	}
-	// Answers whose field no longer exists on the form still show.
-	foreach ( $answers as $fid => $value ) {
-		if ( ! isset( $fields[ $fid ] ) && '' !== $value ) {
-			$rows[] = array(
-				'label' => __( 'Field ', 'minn-admin' ) . $fid,
-				'value' => $value,
-			);
-		}
-	}
-	$meta = array(
-		array( 'label' => __( 'Form', 'minn-admin' ), 'value' => isset( $titles[ $form_id ] ) ? $titles[ $form_id ] : '#' . $form_id ),
-		array( 'label' => __( 'Entry', 'minn-admin' ), 'value' => '#' . (int) get_post_meta( $post->ID, '_seq_num', true ) ),
-		array( 'label' => __( 'Submitted', 'minn-admin' ), 'value' => date_i18n( 'M j, Y g:i a', strtotime( $post->post_date ) ) ),
-	);
-	return array(
-		'kind'     => 'entry',
+	$rows    = minn_admin_forms_answer_rows( minn_admin_ninja_forms_fields( $form_id ), minn_admin_ninja_forms_answers( $post->ID ) );
+	$meta    = minn_admin_forms_meta( isset( $titles[ $form_id ] ) ? $titles[ $form_id ] : '#' . $form_id, (int) get_post_meta( $post->ID, '_seq_num', true ), date_i18n( 'M j, Y g:i a', strtotime( $post->post_date ) ) );
+	return minn_admin_forms_entry( $rows, $meta, admin_url( 'admin.php?page=nf-submissions&form_id=' . $form_id ), array(
 		// The page's pill; a raw "publish" read as a published post.
-		'status'   => minn_admin_ninja_forms_state( $post->post_status ),
-		'sections' => array(
-			array( 'title' => __( 'Answers', 'minn-admin' ), 'rows' => $rows ),
-			array( 'title' => __( 'Submission', 'minn-admin' ), 'rows' => $meta ),
-		),
-		'adminUrl' => admin_url( 'admin.php?page=nf-submissions&form_id=' . $form_id ),
+		'status' => minn_admin_ninja_forms_state( $post->post_status ),
 		// Editable answers (adapters/ninja-forms-entry-edit.php).
-		'edit'     => function_exists( 'minn_admin_ninja_forms_edit_block' ) ? minn_admin_ninja_forms_edit_block( $post, $form_id ) : null,
-	);
+		'edit'   => function_exists( 'minn_admin_ninja_forms_edit_block' ) ? minn_admin_ninja_forms_edit_block( $post, $form_id ) : null,
+	) );
 }
 
 /**
@@ -357,16 +311,12 @@ minn_admin_resource( 'ninja-forms/entries', function () {
 			// descriptor its day range.
 			'range'  => array( 'column' => 'post_date', 'clock' => 'local' ),
 			'row'    => 'minn_admin_ninja_forms_row',
-			'fields' => array(
-				'id'         => 'int',
-				'summary'    => 'text',
-				'form_title' => 'text',
-				'status'     => 'text',
-				'state'      => 'text',
-				'seq'        => 'int',
+			'fields' => minn_admin_forms_fields( array(
+				'state' => 'text',
+				'seq'   => 'int',
 				// post_date is site-local; emitted naked (the client parses local).
-				'date'       => array( 'type' => 'datetime', 'stored' => 'site', 'wire' => 'naked' ),
-			),
+				'date'  => array( 'type' => 'datetime', 'stored' => 'site', 'wire' => 'naked' ),
+			) ),
 		),
 		'item'    => array( 'view' => 'minn_admin_ninja_forms_view' ),
 		'actions' => array(
@@ -401,21 +351,14 @@ minn_admin_resource( 'ninja-forms/entries', function () {
 				},
 				'done'      => __( 'Entry restored.', 'minn-admin' ),
 			),
-			'delete'  => array(
-				'method'    => 'DELETE',
-				'gate'      => 'manage',
-				'when'      => array( 'status' => array( 'trash' ) ),
-				'code'      => 'not_trashed',
-				'refuse'    => __( 'Move the entry to trash before deleting permanently.', 'minn-admin' ),
-				'run'       => function ( $id ) {
-					Ninja_Forms()->form()->sub( $id )->get()->delete();
-					return true;
-				},
-				'expect'    => 'gone',
-				'fail_code' => 'delete_failed',
-				'fail'      => __( 'Entry still exists after delete.', 'minn-admin' ),
-				'done'      => __( 'Entry deleted permanently.', 'minn-admin' ),
-			),
+			'delete'  => minn_admin_forms_delete( function ( $id ) {
+				Ninja_Forms()->form()->sub( $id )->get()->delete();
+				return true;
+			}, __( 'Entry still exists after delete.', 'minn-admin' ), array(
+				'when'   => array( 'status' => array( 'trash' ) ),
+				'code'   => 'not_trashed',
+				'refuse' => __( 'Move the entry to trash before deleting permanently.', 'minn-admin' ),
+			) ),
 		),
 	);
 } );
@@ -435,22 +378,20 @@ function minn_admin_ninja_forms_status_model() {
 		'chart'    => array( 'column' => 'post_date', 'clock' => 'local', 'where' => $live, 'split' => 'post_status' ),
 	) );
 	$trash = Minn_Admin_Kernel_SQL::count( 'posts', array( 'post_type' => 'nf_sub', 'post_status' => 'trash' ) );
-	return array(
-		'rows'    => array(
-			array(
-				'label' => __( 'Submissions', 'minn-admin' ),
-				'value' => number_format_i18n( $n['received'] ),
-				'hint'  => $trash
-					/* translators: %s: number of trashed submissions. */
-					? sprintf( _n( '%s in trash', '%s in trash', $trash, 'minn-admin' ), number_format_i18n( $trash ) )
-					: __( 'All stored submissions', 'minn-admin' ),
-			),
-			array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => number_format_i18n( count( minn_admin_ninja_forms_titles() ) ) ),
+	return minn_admin_forms_card(
+		array(
+			'label' => __( 'Submissions', 'minn-admin' ),
+			'value' => number_format_i18n( $n['received'] ),
+			'hint'  => $trash
+				/* translators: %s: number of trashed submissions. */
+				? sprintf( _n( '%s in trash', '%s in trash', $trash, 'minn-admin' ), number_format_i18n( $trash ) )
+				: __( 'All stored submissions', 'minn-admin' ),
 		),
-		'chart'   => minn_admin_chart_build( $n['days'], __( 'Submissions', 'minn-admin' ) ),
-		'actions' => array(
-			array( 'label' => __( 'Open Ninja Forms ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=nf-submissions' ) ),
-		),
+		count( minn_admin_ninja_forms_titles() ),
+		$n['days'],
+		array( 'label' => __( 'Open Ninja Forms ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=nf-submissions' ) ),
+		'',
+		__( 'Submissions', 'minn-admin' )
 	);
 }
 
@@ -489,80 +430,31 @@ minn_admin_endpoint( 'ninja-forms/forms', array(
 	},
 ) );
 
-add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
-	if ( ! minn_admin_ninja_forms_active() || ! minn_admin_ninja_forms_can() ) {
-		return $surfaces;
-	}
-	$ui = function ( $slug, $ui ) {
-		return Minn_Admin_Kernel::ui( 'ninja-forms/entries', $slug, $ui );
-	};
-
-	$surfaces['ninja-forms'] = array(
-		'label'      => __( 'Forms', 'minn-admin' ),
-		'family'     => 'forms',
-		'group'      => 'workspace', // inbox-shaped (see gravity-forms.php)
-		'sub'        => 'Ninja Forms',
-		'plugin'     => 'ninja-forms',
-		'icon'       => 'inbox',
-		'status'     => array( 'route' => 'minn-admin/v1/ninja-forms/status' ),
-		'cap'        => 'read', // real gate is the filter above (their cap filter)
-		// Route, paging, search, the status-chart day range and the filter
-		// query come from the resource, so they cannot drift from it.
-		'collection' => Minn_Admin_Kernel::collection( 'ninja-forms/entries', array(
-			'viewLabel' => __( 'Entries', 'minn-admin' ),
-			'tabs'      => array(
-				'route'    => 'minn-admin/v1/ninja-forms/forms',
-				'valueKey' => 'id',
-				'labelKey' => 'title',
-				'param'    => 'form_id',
-				'allLabel' => __( 'All entries', 'minn-admin' ),
-			),
-			'filter'    => array(
-				'label'   => __( 'Status', 'minn-admin' ),
-				'options' => array(
-					array( 'publish', 'Received' ),
-					array( 'trash', 'Trash' ),
-				),
-			),
-			'columns'   => array(
-				array( 'key' => 'summary', 'label' => __( 'Entry', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
-				array( 'key' => 'form_title', 'label' => __( 'Form', 'minn-admin' ) ),
-				// `state` is the shown status; `status` stays the post's own
-				// for the action gates.
-				array( 'key' => 'state', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '96px' ),
-				array( 'key' => 'seq', 'label' => '#', 'format' => 'num' ),
-				array( 'key' => 'date', 'label' => __( 'When', 'minn-admin' ), 'format' => 'ago' ),
-			),
-			'detail'    => array(
-				'sectionsRoute' => 'minn-admin/v1/ninja-forms/entries/{id}',
-			),
-			'actions'   => array(
-				$ui( 'trash', array( 'label' => __( 'Trash entry', 'minn-admin' ), 'confirm' => __( 'Move this entry to trash?', 'minn-admin' ), 'danger' => true, 'when' => 'publish' ) ),
-				$ui( 'restore', array( 'label' => __( 'Restore', 'minn-admin' ), 'when' => 'trash' ) ),
-				$ui( 'delete', array( 'label' => __( 'Delete permanently', 'minn-admin' ), 'confirm' => __( 'Delete this entry permanently? There is no undo.', 'minn-admin' ), 'danger' => true, 'when' => 'trash' ) ),
-			),
-			'bulk'      => array(
-				$ui( 'trash', array( 'label' => __( 'Trash', 'minn-admin' ), 'confirm' => __( 'Move the selected entries to trash?', 'minn-admin' ), 'danger' => true, 'when' => 'publish' ) ),
-				$ui( 'restore', array( 'label' => __( 'Restore', 'minn-admin' ), 'when' => 'trash' ) ),
-				$ui( 'delete', array( 'label' => __( 'Delete permanently', 'minn-admin' ), 'confirm' => __( 'Delete the selected entries permanently?', 'minn-admin' ), 'danger' => true, 'when' => 'trash' ) ),
-			),
-		) ),
-		'manage'     => array(
-			'viewLabel' => __( 'Forms', 'minn-admin' ),
-			'route'     => 'minn-admin/v1/ninja-forms/forms?manage=1',
-			'columns'   => array(
-				array( 'key' => 'title', 'label' => __( 'Form', 'minn-admin' ), 'format' => 'title' ),
-				array( 'key' => 'entries', 'label' => __( 'Entries', 'minn-admin' ), 'format' => 'num' ),
-				array( 'key' => 'date', 'label' => __( 'Created', 'minn-admin' ), 'format' => 'ago' ),
-			),
-			'detail'    => array(),
-			'actions'   => array(
-				array(
-					'label' => __( 'Edit in Ninja Forms ↗', 'minn-admin' ),
-					'href'  => admin_url( 'admin.php?page=ninja-forms&form_id={id}' ),
-				),
-			),
+minn_admin_add_surface( 'ninja-forms', function () {
+	return minn_admin_ninja_forms_active() && minn_admin_ninja_forms_can();
+}, function () {
+	$ui = minn_admin_forms_ui( 'ninja-forms/entries' );
+	return minn_admin_forms_surface( 'ninja-forms/entries', array(
+		'sub'     => 'Ninja Forms',
+		'plugin'  => 'ninja-forms',
+		'api'     => 'ninja-forms',
+		'filter'  => array( 'publish' => 'Received', 'trash' => 'Trash' ),
+		// `state` is the shown status; `status` stays the post's own for the
+		// action gates.
+		'pill'    => 'state',
+		'after'   => array( array( 'key' => 'seq', 'label' => '#', 'format' => 'num' ) ),
+		'actions' => array(
+			$ui( 'trash', array( 'label' => __( 'Trash entry', 'minn-admin' ), 'confirm' => __( 'Move this entry to trash?', 'minn-admin' ), 'danger' => true, 'when' => 'publish' ) ),
+			$ui( 'restore', array( 'label' => __( 'Restore', 'minn-admin' ), 'when' => 'trash' ) ),
+			$ui( 'delete', array( 'label' => __( 'Delete permanently', 'minn-admin' ), 'confirm' => __( 'Delete this entry permanently? There is no undo.', 'minn-admin' ), 'danger' => true, 'when' => 'trash' ) ),
 		),
-	);
-	return $surfaces;
+		'bulk'    => array(
+			$ui( 'trash', array( 'label' => __( 'Trash', 'minn-admin' ), 'confirm' => __( 'Move the selected entries to trash?', 'minn-admin' ), 'danger' => true, 'when' => 'publish' ) ),
+			$ui( 'restore', array( 'label' => __( 'Restore', 'minn-admin' ), 'when' => 'trash' ) ),
+			$ui( 'delete', array( 'label' => __( 'Delete permanently', 'minn-admin' ), 'confirm' => __( 'Delete the selected entries permanently?', 'minn-admin' ), 'danger' => true, 'when' => 'trash' ) ),
+		),
+		'manage'  => minn_admin_forms_manage( 'ninja-forms', __( 'Edit in Ninja Forms ↗', 'minn-admin' ), admin_url( 'admin.php?page=ninja-forms&form_id={id}' ), array(
+			array( 'key' => 'date', 'label' => __( 'Created', 'minn-admin' ), 'format' => 'ago' ),
+		) ),
+	) );
 } );

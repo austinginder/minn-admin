@@ -209,44 +209,10 @@ function minn_admin_fluent_forms_response_map( $response ) {
 	}
 	$out = array();
 	foreach ( $map as $k => $v ) {
-		if ( is_array( $v ) ) {
-			// Name fields etc. flatten to "First Last".
-			$flat = array();
-			array_walk_recursive( $v, function ( $leaf ) use ( &$flat ) {
-				// Same rule as the other flatteners: an absolute path on this
-				// server is the upload's location, not its answer, and
-				// printing it leaks the directory layout.
-				if ( '' !== trim( (string) $leaf ) && ! minn_admin_is_server_path( $leaf ) ) {
-					$flat[] = (string) $leaf;
-				}
-			} );
-			$out[ $k ] = implode( ' ', $flat );
-		} else {
-			$out[ $k ] = (string) $v;
-		}
+		// Name fields etc. flatten to "First Last".
+		$out[ $k ] = is_array( $v ) ? minn_admin_forms_flat( $v, ' ' ) : (string) $v;
 	}
 	return $out;
-}
-
-/**
- * Build a list-row summary from a response map.
- *
- * @param array $map Field map.
- * @return string
- */
-function minn_admin_fluent_forms_summary( $map ) {
-	$parts = array();
-	foreach ( $map as $v ) {
-		$v = trim( (string) $v );
-		if ( '' === $v ) {
-			continue;
-		}
-		$parts[] = $v;
-		if ( count( $parts ) >= 3 ) {
-			break;
-		}
-	}
-	return $parts ? implode( ' · ', $parts ) : __( '(empty entry)', 'minn-admin' );
 }
 
 /** Server-built model for the surface status card (SureForms parity). */
@@ -257,13 +223,7 @@ function minn_admin_fluent_forms_status_model() {
 	$scope = minn_admin_fluent_forms_allowed_form_ids();
 	$open  = array( 'label' => __( 'Open Fluent Forms ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=fluent_forms_all_entries' ) );
 	if ( is_array( $scope ) && ! $scope ) {
-		return array(
-			'rows'    => array(
-				array( 'label' => __( 'Unread entries', 'minn-admin' ), 'value' => '0', 'hint' => __( '0 total', 'minn-admin' ) ),
-				array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => '0' ),
-			),
-			'actions' => array( $open ),
-		);
+		return minn_admin_forms_none( array( $open ), __( '0 total', 'minn-admin' ) );
 	}
 	// created_at is site-local current_time, so the chart groups on the site's days.
 	$kept = array( 'status' => array( 'not' => array( 'trashed' ) ) );
@@ -276,18 +236,7 @@ function minn_admin_fluent_forms_status_model() {
 		'chart'    => array( 'column' => 'created_at', 'clock' => 'local', 'where' => $kept, 'split' => 'status', 'secondary' => array( 'spam' ) ),
 	) );
 	$nforms = is_array( $scope ) ? count( $scope ) : Minn_Admin_Kernel_SQL::count( 'fluentform_forms' );
-	$hint   = number_format_i18n( $n['received'] ) . ' total';
-	if ( $n['spam'] ) {
-		$hint .= ', ' . number_format_i18n( $n['spam'] ) . ' spam';
-	}
-	return array(
-		'rows'    => array(
-			array( 'label' => __( 'Unread entries', 'minn-admin' ), 'value' => number_format_i18n( $n['unread'] ), 'hint' => $hint ),
-			array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => number_format_i18n( $nforms ) ),
-		),
-		'chart'   => minn_admin_chart_build( $n['days'], __( 'Entries', 'minn-admin' ), __( 'Spam', 'minn-admin' ) ),
-		'actions' => array( $open ),
-	);
+	return minn_admin_forms_card( minn_admin_forms_unread( $n['unread'], $n['received'], $n['spam'] ), $nforms, $n['days'], $open, __( 'Spam', 'minn-admin' ) );
 }
 
 /** A submission's list row; `bucket` is the filter it was listed under. */
@@ -297,7 +246,7 @@ function minn_admin_fluent_forms_row( array $r, array $q ) {
 	return array(
 		'id'         => (int) $r['id'],
 		'form_id'    => (int) $r['form_id'],
-		'summary'    => minn_admin_fluent_forms_summary( $map ),
+		'summary'    => minn_admin_forms_summary( array_map( 'trim', $map ) ),
 		'form_title' => $title ?: ( 'Form #' . $r['form_id'] ),
 		'status'     => $r['status'] ? (string) $r['status'] : 'unread',
 		'bucket'     => (string) $q['filter'],
@@ -323,30 +272,13 @@ function minn_admin_fluent_forms_view( array $raw ) {
 	$labels  = minn_admin_fluent_forms_labels( (int) $row->form_id );
 	$answers = array();
 	foreach ( $map as $key => $val ) {
-		if ( '' === trim( $val ) ) {
-			continue;
+		if ( '' !== trim( $val ) ) {
+			$answers[] = minn_admin_forms_typed( $labels[ $key ] ?? ucwords( str_replace( array( '_', '-' ), ' ', $key ) ), $val, $key );
 		}
-		$label     = $labels[ $key ] ?? ucwords( str_replace( array( '_', '-' ), ' ', $key ) );
-		$answers[] = array(
-			'label' => $label,
-			'value' => $val,
-			'type'  => ( false !== strpos( $key, 'email' ) || is_email( $val ) ) ? 'email'
-				: ( ( 0 === strpos( $val, 'http' ) ) ? 'url' : 'text' ),
-		);
 	}
 
 	$form_title = minn_admin_fluent_forms_form_title( (int) $row->form_id );
-
-	$meta   = array();
-	$meta[] = array(
-		'label' => __( 'Submitted', 'minn-admin' ),
-		'value' => $row->created_at
-			? date_i18n( 'M j, Y g:i a', strtotime( $row->created_at ) )
-			: '',
-	);
-	if ( $form_title ) {
-		$meta[] = array( 'label' => __( 'Form', 'minn-admin' ), 'value' => $form_title );
-	}
+	$meta       = minn_admin_forms_meta_dated( $row->created_at ? date_i18n( 'M j, Y g:i a', strtotime( $row->created_at ) ) : '', $form_title ? $form_title : null );
 	if ( ! empty( $row->source_url ) ) {
 		$meta[] = array( 'label' => __( 'Source', 'minn-admin' ), 'value' => $row->source_url, 'type' => 'url' );
 	}
@@ -361,27 +293,19 @@ function minn_admin_fluent_forms_view( array $raw ) {
 	}
 
 	$status = $row->status ? (string) $row->status : 'unread';
-	return array(
-		'kind'     => 'entry',
-		'title'    => $form_title ?: ( 'Form #' . (int) $row->form_id ),
-		'status'   => $status,
+	return minn_admin_forms_entry( $answers, $meta, admin_url( 'admin.php?page=fluent_forms&route=entries&form_id=' . (int) $row->form_id . '#/entries/' . (int) $row->id ), array(
+		'responses' => true,
+		'title'     => $form_title ?: ( 'Form #' . (int) $row->form_id ),
+		'status'    => $status,
 		// The row as it stands now, after opening marked it read:
 		// the page's actions gate on it, not on the list's copy.
-		'item'     => array(
+		'item'      => array(
 			'id'      => (int) $row->id,
 			'form_id' => (int) $row->form_id,
 			'status'  => $status,
 			'bucket'  => in_array( $status, array( 'spam', 'trashed' ), true ) ? $status : 'inbox',
 		),
-		'sections' => array(
-			array( 'title' => __( 'Responses', 'minn-admin' ), 'rows' => $answers ),
-			array( 'title' => __( 'Submission', 'minn-admin' ), 'rows' => $meta ),
-		),
-		'adminUrl' => admin_url(
-			'admin.php?page=fluent_forms&route=entries&form_id=' . (int) $row->form_id
-			. '#/entries/' . (int) $row->id
-		),
-	);
+	) );
 }
 
 /**
@@ -470,17 +394,13 @@ minn_admin_resource( 'fluent-forms/entries', function () {
 			// added out of order (an import) lands where it belongs.
 			'order'  => array( 'column' => 'created_at', 'dir' => 'DESC' ),
 			'row'    => 'minn_admin_fluent_forms_row',
-			'fields' => array(
-				'id'         => 'int',
-				'form_id'    => 'int',
-				'summary'    => 'text',
-				'form_title' => 'text',
-				'status'     => 'text',
-				'bucket'     => 'text',
+			'fields' => minn_admin_forms_fields( array(
+				'form_id' => 'int',
+				'bucket'  => 'text',
 				// Site-local; timeAgo treats bare strings as UTC, so it leaves
 				// as local-looking ISO without a Z.
-				'date'       => array( 'type' => 'datetime', 'stored' => 'site', 'wire' => 'naked' ),
-			),
+				'date'    => array( 'type' => 'datetime', 'stored' => 'site', 'wire' => 'naked' ),
+			) ),
 		),
 		'item'      => array( 'view' => 'minn_admin_fluent_forms_view' ),
 		'actions'   => array(
@@ -524,23 +444,14 @@ minn_admin_resource( 'fluent-forms/entries', function () {
 				},
 			),
 			// Permanent delete is for trash/spam only (Received → Trash first).
-			'delete' => array(
-				'method'    => 'DELETE',
-				'gate'      => 'manage',
-				'when'      => array( 'status' => array( 'trashed', 'spam' ) ),
-				'code'      => 'not_trashed',
-				'refuse'    => __( 'Move the entry to trash (or spam) before deleting permanently.', 'minn-admin' ),
-				'run'       => function ( $id, $row ) {
-					return minn_admin_fluent_forms_delete( $id, (int) $row['form_id'] );
-				},
-				'expect'    => 'gone',
-				'fail_code' => 'delete_failed',
-				'fail'      => __( 'Fluent Forms reported success but the entry still exists.', 'minn-admin' ),
-				'reply'     => function ( $id ) {
-					return array( 'id' => (int) $id, 'deleted' => true );
-				},
-				'done'      => __( 'Entry deleted permanently.', 'minn-admin' ),
-			),
+			'delete' => minn_admin_forms_delete( function ( $id, $row ) {
+				return minn_admin_fluent_forms_delete( $id, (int) $row['form_id'] );
+			}, __( 'Fluent Forms reported success but the entry still exists.', 'minn-admin' ), array(
+				'when'   => array( 'status' => array( 'trashed', 'spam' ) ),
+				'code'   => 'not_trashed',
+				'refuse' => __( 'Move the entry to trash (or spam) before deleting permanently.', 'minn-admin' ),
+				'reply'  => 'minn_admin_forms_deleted',
+			) ),
 		),
 	);
 } );
@@ -594,95 +505,41 @@ minn_admin_endpoint( 'fluent-forms/forms', array(
 	},
 ) );
 
-add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
-	if ( ! minn_admin_fluent_forms_ready() ) {
-		return $surfaces;
-	}
-	if ( ! minn_admin_fluent_forms_can_view() ) {
-		return $surfaces;
-	}
-	$ui = function ( $slug, $ui ) {
-		return Minn_Admin_Kernel::ui( 'fluent-forms/entries', $slug, $ui );
-	};
-
-	$surfaces['fluent-forms'] = array(
-		'label'      => __( 'Forms', 'minn-admin' ),
-		'family'     => 'forms',
-		'status'     => array( 'route' => 'minn-admin/v1/fluent-forms/status' ),
-		'group'      => 'workspace', // inbox-shaped (see gravity-forms.php)
-		'sub'        => 'Fluent Forms',
-		'plugin'     => array( 'fluentform', 'fluentformpro' ),
-		'icon'       => 'inbox',
-		'cap'        => 'read',
-		// Route, paging, search, the status-chart day range and the filter
-		// query come from the resource, so they cannot drift from it.
-		'collection' => Minn_Admin_Kernel::collection( 'fluent-forms/entries', array(
-			'viewLabel' => __( 'Entries', 'minn-admin' ),
-			'tabs'      => array(
-				'route'    => 'minn-admin/v1/fluent-forms/forms',
-				'valueKey' => 'id',
-				'labelKey' => 'title',
-				'param'    => 'form_id',
-				'allLabel' => __( 'All entries', 'minn-admin' ),
-			),
-			'filter'    => array(
-				'label'   => __( 'Status', 'minn-admin' ),
-				'options' => array(
-					array( 'inbox', 'Received' ),
-					array( 'spam', 'Spam' ),
-					array( 'trashed', 'Trash' ),
-				),
-			),
-			'columns'   => array(
-				array( 'key' => 'summary', 'label' => __( 'Entry', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
-				array( 'key' => 'form_title', 'label' => __( 'Form', 'minn-admin' ) ),
-				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '100px' ),
-				array( 'key' => 'date', 'label' => __( 'When', 'minn-admin' ), 'format' => 'ago' ),
-			),
-			'detail'    => array(
-				'sectionsRoute' => 'minn-admin/v1/fluent-forms/entries/{id}',
-			),
-			'actions'   => array(
-				$ui( 'status', array( 'label' => __( 'Mark as read', 'minn-admin' ), 'body' => array( 'status' => 'read' ), 'when' => 'unread' ) ),
-				$ui( 'status', array( 'label' => __( 'Mark as spam', 'minn-admin' ), 'body' => array( 'status' => 'spam' ), 'confirm' => __( 'Mark this entry as spam? Find it under the Spam filter.', 'minn-admin' ), 'danger' => true, 'key' => 'bucket', 'when' => 'inbox' ) ),
-				$ui( 'status', array( 'label' => __( 'Not spam', 'minn-admin' ), 'body' => array( 'status' => 'unread' ), 'when' => 'spam' ) ),
-				$ui( 'status', array( 'label' => __( 'Trash entry', 'minn-admin' ), 'body' => array( 'status' => 'trashed' ), 'confirm' => __( 'Move this entry to trash?', 'minn-admin' ), 'danger' => true, 'key' => 'bucket', 'when' => 'inbox' ) ),
-				$ui( 'status', array( 'label' => __( 'Restore', 'minn-admin' ), 'body' => array( 'status' => 'unread' ), 'when' => 'trashed' ) ),
-				$ui( 'delete', array( 'label' => __( 'Delete permanently', 'minn-admin' ), 'confirm' => __( 'Delete this entry permanently? There is no undo.', 'minn-admin' ), 'danger' => true, 'when' => 'trashed' ) ),
-				$ui( 'delete', array( 'label' => __( 'Delete permanently', 'minn-admin' ), 'confirm' => __( 'Delete this entry permanently? There is no undo.', 'minn-admin' ), 'danger' => true, 'when' => 'spam' ) ),
-				array(
-					'label' => __( 'Open in Fluent Forms ↗', 'minn-admin' ),
-					// Detail modal also carries adminUrl with the form-scoped entry deep link.
-					'href'  => admin_url( 'admin.php?page=fluent_forms&route=entries#/entries/{id}' ),
-				),
-			),
-			'bulk'      => array(
-				$ui( 'status', array( 'label' => __( 'Mark as spam', 'minn-admin' ), 'body' => array( 'status' => 'spam' ), 'confirm' => __( 'Mark the selected entries as spam?', 'minn-admin' ), 'danger' => true, 'key' => 'bucket', 'when' => 'inbox' ) ),
-				$ui( 'status', array( 'label' => __( 'Trash', 'minn-admin' ), 'body' => array( 'status' => 'trashed' ), 'confirm' => __( 'Move the selected entries to trash?', 'minn-admin' ), 'danger' => true, 'key' => 'bucket', 'when' => 'inbox' ) ),
-				$ui( 'status', array( 'label' => __( 'Restore', 'minn-admin' ), 'body' => array( 'status' => 'unread' ), 'when' => 'trashed' ) ),
-				$ui( 'delete', array( 'label' => __( 'Delete permanently', 'minn-admin' ), 'confirm' => __( 'Delete the selected entries permanently?', 'minn-admin' ), 'danger' => true, 'when' => 'trashed' ) ),
-			),
-		) ),
-		'manage'     => array(
-			'viewLabel' => __( 'Forms', 'minn-admin' ),
-			'route'     => 'minn-admin/v1/fluent-forms/forms?manage=1',
-			'columns'   => array(
-				array( 'key' => 'title', 'label' => __( 'Form', 'minn-admin' ), 'format' => 'title' ),
-				array( 'key' => 'entries', 'label' => __( 'Entries', 'minn-admin' ), 'format' => 'num' ),
-				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '100px' ),
-				array( 'key' => 'date', 'label' => __( 'Updated', 'minn-admin' ), 'format' => 'ago' ),
-			),
-			'detail'    => array(),
-			// A row opens the form's emails and confirmation page
-			// (fluent-forms-emails.php), for the people who manage forms.
-			'open'      => array( 'route' => 'fluent-forms/form/{id}' ),
-			'actions'   => array(
-				array(
-					'label' => __( 'Edit in Fluent Forms ↗', 'minn-admin' ),
-					'href'  => admin_url( 'admin.php?page=fluent_forms&route=editor&form_id={id}' ),
-				),
+minn_admin_add_surface( 'fluent-forms', function () {
+	return minn_admin_fluent_forms_ready() && minn_admin_fluent_forms_can_view();
+}, function () {
+	$ui = minn_admin_forms_ui( 'fluent-forms/entries' );
+	return minn_admin_forms_surface( 'fluent-forms/entries', array(
+		'sub'     => 'Fluent Forms',
+		'plugin'  => array( 'fluentform', 'fluentformpro' ),
+		'api'     => 'fluent-forms',
+		'filter'  => array( 'inbox' => 'Received', 'spam' => 'Spam', 'trashed' => 'Trash' ),
+		'width'   => '100px',
+		'actions' => array(
+			$ui( 'status', array( 'label' => __( 'Mark as read', 'minn-admin' ), 'body' => array( 'status' => 'read' ), 'when' => 'unread' ) ),
+			$ui( 'status', array( 'label' => __( 'Mark as spam', 'minn-admin' ), 'body' => array( 'status' => 'spam' ), 'confirm' => __( 'Mark this entry as spam? Find it under the Spam filter.', 'minn-admin' ), 'danger' => true, 'key' => 'bucket', 'when' => 'inbox' ) ),
+			$ui( 'status', array( 'label' => __( 'Not spam', 'minn-admin' ), 'body' => array( 'status' => 'unread' ), 'when' => 'spam' ) ),
+			$ui( 'status', array( 'label' => __( 'Trash entry', 'minn-admin' ), 'body' => array( 'status' => 'trashed' ), 'confirm' => __( 'Move this entry to trash?', 'minn-admin' ), 'danger' => true, 'key' => 'bucket', 'when' => 'inbox' ) ),
+			$ui( 'status', array( 'label' => __( 'Restore', 'minn-admin' ), 'body' => array( 'status' => 'unread' ), 'when' => 'trashed' ) ),
+			$ui( 'delete', array( 'label' => __( 'Delete permanently', 'minn-admin' ), 'confirm' => __( 'Delete this entry permanently? There is no undo.', 'minn-admin' ), 'danger' => true, 'when' => 'trashed' ) ),
+			$ui( 'delete', array( 'label' => __( 'Delete permanently', 'minn-admin' ), 'confirm' => __( 'Delete this entry permanently? There is no undo.', 'minn-admin' ), 'danger' => true, 'when' => 'spam' ) ),
+			array(
+				'label' => __( 'Open in Fluent Forms ↗', 'minn-admin' ),
+				// Detail modal also carries adminUrl with the form-scoped entry deep link.
+				'href'  => admin_url( 'admin.php?page=fluent_forms&route=entries#/entries/{id}' ),
 			),
 		),
-	);
-	return $surfaces;
+		'bulk'    => array(
+			$ui( 'status', array( 'label' => __( 'Mark as spam', 'minn-admin' ), 'body' => array( 'status' => 'spam' ), 'confirm' => __( 'Mark the selected entries as spam?', 'minn-admin' ), 'danger' => true, 'key' => 'bucket', 'when' => 'inbox' ) ),
+			$ui( 'status', array( 'label' => __( 'Trash', 'minn-admin' ), 'body' => array( 'status' => 'trashed' ), 'confirm' => __( 'Move the selected entries to trash?', 'minn-admin' ), 'danger' => true, 'key' => 'bucket', 'when' => 'inbox' ) ),
+			$ui( 'status', array( 'label' => __( 'Restore', 'minn-admin' ), 'body' => array( 'status' => 'unread' ), 'when' => 'trashed' ) ),
+			$ui( 'delete', array( 'label' => __( 'Delete permanently', 'minn-admin' ), 'confirm' => __( 'Delete the selected entries permanently?', 'minn-admin' ), 'danger' => true, 'when' => 'trashed' ) ),
+		),
+		// A row opens the form's emails and confirmation page
+		// (fluent-forms-emails.php), for the people who manage forms.
+		'manage'  => minn_admin_forms_manage( 'fluent-forms', __( 'Edit in Fluent Forms ↗', 'minn-admin' ), admin_url( 'admin.php?page=fluent_forms&route=editor&form_id={id}' ), array(
+			array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '100px' ),
+			array( 'key' => 'date', 'label' => __( 'Updated', 'minn-admin' ), 'format' => 'ago' ),
+		), array( 'open' => array( 'route' => 'fluent-forms/form/{id}' ) ) ),
+	) );
 } );

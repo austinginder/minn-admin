@@ -124,16 +124,7 @@ function minn_admin_forminator_answers( $entry_id ) {
 				$urls = array_filter( array_map( 'strval', (array) $v['file']['file_url'] ) );
 				$v    = implode( ', ', $urls );
 			} elseif ( is_array( $v ) ) {
-				$flat = array();
-				array_walk_recursive( $v, function ( $leaf ) use ( &$flat ) {
-					// Same rule as the other flatteners: an absolute path
-					// on this server is the upload's location, not its
-					// answer, and printing it leaks the directory layout.
-					if ( '' !== trim( (string) $leaf ) && ! minn_admin_is_server_path( $leaf ) ) {
-						$flat[] = (string) $leaf;
-					}
-				} );
-				$v = implode( ', ', $flat );
+				$v = minn_admin_forms_flat( $v );
 			}
 			$out[ $key ] = trim( (string) $v );
 		}
@@ -215,19 +206,16 @@ function minn_admin_forminator_status_model() {
 		$days[ $d ]['secondary'] += $p['secondary'];
 	}
 	$spam = $spammed['spam'];
-	return array(
-		'rows'    => array(
-			array(
-				'label' => __( 'Entries', 'minn-admin' ),
-				'value' => number_format_i18n( $received['received'] ),
-				'hint'  => $spam ? number_format_i18n( $spam ) . ' spam' : __( 'All received entries', 'minn-admin' ),
-			),
-			array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => number_format_i18n( count( minn_admin_forminator_titles() ) ) ),
+	return minn_admin_forms_card(
+		array(
+			'label' => __( 'Entries', 'minn-admin' ),
+			'value' => number_format_i18n( $received['received'] ),
+			'hint'  => $spam ? number_format_i18n( $spam ) . ' spam' : __( 'All received entries', 'minn-admin' ),
 		),
-		'chart'   => minn_admin_chart_build( $days, __( 'Entries', 'minn-admin' ), __( 'Spam', 'minn-admin' ) ),
-		'actions' => array(
-			array( 'label' => __( 'Open Forminator ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=forminator-entries' ) ),
-		),
+		count( minn_admin_forminator_titles() ),
+		$days,
+		array( 'label' => __( 'Open Forminator ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=forminator-entries' ) ),
+		__( 'Spam', 'minn-admin' )
 	);
 }
 
@@ -235,19 +223,9 @@ function minn_admin_forminator_status_model() {
 function minn_admin_forminator_row( array $row ) {
 	$form_id = (int) $row['form_id'];
 	$titles  = minn_admin_forminator_titles();
-	$answers = minn_admin_forminator_answers( (int) $row['entry_id'] );
-	$parts   = array();
-	foreach ( minn_admin_forminator_fields( $form_id ) as $slug => $label ) {
-		if ( isset( $answers[ $slug ] ) && '' !== $answers[ $slug ] ) {
-			$parts[] = $answers[ $slug ];
-		}
-		if ( count( $parts ) >= 3 ) {
-			break;
-		}
-	}
 	return array(
 		'id'         => (int) $row['entry_id'],
-		'summary'    => $parts ? implode( ' · ', $parts ) : __( '(empty entry)', 'minn-admin' ),
+		'summary'    => minn_admin_forms_summary( minn_admin_forminator_answers( (int) $row['entry_id'] ), minn_admin_forminator_fields( $form_id ) ),
 		'form_title' => isset( $titles[ $form_id ] ) ? $titles[ $form_id ] : '#' . $form_id,
 		// A pending entry reads as pending, which also keeps the spam actions
 		// (offered on `received` only) off it.
@@ -260,38 +238,12 @@ function minn_admin_forminator_row( array $row ) {
 function minn_admin_forminator_view( array $row ) {
 	$id      = (int) $row['entry_id'];
 	$form_id = (int) $row['form_id'];
-	$fields  = minn_admin_forminator_fields( $form_id );
-	$answers = minn_admin_forminator_answers( $id );
 	$titles  = minn_admin_forminator_titles();
-	$rows    = array();
-	foreach ( $fields as $slug => $label ) {
-		$rows[] = array(
-			'label' => $label,
-			'value' => isset( $answers[ $slug ] ) && '' !== $answers[ $slug ] ? $answers[ $slug ] : '—',
-		);
-	}
-	// Answers whose field no longer exists on the form still show.
-	foreach ( $answers as $slug => $value ) {
-		if ( ! isset( $fields[ $slug ] ) && '' !== $value ) {
-			$rows[] = array(
-				'label' => ucfirst( str_replace( '-', ' ', $slug ) ),
-				'value' => $value,
-			);
-		}
-	}
-	$meta = array(
-		array( 'label' => __( 'Form', 'minn-admin' ), 'value' => isset( $titles[ $form_id ] ) ? $titles[ $form_id ] : '#' . $form_id ),
-		array( 'label' => __( 'Entry', 'minn-admin' ), 'value' => '#' . $id ),
-		array( 'label' => __( 'Submitted', 'minn-admin' ), 'value' => date_i18n( 'M j, Y g:i a', strtotime( $row['date_created'] ) ) ),
-	);
-	return array(
-		'kind'     => 'entry',
-		'sections' => array(
-			array( 'title' => __( 'Answers', 'minn-admin' ), 'rows' => $rows ),
-			array( 'title' => __( 'Submission', 'minn-admin' ), 'rows' => $meta ),
-		),
-		'adminUrl' => admin_url( 'admin.php?page=forminator-entries&form_type=forminator_forms&form_id=' . $form_id ),
-	);
+	$rows    = minn_admin_forms_answer_rows( minn_admin_forminator_fields( $form_id ), minn_admin_forminator_answers( $id ), function ( $slug ) {
+		return ucfirst( str_replace( '-', ' ', $slug ) );
+	} );
+	$meta    = minn_admin_forms_meta( isset( $titles[ $form_id ] ) ? $titles[ $form_id ] : '#' . $form_id, $id, date_i18n( 'M j, Y g:i a', strtotime( $row['date_created'] ) ) );
+	return minn_admin_forms_entry( $rows, $meta, admin_url( 'admin.php?page=forminator-entries&form_type=forminator_forms&form_id=' . $form_id ) );
 }
 
 /**
@@ -419,34 +371,20 @@ minn_admin_resource( 'forminator/entries', function () {
 			// added out of order (an import) lands where it belongs.
 			'order'  => array( 'column' => 'date_created', 'dir' => 'DESC' ),
 			'row'    => 'minn_admin_forminator_row',
-			'fields' => array(
-				'id'         => 'int',
-				'summary'    => 'text',
-				'form_title' => 'text',
-				'status'     => 'text',
-				'date'       => array( 'type' => 'datetime', 'stored' => 'site', 'wire' => 'naked' ),
-			),
+			'fields' => minn_admin_forms_fields( array( 'date' => array( 'type' => 'datetime', 'stored' => 'site', 'wire' => 'naked' ) ) ),
 		),
 		'item'    => array( 'view' => 'minn_admin_forminator_view' ),
 		'actions' => array_merge( minn_admin_forminator_spam_actions(), array(
-			'delete' => array(
-				'method'    => 'DELETE',
-				'gate'      => 'manage',
-				'run'       => function ( $id, $row ) {
-					// Their complete cleanup (meta and upload bookkeeping go too).
-					// The module type is their own check that the entry belongs to
-					// a form (1.58+; earlier versions ignore the extra argument).
-					$result = Forminator_API::delete_entry( (int) $row['form_id'], $id, 'custom-forms' );
-					if ( is_wp_error( $result ) ) {
-						$result->add_data( array( 'status' => 400 ) );
-					}
-					return $result;
-				},
-				'expect'    => 'gone',
-				'fail_code' => 'delete_failed',
-				'fail'      => __( 'Forminator reported success but the entry still exists.', 'minn-admin' ),
-				'done'      => __( 'Entry deleted permanently.', 'minn-admin' ),
-			),
+			'delete' => minn_admin_forms_delete( function ( $id, $row ) {
+				// Their complete cleanup (meta and upload bookkeeping go too).
+				// The module type is their own check that the entry belongs to
+				// a form (1.58+; earlier versions ignore the extra argument).
+				$result = Forminator_API::delete_entry( (int) $row['form_id'], $id, 'custom-forms' );
+				if ( is_wp_error( $result ) ) {
+					$result->add_data( array( 'status' => 400 ) );
+				}
+				return $result;
+			}, __( 'Forminator reported success but the entry still exists.', 'minn-admin' ) ),
 		) ),
 	);
 } );
@@ -484,76 +422,26 @@ minn_admin_endpoint( 'forminator/forms', array(
 	},
 ) );
 
-add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
-	if ( ! minn_admin_forminator_active() || ! minn_admin_forminator_can() ) {
-		return $surfaces;
-	}
-	$ui = function ( $slug, $ui ) {
-		return Minn_Admin_Kernel::ui( 'forminator/entries', $slug, $ui );
-	};
-
-	$surfaces['forminator'] = array(
-		'label'      => __( 'Forms', 'minn-admin' ),
-		'family'     => 'forms',
-		'group'      => 'workspace', // inbox-shaped (see gravity-forms.php)
-		'sub'        => 'Forminator',
-		'plugin'     => array( 'forminator', 'forminator-pro' ),
-		'icon'       => 'inbox',
-		'status'     => array( 'route' => 'minn-admin/v1/forminator/status' ),
-		'cap'        => 'read', // real gate is the filter above (their permission model)
-		// Route, paging, search, the status-chart day range and the filter
-		// query come from the resource, so they cannot drift from it.
-		'collection' => Minn_Admin_Kernel::collection( 'forminator/entries', array(
-			'viewLabel' => __( 'Entries', 'minn-admin' ),
-			'tabs'      => array(
-				'route'    => 'minn-admin/v1/forminator/forms',
-				'valueKey' => 'id',
-				'labelKey' => 'title',
-				'param'    => 'form_id',
-				'allLabel' => __( 'All entries', 'minn-admin' ),
-			),
-			'filter'    => array(
-				'label'   => __( 'Status', 'minn-admin' ),
-				'options' => array(
-					array( 'received', 'Received' ),
-					array( 'spam', 'Spam' ),
-				),
-			),
-			'columns'   => array(
-				array( 'key' => 'summary', 'label' => __( 'Entry', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
-				array( 'key' => 'form_title', 'label' => __( 'Form', 'minn-admin' ) ),
-				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '96px' ),
-				array( 'key' => 'date', 'label' => __( 'When', 'minn-admin' ), 'format' => 'ago' ),
-			),
-			'detail'    => array(
-				'sectionsRoute' => 'minn-admin/v1/forminator/entries/{id}',
-			),
-			'actions'   => array(
-				$ui( 'spam', array( 'label' => __( 'Mark as spam', 'minn-admin' ), 'confirm' => __( 'Mark this entry as spam? Find it under the Spam filter.', 'minn-admin' ), 'danger' => true, 'when' => 'received' ) ),
-				$ui( 'unspam', array( 'label' => __( 'Not spam', 'minn-admin' ), 'when' => 'spam' ) ),
-				$ui( 'delete', array( 'label' => __( 'Delete permanently', 'minn-admin' ), 'confirm' => __( 'Delete this entry permanently? Forminator has no entry trash — there is no undo.', 'minn-admin' ), 'danger' => true ) ),
-			),
-			'bulk'      => array(
-				$ui( 'spam', array( 'label' => __( 'Mark as spam', 'minn-admin' ), 'confirm' => __( 'Mark the selected entries as spam?', 'minn-admin' ), 'danger' => true, 'when' => 'received' ) ),
-				$ui( 'delete', array( 'label' => __( 'Delete permanently', 'minn-admin' ), 'confirm' => __( 'Delete the selected entries permanently? There is no undo.', 'minn-admin' ), 'danger' => true ) ),
-			),
-		) ),
-		'manage'     => array(
-			'viewLabel' => __( 'Forms', 'minn-admin' ),
-			'route'     => 'minn-admin/v1/forminator/forms?manage=1',
-			'columns'   => array(
-				array( 'key' => 'title', 'label' => __( 'Form', 'minn-admin' ), 'format' => 'title' ),
-				array( 'key' => 'entries', 'label' => __( 'Entries', 'minn-admin' ), 'format' => 'num' ),
-				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill' ),
-			),
-			'detail'    => array(),
-			'actions'   => array(
-				array(
-					'label' => __( 'Edit in Forminator ↗', 'minn-admin' ),
-					'href'  => admin_url( 'admin.php?page=forminator-cform-wizard&id={id}' ),
-				),
-			),
+minn_admin_add_surface( 'forminator', function () {
+	return minn_admin_forminator_active() && minn_admin_forminator_can();
+}, function () {
+	$ui = minn_admin_forms_ui( 'forminator/entries' );
+	return minn_admin_forms_surface( 'forminator/entries', array(
+		'sub'     => 'Forminator',
+		'plugin'  => array( 'forminator', 'forminator-pro' ),
+		'api'     => 'forminator',
+		'filter'  => array( 'received' => 'Received', 'spam' => 'Spam' ),
+		'actions' => array(
+			$ui( 'spam', array( 'label' => __( 'Mark as spam', 'minn-admin' ), 'confirm' => __( 'Mark this entry as spam? Find it under the Spam filter.', 'minn-admin' ), 'danger' => true, 'when' => 'received' ) ),
+			$ui( 'unspam', array( 'label' => __( 'Not spam', 'minn-admin' ), 'when' => 'spam' ) ),
+			$ui( 'delete', array( 'label' => __( 'Delete permanently', 'minn-admin' ), 'confirm' => __( 'Delete this entry permanently? Forminator has no entry trash — there is no undo.', 'minn-admin' ), 'danger' => true ) ),
 		),
-	);
-	return $surfaces;
+		'bulk'    => array(
+			$ui( 'spam', array( 'label' => __( 'Mark as spam', 'minn-admin' ), 'confirm' => __( 'Mark the selected entries as spam?', 'minn-admin' ), 'danger' => true, 'when' => 'received' ) ),
+			$ui( 'delete', array( 'label' => __( 'Delete permanently', 'minn-admin' ), 'confirm' => __( 'Delete the selected entries permanently? There is no undo.', 'minn-admin' ), 'danger' => true ) ),
+		),
+		'manage'  => minn_admin_forms_manage( 'forminator', __( 'Edit in Forminator ↗', 'minn-admin' ), admin_url( 'admin.php?page=forminator-cform-wizard&id={id}' ), array(
+			array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill' ),
+		) ),
+	) );
 } );

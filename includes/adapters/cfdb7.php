@@ -371,44 +371,22 @@ function minn_admin_cfdb7_view( array $row ) {
 		}
 		$label     = preg_replace( '/^your[-_]/', '', (string) $key );
 		$label     = ucwords( str_replace( array( '-', '_' ), ' ', $label ) );
-		$answers[] = array(
-			'label' => $label . ( $is_file ? ' (file)' : '' ),
-			'value' => $is_file ? $upload_url . $value : (string) $value,
-			'type'  => $is_file ? 'url'
-				: ( is_email( (string) $value ) ? 'email'
-					: ( 0 === strpos( (string) $value, 'http' ) ? 'url' : 'text' ) ),
-		);
+		$answers[] = $is_file ? array( 'label' => $label . ' (file)', 'value' => $upload_url . $value, 'type' => 'url' ) : minn_admin_forms_typed( $label, $value );
 	}
 
 	$title = minn_admin_cfdb7_form_title( $form_id );
-	$meta  = array(
-		array(
-			'label' => __( 'Submitted', 'minn-admin' ),
-			'value' => date_i18n( 'M j, Y g:i a', strtotime( (string) $row['form_date'] ) ),
-		),
-		array(
-			'label' => __( 'Form', 'minn-admin' ),
-			'value' => $title,
-		),
-	);
-
-	return array(
-		'kind'     => 'entry',
-		'title'    => $title,
-		'status'   => $status,
+	return minn_admin_forms_entry( $answers, minn_admin_forms_meta_dated( date_i18n( 'M j, Y g:i a', strtotime( (string) $row['form_date'] ) ), $title ), admin_url( 'admin.php?page=cfdb7-list.php&fid=' . $form_id . '&ufid=' . $id ), array(
+		'responses' => true,
+		'title'     => $title,
+		'status'    => $status,
 		// The row as it stands now, after opening marked it read: the page's
 		// actions gate on it, not on the list's copy.
-		'item'     => array(
+		'item'      => array(
 			'id'           => $id,
 			'form_post_id' => $form_id,
 			'status'       => $status,
 		),
-		'sections' => array(
-			array( 'title' => __( 'Responses', 'minn-admin' ), 'rows' => $answers ),
-			array( 'title' => __( 'Submission', 'minn-admin' ), 'rows' => $meta ),
-		),
-		'adminUrl' => admin_url( 'admin.php?page=cfdb7-list.php&fid=' . $form_id . '&ufid=' . $id ),
-	);
+	) );
 }
 
 /**
@@ -468,23 +446,19 @@ function minn_admin_cfdb7_status_model() {
 	// condition reaches; a row without the token is unread on their screen too
 	// (the list's rule).
 	$unread = Minn_Admin_Kernel_SQL::count( 'db7_forms', array( 'form_value' => array( 'none' => array( array( 'contains' => 's:12:"cfdb7_status";s:4:"read"' ) ) ) ) );
-	return array(
-		'rows'    => array(
-			array(
-				'label' => __( 'Unread entries', 'minn-admin' ),
-				'value' => number_format_i18n( $unread ),
-				'hint'  => sprintf(
-					/* translators: %s: total number of stored entries. */
-					__( '%s total', 'minn-admin' ),
-					number_format_i18n( $n['received'] )
-				),
+	return minn_admin_forms_card(
+		array(
+			'label' => __( 'Unread entries', 'minn-admin' ),
+			'value' => number_format_i18n( $unread ),
+			'hint'  => sprintf(
+				/* translators: %s: total number of stored entries. */
+				__( '%s total', 'minn-admin' ),
+				number_format_i18n( $n['received'] )
 			),
-			array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => number_format_i18n( count( minn_admin_cfdb7_form_titles() ) ) ),
 		),
-		'chart'   => minn_admin_chart_build( $n['days'], __( 'Entries', 'minn-admin' ) ),
-		'actions' => array(
-			array( 'label' => __( 'Open CFDB7 ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=cfdb7-list.php' ) ),
-		),
+		count( minn_admin_cfdb7_form_titles() ),
+		$n['days'],
+		array( 'label' => __( 'Open CFDB7 ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=cfdb7-list.php' ) )
 	);
 }
 
@@ -558,18 +532,7 @@ minn_admin_resource( 'cfdb7/entries', function () use ( $minn_admin_cfdb7_column
 				'done'   => __( 'Marked as unread.', 'minn-admin' ),
 			),
 			// CFDB7 has no trash: delete is permanent from any state.
-			'delete' => array(
-				'method'    => 'DELETE',
-				'gate'      => 'manage',
-				'run'       => 'minn_admin_cfdb7_delete',
-				'expect'    => 'gone',
-				'fail_code' => 'delete_failed',
-				'fail'      => __( 'CFDB7 could not delete the entry.', 'minn-admin' ),
-				'reply'     => function ( $id ) {
-					return array( 'id' => (int) $id, 'deleted' => true );
-				},
-				'done'      => __( 'Entry deleted permanently.', 'minn-admin' ),
-			),
+			'delete' => minn_admin_forms_delete( 'minn_admin_cfdb7_delete', __( 'CFDB7 could not delete the entry.', 'minn-admin' ), array( 'reply' => 'minn_admin_forms_deleted' ) ),
 		),
 	);
 } );
@@ -596,63 +559,29 @@ minn_admin_endpoint( 'cfdb7/status', array(
 	'run'    => 'minn_admin_cfdb7_status_model',
 ) );
 
-add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
-	if ( ! minn_admin_cfdb7_ready() || ! minn_admin_cfdb7_can_view() ) {
-		return $surfaces;
-	}
-	$ui = function ( $slug, $ui ) {
-		return Minn_Admin_Kernel::ui( 'cfdb7/entries', $slug, $ui );
-	};
-	$surfaces['cfdb7'] = array(
-		'label'      => __( 'Forms', 'minn-admin' ),
-		'family'     => 'forms',
-		'group'      => 'workspace',
-		'sub'        => 'CFDB7',
-		'plugin'     => 'contact-form-cfdb7',
-		'icon'       => 'inbox',
-		'cap'        => 'read',
-		'status'     => array( 'route' => 'minn-admin/v1/cfdb7/status' ),
-		// Route, paging, search, the status-chart day range and the filter
-		// query come from the resource, so they cannot drift from it.
-		'collection' => Minn_Admin_Kernel::collection( 'cfdb7/entries', array(
-			'viewLabel' => __( 'Messages', 'minn-admin' ),
-			'tabs'      => array(
-				'route'    => 'minn-admin/v1/cfdb7/forms',
-				'valueKey' => 'id',
-				'labelKey' => 'title',
-				'param'    => 'form_post_id',
-				'allLabel' => __( 'All messages', 'minn-admin' ),
+minn_admin_add_surface( 'cfdb7', function () {
+	return minn_admin_cfdb7_ready() && minn_admin_cfdb7_can_view();
+}, function () {
+	$ui = minn_admin_forms_ui( 'cfdb7/entries' );
+	return minn_admin_forms_surface( 'cfdb7/entries', array(
+		'sub'      => 'CFDB7',
+		'plugin'   => 'contact-form-cfdb7',
+		'api'      => 'cfdb7',
+		'tab'      => 'form_post_id',
+		'messages' => true,
+		// Read/unread lives in the serialized blob as cfdb7_status.
+		'filter'   => array( 'all' => 'All', 'unread' => 'Unread', 'read' => 'Read' ),
+		'form'     => 'form',
+		'actions'  => array(
+			$ui( 'unread', array( 'label' => __( 'Mark as unread', 'minn-admin' ), 'when' => 'read' ) ),
+			$ui( 'delete', array( 'label' => __( 'Delete entry', 'minn-admin' ), 'confirm' => __( 'Delete this entry permanently? CFDB7 has no trash.', 'minn-admin' ), 'danger' => true ) ),
+			array(
+				'label' => __( 'Open in CFDB7 ↗', 'minn-admin' ),
+				'href'  => admin_url( 'admin.php?page=cfdb7-list.php&fid={form_post_id}&ufid={id}' ),
 			),
-			// Read/unread lives in the serialized blob as cfdb7_status.
-			'filter'    => array(
-				'label'   => __( 'Status', 'minn-admin' ),
-				'options' => array(
-					array( 'all', 'All' ),
-					array( 'unread', 'Unread' ),
-					array( 'read', 'Read' ),
-				),
-			),
-			'columns'   => array(
-				array( 'key' => 'summary', 'label' => __( 'Entry', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
-				array( 'key' => 'form', 'label' => __( 'Form', 'minn-admin' ) ),
-				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '96px' ),
-				array( 'key' => 'date', 'label' => __( 'When', 'minn-admin' ), 'format' => 'ago' ),
-			),
-			'detail'    => array(
-				'sectionsRoute' => 'minn-admin/v1/cfdb7/entries/{id}',
-			),
-			'actions'   => array(
-				$ui( 'unread', array( 'label' => __( 'Mark as unread', 'minn-admin' ), 'when' => 'read' ) ),
-				$ui( 'delete', array( 'label' => __( 'Delete entry', 'minn-admin' ), 'confirm' => __( 'Delete this entry permanently? CFDB7 has no trash.', 'minn-admin' ), 'danger' => true ) ),
-				array(
-					'label' => __( 'Open in CFDB7 ↗', 'minn-admin' ),
-					'href'  => admin_url( 'admin.php?page=cfdb7-list.php&fid={form_post_id}&ufid={id}' ),
-				),
-			),
-			'bulk'      => array(
-				$ui( 'delete', array( 'label' => __( 'Delete', 'minn-admin' ), 'confirm' => __( 'Delete the selected entries permanently? CFDB7 has no trash.', 'minn-admin' ), 'danger' => true ) ),
-			),
-		) ),
-	);
-	return $surfaces;
+		),
+		'bulk'     => array(
+			$ui( 'delete', array( 'label' => __( 'Delete', 'minn-admin' ), 'confirm' => __( 'Delete the selected entries permanently? CFDB7 has no trash.', 'minn-admin' ), 'danger' => true ) ),
+		),
+	) );
 } );

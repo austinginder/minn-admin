@@ -160,19 +160,17 @@ function minn_admin_flamingo_status_model() {
 			'secondary' => array( Flamingo_Inbound_Message::spam_status ),
 		),
 	) );
-	return array(
-		'rows'    => array(
-			array(
-				'label' => __( 'Inbox messages', 'minn-admin' ),
-				'value' => number_format_i18n( $inbox ),
-				'hint'  => $bits ? implode( ', ', $bits ) : __( 'All stored messages', 'minn-admin' ),
-			),
-			array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => number_format_i18n( $forms ) ),
+	return minn_admin_forms_card(
+		array(
+			'label' => __( 'Inbox messages', 'minn-admin' ),
+			'value' => number_format_i18n( $inbox ),
+			'hint'  => $bits ? implode( ', ', $bits ) : __( 'All stored messages', 'minn-admin' ),
 		),
-		'chart'   => minn_admin_chart_build( $n['days'], __( 'Messages', 'minn-admin' ), __( 'Spam', 'minn-admin' ) ),
-		'actions' => array(
-			array( 'label' => __( 'Open Flamingo ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=flamingo_inbound' ) ),
-		),
+		$forms,
+		$n['days'],
+		array( 'label' => __( 'Open Flamingo ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=flamingo_inbound' ) ),
+		__( 'Spam', 'minn-admin' ),
+		__( 'Messages', 'minn-admin' )
 	);
 }
 
@@ -296,24 +294,10 @@ function minn_admin_flamingo_view( array $row ) {
 		// CF7 field names read like 'your-name' — humanize, and drop the
 		// conventional 'your-' prefix.
 		$label     = preg_replace( '/^your[-_]/', '', (string) $key );
-		$label     = ucwords( str_replace( array( '-', '_' ), ' ', $label ) );
-		$answers[] = array(
-			'label' => $label,
-			'value' => $value,
-			'type'  => is_email( $value ) ? 'email'
-				: ( 0 === strpos( $value, 'http' ) ? 'url' : 'text' ),
-		);
+		$answers[] = minn_admin_forms_typed( ucwords( str_replace( array( '-', '_' ), ' ', $label ) ), $value );
 	}
 
-	$meta = array(
-		array(
-			'label' => __( 'Submitted', 'minn-admin' ),
-			'value' => date_i18n( 'M j, Y g:i a', strtotime( $row['post_date'] ) ),
-		),
-	);
-	if ( $msg->channel ) {
-		$meta[] = array( 'label' => __( 'Form', 'minn-admin' ), 'value' => minn_admin_flamingo_channel_name( $msg->channel ) );
-	}
+	$meta = minn_admin_forms_meta_dated( date_i18n( 'M j, Y g:i a', strtotime( $row['post_date'] ) ), $msg->channel ? minn_admin_flamingo_channel_name( $msg->channel ) : null );
 	if ( $msg->from ) {
 		$meta[] = array( 'label' => __( 'From', 'minn-admin' ), 'value' => (string) $msg->from );
 	}
@@ -337,16 +321,11 @@ function minn_admin_flamingo_view( array $row ) {
 		$meta[] = array( 'label' => __( 'Spam', 'minn-admin' ), 'value' => $log ? implode( ' · ', $log ) : 'Marked as spam' );
 	}
 
-	return array(
-		'kind'     => 'entry',
-		'title'    => $msg->subject ?: 'Message',
-		'status'   => minn_admin_flamingo_status( $msg ),
-		'sections' => array(
-			array( 'title' => __( 'Responses', 'minn-admin' ), 'rows' => $answers ),
-			array( 'title' => __( 'Submission', 'minn-admin' ), 'rows' => $meta ),
-		),
-		'adminUrl' => admin_url( 'admin.php?page=flamingo_inbound&post=' . (int) $msg->id() . '&action=edit' ),
-	);
+	return minn_admin_forms_entry( $answers, $meta, admin_url( 'admin.php?page=flamingo_inbound&post=' . (int) $msg->id() . '&action=edit' ), array(
+		'responses' => true,
+		'title'     => $msg->subject ?: 'Message',
+		'status'    => minn_admin_flamingo_status( $msg ),
+	) );
 }
 
 /** Every action's reply names the message it acted on. */
@@ -555,104 +534,67 @@ minn_admin_endpoint( 'cf7/forms', array(
 	},
 ) );
 
-add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
-	if ( ! minn_admin_flamingo_ready() || ! minn_admin_flamingo_can_view() ) {
-		return $surfaces;
-	}
-	$cf7 = defined( 'WPCF7_VERSION' );
-	$ui  = function ( $slug, $ui ) {
-		return Minn_Admin_Kernel::ui( 'cf7/messages', $slug, $ui );
-	};
-	// Permanent, whatever bucket the message is in by the time it arrives.
-
-	$surfaces['cf7'] = array(
-		'label'      => __( 'Forms', 'minn-admin' ),
-		'family'     => 'forms',
-		'group'      => 'workspace', // inbox-shaped (see gravity-forms.php)
+minn_admin_add_surface( 'cf7', function () {
+	return minn_admin_flamingo_ready() && minn_admin_flamingo_can_view();
+}, function () {
+	$cf7     = defined( 'WPCF7_VERSION' );
+	$ui      = minn_admin_forms_ui( 'cf7/messages' );
+	$surface = minn_admin_forms_surface( 'cf7/messages', array(
 		'sub'        => $cf7 ? 'Contact Form 7' : 'Flamingo',
 		'plugin'     => array( 'contact-form-7', 'flamingo' ),
-		'status'     => array( 'route' => 'minn-admin/v1/cf7/status' ),
-		'icon'       => 'inbox',
-		'cap'        => 'read',
-		// Route, paging, search, the status-chart day range and the filter
-		// query come from the resource, so they cannot drift from it.
-		'collection' => Minn_Admin_Kernel::collection( 'cf7/messages', array(
-			'viewLabel'  => __( 'Messages', 'minn-admin' ),
-			// The messages are Flamingo's inbox, so they leave with Flamingo or
-			// that page, and Contact Form 7's forms list takes their place while
-			// Contact Form 7 is still in the menu; the forms list leaves with
-			// Contact Form 7.
+		'api'        => 'cf7',
+		'forms'      => 'cf7/channels',
+		'tab'        => 'channel_id',
+		'messages'   => true,
+		'filter'     => array( 'inbox' => 'Received', 'spam' => 'Spam', 'trash' => 'Trash' ),
+		'lead'       => array(
+			array( 'key' => 'from', 'label' => __( 'From', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.2fr)' ),
+			array( 'key' => 'subject', 'label' => __( 'Subject', 'minn-admin' ), 'width' => 'minmax(0,1.4fr)' ),
+		),
+		'form'       => 'form',
+		// The messages are Flamingo's inbox, so they leave with Flamingo or
+		// that page, and Contact Form 7's forms list takes their place while
+		// Contact Form 7 is still in the menu; the forms list leaves with
+		// Contact Form 7.
+		'collection' => array(
 			'plugin'     => 'flamingo',
 			'adminPages' => array( 'flamingo_inbound' ),
-			'tabs'       => array(
-				'route'    => 'minn-admin/v1/cf7/channels',
-				'valueKey' => 'id',
-				'labelKey' => 'title',
-				'param'    => 'channel_id',
-				'allLabel' => __( 'All messages', 'minn-admin' ),
+		),
+		'actions'    => array(
+			$ui( 'spam', array( 'label' => __( 'Mark as spam', 'minn-admin' ), 'key' => 'bucket', 'when' => 'inbox' ) ),
+			$ui( 'unspam', array( 'label' => __( 'Not spam', 'minn-admin' ), 'key' => 'bucket', 'when' => 'spam' ) ),
+			$ui( 'trash', array( 'label' => __( 'Trash message', 'minn-admin' ), 'confirm' => __( 'Move this message to trash?', 'minn-admin' ), 'danger' => true, 'key' => 'bucket', 'when' => 'inbox' ) ),
+			$ui( 'restore', array( 'label' => __( 'Restore', 'minn-admin' ), 'when' => 'trash' ) ),
+			// Permanent, whatever bucket the message is in by the time it arrives.
+			$ui( 'delete', array( 'label' => __( 'Delete permanently', 'minn-admin' ), 'confirm' => __( 'Delete this message permanently? There is no undo.', 'minn-admin' ), 'danger' => true, 'query' => 'force=1', 'key' => 'bucket', 'when' => 'trash' ) ),
+			$ui( 'delete', array( 'label' => __( 'Delete permanently', 'minn-admin' ), 'confirm' => __( 'Delete this message permanently? There is no undo.', 'minn-admin' ), 'danger' => true, 'query' => 'force=1', 'key' => 'bucket', 'when' => 'spam' ) ),
+			array(
+				'label' => __( 'Open in Flamingo ↗', 'minn-admin' ),
+				'href'  => admin_url( 'admin.php?page=flamingo_inbound&post={id}&action=edit' ),
 			),
-			'filter'     => array(
-				'label'   => __( 'Status', 'minn-admin' ),
-				'options' => array(
-					array( 'inbox', 'Received' ),
-					array( 'spam', 'Spam' ),
-					array( 'trash', 'Trash' ),
-				),
-			),
-			'columns'    => array(
-				array( 'key' => 'from', 'label' => __( 'From', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.2fr)' ),
-				array( 'key' => 'subject', 'label' => __( 'Subject', 'minn-admin' ), 'width' => 'minmax(0,1.4fr)' ),
-				array( 'key' => 'form', 'label' => __( 'Form', 'minn-admin' ) ),
-				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '96px' ),
-				array( 'key' => 'date', 'label' => __( 'When', 'minn-admin' ), 'format' => 'ago' ),
-			),
-			'detail'     => array(
-				'sectionsRoute' => 'minn-admin/v1/cf7/messages/{id}',
-			),
-			'actions'    => array(
-				$ui( 'spam', array( 'label' => __( 'Mark as spam', 'minn-admin' ), 'key' => 'bucket', 'when' => 'inbox' ) ),
-				$ui( 'unspam', array( 'label' => __( 'Not spam', 'minn-admin' ), 'key' => 'bucket', 'when' => 'spam' ) ),
-				$ui( 'trash', array( 'label' => __( 'Trash message', 'minn-admin' ), 'confirm' => __( 'Move this message to trash?', 'minn-admin' ), 'danger' => true, 'key' => 'bucket', 'when' => 'inbox' ) ),
-				$ui( 'restore', array( 'label' => __( 'Restore', 'minn-admin' ), 'when' => 'trash' ) ),
-				$ui( 'delete', array( 'label' => __( 'Delete permanently', 'minn-admin' ), 'confirm' => __( 'Delete this message permanently? There is no undo.', 'minn-admin' ), 'danger' => true, 'query' => 'force=1', 'key' => 'bucket', 'when' => 'trash' ) ),
-				$ui( 'delete', array( 'label' => __( 'Delete permanently', 'minn-admin' ), 'confirm' => __( 'Delete this message permanently? There is no undo.', 'minn-admin' ), 'danger' => true, 'query' => 'force=1', 'key' => 'bucket', 'when' => 'spam' ) ),
-				array(
-					'label' => __( 'Open in Flamingo ↗', 'minn-admin' ),
-					'href'  => admin_url( 'admin.php?page=flamingo_inbound&post={id}&action=edit' ),
-				),
-			),
-			'bulk'       => array(
-				$ui( 'spam', array( 'label' => __( 'Mark as spam', 'minn-admin' ), 'key' => 'bucket', 'when' => 'inbox' ) ),
-				$ui( 'trash', array( 'label' => __( 'Trash', 'minn-admin' ), 'confirm' => __( 'Move the selected messages to trash?', 'minn-admin' ), 'danger' => true, 'key' => 'bucket', 'when' => 'inbox' ) ),
-				$ui( 'restore', array( 'label' => __( 'Restore', 'minn-admin' ), 'when' => 'trash' ) ),
-				$ui( 'delete', array( 'label' => __( 'Delete permanently', 'minn-admin' ), 'confirm' => __( 'Delete the selected messages permanently?', 'minn-admin' ), 'danger' => true, 'query' => 'force=1', 'key' => 'bucket', 'when' => 'trash' ) ),
-			),
-		) ),
-	);
-
+		),
+		'bulk'       => array(
+			$ui( 'spam', array( 'label' => __( 'Mark as spam', 'minn-admin' ), 'key' => 'bucket', 'when' => 'inbox' ) ),
+			$ui( 'trash', array( 'label' => __( 'Trash', 'minn-admin' ), 'confirm' => __( 'Move the selected messages to trash?', 'minn-admin' ), 'danger' => true, 'key' => 'bucket', 'when' => 'inbox' ) ),
+			$ui( 'restore', array( 'label' => __( 'Restore', 'minn-admin' ), 'when' => 'trash' ) ),
+			$ui( 'delete', array( 'label' => __( 'Delete permanently', 'minn-admin' ), 'confirm' => __( 'Delete the selected messages permanently?', 'minn-admin' ), 'danger' => true, 'query' => 'force=1', 'key' => 'bucket', 'when' => 'trash' ) ),
+		),
+	) );
 	if ( $cf7 ) {
-		$surfaces['cf7']['manage'] = array(
-			'viewLabel' => __( 'Forms', 'minn-admin' ),
-			'plugin'    => 'contact-form-7',
-			'route'     => 'minn-admin/v1/cf7/forms',
-			'itemsKey'  => 'items',
-			'totalKey'  => 'total',
-			'columns'   => array(
+		// A row opens the form's email and messages page (cf7-mail.php).
+		$surface['manage'] = minn_admin_forms_manage( 'cf7', __( 'Edit in Contact Form 7 ↗', 'minn-admin' ), admin_url( 'admin.php?page=wpcf7&post={id}&action=edit' ), array(), array(
+			'plugin'   => 'contact-form-7',
+			'route'    => 'minn-admin/v1/cf7/forms',
+			'itemsKey' => 'items',
+			'totalKey' => 'total',
+			'columns'  => array(
 				array( 'key' => 'title', 'label' => __( 'Form', 'minn-admin' ), 'format' => 'title' ),
 				array( 'key' => 'shortcode', 'label' => __( 'Shortcode', 'minn-admin' ), 'format' => 'mono', 'width' => 'minmax(0,1fr)' ),
 				array( 'key' => 'messages', 'label' => __( 'Messages', 'minn-admin' ), 'format' => 'num' ),
 				array( 'key' => 'date', 'label' => __( 'Updated', 'minn-admin' ), 'format' => 'ago' ),
 			),
-			'detail'    => array(),
-			// A row opens the form's email and messages page (cf7-mail.php).
-			'open'      => array( 'route' => 'cf7/form/{id}' ),
-			'actions'   => array(
-				array(
-					'label' => __( 'Edit in Contact Form 7 ↗', 'minn-admin' ),
-					'href'  => admin_url( 'admin.php?page=wpcf7&post={id}&action=edit' ),
-				),
-			),
-		);
+			'open'     => array( 'route' => 'cf7/form/{id}' ),
+		) );
 	}
-	return $surfaces;
+	return $surface;
 } );
