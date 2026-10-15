@@ -6,9 +6,11 @@
  * is {prefix}wpmailsmtp_debug_events: delivery errors and, when verbose
  * debugging is on, send attempts. That is exactly the "did my mail fail and
  * why" daily-work question, so the surface lists those events read-only.
- * event_type 0 = error, 1 = debug. created_at is a MySQL CURRENT_TIMESTAMP —
- * the DB server clock, UTC on the stacks this targets (verified against a
- * seeded row) — so it's emitted as an ISO-8601 Z string. The `initiator`
+ * event_type 0 = error, 1 = debug. created_at is a MySQL CURRENT_TIMESTAMP:
+ * the database server's own clock, which is UTC on most hosts and local time
+ * on a server left on its system zone, so it is read on the kernel's 'db'
+ * clock (the database turns each value into its instant) and leaves as an
+ * ISO-8601 Z string. The `initiator`
  * column is a {"file","line"} JSON blob, reduced to basename:line. The
  * table only exists after the plugin's migration runs; routes answer empty
  * until then.
@@ -98,8 +100,8 @@ function minn_admin_wp_mail_smtp_type( $event_type ) {
 	return 0 === (int) $event_type ? 'error' : 'debug';
 }
 
-// created_at is the DB clock, UTC on the stacks this targets (the header's
-// verified note), so a chart bar's site-local bounds convert first.
+// created_at is the database's own clock (see the header): a chart bar's
+// site-local bounds are read as the database reads them.
 minn_admin_resource( 'wp-mail-smtp/events', function () {
 	return array(
 		'active' => 'minn_admin_wp_mail_smtp_active',
@@ -119,7 +121,7 @@ minn_admin_resource( 'wp-mail-smtp/events', function () {
 			),
 			// Their own EventsCollection searches content OR initiator.
 			'search' => array( 'columns' => array( 'content', 'initiator' ) ),
-			'range'  => array( 'column' => 'created_at', 'clock' => 'utc' ),
+			'range'  => array( 'column' => 'created_at', 'clock' => 'db' ),
 			'order'  => array( 'column' => 'id' ),
 			'row'    => function ( array $r ) {
 				$content = trim( preg_replace( '/\s+/', ' ', (string) $r['content'] ) );
@@ -139,7 +141,7 @@ minn_admin_resource( 'wp-mail-smtp/events', function () {
 				'content'    => 'text',
 				'initiator'  => 'text',
 				'type'       => 'text',
-				'created_at' => array( 'type' => 'datetime', 'stored' => 'utc', 'wire' => 'z' ),
+				'created_at' => array( 'type' => 'datetime', 'stored' => 'db', 'wire' => 'z' ),
 			),
 		),
 		'item'   => array(
@@ -156,7 +158,7 @@ minn_admin_resource( 'wp-mail-smtp/events', function () {
 				'id'         => 'int',
 				'initiator'  => 'text',
 				'type'       => 'text',
-				'created_at' => array( 'type' => 'datetime', 'stored' => 'utc', 'wire' => 'z' ),
+				'created_at' => array( 'type' => 'datetime', 'stored' => 'db', 'wire' => 'z' ),
 				'message'    => 'text',
 			),
 		),
@@ -240,7 +242,7 @@ minn_admin_endpoint( 'wp-mail-smtp/status', array(
 		// Errors per day for the same fourteen days the mail siblings show:
 		// TYPE_ERROR is 0 and TYPE_DEBUG 1, their only two.
 		if ( Minn_Admin_Kernel_SQL::exists( 'wpmailsmtp_debug_events' ) ) {
-			$days         = Minn_Admin_Kernel::days( 'wp-mail-smtp/events', array( 'column' => 'created_at', 'clock' => 'utc', 'split' => 'event_type', 'secondary' => array( 1 ) ) );
+			$days         = Minn_Admin_Kernel::days( 'wp-mail-smtp/events', array( 'column' => 'created_at', 'clock' => 'db', 'split' => 'event_type', 'secondary' => array( 1 ) ) );
 			$out['chart'] = minn_admin_chart_build( $days, __( 'Errors', 'minn-admin' ), __( 'Debug', 'minn-admin' ) );
 		}
 		return $out;
