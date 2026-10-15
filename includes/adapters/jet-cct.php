@@ -105,10 +105,8 @@ function minn_admin_jet_cct_form_field( $f ) {
 }
 
 function minn_admin_jet_cct_row( $slug, $id ) {
-	global $wpdb;
-	$t = minn_admin_jet_cct_table( $slug );
-	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-	return $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$t} WHERE _ID = %d", (int) $id ), ARRAY_A );
+	$row = Minn_Admin_Kernel_SQL::select( Minn_Admin_Kernel_SQL::named( minn_admin_jet_cct_table( $slug ) ), array(), array( '_ID' => (int) $id ), array(), 1 );
+	return $row ? $row[0] : null;
 }
 
 /**
@@ -297,152 +295,154 @@ add_action( 'rest_api_init', function () {
 	$perm = function ( WP_REST_Request $request ) use ( $type_of ) {
 		return (bool) $type_of( $request ); // the type's own user_has_access()
 	};
-	$ns = 'minn-admin/v1';
-	$re = '/jet-cct/(?P<slug>[a-z0-9_]+)/items';
 
-	register_rest_route( $ns, $re, array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) use ( $type_of ) {
-				global $wpdb;
-				$factory  = $type_of( $request );
-				$slug     = sanitize_key( Minn_Admin::path_param( $request, 'slug' ) );
-				$t        = minn_admin_jet_cct_table( $slug );
-				$per_page = min( 100, max( 1, (int) $request->get_param( 'per_page' ) ?: 25 ) );
-				$page     = max( 1, (int) $request->get_param( 'page' ) ?: 1 );
-				$status   = sanitize_key( (string) $request->get_param( 'status' ) );
-				$search   = sanitize_text_field( (string) $request->get_param( 'search' ) );
-				$where    = array( '1=1' );
-				$params   = array();
-				if ( in_array( $status, array( 'publish', 'draft' ), true ) ) {
-					$where[]  = 'cct_status = %s';
-					$params[] = $status;
-				}
-				if ( '' !== $search ) {
-					$set  = minn_admin_jet_cct_fields( $factory );
-					$cols = array();
-					foreach ( $set['fields'] as $name => $f ) {
-						if ( in_array( $f['type'], array( 'text', 'textarea', 'wysiwyg' ), true ) ) {
-							$cols[] = '`' . str_replace( '`', '', $name ) . '` LIKE %s';
-						}
+	minn_admin_endpoint( '/jet-cct/(?P<slug>[a-z0-9_]+)/items', array(
+		'methods'             => 'GET',
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) use ( $type_of ) {
+			$factory  = $type_of( $request );
+			$slug     = sanitize_key( Minn_Admin::path_param( $request, 'slug' ) );
+			$t        = minn_admin_jet_cct_table( $slug );
+			$per_page = min( 100, max( 1, (int) $request->get_param( 'per_page' ) ?: 25 ) );
+			$page     = max( 1, (int) $request->get_param( 'page' ) ?: 1 );
+			$status   = sanitize_key( (string) $request->get_param( 'status' ) );
+			$search   = sanitize_text_field( (string) $request->get_param( 'search' ) );
+			$conds    = array();
+			if ( in_array( $status, array( 'publish', 'draft' ), true ) ) {
+				$conds['cct_status'] = $status;
+			}
+			if ( '' !== $search ) {
+				// Any text field containing the term; with no text field at
+				// all, the term as an item id. A field whose name is not a
+				// plain identifier (JetEngine allows one that starts with a
+				// digit) cannot be named in SQL and is not searched, and a
+				// type whose text fields are all of that kind matches
+				// nothing rather than an item by number.
+				$set    = minn_admin_jet_cct_fields( $factory );
+				$groups = array();
+				$texts  = 0;
+				foreach ( $set['fields'] as $name => $f ) {
+					if ( ! in_array( $f['type'], array( 'text', 'textarea', 'wysiwyg' ), true ) ) {
+						continue;
 					}
-					if ( $cols ) {
-						$where[] = '(' . implode( ' OR ', $cols ) . ')';
-						$params  = array_merge( $params, array_fill( 0, count( $cols ), '%' . $wpdb->esc_like( $search ) . '%' ) );
-					} else {
-						$where[]  = '_ID = %d';
-						$params[] = (int) $search;
+					$texts++;
+					if ( preg_match( '/^[A-Za-z_][A-Za-z0-9_]{0,63}$/', (string) $name ) ) {
+						$groups[] = array( $name => array( 'contains' => $search ) );
 					}
 				}
-				$wsql = 'WHERE ' . implode( ' AND ', $where );
-				// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
-				$count_sql = "SELECT COUNT(*) FROM {$t} {$wsql}";
-				$total     = (int) ( $params ? $wpdb->get_var( $wpdb->prepare( $count_sql, $params ) ) : $wpdb->get_var( $count_sql ) );
-				$rows      = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$t} {$wsql} ORDER BY _ID DESC LIMIT %d OFFSET %d", array_merge( $params, array( $per_page, ( $page - 1 ) * $per_page ) ) ), ARRAY_A );
-				// phpcs:enable
-				$items = array();
-				foreach ( $rows ? $rows : array() as $row ) {
-					$items[] = minn_admin_jet_cct_item( $factory, $row );
-				}
-				return rest_ensure_response( array( 'items' => $items, 'total' => $total ) );
-			},
-		),
-		array(
-			'methods'             => 'POST',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) use ( $type_of ) {
-				$factory = $type_of( $request );
-				// The JSON body only: get_params() would add the route's own
-				// slug and any query-string key as candidate field values.
-				$itemarr = minn_admin_jet_cct_itemarr( $factory, (array) $request->get_json_params() );
-				if ( ! $itemarr ) {
-					return new WP_Error( 'empty', __( 'Fill in at least one field.', 'minn-admin' ), array( 'status' => 400 ) );
-				}
-				$itemarr['cct_status'] = 'publish';
-				try {
-					$id = $factory->get_item_handler()->update_item( $itemarr ); // no _ID = insert
-				} catch ( \Throwable $e ) {
-					return new WP_Error( 'insert_failed', __( 'JetEngine could not save that item.', 'minn-admin' ), array( 'status' => 500 ) );
-				}
-				$row = $id ? minn_admin_jet_cct_row( sanitize_key( Minn_Admin::path_param( $request, 'slug' ) ), $id ) : null;
-				if ( ! $row ) {
-					return new WP_Error( 'insert_failed', __( 'JetEngine could not save that item.', 'minn-admin' ), array( 'status' => 500 ) );
-				}
-				return rest_ensure_response( array( 'ok' => true, 'id' => (int) $id, 'item' => minn_admin_jet_cct_item( $factory, $row ) ) );
-			},
-		),
+				$conds['#any'] = $groups ? $groups : ( $texts ? array() : array( array( '_ID' => (int) $search ) ) );
+			}
+			list( $sql, $args )   = Minn_Admin_Kernel_SQL::where( $conds, 'e' );
+			list( $rows, $total ) = Minn_Admin_Kernel_SQL::page( array(
+				'table'   => Minn_Admin_Kernel_SQL::named( $t ),
+				'key'     => '_ID',
+				'columns' => array(),
+				'sql'     => $sql,
+				'args'    => $args,
+				'order'   => '_ID',
+				'dir'     => 'DESC',
+				'limit'   => $per_page,
+				'offset'  => ( $page - 1 ) * $per_page,
+			) );
+			$items = array();
+			foreach ( $rows ? $rows : array() as $row ) {
+				$items[] = minn_admin_jet_cct_item( $factory, $row );
+			}
+			return rest_ensure_response( array( 'items' => $items, 'total' => $total ) );
+		},
 	) );
-
-	register_rest_route( $ns, $re . '/(?P<id>\d+)', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) use ( $type_of ) {
-				$factory = $type_of( $request );
-				$row     = minn_admin_jet_cct_row( sanitize_key( Minn_Admin::path_param( $request, 'slug' ) ), (int) Minn_Admin::path_param( $request ) );
-				return $row ? rest_ensure_response( minn_admin_jet_cct_item( $factory, $row ) ) : new WP_Error( 'not_found', __( 'Item not found', 'minn-admin' ), array( 'status' => 404 ) );
-			},
-		),
-		array(
-			'methods'             => 'POST',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) use ( $type_of ) {
-				$factory = $type_of( $request );
-				$slug    = sanitize_key( Minn_Admin::path_param( $request, 'slug' ) );
-				$id      = (int) Minn_Admin::path_param( $request );
-				$row     = minn_admin_jet_cct_row( $slug, $id );
-				if ( ! $row ) {
-					return new WP_Error( 'not_found', __( 'Item not found', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				// The JSON body only (the route's slug and id are not fields).
-				// Without one there is nothing to apply, and an empty answer
-				// would read as a save that worked.
-				if ( ! is_array( $request->get_json_params() ) ) {
-					return new WP_Error( 'invalid_body', __( 'Send the item as JSON.', 'minn-admin' ), array( 'status' => 400 ) );
-				}
-				$itemarr = minn_admin_jet_cct_itemarr( $factory, $request->get_json_params(), $row );
-				if ( ! $itemarr ) {
-					return rest_ensure_response( minn_admin_jet_cct_item( $factory, minn_admin_jet_cct_row( $slug, $id ) ) );
-				}
-				$itemarr['_ID'] = $id;
-				try {
-					// Their handler merges the stored row under the edits, so
-					// untouched columns survive; the stored status rides along.
-					$factory->get_item_handler()->update_item( $itemarr );
-				} catch ( \Throwable $e ) {
-					return new WP_Error( 'update_failed', __( 'JetEngine could not update that item.', 'minn-admin' ), array( 'status' => 500 ) );
-				}
-				return rest_ensure_response( minn_admin_jet_cct_item( $factory, minn_admin_jet_cct_row( $slug, $id ) ) );
-			},
-		),
-		array(
-			'methods'             => 'DELETE',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) use ( $type_of ) {
-				$factory = $type_of( $request );
-				$slug    = sanitize_key( Minn_Admin::path_param( $request, 'slug' ) );
-				$id      = (int) Minn_Admin::path_param( $request );
-				if ( ! minn_admin_jet_cct_row( $slug, $id ) ) {
-					return new WP_Error( 'not_found', __( 'Item not found', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				try {
-					$factory->get_item_handler()->raw_delete_item( $id ); // drops the linked single post too
-				} catch ( \Throwable $e ) {
-					return new WP_Error( 'delete_failed', __( 'JetEngine could not delete that item.', 'minn-admin' ), array( 'status' => 500 ) );
-				}
-				if ( minn_admin_jet_cct_row( $slug, $id ) ) {
-					return new WP_Error( 'delete_failed', __( 'JetEngine could not delete that item.', 'minn-admin' ), array( 'status' => 500 ) );
-				}
-				return rest_ensure_response( array( 'ok' => true, 'message' => __( 'Item deleted.', 'minn-admin' ) ) );
-			},
-		),
-	) );
-
-	register_rest_route( $ns, $re . '/(?P<id>\d+)/status', array(
+	minn_admin_endpoint( '/jet-cct/(?P<slug>[a-z0-9_]+)/items', array(
 		'methods'             => 'POST',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) use ( $type_of ) {
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) use ( $type_of ) {
+			$factory = $type_of( $request );
+			// The JSON body only: get_params() would add the route's own
+			// slug and any query-string key as candidate field values.
+			$itemarr = minn_admin_jet_cct_itemarr( $factory, (array) $request->get_json_params() );
+			if ( ! $itemarr ) {
+				return new WP_Error( 'empty', __( 'Fill in at least one field.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
+			$itemarr['cct_status'] = 'publish';
+			try {
+				$id = $factory->get_item_handler()->update_item( $itemarr ); // no _ID = insert
+			} catch ( \Throwable $e ) {
+				return new WP_Error( 'insert_failed', __( 'JetEngine could not save that item.', 'minn-admin' ), array( 'status' => 500 ) );
+			}
+			$row = $id ? minn_admin_jet_cct_row( sanitize_key( Minn_Admin::path_param( $request, 'slug' ) ), $id ) : null;
+			if ( ! $row ) {
+				return new WP_Error( 'insert_failed', __( 'JetEngine could not save that item.', 'minn-admin' ), array( 'status' => 500 ) );
+			}
+			return rest_ensure_response( array( 'ok' => true, 'id' => (int) $id, 'item' => minn_admin_jet_cct_item( $factory, $row ) ) );
+		},
+	) );
+
+	minn_admin_endpoint( '/jet-cct/(?P<slug>[a-z0-9_]+)/items/(?P<id>\d+)', array(
+		'methods'             => 'GET',
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) use ( $type_of ) {
+			$factory = $type_of( $request );
+			$row     = minn_admin_jet_cct_row( sanitize_key( Minn_Admin::path_param( $request, 'slug' ) ), (int) Minn_Admin::path_param( $request ) );
+			return $row ? rest_ensure_response( minn_admin_jet_cct_item( $factory, $row ) ) : new WP_Error( 'not_found', __( 'Item not found', 'minn-admin' ), array( 'status' => 404 ) );
+		},
+	) );
+	minn_admin_endpoint( '/jet-cct/(?P<slug>[a-z0-9_]+)/items/(?P<id>\d+)', array(
+		'methods'             => 'POST',
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) use ( $type_of ) {
+			$factory = $type_of( $request );
+			$slug    = sanitize_key( Minn_Admin::path_param( $request, 'slug' ) );
+			$id      = (int) Minn_Admin::path_param( $request );
+			$row     = minn_admin_jet_cct_row( $slug, $id );
+			if ( ! $row ) {
+				return new WP_Error( 'not_found', __( 'Item not found', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			// The JSON body only (the route's slug and id are not fields).
+			// Without one there is nothing to apply, and an empty answer
+			// would read as a save that worked.
+			if ( ! is_array( $request->get_json_params() ) ) {
+				return new WP_Error( 'invalid_body', __( 'Send the item as JSON.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
+			$itemarr = minn_admin_jet_cct_itemarr( $factory, $request->get_json_params(), $row );
+			if ( ! $itemarr ) {
+				return rest_ensure_response( minn_admin_jet_cct_item( $factory, minn_admin_jet_cct_row( $slug, $id ) ) );
+			}
+			$itemarr['_ID'] = $id;
+			try {
+				// Their handler merges the stored row under the edits, so
+				// untouched columns survive; the stored status rides along.
+				$factory->get_item_handler()->update_item( $itemarr );
+			} catch ( \Throwable $e ) {
+				return new WP_Error( 'update_failed', __( 'JetEngine could not update that item.', 'minn-admin' ), array( 'status' => 500 ) );
+			}
+			return rest_ensure_response( minn_admin_jet_cct_item( $factory, minn_admin_jet_cct_row( $slug, $id ) ) );
+		},
+	) );
+	minn_admin_endpoint( '/jet-cct/(?P<slug>[a-z0-9_]+)/items/(?P<id>\d+)', array(
+		'methods'             => 'DELETE',
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) use ( $type_of ) {
+			$factory = $type_of( $request );
+			$slug    = sanitize_key( Minn_Admin::path_param( $request, 'slug' ) );
+			$id      = (int) Minn_Admin::path_param( $request );
+			if ( ! minn_admin_jet_cct_row( $slug, $id ) ) {
+				return new WP_Error( 'not_found', __( 'Item not found', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			try {
+				$factory->get_item_handler()->raw_delete_item( $id ); // drops the linked single post too
+			} catch ( \Throwable $e ) {
+				return new WP_Error( 'delete_failed', __( 'JetEngine could not delete that item.', 'minn-admin' ), array( 'status' => 500 ) );
+			}
+			if ( minn_admin_jet_cct_row( $slug, $id ) ) {
+				return new WP_Error( 'delete_failed', __( 'JetEngine could not delete that item.', 'minn-admin' ), array( 'status' => 500 ) );
+			}
+			return rest_ensure_response( array( 'ok' => true, 'message' => __( 'Item deleted.', 'minn-admin' ) ) );
+		},
+	) );
+
+	minn_admin_endpoint( '/jet-cct/(?P<slug>[a-z0-9_]+)/items/(?P<id>\d+)/status', array(
+		'methods'             => 'POST',
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) use ( $type_of ) {
 			$factory = $type_of( $request );
 			$slug    = sanitize_key( Minn_Admin::path_param( $request, 'slug' ) );
 			$id      = (int) Minn_Admin::path_param( $request );

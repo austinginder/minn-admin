@@ -86,7 +86,7 @@ function minn_admin_freighter_raw_option( $prefix, $name ) {
 function minn_admin_freighter_tenant_exists( $id ) {
 	global $wpdb;
 	$table = 'stacked_' . (int) $id . '_options';
-	return $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) === $table;
+	return $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) ) ) === $table;
 }
 
 /** Freighter's configuration (files mode + domain mapping) as a plain object, without the lazy bootstrap write get() performs. */
@@ -157,7 +157,7 @@ function minn_admin_freighter_tenant_can_run_minn( $id, $configs ) {
 function minn_admin_freighter_tenant_user_count( $id ) {
 	global $wpdb;
 	$table = 'stacked_' . (int) $id . '_users';
-	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
+	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) ) ) !== $table ) {
 		return 0;
 	}
 	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table built from a trusted integer id.
@@ -521,83 +521,77 @@ add_action( 'rest_api_init', function () {
 	}
 	$can = 'minn_admin_freighter_can';
 
-	register_rest_route( 'minn-admin/v1', '/freighter/status', array(
+	minn_admin_endpoint( '/freighter/status', array(
 		'methods'             => 'GET',
-		'permission_callback' => $can,
-		'callback'            => 'minn_admin_freighter_status',
+		'gate'                => $can,
+		'run'                 => 'minn_admin_freighter_status',
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/freighter/sites', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => $can,
-			'callback'            => 'minn_admin_freighter_sites_list',
-		),
-		array(
-			'methods'             => 'POST',
-			'permission_callback' => $can,
-			'callback'            => 'minn_admin_freighter_sites_create',
-			'args'                => array(
-				'title'    => array( 'type' => 'string', 'required' => true ),
-				'name'     => array( 'type' => 'string' ),
-				'domain'   => array( 'type' => 'string' ),
-				'username' => array( 'type' => 'string', 'required' => true ),
-				'email'    => array( 'type' => 'string', 'required' => true ),
-				'password' => array( 'type' => 'string' ),
-			),
+	minn_admin_endpoint( '/freighter/sites', array(
+		'methods'             => 'GET',
+		'gate'                => $can,
+		'run'                 => 'minn_admin_freighter_sites_list',
+	) );
+	minn_admin_endpoint( '/freighter/sites', array(
+		'methods'             => 'POST',
+		'gate'                => $can,
+		'run'                 => 'minn_admin_freighter_sites_create',
+		'args'                => array(
+			'title'    => array( 'type' => 'string', 'required' => true ),
+			'name'     => array( 'type' => 'string' ),
+			'domain'   => array( 'type' => 'string' ),
+			'username' => array( 'type' => 'string', 'required' => true ),
+			'email'    => array( 'type' => 'string', 'required' => true ),
+			'password' => array( 'type' => 'string' ),
 		),
 	) );
 
 	// 'main' or a tenant id: the login route is the one verb the main site
 	// answers to, so the switcher can carry you back.
-	register_rest_route( 'minn-admin/v1', '/freighter/sites/(?P<id>main|\d+)/login', array(
+	minn_admin_endpoint( '/freighter/sites/(?P<id>main|\d+)/login', array(
 		'methods'             => 'POST',
-		'permission_callback' => $can,
-		'callback'            => 'minn_admin_freighter_site_login',
+		'gate'                => $can,
+		'run'                 => 'minn_admin_freighter_site_login',
 		'args'                => array(
-			'to' => array( 'type' => 'string', 'enum' => array( 'minn', 'admin' ), 'default' => 'minn' ),
+			'to' => array( 'type' => 'string', 'enum' => array( 'minn', 'admin' ) ),
 		),
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/freighter/sites/(?P<id>\d+)', array(
-		array(
-			'methods'             => 'POST',
-			'permission_callback' => $can,
-			'callback'            => 'minn_admin_freighter_site_update',
-		),
-		array(
-			'methods'             => 'DELETE',
-			'permission_callback' => $can,
-			'callback'            => 'minn_admin_freighter_site_delete',
-		),
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/freighter/sites/(?P<id>\d+)/clone', array(
+	minn_admin_endpoint( '/freighter/sites/(?P<id>\d+)', array(
 		'methods'             => 'POST',
-		'permission_callback' => $can,
-		'callback'            => 'minn_admin_freighter_site_clone',
+		'gate'                => $can,
+		'run'                 => 'minn_admin_freighter_site_update',
+	) );
+	minn_admin_endpoint( '/freighter/sites/(?P<id>\d+)', array(
+		'methods'             => 'DELETE',
+		'gate'                => $can,
+		'run'                 => 'minn_admin_freighter_site_delete',
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/freighter/sites/(?P<id>\d+)/minn', array(
+	minn_admin_endpoint( '/freighter/sites/(?P<id>\d+)/clone', array(
 		'methods'             => 'POST',
-		'permission_callback' => $can,
-		'callback'            => 'minn_admin_freighter_site_minn',
+		'gate'                => $can,
+		'run'                 => 'minn_admin_freighter_site_clone',
+	) );
+
+	minn_admin_endpoint( '/freighter/sites/(?P<id>\d+)/minn', array(
+		'methods'             => 'POST',
+		'gate'                => $can,
+		'run'                 => 'minn_admin_freighter_site_minn',
 		'args'                => array(
 			'on' => array( 'type' => 'boolean', 'required' => true ),
 		),
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/freighter/settings/(?P<tab>[a-z0-9_-]+)', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => $can,
-			'callback'            => 'minn_admin_freighter_settings_get',
-		),
-		array(
-			'methods'             => 'POST',
-			'permission_callback' => $can,
-			'callback'            => 'minn_admin_freighter_settings_post',
-		),
+	minn_admin_endpoint( '/freighter/settings/(?P<tab>[a-z0-9_-]+)', array(
+		'methods'             => 'GET',
+		'gate'                => $can,
+		'run'                 => 'minn_admin_freighter_settings_get',
+	) );
+	minn_admin_endpoint( '/freighter/settings/(?P<tab>[a-z0-9_-]+)', array(
+		'methods'             => 'POST',
+		'gate'                => $can,
+		'run'                 => 'minn_admin_freighter_settings_post',
 	) );
 } );
 
@@ -1029,7 +1023,11 @@ function minn_admin_freighter_site_minn( WP_REST_Request $request ) {
 	// The tenant caches its options in the object cache under its own salt,
 	// so a persistent cache there may hold the old row until it expires or
 	// the tenant's next option write; the raw row is the truth and is what
-	// the next request loads when the cache misses.
+	// the next request loads when the cache misses. Done only once that row
+	// reads back as written.
+	if ( minn_admin_freighter_tenant_has_minn( $id ) !== $on ) {
+		return new WP_Error( 'minn_failed', __( 'That tenant\'s plugin list did not change. Nothing was reported as done.', 'minn-admin' ), array( 'status' => 500 ) );
+	}
 	$row = minn_admin_freighter_row( \WPFreighter\Site::get( $id ), $configs );
 	$row['message'] = $on
 		? __( 'Minn Admin is on for that tenant. Open in Minn to use it there.', 'minn-admin' )
