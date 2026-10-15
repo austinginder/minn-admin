@@ -668,7 +668,10 @@ class Minn_Admin_Kernel_SQL {
 	private static function writable( $table ) {
 		global $wpdb;
 		$name = is_array( $table ) && isset( $table['core'] ) ? '' : self::table( $table );
-		if ( '' === $name || in_array( $name, array_values( $wpdb->tables( 'all', true ) ), true ) ) {
+		// By its name too: on a network site "usermeta" with the site's own
+		// prefix is no table of anyone's, and still a name that means theirs.
+		$bare = strtolower( (string) ( is_array( $table ) ? ( $table['table'] ?? '' ) : $table ) );
+		if ( '' === $name || in_array( $name, array_values( $wpdb->tables( 'all', true ) ), true ) || in_array( $bare, array_map( 'strtolower', $wpdb->tables( 'all', false ) ), true ) ) {
 			throw new InvalidArgumentException( 'minn_kernel_core_table' );
 		}
 	}
