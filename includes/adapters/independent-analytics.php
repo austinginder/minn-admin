@@ -96,24 +96,17 @@ function minn_admin_iawp_is_pro() {
 }
 
 /**
- * Prefixed table name.
+ * One of the plugin's tables, as the kernel's SQL layer names it (no prefix).
  */
 function minn_admin_iawp_table( $name ) {
-	global $wpdb;
-	return $wpdb->prefix . 'independent_analytics_' . $name;
+	return 'independent_analytics_' . $name;
 }
 
 /**
- * Table exists (one SHOW TABLES per name per request).
+ * Table exists (asked once per name per request).
  */
 function minn_admin_iawp_has( $name ) {
-	static $seen = array();
-	if ( ! array_key_exists( $name, $seen ) ) {
-		global $wpdb;
-		$t             = minn_admin_iawp_table( $name );
-		$seen[ $name ] = ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $t ) ) === $t );
-	}
-	return $seen[ $name ];
+	return Minn_Admin_Kernel_SQL::exists( minn_admin_iawp_table( $name ) );
 }
 
 /**
@@ -150,48 +143,40 @@ function minn_admin_iawp_admin_url() {
  * @return array[] { title, path, url, postId, visitors, pageviews }
  */
 function minn_admin_iawp_pages( $from_dt, $to_dt, $limit = 25 ) {
-	global $wpdb;
 	if ( ! minn_admin_iawp_has( 'views' ) ) {
 		return array();
 	}
-	$views    = minn_admin_iawp_table( 'views' );
-	$sessions = minn_admin_iawp_table( 'sessions' );
-	$res      = minn_admin_iawp_table( 'resources' );
 	$has_res  = minn_admin_iawp_has( 'resources' );
 	$has_sess = minn_admin_iawp_has( 'sessions' );
-	$limit    = max( 1, min( 100, (int) $limit ) );
-
-	$visitor_expr = $has_sess ? 'COUNT(DISTINCT s.visitor_id)' : 'COUNT(DISTINCT v.session_id)';
-	$sess_join    = $has_sess ? "LEFT JOIN {$sessions} s ON s.session_id = v.session_id" : '';
-	$res_cols     = $has_res
-		? 'MAX(r.cached_title) AS title, MAX(r.cached_url) AS url, MAX(r.singular_id) AS singular_id, MAX(r.resource) AS resource'
-		: 'NULL AS title, NULL AS url, NULL AS singular_id, NULL AS resource';
-	$res_join     = $has_res ? "LEFT JOIN {$res} r ON r.id = v.resource_id" : '';
-
-	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table names are prefix-scoped.
-	$rows = $wpdb->get_results(
-		$wpdb->prepare(
-			"SELECT v.resource_id,
-				COUNT(*) AS pageviews,
-				{$visitor_expr} AS visitors,
-				{$res_cols}
-			FROM {$views} v
-			{$sess_join}
-			{$res_join}
-			WHERE v.viewed_at >= %s AND v.viewed_at <= %s
-			GROUP BY v.resource_id
-			ORDER BY pageviews DESC, visitors DESC
-			LIMIT {$limit}",
-			$from_dt,
-			$to_dt
-		)
+	$joins    = array();
+	$totals   = array( 'pageviews' => array( 'count' => '*' ), 'visitors' => array( 'distinct' => $has_sess ? 's.visitor_id' : 'session_id' ) );
+	if ( $has_sess ) {
+		$joins['s'] = array( 'table' => minn_admin_iawp_table( 'sessions' ), 'on' => array( 'session_id' => 'e.session_id' ) );
+	}
+	if ( $has_res ) {
+		$joins['r'] = array( 'table' => minn_admin_iawp_table( 'resources' ), 'on' => array( 'id' => 'e.resource_id' ) );
+		$totals    += array(
+			'title'       => array( 'max' => 'r.cached_title' ),
+			'url'         => array( 'max' => 'r.cached_url' ),
+			'singular_id' => array( 'max' => 'r.singular_id' ),
+			'resource'    => array( 'max' => 'r.resource' ),
+		);
+	}
+	$rows = Minn_Admin_Kernel_SQL::totals(
+		array( 'table' => minn_admin_iawp_table( 'views' ), 'joins' => $joins ),
+		array( 'resource_id' ),
+		$totals,
+		minn_admin_traffic_window( 'viewed_at', $from_dt, $to_dt ),
+		array( 'pageviews' => 'DESC', 'visitors' => 'DESC' ),
+		max( 1, min( 100, (int) $limit ) )
 	);
 
 	$pages = array();
-	foreach ( (array) $rows as $row ) {
-		$post_id = (int) $row->singular_id;
-		$title   = $row->title ? (string) $row->title : '';
-		$url     = $row->url ? (string) $row->url : '';
+	foreach ( $rows as $row ) {
+		$row    += array( 'title' => null, 'url' => null, 'singular_id' => null, 'resource' => null );
+		$post_id = (int) $row['singular_id'];
+		$title   = $row['title'] ? (string) $row['title'] : '';
+		$url     = $row['url'] ? (string) $row['url'] : '';
 		$path    = '';
 		if ( $url ) {
 			$path = wp_parse_url( $url, PHP_URL_PATH );
@@ -206,12 +191,12 @@ function minn_admin_iawp_pages( $from_dt, $to_dt, $limit = 25 ) {
 			}
 		}
 		if ( '' === $title ) {
-			$resource = $row->resource ? (string) $row->resource : '';
+			$resource = $row['resource'] ? (string) $row['resource'] : '';
 			if ( $resource ) {
 				$title = $resource;
 				$path  = $path ? $path : ( '/' === $resource[0] ? $resource : '/' . $resource );
 			} else {
-				$title = 'Resource #' . (int) $row->resource_id;
+				$title = 'Resource #' . (int) $row['resource_id'];
 				$path  = $path ? $path : '/';
 			}
 			$url = $url ? $url : home_url( $path ? $path : '/' );
@@ -224,8 +209,8 @@ function minn_admin_iawp_pages( $from_dt, $to_dt, $limit = 25 ) {
 			'path'      => $path,
 			'url'       => $url,
 			'postId'    => $post_id,
-			'visitors'  => (int) $row->visitors,
-			'pageviews' => (int) $row->pageviews,
+			'visitors'  => (int) $row['visitors'],
+			'pageviews' => (int) $row['pageviews'],
 		);
 	}
 	return $pages;
@@ -241,41 +226,30 @@ function minn_admin_iawp_pages( $from_dt, $to_dt, $limit = 25 ) {
  * @return array[] { label, sub, visitors, pageviews }
  */
 function minn_admin_iawp_referrers( $from_dt, $to_dt, $limit = 15 ) {
-	global $wpdb;
 	if ( ! minn_admin_iawp_has( 'sessions' ) || ! minn_admin_iawp_has( 'referrers' ) ) {
 		return array();
 	}
-	$sessions  = minn_admin_iawp_table( 'sessions' );
-	$refs      = minn_admin_iawp_table( 'referrers' );
-	$types     = minn_admin_iawp_table( 'referrer_types' );
-	$has_types = minn_admin_iawp_has( 'referrer_types' );
-	$limit     = max( 1, min( 100, (int) $limit ) );
-	$type_col  = $has_types ? 'MAX(t.referrer_type) AS rtype' : 'NULL AS rtype';
-	$type_join = $has_types ? "LEFT JOIN {$types} t ON t.id = r.referrer_type_id" : '';
-
-	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-	$rows = $wpdb->get_results(
-		$wpdb->prepare(
-			"SELECT MAX(r.domain) AS domain, MAX(r.referrer) AS name, {$type_col},
-				COUNT(DISTINCT s.visitor_id) AS visitors,
-				COALESCE(SUM(s.total_views), 0) AS pageviews
-			FROM {$sessions} s
-			INNER JOIN {$refs} r ON r.id = s.referrer_id
-			{$type_join}
-			WHERE s.created_at >= %s AND s.created_at <= %s
-				AND s.referrer_id IS NOT NULL AND s.referrer_id > 0
-			GROUP BY s.referrer_id
-			ORDER BY visitors DESC, pageviews DESC
-			LIMIT {$limit}",
-			$from_dt,
-			$to_dt
-		)
+	$joins  = array( 'r' => array( 'table' => minn_admin_iawp_table( 'referrers' ), 'on' => array( 'id' => 'e.referrer_id' ) ) );
+	$totals = array( 'domain' => array( 'max' => 'r.domain' ), 'name' => array( 'max' => 'r.referrer' ) );
+	if ( minn_admin_iawp_has( 'referrer_types' ) ) {
+		$joins['t']      = array( 'table' => minn_admin_iawp_table( 'referrer_types' ), 'on' => array( 'id' => 'r.referrer_type_id' ) );
+		$totals['rtype'] = array( 'max' => 't.referrer_type' );
+	}
+	$rows = Minn_Admin_Kernel_SQL::totals(
+		array( 'table' => minn_admin_iawp_table( 'sessions' ), 'joins' => $joins ),
+		array( 'referrer_id' ),
+		$totals + array( 'visitors' => array( 'distinct' => 'visitor_id' ), 'pageviews' => array( 'sum' => 'total_views' ) ),
+		// A session with a referrer the plugin still has: its own inner join.
+		minn_admin_traffic_window( 'created_at', $from_dt, $to_dt ) + array( 'referrer_id' => array( 'op' => '>', 'value' => 0 ), 'r.id' => array( 'none' => array( null ) ) ),
+		array( 'visitors' => 'DESC', 'pageviews' => 'DESC' ),
+		max( 1, min( 100, (int) $limit ) )
 	);
+
 	$out = array();
-	foreach ( (array) $rows as $row ) {
-		$domain = trim( (string) $row->domain );
-		$name   = trim( (string) $row->name );
-		if ( 'Direct' === (string) $row->rtype || ( '' === $domain && ( '' === $name || 'Direct' === $name ) ) ) {
+	foreach ( $rows as $row ) {
+		$domain = trim( (string) $row['domain'] );
+		$name   = trim( (string) $row['name'] );
+		if ( 'Direct' === (string) ( $row['rtype'] ?? '' ) || ( '' === $domain && ( '' === $name || 'Direct' === $name ) ) ) {
 			continue;
 		}
 		$label = '' !== $name ? $name : $domain;
@@ -285,8 +259,8 @@ function minn_admin_iawp_referrers( $from_dt, $to_dt, $limit = 15 ) {
 		$out[] = array(
 			'label'     => $label,
 			'sub'       => ( '' !== $domain && $domain !== $label ) ? $domain : '',
-			'visitors'  => (int) $row->visitors,
-			'pageviews' => (int) $row->pageviews,
+			'visitors'  => (int) $row['visitors'],
+			'pageviews' => (int) $row['pageviews'],
 		);
 	}
 	return $out;
@@ -300,46 +274,39 @@ function minn_admin_iawp_referrers( $from_dt, $to_dt, $limit = 15 ) {
  * @param string $table     Lookup table suffix (countries, device_types, …).
  * @param string $id_col    Shared id column (country_id, device_type_id, …).
  * @param string $label_col Label column on the lookup table.
- * @param string $sub_sql   Optional SQL expression for a sub line (may
- *                          reference alias `d`).
+ * @param string $sub       Optional column for a sub line, on the lookup
+ *                          table (alias `d`) or on one of $joins.
+ * @param array  $joins     Further joins the sub line reads (a city's country).
  * @return array[] { label, sub, visitors, pageviews }
  */
-function minn_admin_iawp_dimension( $from_dt, $to_dt, $table, $id_col, $label_col, $sub_sql = '', $limit = 25 ) {
-	global $wpdb;
+function minn_admin_iawp_dimension( $from_dt, $to_dt, $table, $id_col, $label_col, $sub = '', array $joins = array(), $limit = 25 ) {
 	if ( ! minn_admin_iawp_has( 'sessions' ) || ! minn_admin_iawp_has( $table ) ) {
 		return array();
 	}
-	$sessions = minn_admin_iawp_table( 'sessions' );
-	$dim      = minn_admin_iawp_table( $table );
-	$limit    = max( 1, min( 100, (int) $limit ) );
-	$sub_expr = '' !== $sub_sql ? "MAX({$sub_sql}) AS sub" : "'' AS sub";
-	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- identifiers are adapter constants.
-	$rows = $wpdb->get_results(
-		$wpdb->prepare(
-			"SELECT MAX(d.{$label_col}) AS label, {$sub_expr},
-				COUNT(DISTINCT s.visitor_id) AS visitors,
-				COALESCE(SUM(s.total_views), 0) AS pageviews
-			FROM {$sessions} s
-			INNER JOIN {$dim} d ON d.{$id_col} = s.{$id_col}
-			WHERE s.created_at >= %s AND s.created_at <= %s
-			GROUP BY s.{$id_col}
-			ORDER BY visitors DESC, pageviews DESC
-			LIMIT {$limit}",
-			$from_dt,
-			$to_dt
-		)
+	$totals = array( 'label' => array( 'max' => 'd.' . $label_col ) );
+	if ( '' !== $sub ) {
+		$totals['sub'] = array( 'max' => $sub );
+	}
+	$rows = Minn_Admin_Kernel_SQL::totals(
+		array( 'table' => minn_admin_iawp_table( 'sessions' ), 'joins' => array( 'd' => array( 'table' => minn_admin_iawp_table( $table ), 'on' => array( $id_col => 'e.' . $id_col ) ) ) + $joins ),
+		array( $id_col ),
+		$totals + array( 'visitors' => array( 'distinct' => 'visitor_id' ), 'pageviews' => array( 'sum' => 'total_views' ) ),
+		minn_admin_traffic_window( 'created_at', $from_dt, $to_dt ) + array( 'd.' . $id_col => array( 'none' => array( null ) ) ),
+		array( 'visitors' => 'DESC', 'pageviews' => 'DESC' ),
+		max( 1, min( 100, (int) $limit ) )
 	);
+
 	$out = array();
-	foreach ( (array) $rows as $row ) {
-		$label = trim( (string) $row->label );
+	foreach ( $rows as $row ) {
+		$label = trim( (string) $row['label'] );
 		if ( '' === $label ) {
 			continue;
 		}
 		$out[] = array(
 			'label'     => $label,
-			'sub'       => trim( (string) $row->sub ),
-			'visitors'  => (int) $row->visitors,
-			'pageviews' => (int) $row->pageviews,
+			'sub'       => trim( (string) ( $row['sub'] ?? '' ) ),
+			'visitors'  => (int) $row['visitors'],
+			'pageviews' => (int) $row['pageviews'],
 		);
 	}
 	return $out;
@@ -349,49 +316,46 @@ function minn_admin_iawp_dimension( $from_dt, $to_dt, $table, $id_col, $label_co
  * Pro: UTM campaigns. Label = utm_campaign, sub = "source / medium".
  */
 function minn_admin_iawp_campaigns( $from_dt, $to_dt, $limit = 25 ) {
-	global $wpdb;
 	foreach ( array( 'sessions', 'campaigns', 'utm_campaigns', 'utm_sources', 'utm_mediums' ) as $t ) {
 		if ( ! minn_admin_iawp_has( $t ) ) {
 			return array();
 		}
 	}
-	$sessions = minn_admin_iawp_table( 'sessions' );
-	$camps    = minn_admin_iawp_table( 'campaigns' );
-	$uc       = minn_admin_iawp_table( 'utm_campaigns' );
-	$us       = minn_admin_iawp_table( 'utm_sources' );
-	$um       = minn_admin_iawp_table( 'utm_mediums' );
-	$limit    = max( 1, min( 100, (int) $limit ) );
-	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-	$rows = $wpdb->get_results(
-		$wpdb->prepare(
-			"SELECT MAX(uc.utm_campaign) AS campaign, MAX(us.utm_source) AS source, MAX(um.utm_medium) AS medium,
-				COUNT(DISTINCT s.visitor_id) AS visitors,
-				COALESCE(SUM(s.total_views), 0) AS pageviews
-			FROM {$sessions} s
-			INNER JOIN {$camps} c ON c.campaign_id = s.campaign_id
-			LEFT JOIN {$uc} uc ON uc.id = c.utm_campaign_id
-			LEFT JOIN {$us} us ON us.id = c.utm_source_id
-			LEFT JOIN {$um} um ON um.id = c.utm_medium_id
-			WHERE s.created_at >= %s AND s.created_at <= %s
-			GROUP BY c.utm_campaign_id, c.utm_source_id, c.utm_medium_id
-			ORDER BY visitors DESC, pageviews DESC
-			LIMIT {$limit}",
-			$from_dt,
-			$to_dt
-		)
+	$rows = Minn_Admin_Kernel_SQL::totals(
+		array(
+			'table' => minn_admin_iawp_table( 'sessions' ),
+			'joins' => array(
+				'c'  => array( 'table' => minn_admin_iawp_table( 'campaigns' ), 'on' => array( 'campaign_id' => 'e.campaign_id' ) ),
+				'uc' => array( 'table' => minn_admin_iawp_table( 'utm_campaigns' ), 'on' => array( 'id' => 'c.utm_campaign_id' ) ),
+				'us' => array( 'table' => minn_admin_iawp_table( 'utm_sources' ), 'on' => array( 'id' => 'c.utm_source_id' ) ),
+				'um' => array( 'table' => minn_admin_iawp_table( 'utm_mediums' ), 'on' => array( 'id' => 'c.utm_medium_id' ) ),
+			),
+		),
+		array( 'c.utm_campaign_id', 'c.utm_source_id', 'c.utm_medium_id' ),
+		array(
+			'campaign'  => array( 'max' => 'uc.utm_campaign' ),
+			'source'    => array( 'max' => 'us.utm_source' ),
+			'medium'    => array( 'max' => 'um.utm_medium' ),
+			'visitors'  => array( 'distinct' => 'visitor_id' ),
+			'pageviews' => array( 'sum' => 'total_views' ),
+		),
+		minn_admin_traffic_window( 'created_at', $from_dt, $to_dt ) + array( 'c.campaign_id' => array( 'none' => array( null ) ) ),
+		array( 'visitors' => 'DESC', 'pageviews' => 'DESC' ),
+		max( 1, min( 100, (int) $limit ) )
 	);
+
 	$out = array();
-	foreach ( (array) $rows as $row ) {
-		$label = trim( (string) $row->campaign );
+	foreach ( $rows as $row ) {
+		$label = trim( (string) $row['campaign'] );
 		if ( '' === $label ) {
 			continue;
 		}
-		$parts = array_filter( array( trim( (string) $row->source ), trim( (string) $row->medium ) ) );
+		$parts = array_filter( array( trim( (string) $row['source'] ), trim( (string) $row['medium'] ) ) );
 		$out[] = array(
 			'label'     => $label,
 			'sub'       => implode( ' / ', $parts ),
-			'visitors'  => (int) $row->visitors,
-			'pageviews' => (int) $row->pageviews,
+			'visitors'  => (int) $row['visitors'],
+			'pageviews' => (int) $row['pageviews'],
 		);
 	}
 	return $out;
@@ -403,48 +367,39 @@ function minn_admin_iawp_campaigns( $from_dt, $to_dt, $limit = 25 ) {
  * visitors via the click's view → session).
  */
 function minn_admin_iawp_clicks( $from_dt, $to_dt, $limit = 25 ) {
-	global $wpdb;
 	foreach ( array( 'clicks', 'clicked_links', 'links', 'click_targets' ) as $t ) {
 		if ( ! minn_admin_iawp_has( $t ) ) {
 			return array();
 		}
 	}
-	$clicks   = minn_admin_iawp_table( 'clicks' );
-	$cl       = minn_admin_iawp_table( 'clicked_links' );
-	$links    = minn_admin_iawp_table( 'links' );
-	$targets  = minn_admin_iawp_table( 'click_targets' );
-	$views    = minn_admin_iawp_table( 'views' );
-	$sessions = minn_admin_iawp_table( 'sessions' );
-	$has_vs   = minn_admin_iawp_has( 'views' ) && minn_admin_iawp_has( 'sessions' );
-	$limit    = max( 1, min( 100, (int) $limit ) );
-	$vis_expr = $has_vs ? 'COUNT(DISTINCT s.visitor_id)' : '0';
-	$vs_join  = $has_vs ? "LEFT JOIN {$views} v ON v.id = k.view_id LEFT JOIN {$sessions} s ON s.session_id = v.session_id" : '';
-	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-	$rows = $wpdb->get_results(
-		$wpdb->prepare(
-			"SELECT MAX(t.target) AS target, MAX(t.protocol) AS protocol,
-				COUNT(DISTINCT k.click_id) AS clicks,
-				{$vis_expr} AS visitors
-			FROM {$clicks} k
-			INNER JOIN {$cl} cl ON cl.click_id = k.click_id
-			INNER JOIN {$links} l ON l.id = cl.link_id
-			INNER JOIN {$targets} t ON t.click_target_id = l.click_target_id
-			{$vs_join}
-			WHERE k.created_at >= %s AND k.created_at <= %s
-			GROUP BY l.click_target_id
-			ORDER BY clicks DESC
-			LIMIT {$limit}",
-			$from_dt,
-			$to_dt
-		)
+	$joins  = array(
+		'cl' => array( 'table' => minn_admin_iawp_table( 'clicked_links' ), 'on' => array( 'click_id' => 'e.click_id' ) ),
+		'l'  => array( 'table' => minn_admin_iawp_table( 'links' ), 'on' => array( 'id' => 'cl.link_id' ) ),
+		't'  => array( 'table' => minn_admin_iawp_table( 'click_targets' ), 'on' => array( 'click_target_id' => 'l.click_target_id' ) ),
 	);
+	$totals = array( 'target' => array( 'max' => 't.target' ), 'protocol' => array( 'max' => 't.protocol' ), 'clicks' => array( 'distinct' => 'click_id' ) );
+	if ( minn_admin_iawp_has( 'views' ) && minn_admin_iawp_has( 'sessions' ) ) {
+		$joins['v']         = array( 'table' => minn_admin_iawp_table( 'views' ), 'on' => array( 'id' => 'e.view_id' ) );
+		$joins['s']         = array( 'table' => minn_admin_iawp_table( 'sessions' ), 'on' => array( 'session_id' => 'v.session_id' ) );
+		$totals['visitors'] = array( 'distinct' => 's.visitor_id' );
+	}
+	$rows = Minn_Admin_Kernel_SQL::totals(
+		array( 'table' => minn_admin_iawp_table( 'clicks' ), 'joins' => $joins ),
+		array( 'l.click_target_id' ),
+		$totals,
+		// A click whose link and target the plugin still has: its own inner joins.
+		minn_admin_traffic_window( 'created_at', $from_dt, $to_dt ) + array( 't.click_target_id' => array( 'none' => array( null ) ) ),
+		array( 'clicks' => 'DESC' ),
+		max( 1, min( 100, (int) $limit ) )
+	);
+
 	$out = array();
-	foreach ( (array) $rows as $row ) {
-		$target = trim( (string) $row->target );
+	foreach ( $rows as $row ) {
+		$target = trim( (string) $row['target'] );
 		if ( '' === $target ) {
 			continue;
 		}
-		$proto = trim( (string) $row->protocol );
+		$proto = trim( (string) $row['protocol'] );
 		$label = $target;
 		$sub   = '';
 		$url   = '';
@@ -466,12 +421,12 @@ function minn_admin_iawp_clicks( $from_dt, $to_dt, $limit = 25 ) {
 		// count is neither, so it rides the sub line in words and the
 		// pageviews slot stays empty (the client hides a zero).
 		/* translators: %s: number of clicks. */
-		$count = sprintf( _n( '%s click', '%s clicks', (int) $row->clicks, 'minn-admin' ), number_format_i18n( (int) $row->clicks ) );
+		$count = sprintf( _n( '%s click', '%s clicks', (int) $row['clicks'], 'minn-admin' ), number_format_i18n( (int) $row['clicks'] ) );
 		$out[] = array(
 			'label'     => $label,
 			'sub'       => '' !== $sub ? $count . ' · ' . $sub : $count,
 			'url'       => $url,
-			'visitors'  => (int) $row->visitors,
+			'visitors'  => (int) ( $row['visitors'] ?? 0 ),
 			'pageviews' => 0,
 		);
 	}
@@ -489,51 +444,25 @@ add_filter( 'minn_admin_traffic', function ( $traffic, $days ) {
 	if ( ! minn_admin_iawp_ready() || ! minn_admin_iawp_has( 'views' ) ) {
 		return $traffic;
 	}
+	$days              = max( 1, (int) $days );
+	list( $cur_start ) = minn_admin_traffic_starts( $days );
+	$since             = gmdate( 'Y-m-d 00:00:00', time() - ( 2 * $days - 1 ) * DAY_IN_SECONDS );
 
-	global $wpdb;
-	$views    = minn_admin_iawp_table( 'views' );
-	$sessions = minn_admin_iawp_table( 'sessions' );
-
-	$days       = max( 1, (int) $days );
-	$cur_start  = gmdate( 'Y-m-d', time() - ( $days - 1 ) * DAY_IN_SECONDS );
-	$prev_start = gmdate( 'Y-m-d 00:00:00', time() - ( 2 * $days - 1 ) * DAY_IN_SECONDS );
-
-	$view_rows = $wpdb->get_results( $wpdb->prepare(
-		"SELECT DATE(viewed_at) AS d, COUNT(*) AS p FROM {$views} WHERE viewed_at >= %s GROUP BY d", // phpcs:ignore
-		$prev_start
-	) );
-	$visitor_rows = minn_admin_iawp_has( 'sessions' ) ? $wpdb->get_results( $wpdb->prepare(
-		"SELECT DATE(created_at) AS d, COUNT(DISTINCT visitor_id) AS v FROM {$sessions} WHERE created_at >= %s GROUP BY d", // phpcs:ignore
-		$prev_start
-	) ) : array();
-	if ( ! $view_rows && ! $visitor_rows ) {
-		return $traffic;
-	}
-
-	$map  = array();
-	$prev = 0;
-	foreach ( (array) $visitor_rows as $row ) {
-		if ( $row->d >= $cur_start ) {
-			$map[ $row->d ] = array( 'visitors' => (int) $row->v, 'pageviews' => 0 );
-		} else {
-			$prev += (int) $row->v;
-		}
-	}
-	foreach ( (array) $view_rows as $row ) {
-		if ( $row->d < $cur_start ) {
+	// Pageviews from views, visitors from sessions, each by its UTC day.
+	$per_day = array();
+	foreach ( array( array( 'views', 'viewed_at', 'p', array( 'count' => '*' ) ), array( 'sessions', 'created_at', 'v', array( 'distinct' => 'visitor_id' ) ) ) as $q ) {
+		if ( ! minn_admin_iawp_has( $q[0] ) ) {
 			continue;
 		}
-		if ( ! isset( $map[ $row->d ] ) ) {
-			$map[ $row->d ] = array( 'visitors' => 0, 'pageviews' => 0 );
+		foreach ( Minn_Admin_Kernel_SQL::totals( minn_admin_iawp_table( $q[0] ), array( 'd' => array( 'day' => $q[1], 'clock' => 'local' ) ), array( 'n' => $q[3] ), array( $q[1] => array( 'op' => '>=', 'value' => $since ) ), array(), 5000 ) as $row ) {
+			$per_day[ $row['d'] ]          = $per_day[ $row['d'] ] ?? array( 'd' => $row['d'], 'v' => 0, 'p' => 0 );
+			$per_day[ $row['d'] ][ $q[2] ] = (int) $row['n'];
 		}
-		$map[ $row->d ]['pageviews'] = (int) $row->p;
 	}
-
-	return array(
-		'source'        => minn_admin_iawp_source_name(),
-		'days'          => $map,
-		'prev_visitors' => $prev,
-	);
+	if ( ! $per_day ) {
+		return $traffic;
+	}
+	return minn_admin_traffic_series( minn_admin_iawp_source_name(), array_values( $per_day ), $cur_start );
 }, 10, 2 );
 
 /**
@@ -617,7 +546,8 @@ add_filter( 'minn_admin_traffic_report', function ( $report, $from, $to ) {
 			'cities',
 			'city_id',
 			'city',
-			'(SELECT c2.country FROM ' . minn_admin_iawp_table( 'countries' ) . ' c2 WHERE c2.country_id = d.country_id LIMIT 1)'
+			'c2.country',
+			array( 'c2' => array( 'table' => minn_admin_iawp_table( 'countries' ), 'on' => array( 'country_id' => 'd.country_id' ) ) )
 		);
 		if ( $cities ) {
 			$sections[] = array( 'id' => 'cities', 'label' => __( 'Cities', 'minn-admin' ), 'rows' => $cities );

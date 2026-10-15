@@ -34,46 +34,24 @@ add_filter( 'minn_admin_traffic', function ( $traffic, $days ) {
 	if ( null !== $traffic || ! defined( 'BURST_VERSION' ) ) {
 		return $traffic;
 	}
-	if ( ! minn_admin_burst_ready() ) {
+	if ( ! minn_admin_burst_ready() || ! Minn_Admin_Kernel_SQL::exists( 'burst_statistics' ) ) {
 		return $traffic;
 	}
-
-	global $wpdb;
-	$table = $wpdb->prefix . 'burst_statistics';
-	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
-		return $traffic;
-	}
-
-	$days       = max( 1, (int) $days );
-	$cur_start  = gmdate( 'Y-m-d', time() - ( $days - 1 ) * DAY_IN_SECONDS );
-	$prev_since = time() - ( 2 * $days - 1 ) * DAY_IN_SECONDS;
-
-	$rows = $wpdb->get_results( $wpdb->prepare(
-		"SELECT DATE(FROM_UNIXTIME(time)) AS d, COUNT(DISTINCT uid) AS v, COUNT(*) AS p FROM {$table} WHERE time >= %d GROUP BY d", // phpcs:ignore
-		$prev_since
-	) );
+	$days         = max( 1, (int) $days );
+	list( $cur_start ) = minn_admin_traffic_starts( $days );
+	// A hit's day is the UTC day of its epoch, as the drill-down's windows are.
+	$rows = Minn_Admin_Kernel_SQL::totals(
+		'burst_statistics',
+		array( 'd' => array( 'day' => 'time', 'clock' => 'local-epoch' ) ),
+		array( 'v' => array( 'distinct' => 'uid' ), 'p' => array( 'count' => '*' ) ),
+		array( 'time' => array( 'op' => '>=', 'value' => time() - ( 2 * $days - 1 ) * DAY_IN_SECONDS ) ),
+		array(),
+		5000
+	);
 	if ( ! $rows ) {
 		return $traffic;
 	}
-
-	$map  = array();
-	$prev = 0;
-	foreach ( $rows as $row ) {
-		if ( $row->d >= $cur_start ) {
-			$map[ $row->d ] = array(
-				'visitors'  => (int) $row->v,
-				'pageviews' => (int) $row->p,
-			);
-		} else {
-			$prev += (int) $row->v;
-		}
-	}
-
-	return array(
-		'source'        => 'Burst Statistics',
-		'days'          => $map,
-		'prev_visitors' => $prev,
-	);
+	return minn_admin_traffic_series( 'Burst Statistics', $rows, $cur_start );
 }, 10, 2 );
 
 /**
@@ -81,120 +59,63 @@ add_filter( 'minn_admin_traffic', function ( $traffic, $days ) {
  * (+ page_id when set) and top referrers from burst_sessions.referrer.
  */
 add_filter( 'minn_admin_traffic_day', function ( $data, $from, $to ) {
-	if ( null !== $data ) {
+	if ( null !== $data || ! defined( 'BURST_VERSION' ) ) {
 		return $data;
 	}
-	if ( ! defined( 'BURST_VERSION' ) ) {
-		return $data;
-	}
-	if ( ! minn_admin_burst_ready() ) {
+	if ( ! minn_admin_burst_ready() || ! Minn_Admin_Kernel_SQL::exists( 'burst_statistics' ) ) {
 		return $data;
 	}
 
-	global $wpdb;
-	$table = $wpdb->prefix . 'burst_statistics';
-	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
-		return $data;
-	}
-
-	// Inclusive Y-m-d window → unix range (UTC, matching the traffic adapter's FROM_UNIXTIME).
+	// Inclusive Y-m-d window → unix range (UTC, matching the series' days).
 	$from_ts = strtotime( $from . ' 00:00:00 UTC' );
 	$to_ts   = strtotime( $to . ' 23:59:59 UTC' );
 	if ( ! $from_ts || ! $to_ts ) {
 		return $data;
 	}
+	$window = array( 'time' => array( 'op' => '>=', 'value' => $from_ts ), "time\0to" => array( 'op' => '<=', 'value' => $to_ts ) );
 
-	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is prefix-scoped.
-	$rows = $wpdb->get_results(
-		$wpdb->prepare(
-			"SELECT page_url, page_id,
-				COUNT(DISTINCT uid) AS visitors,
-				COUNT(*) AS pageviews
-			FROM {$table}
-			WHERE time >= %d AND time <= %d
-			GROUP BY page_url, page_id
-			ORDER BY pageviews DESC, visitors DESC
-			LIMIT 25",
-			$from_ts,
-			$to_ts
-		)
+	$rows  = Minn_Admin_Kernel_SQL::totals(
+		'burst_statistics',
+		array( 'page_url', 'page_id' ),
+		array( 'visitors' => array( 'distinct' => 'uid' ), 'pageviews' => array( 'count' => '*' ) ),
+		$window,
+		array( 'pageviews' => 'DESC', 'visitors' => 'DESC' ),
+		25
 	);
-
 	$pages = array();
-	foreach ( (array) $rows as $row ) {
-		$path    = (string) $row->page_url;
+	foreach ( $rows as $row ) {
+		$path = (string) $row['page_url'];
 		if ( '' === $path ) {
 			$path = '/';
 		}
 		if ( '/' !== $path[0] ) {
 			$path = '/' . ltrim( $path, '/' );
 		}
-		$post_id = (int) $row->page_id;
-		$title   = '';
-		$url     = '';
-		if ( $post_id > 0 ) {
-			$post = get_post( $post_id );
-			if ( $post ) {
-				$title = html_entity_decode( get_the_title( $post ), ENT_QUOTES );
-				$url   = get_permalink( $post ) ?: '';
-			}
-		}
-		if ( '' === $title ) {
-			$title = ( '/' === $path ) ? 'Homepage' : $path;
-			$url   = home_url( $path );
-		}
-		$pages[] = array(
-			'title'     => $title,
-			'path'      => $path,
-			'url'       => $url,
-			'postId'    => $post_id,
-			'visitors'  => (int) $row->visitors,
-			'pageviews' => (int) $row->pageviews,
-		);
+		$pages[] = minn_admin_traffic_page( $row['page_id'], $path, $row['visitors'], $row['pageviews'] );
 	}
 
 	$referrers = array();
-	$sessions  = $wpdb->prefix . 'burst_sessions';
-	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $sessions ) ) === $sessions ) {
-		// Sessions lack a day column; join via first hit in the window when possible.
-		// Fall back to any non-empty referrer counted against sessions that have
-		// a statistics row in range.
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		$ref_rows = $wpdb->get_results(
-			$wpdb->prepare(
-				"SELECT s.referrer AS ref, COUNT(DISTINCT s.ID) AS v
-				FROM {$sessions} s
-				INNER JOIN {$table} st ON st.session_id = s.ID
-				WHERE st.time >= %d AND st.time <= %d
-					AND s.referrer IS NOT NULL AND s.referrer != ''
-				GROUP BY s.referrer
-				ORDER BY v DESC
-				LIMIT 15",
-				$from_ts,
-				$to_ts
-			)
-		);
-		foreach ( (array) $ref_rows as $row ) {
-			$ref = (string) $row->ref;
-			if ( '' === $ref ) {
-				continue;
-			}
-			$host = wp_parse_url( $ref, PHP_URL_HOST );
-			if ( ! $host && preg_match( '/^[\w.-]+\.[a-z]{2,}$/i', $ref ) ) {
-				$host = $ref;
-			}
-			$referrers[] = array(
-				'label'     => $host ? $host : $ref,
-				'visitors'  => (int) $row->v,
-				'pageviews' => (int) $row->v,
-			);
+	if ( Minn_Admin_Kernel_SQL::exists( 'burst_sessions' ) ) {
+		// Sessions lack a day column: counted against the sessions that have
+		// a statistics row in the window.
+		$hits      = array();
+		foreach ( $window as $k => $rule ) {
+			$hits[ 'st.' . $k ] = $rule;
 		}
+		$referrers = minn_admin_traffic_referrers(
+			Minn_Admin_Kernel_SQL::totals(
+				array( 'table' => 'burst_sessions', 'joins' => array( 'st' => array( 'table' => 'burst_statistics', 'on' => array( 'session_id' => 'e.ID' ) ) ) ),
+				array( 'referrer' => 'ref' ),
+				array( 'v' => array( 'distinct' => 'ID' ) ),
+				$hits + array( 'referrer' => array( 'not' => array( '' ) ) ),
+				array( 'v' => 'DESC' ),
+				15
+			),
+			'ref',
+			'v',
+			'v'
+		);
 	}
 
-	return array(
-		'source'    => 'Burst Statistics',
-		'pages'     => $pages,
-		'referrers' => $referrers,
-		'adminUrl'  => admin_url( 'admin.php?page=burst' ),
-	);
+	return minn_admin_traffic_day_reply( 'Burst Statistics', $pages, $referrers, admin_url( 'admin.php?page=burst' ) );
 }, 10, 3 );

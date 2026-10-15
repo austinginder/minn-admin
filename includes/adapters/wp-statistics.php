@@ -40,52 +40,28 @@ add_filter( 'minn_admin_traffic', function ( $traffic, $days ) {
 	if ( ! minn_admin_wps_ready() ) {
 		return $traffic;
 	}
-
-	global $wpdb;
-	$days       = max( 1, (int) $days );
-	$cur_start  = gmdate( 'Y-m-d', time() - ( $days - 1 ) * DAY_IN_SECONDS );
-	$prev_start = gmdate( 'Y-m-d', time() - ( 2 * $days - 1 ) * DAY_IN_SECONDS );
-
-	$rows    = array();
-	$summary = $wpdb->prefix . 'statistics_summary_totals';
-	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $summary ) ) === $summary ) {
-		$rows = $wpdb->get_results( $wpdb->prepare(
-			"SELECT date AS d, visitors AS v, views AS p FROM {$summary} WHERE date >= %s", // phpcs:ignore
-			$prev_start
-		) );
+	list( $cur_start, $prev_start ) = minn_admin_traffic_starts( $days );
+	$rows = array();
+	if ( Minn_Admin_Kernel_SQL::exists( 'statistics_summary_totals' ) ) {
+		$rows = Minn_Admin_Kernel_SQL::select( 'statistics_summary_totals', array( 'date' => 'd', 'visitors' => 'v', 'views' => 'p' ), array( 'date' => array( 'op' => '>=', 'value' => $prev_start ) ) );
 	}
 	if ( ! $rows ) {
-		$visitor = $wpdb->prefix . 'statistics_visitor';
-		if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $visitor ) ) !== $visitor ) {
+		if ( ! Minn_Admin_Kernel_SQL::exists( 'statistics_visitor' ) ) {
 			return $traffic;
 		}
-		$rows = $wpdb->get_results( $wpdb->prepare(
-			"SELECT last_counter AS d, COUNT(*) AS v, COALESCE(SUM(hits), 0) AS p FROM {$visitor} WHERE last_counter >= %s GROUP BY last_counter", // phpcs:ignore
-			$prev_start
-		) );
+		$rows = Minn_Admin_Kernel_SQL::totals(
+			'statistics_visitor',
+			array( 'last_counter' => 'd' ),
+			array( 'v' => array( 'count' => '*' ), 'p' => array( 'sum' => 'hits' ) ),
+			array( 'last_counter' => array( 'op' => '>=', 'value' => $prev_start ) ),
+			array(),
+			5000
+		);
 	}
 	if ( ! $rows ) {
 		return $traffic;
 	}
-
-	$map  = array();
-	$prev = 0;
-	foreach ( $rows as $row ) {
-		if ( $row->d >= $cur_start ) {
-			$map[ $row->d ] = array(
-				'visitors'  => (int) $row->v,
-				'pageviews' => (int) $row->p,
-			);
-		} else {
-			$prev += (int) $row->v;
-		}
-	}
-
-	return array(
-		'source'        => 'WP Statistics',
-		'days'          => $map,
-		'prev_visitors' => $prev,
-	);
+	return minn_admin_traffic_series( 'WP Statistics', $rows, $cur_start );
 }, 10, 2 );
 
 /**
@@ -95,41 +71,22 @@ add_filter( 'minn_admin_traffic', function ( $traffic, $days ) {
  * total so the modal stays scannable without inventing uniques.
  */
 add_filter( 'minn_admin_traffic_day', function ( $data, $from, $to ) {
-	if ( null !== $data ) {
-		return $data;
-	}
-	if ( ! defined( 'WP_STATISTICS_VERSION' ) ) {
+	if ( null !== $data || ! defined( 'WP_STATISTICS_VERSION' ) ) {
 		return $data;
 	}
 	if ( ! minn_admin_wps_ready() ) {
 		return $data;
 	}
 
-	global $wpdb;
-	$pages_table = $wpdb->prefix . 'statistics_pages';
-	$has_pages   = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $pages_table ) ) === $pages_table;
-
 	$pages = array();
-	if ( $has_pages ) {
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is prefix-scoped.
-		$rows = $wpdb->get_results(
-			$wpdb->prepare(
-				"SELECT uri, type, id, SUM(count) AS hits
-				FROM {$pages_table}
-				WHERE date >= %s AND date <= %s
-				GROUP BY uri, type, id
-				ORDER BY hits DESC
-				LIMIT 25",
-				$from,
-				$to
-			)
-		);
-		foreach ( (array) $rows as $row ) {
-			$uri     = ltrim( (string) $row->uri, '/' );
+	if ( Minn_Admin_Kernel_SQL::exists( 'statistics_pages' ) ) {
+		$rows = Minn_Admin_Kernel_SQL::totals( 'statistics_pages', array( 'uri', 'type', 'id' ), array( 'hits' => array( 'sum' => 'count' ) ), minn_admin_traffic_window( 'date', $from, $to ), array( 'hits' => 'DESC' ), 25 );
+		foreach ( $rows as $row ) {
+			$uri     = ltrim( (string) $row['uri'], '/' );
 			$path    = '/' . $uri;
-			$type    = (string) $row->type;
-			$obj_id  = (int) $row->id;
-			$hits    = (int) $row->hits;
+			$type    = (string) $row['type'];
+			$obj_id  = (int) $row['id'];
+			$hits    = (int) $row['hits'];
 			$title   = '';
 			$url     = '';
 			$post_id = 0;
@@ -172,49 +129,25 @@ add_filter( 'minn_admin_traffic_day', function ( $data, $from, $to ) {
 		}
 	}
 
-	$referrers     = array();
-	$visitor_table = $wpdb->prefix . 'statistics_visitor';
-	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $visitor_table ) ) === $visitor_table ) {
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		$ref_rows = $wpdb->get_results(
-			$wpdb->prepare(
-				"SELECT referred, COUNT(*) AS v
-				FROM {$visitor_table}
-				WHERE last_counter >= %s AND last_counter <= %s
-					AND referred IS NOT NULL AND referred != ''
-				GROUP BY referred
-				ORDER BY v DESC
-				LIMIT 15",
-				$from,
-				$to
-			)
+	$referrers = array();
+	if ( Minn_Admin_Kernel_SQL::exists( 'statistics_visitor' ) ) {
+		$referrers = minn_admin_traffic_referrers(
+			Minn_Admin_Kernel_SQL::totals(
+				'statistics_visitor',
+				array( 'referred' ),
+				array( 'v' => array( 'count' => '*' ) ),
+				minn_admin_traffic_window( 'last_counter', $from, $to ) + array( 'referred' => array( 'not' => array( '' ) ) ),
+				array( 'v' => 'DESC' ),
+				15
+			),
+			'referred',
+			'v',
+			'v'
 		);
-		foreach ( (array) $ref_rows as $row ) {
-			$ref = (string) $row->referred;
-			if ( '' === $ref ) {
-				continue;
-			}
-			$host = wp_parse_url( $ref, PHP_URL_HOST );
-			// referred is sometimes a bare host without a scheme.
-			if ( ! $host && preg_match( '/^[\w.-]+\.[a-z]{2,}$/i', $ref ) ) {
-				$host = $ref;
-			}
-			$referrers[] = array(
-				'label'     => $host ? $host : $ref,
-				'visitors'  => (int) $row->v,
-				'pageviews' => (int) $row->v,
-			);
-		}
 	}
 
 	if ( ! $pages && ! $referrers ) {
 		return $data; // no breakdown — leave room for another provider
 	}
-
-	return array(
-		'source'    => 'WP Statistics',
-		'pages'     => $pages,
-		'referrers' => $referrers,
-		'adminUrl'  => admin_url( 'admin.php?page=wps_overview_page' ),
-	);
+	return minn_admin_traffic_day_reply( 'WP Statistics', $pages, $referrers, admin_url( 'admin.php?page=wps_overview_page' ) );
 }, 10, 3 );

@@ -32,46 +32,17 @@ add_filter( 'minn_admin_traffic', function ( $traffic, $days ) {
 	if ( null !== $traffic ) {
 		return $traffic; // another provider answered first
 	}
-	if ( ! minn_admin_koko_ready() ) {
+	if ( ! minn_admin_koko_ready() || ! Minn_Admin_Kernel_SQL::exists( 'koko_analytics_site_stats' ) ) {
 		return $traffic;
 	}
-	if ( ! defined( 'KOKO_ANALYTICS_VERSION' ) && ! class_exists( 'KokoAnalytics\Plugin' ) ) {
-		return $traffic;
-	}
-
-	global $wpdb;
-	$table = $wpdb->prefix . 'koko_analytics_site_stats';
-	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
-		return $traffic;
-	}
-
-	$days       = max( 1, (int) $days );
-	$cur_start  = gmdate( 'Y-m-d', time() - ( $days - 1 ) * DAY_IN_SECONDS );
-	$prev_start = gmdate( 'Y-m-d', time() - ( 2 * $days - 1 ) * DAY_IN_SECONDS );
-
-	$rows = $wpdb->get_results( $wpdb->prepare(
-		"SELECT date, visitors, pageviews FROM {$table} WHERE date >= %s ORDER BY date ASC", // phpcs:ignore
-		$prev_start
-	) );
-
-	$map  = array();
-	$prev = 0;
-	foreach ( (array) $rows as $row ) {
-		if ( $row->date >= $cur_start ) {
-			$map[ $row->date ] = array(
-				'visitors'  => (int) $row->visitors,
-				'pageviews' => (int) $row->pageviews,
-			);
-		} else {
-			$prev += (int) $row->visitors;
-		}
-	}
-
-	return array(
-		'source'        => 'Koko Analytics',
-		'days'          => $map,
-		'prev_visitors' => $prev,
+	list( $cur_start, $prev_start ) = minn_admin_traffic_starts( $days );
+	$rows = Minn_Admin_Kernel_SQL::select(
+		'koko_analytics_site_stats',
+		array( 'date' => 'd', 'visitors' => 'v', 'pageviews' => 'p' ),
+		array( 'date' => array( 'op' => '>=', 'value' => $prev_start ) ),
+		array( 'date' => 'ASC' )
 	);
+	return minn_admin_traffic_series( 'Koko Analytics', $rows, $cur_start );
 }, 10, 2 );
 
 /**
@@ -82,112 +53,47 @@ add_filter( 'minn_admin_traffic_day', function ( $data, $from, $to ) {
 	if ( null !== $data ) {
 		return $data;
 	}
-	if ( ! defined( 'KOKO_ANALYTICS_VERSION' ) && ! class_exists( 'KokoAnalytics\Plugin' ) ) {
-		return $data;
-	}
-	if ( ! minn_admin_koko_ready() ) {
-		return $data;
-	}
-
-	global $wpdb;
-	$stats = $wpdb->prefix . 'koko_analytics_post_stats';
-	$paths = $wpdb->prefix . 'koko_analytics_paths';
-	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $stats ) ) !== $stats ) {
+	if ( ! minn_admin_koko_ready() || ! Minn_Admin_Kernel_SQL::exists( 'koko_analytics_post_stats' ) ) {
 		return $data;
 	}
 
 	// Aggregate across the window (daily bars are 1 day; 90d chart buckets weeks).
-	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table names are prefix-scoped.
-	$rows = $wpdb->get_results(
-		$wpdb->prepare(
-			"SELECT ps.post_id, ps.path_id,
-				SUM(ps.visitors) AS visitors,
-				SUM(ps.pageviews) AS pageviews,
-				MAX(paths.path) AS path
-			FROM {$stats} ps
-			LEFT JOIN {$paths} paths ON paths.id = ps.path_id
-			WHERE ps.date >= %s AND ps.date <= %s
-			GROUP BY ps.path_id, ps.post_id
-			ORDER BY pageviews DESC, visitors DESC
-			LIMIT 25",
-			$from,
-			$to
-		)
+	$rows  = Minn_Admin_Kernel_SQL::totals(
+		array( 'table' => 'koko_analytics_post_stats', 'joins' => array( 'paths' => array( 'table' => 'koko_analytics_paths', 'on' => array( 'id' => 'e.path_id' ) ) ) ),
+		array( 'path_id', 'post_id' ),
+		array( 'visitors' => array( 'sum' => 'visitors' ), 'pageviews' => array( 'sum' => 'pageviews' ), 'path' => array( 'max' => 'paths.path' ) ),
+		minn_admin_traffic_window( 'date', $from, $to ),
+		array( 'pageviews' => 'DESC', 'visitors' => 'DESC' ),
+		25
 	);
-
 	$pages = array();
-	foreach ( (array) $rows as $row ) {
-		$post_id = (int) $row->post_id;
-		$path    = $row->path ? (string) $row->path : '/';
-		// Prefer the post title when Koko tied the hit to a post; path for pure URLs.
-		$title = '';
-		$url   = '';
-		if ( $post_id > 0 ) {
-			$post = get_post( $post_id );
-			if ( $post ) {
-				$title = html_entity_decode( get_the_title( $post ), ENT_QUOTES );
-				$url   = get_permalink( $post ) ?: '';
-			}
-		}
-		if ( '' === $title ) {
-			$title = ( '/' === $path || '' === $path ) ? 'Homepage' : $path;
-			$url   = home_url( $path ? $path : '/' );
-		}
-		$pages[] = array(
-			'title'     => $title,
-			'path'      => $path,
-			'url'       => $url,
-			'postId'    => $post_id,
-			'visitors'  => (int) $row->visitors,
-			'pageviews' => (int) $row->pageviews,
-		);
+	foreach ( $rows as $row ) {
+		// The post's title when Koko tied the hit to a post; the path for pure URLs.
+		$pages[] = minn_admin_traffic_page( $row['post_id'], $row['path'] ? (string) $row['path'] : '/', $row['visitors'], $row['pageviews'] );
 	}
 
-	$referrers = array();
-	$ref_stats = $wpdb->prefix . 'koko_analytics_referrer_stats';
 	// Koko 2.x renamed referrer_urls (url) to referrer_labels (value); a site
 	// whose migration has not run yet still has the old table.
-	$ref_urls  = $wpdb->prefix . 'koko_analytics_referrer_labels';
-	$ref_col   = 'value';
-	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $ref_urls ) ) !== $ref_urls ) {
-		$ref_urls = $wpdb->prefix . 'koko_analytics_referrer_urls';
-		$ref_col  = 'url';
-	}
-	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $ref_stats ) ) === $ref_stats
-		&& $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $ref_urls ) ) === $ref_urls ) {
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		$ref_rows = $wpdb->get_results(
-			$wpdb->prepare(
-				"SELECT ru.{$ref_col} AS url, SUM(rs.unique_hits) AS v, SUM(rs.hits) AS p
-				FROM {$ref_stats} rs
-				INNER JOIN {$ref_urls} ru ON ru.id = rs.id
-				WHERE rs.date >= %s AND rs.date <= %s
-				GROUP BY rs.id
-				ORDER BY v DESC, p DESC
-				LIMIT 15",
-				$from,
-				$to
-			)
+	list( $labels, $col ) = Minn_Admin_Kernel_SQL::exists( 'koko_analytics_referrer_labels' )
+		? array( 'koko_analytics_referrer_labels', 'value' )
+		: array( 'koko_analytics_referrer_urls', 'url' );
+	$referrers = array();
+	if ( Minn_Admin_Kernel_SQL::exists( 'koko_analytics_referrer_stats' ) && Minn_Admin_Kernel_SQL::exists( $labels ) ) {
+		$referrers = minn_admin_traffic_referrers(
+			Minn_Admin_Kernel_SQL::totals(
+				array( 'table' => 'koko_analytics_referrer_stats', 'joins' => array( 'ru' => array( 'table' => $labels, 'on' => array( 'id' => 'e.id' ) ) ) ),
+				array( 'id' ),
+				array( 'url' => array( 'max' => 'ru.' . $col ), 'v' => array( 'sum' => 'unique_hits' ), 'p' => array( 'sum' => 'hits' ) ),
+				// Only stats with a label: Koko's own inner join, an empty one left out.
+				minn_admin_traffic_window( 'date', $from, $to ) + array( 'ru.' . $col => array( 'not' => array( '' ) ) ),
+				array( 'v' => 'DESC', 'p' => 'DESC' ),
+				15
+			),
+			'url',
+			'v',
+			'p'
 		);
-		foreach ( (array) $ref_rows as $row ) {
-			$url = (string) $row->url;
-			if ( '' === $url ) {
-				continue;
-			}
-			// Host-only label when possible so the list stays scannable.
-			$host = wp_parse_url( $url, PHP_URL_HOST );
-			$referrers[] = array(
-				'label'     => $host ? $host : $url,
-				'visitors'  => (int) $row->v,
-				'pageviews' => (int) $row->p,
-			);
-		}
 	}
 
-	return array(
-		'source'    => 'Koko Analytics',
-		'pages'     => $pages,
-		'referrers' => $referrers,
-		'adminUrl'  => admin_url( 'index.php?page=koko-analytics' ),
-	);
+	return minn_admin_traffic_day_reply( 'Koko Analytics', $pages, $referrers, admin_url( 'index.php?page=koko-analytics' ) );
 }, 10, 3 );

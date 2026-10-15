@@ -247,6 +247,7 @@ require_once MINN_ADMIN_DIR . 'includes/adapters/powerpress.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/the-events-calendar.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/wp-job-manager.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/safe-svg.php';
+require_once MINN_ADMIN_DIR . 'includes/adapters/traffic-kit.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/koko-analytics.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/wp-statistics.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/burst-statistics.php';

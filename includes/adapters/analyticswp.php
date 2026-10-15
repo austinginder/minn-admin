@@ -45,61 +45,28 @@ add_filter( 'minn_admin_traffic', function ( $traffic, $days ) {
 	if ( null !== $traffic ) {
 		return $traffic; // another provider answered first
 	}
-	if ( ! minn_admin_awp_ready() ) {
-		return $traffic;
-	}
-	if ( ! defined( 'ANALYTICSWP_VERSION' ) ) {
+	if ( ! minn_admin_awp_ready() || ! defined( 'ANALYTICSWP_VERSION' ) || ! Minn_Admin_Kernel_SQL::exists( 'analytics_wp_events' ) ) {
 		return $traffic;
 	}
 
-	global $wpdb;
-	$table = $wpdb->prefix . 'analytics_wp_events';
-	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
-		return $traffic;
-	}
-
-	// Site-timezone offset as ±H:MM for DATE_ADD — matches AnalyticsWP's own
-	// dashboard bucketing of its UTC timestamps.
-	$offset  = (int) wp_timezone()->getOffset( new DateTimeImmutable( 'now', new DateTimeZone( 'UTC' ) ) );
-	$hours   = intdiv( abs( $offset ), 3600 );
-	$minutes = intdiv( abs( $offset ) % 3600, 60 );
-	$tz      = sprintf( '%s%d:%02d', $offset < 0 ? '-' : '+', $hours, $minutes );
-
+	// Site days, as AnalyticsWP's own dashboard buckets its UTC timestamps:
+	// each day the site day it falls on, the window from the site's midnight.
 	$days       = max( 1, (int) $days );
 	$now_local  = current_datetime();
 	$cur_start  = $now_local->modify( '-' . ( $days - 1 ) . ' days' )->format( 'Y-m-d' );
 	$prev_start = $now_local->modify( '-' . ( 2 * $days - 1 ) . ' days' )->format( 'Y-m-d' );
+	$offset     = (int) round( (float) get_option( 'gmt_offset', 0 ) * HOUR_IN_SECONDS );
 
-	$rows = $wpdb->get_results( $wpdb->prepare(
-		"SELECT DATE(DATE_ADD(timestamp, INTERVAL %s HOUR_MINUTE)) AS day,
-			COUNT(*) AS pageviews,
-			COUNT(DISTINCT unique_session_id) AS visitors
-		FROM {$table}
-		WHERE event_type = 'pageview'
-			AND DATE(DATE_ADD(timestamp, INTERVAL %s HOUR_MINUTE)) >= %s
-		GROUP BY day
-		ORDER BY day ASC", // phpcs:ignore
-		$tz,
-		$tz,
-		$prev_start
-	) );
-
-	$map  = array();
-	$prev = 0;
-	foreach ( (array) $rows as $row ) {
-		if ( $row->day >= $cur_start ) {
-			$map[ $row->day ] = array(
-				'visitors'  => (int) $row->visitors,
-				'pageviews' => (int) $row->pageviews,
-			);
-		} else {
-			$prev += (int) $row->visitors;
-		}
-	}
-
-	return array(
-		'source'        => 'AnalyticsWP',
-		'days'          => $map,
-		'prev_visitors' => $prev,
+	$rows = Minn_Admin_Kernel_SQL::totals(
+		'analytics_wp_events',
+		array( 'd' => array( 'day' => 'timestamp', 'clock' => 'utc' ) ),
+		array( 'p' => array( 'count' => '*' ), 'v' => array( 'distinct' => 'unique_session_id' ) ),
+		array(
+			'event_type' => 'pageview',
+			'timestamp'  => array( 'op' => '>=', 'value' => gmdate( 'Y-m-d H:i:s', strtotime( $prev_start . ' 00:00:00 UTC' ) - $offset ) ),
+		),
+		array( 'd' => 'ASC' ),
+		5000
 	);
+	return minn_admin_traffic_series( 'AnalyticsWP', $rows, $cur_start );
 }, 10, 2 );
