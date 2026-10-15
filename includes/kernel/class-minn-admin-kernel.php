@@ -96,7 +96,8 @@
  *                   // must be true, the text of whom it sent to or array( 'sent' => true, … ),
  *                   // and no wp_mail_failed may fire while it runs
  *       'args'   => array( name => schema ),   // JSON-schema keys only, checked after the gate and the
- *                                      // row: 400 rest_missing_callback_param / rest_invalid_param
+ *                                      // row: 400 rest_missing_callback_param / rest_invalid_param;
+ *                                      // no 'default', 'required' a boolean, no name the route captures
  *       'fail'   => …,                // the 500 when the expectation does not hold
  *       'reply'  => callable( int $id, ?array $fresh, mixed $ran ): array,   // merged over { ok: true }
  *       'done'   => …,                // the reply's message
@@ -181,7 +182,9 @@ class Minn_Admin_Kernel {
 	 *
 	 * @param string $path Route under minn-admin/v1, may hold (?P<id>\d+).
 	 * @param array  $def  methods, gate (callable, required), run (callable(
-	 *                     WP_REST_Request, array ctx )), active, args.
+	 *                     WP_REST_Request, array ctx )), active, args (JSON
+	 *                     schemas the kernel checks after the gate, as an
+	 *                     action's are).
 	 *                     Any message in it is translated when declared, so
 	 *                     an endpoint declared as its file loads keeps its
 	 *                     messages inside run.
@@ -415,8 +418,8 @@ class Minn_Admin_Kernel {
 				$why = 'its slug is not a key';
 			} elseif ( ! empty( $taken[ $method . ' ' . $path ] ) ) {
 				$why = "{$method} on its route is taken";
-			} elseif ( isset( $action['args'] ) && ! self::args_ok( $action['args'] ) ) {
-				$why = 'its args are not schemas (no callbacks, no id)';
+			} elseif ( isset( $action['args'] ) && ! self::args_ok( $action['args'], $item ) ) {
+				$why = 'its args are not schemas (no callbacks, no default, a boolean required, no name the route captures)';
 			}
 			if ( '' !== $why ) {
 				_doing_it_wrong( 'minn_admin_resource', esc_html( "{$res['id']} action {$slug}: {$why}, so it has no route." ), 'Minn Admin 0.46.0' );
@@ -449,6 +452,10 @@ class Minn_Admin_Kernel {
 			_doing_it_wrong( 'minn_admin_endpoint', esc_html( sprintf( __( '%s has no gate, so it has no route.', 'minn-admin' ), $ep['path'] ) ), 'Minn Admin 0.46.0' );
 			return;
 		}
+		if ( isset( $ep['args'] ) && ! self::args_ok( $ep['args'], $ep['path'] ) ) {
+			_doing_it_wrong( 'minn_admin_endpoint', esc_html( "{$ep['path']}: its args are not schemas (no callbacks, no default, a boolean required, no name the route captures), so it has no route." ), 'Minn Admin 0.46.0' );
+			return;
+		}
 		$run = $ep['run'] ?? null;
 		$args = array(
 			'minn_file'           => $ep['file'],
@@ -469,12 +476,10 @@ class Minn_Admin_Kernel {
 				} elseif ( false !== strpos( $ep['path'], '(?P<id>' ) ) {
 					$ctx['id'] = (string) Minn_Admin::path_param( $r );
 				}
-				return call_user_func( $run, $r, $ctx );
+				$bad = Minn_Admin_Kernel::check_args( (array) ( $ep['args'] ?? array() ), $r );
+				return $bad ? $bad : call_user_func( $run, $r, $ctx );
 			} ),
 		);
-		if ( ! empty( $ep['args'] ) ) {
-			$args['args'] = $ep['args'];
-		}
 		register_rest_route( self::NS, '/' . $ep['path'], $args );
 	}
 
@@ -1005,22 +1010,9 @@ class Minn_Admin_Kernel {
 		if ( is_wp_error( $row ) ) {
 			return $row;
 		}
-		foreach ( (array) ( $a['args'] ?? array() ) as $name => $schema ) {
-			$required = ! empty( $schema['required'] );
-			unset( $schema['required'] );
-			if ( ! $r->has_param( $name ) ) {
-				if ( $required ) {
-					/* translators: %s: the parameter's name. */
-					return new WP_Error( 'rest_missing_callback_param', sprintf( __( 'Missing parameter: %s', 'minn-admin' ), $name ), array( 'status' => 400, 'params' => array( $name ) ) );
-				}
-				continue;
-			}
-			$valid = rest_validate_value_from_schema( $r->get_param( $name ), $schema, $name );
-			if ( is_wp_error( $valid ) ) {
-				/* translators: %s: the parameter's name. */
-				return new WP_Error( 'rest_invalid_param', sprintf( __( 'Invalid parameter: %s', 'minn-admin' ), $name ), array( 'status' => 400, 'params' => array( $name => $valid->get_error_message() ) ) );
-			}
-			$r->set_param( $name, rest_sanitize_value_from_schema( $r->get_param( $name ), $schema, $name ) );
+		$bad = self::check_args( (array) ( $a['args'] ?? array() ), $r );
+		if ( $bad ) {
+			return $bad;
 		}
 		if ( ! self::holds( $a['when'] ?? null, $row ) ) {
 			return self::fail( (string) ( $a['code'] ?? 'bad_status' ), $a['refuse'] ?? __( 'That cannot be done to this item now.', 'minn-admin' ), 400 );
@@ -1157,25 +1149,70 @@ class Minn_Admin_Kernel {
 	}
 
 	/**
-	 * Whether an action's args are what handle_action() checks: name =>
-	 * schema arrays, no callback of any kind (which WordPress would run before
-	 * the gate), and nothing named id (the URL's own).
+	 * Whether args are what check_args() checks: name => schema arrays, no
+	 * callback of any kind (which WordPress would run before the gate), no
+	 * 'default' (the kernel applies none, so one would only read as applied),
+	 * 'required' a boolean when given, and no name the route itself captures
+	 * (id, or a (?P<file>) of its path): the sanitized value is written back
+	 * through set_param(), which writes every source holding the name, the
+	 * URL's included, so a body could otherwise replace the path's value.
+	 *
+	 * @param mixed  $args Declared args.
+	 * @param string $path The route's pattern.
+	 * @return bool
 	 */
-	private static function args_ok( $args ) {
+	private static function args_ok( $args, $path ) {
 		if ( ! is_array( $args ) ) {
 			return false;
 		}
+		preg_match_all( '/\(\?P<([A-Za-z0-9_]+)>/', (string) $path, $m );
+		$captured = array_merge( array( 'id' ), $m[1] );
 		foreach ( $args as $name => $schema ) {
-			if ( ! is_string( $name ) || 'id' === $name || ! is_array( $schema ) ) {
+			if ( ! is_string( $name ) || in_array( $name, $captured, true ) || ! is_array( $schema ) ) {
 				return false;
 			}
-			foreach ( array( 'validate_callback', 'sanitize_callback', 'arg_options' ) as $k ) {
+			foreach ( array( 'validate_callback', 'sanitize_callback', 'arg_options', 'default' ) as $k ) {
 				if ( array_key_exists( $k, $schema ) ) {
 					return false;
 				}
 			}
+			if ( array_key_exists( 'required', $schema ) && ! is_bool( $schema['required'] ) ) {
+				return false;
+			}
 		}
 		return true;
+	}
+
+	/**
+	 * Declared args checked as JSON schemas, after the gate (and an item's
+	 * row) and before the run, the value the run reads set to its sanitized
+	 * form: the first refusal as a WP_Error, or null when every one holds.
+	 *
+	 * @param array           $args Name => schema ('required' for a must).
+	 * @param WP_REST_Request $r    Request.
+	 * @return WP_Error|null
+	 */
+	public static function check_args( array $args, WP_REST_Request $r ) {
+		foreach ( $args as $name => $schema ) {
+			$required = true === ( $schema['required'] ?? null );
+			unset( $schema['required'] );
+			// A null is no value, as WordPress reads one: missing when it
+			// must be sent, unchecked when it need not be.
+			if ( ! $r->has_param( $name ) || null === $r->get_param( $name ) ) {
+				if ( $required ) {
+					/* translators: %s: the parameter's name. */
+					return new WP_Error( 'rest_missing_callback_param', sprintf( __( 'Missing parameter: %s', 'minn-admin' ), $name ), array( 'status' => 400, 'params' => array( $name ) ) );
+				}
+				continue;
+			}
+			$valid = rest_validate_value_from_schema( $r->get_param( $name ), $schema, $name );
+			if ( is_wp_error( $valid ) ) {
+				/* translators: %s: the parameter's name. */
+				return new WP_Error( 'rest_invalid_param', sprintf( __( 'Invalid parameter: %s', 'minn-admin' ), $name ), array( 'status' => 400, 'params' => array( $name => $valid->get_error_message() ) ) );
+			}
+			$r->set_param( $name, rest_sanitize_value_from_schema( $r->get_param( $name ), $schema, $name ) );
+		}
+		return null;
 	}
 
 	/** A create's answer as an id: a positive int, or a string of digits; anything else is 0. */

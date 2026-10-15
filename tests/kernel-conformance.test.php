@@ -747,6 +747,73 @@ $hex            = md5( 'minn' ); // Starts with a letter: an int cast would make
 list( $st, $d ) = $call( 'GET', '/minn-admin/v1/minn-conformance/ep-hex/' . $hex );
 $check( 'an endpoint id that is not \d+ reaches the handler as its string', 200 === $st && $hex === ( $d['id'] ?? '' ), $st . ' ' . wp_json_encode( $d ) );
 
+// An endpoint's args: checked after its gate, as an action's are, so a caller
+// the gate refuses learns nothing from a 400; args with callbacks WordPress
+// would run before the gate leave it with no route.
+$ep_gate  = true;
+$ep_seen  = array();
+$ep_early = false;
+Minn_Admin_Kernel::endpoint( 'minn-conformance/ep-args', array(
+	'methods' => 'POST',
+	'gate'    => function () use ( &$ep_gate ) {
+		return $ep_gate;
+	},
+	'args'    => array(
+		'on' => array( 'type' => 'boolean', 'required' => true ),
+		'n'  => array( 'type' => 'integer' ),
+	),
+	'run'     => function ( WP_REST_Request $r ) use ( &$ep_seen ) {
+		$ep_seen[] = gettype( $r['on'] ) . ':' . wp_json_encode( $r['on'] );
+		return array( 'done' => true );
+	},
+) );
+Minn_Admin_Kernel::endpoint( 'minn-conformance/ep-args-early', array(
+	'methods' => 'POST',
+	'gate'    => '__return_true',
+	'args'    => array( 'x' => array( 'type' => 'string', 'sanitize_callback' => function ( $v ) use ( &$ep_early ) {
+		$ep_early = true;
+		return $v;
+	} ) ),
+	'run'     => '__return_true',
+) );
+$ep_base          = '/minn-admin/v1/minn-conformance/ep-args';
+list( $st, $d )   = $call( 'POST', $ep_base, array(), array() );
+list( $st2, $d2 ) = $call( 'POST', $ep_base, array(), array( 'on' => 'maybe' ) );
+$ep_gate          = false;
+list( $st3 )      = $call( 'POST', $ep_base, array(), array() );
+list( $st4 )      = $call( 'POST', $ep_base, array(), array( 'on' => 'maybe' ) );
+$ep_gate          = true;
+$call( 'POST', $ep_base, array(), array( 'on' => 'false' ) );
+list( $st5 ) = $call( 'POST', $ep_base . '-early', array(), array( 'x' => 'y' ) );
+$check( "an endpoint's arguments are checked after its gate, missing and invalid apart, and reach it as their type; args with callbacks have no route", 400 === $st && 'rest_missing_callback_param' === ( $d['code'] ?? '' ) && 400 === $st2 && 'rest_invalid_param' === ( $d2['code'] ?? '' ) && 403 === $st3 && 403 === $st4 && array( 'boolean:false' ) === $ep_seen && 404 === $st5 && ! $ep_early, implode( ' ', array( $st, $st2, $st3, $st4, $st5 ) ) . ' ' . wp_json_encode( $ep_seen ) );
+Minn_Admin_Kernel::endpoint( 'minn-conformance/ep-args-cap/(?P<file>[a-z.]+)', array(
+	'methods' => 'POST',
+	'gate'    => '__return_true',
+	'args'    => array( 'file' => array( 'type' => 'string' ) ),
+	'run'     => function ( WP_REST_Request $r ) {
+		return array( 'file' => Minn_Admin::path_param( $r, 'file' ) );
+	},
+) );
+Minn_Admin_Kernel::endpoint( 'minn-conformance/ep-args-default', array(
+	'methods' => 'POST',
+	'gate'    => '__return_true',
+	'args'    => array( 'on' => array( 'type' => 'boolean', 'default' => true ) ),
+	'run'     => '__return_true',
+) );
+Minn_Admin_Kernel::endpoint( 'minn-conformance/ep-args-req', array(
+	'methods' => 'POST',
+	'gate'    => '__return_true',
+	'args'    => array( 'on' => array( 'type' => 'boolean', 'required' => 'false' ) ),
+	'run'     => '__return_true',
+) );
+$ep_seen          = array();
+list( $st )       = $call( 'POST', '/minn-admin/v1/minn-conformance/ep-args-cap/a.php', array(), array( 'file' => 'b.php' ) );
+list( $st2 )      = $call( 'POST', '/minn-admin/v1/minn-conformance/ep-args-default', array(), array() );
+list( $st3 )      = $call( 'POST', '/minn-admin/v1/minn-conformance/ep-args-req', array(), array() );
+list( $st4, $d4 ) = $call( 'POST', $ep_base, array(), array( 'on' => null ) );
+list( $st5 )      = $call( 'POST', $ep_base, array(), array( 'on' => true, 'n' => null ) );
+$check( 'args never name what the route captures, carry no default and only a boolean required, or the endpoint has no route; a null is no value', 404 === $st && 404 === $st2 && 404 === $st3 && 400 === $st4 && 'rest_missing_callback_param' === ( $d4['code'] ?? '' ) && 200 === $st5 && array( 'boolean:true' ) === $ep_seen, implode( ' ', array( $st, $st2, $st3, $st4, $st5 ) ) . ' ' . wp_json_encode( $ep_seen ) );
+
 // --- 1c. Booking shapes: joins, views with their own order, cards ahead ----
 $bk  = $wpdb->prefix . 'minn_conf_bk';
 $bkc = $wpdb->prefix . 'minn_conf_bk_cust';
