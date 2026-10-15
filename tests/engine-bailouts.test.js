@@ -125,7 +125,9 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	   engine a wp-admin link stays only when the engine opens that page
 	   (MINN.adminActions, while the Minn Legacy Pack is active), or when
 	   the editor needs the pack and it is not active (MINN.legacyPack):
-	   following the link then offers to install the pack. ===== */
+	   following the link then offers to install the pack. A front-end
+	   editor link (Beaver Builder's ?fl_builder) always stays, and offers
+	   the pack the same way when its editor needs it. ===== */
 	await page.goto( BASE + '/minn-admin/content', { waitUntil: 'domcontentloaded' } );
 	await page.waitForSelector( '.minn-table-row[data-id]', { timeout: 20000 } );
 	const built = await page.evaluate( () => {
@@ -133,12 +135,18 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		return row ? { id: row.dataset.id, type: row.dataset.type, name: row.dataset.builder, href: row.dataset.builderEdit } : null;
 	} );
 	if ( built ) {
-		const action = new URL( built.href, BASE ).searchParams.get( 'action' ) || '';
-		const packOffer = boot.engine && ( await page.evaluate( ( a ) => {
+		const builtUrl = new URL( built.href, BASE );
+		const action = builtUrl.searchParams.get( 'action' ) || '';
+		const adminLink = /\/wp-admin\//.test( builtUrl.pathname );
+		const packOffer = boot.engine && ( await page.evaluate( ( href ) => {
 			const pack = window.MINN.legacyPack;
-			return !! pack && ! pack.active && ( pack.editors || [] ).some( ( e ) => e.action === a );
-		}, action ) );
-		const opens = ! boot.engine || packOffer || ( await page.evaluate( ( a ) => ( window.MINN.adminActions || [] ).includes( a ), action ) );
+			const u = new URL( href, location.href );
+			const admin = /\/wp-admin\/[a-z0-9-]+\.php$/i.test( u.pathname );
+			return !! pack && ! pack.active && ( pack.editors || [] ).some( ( e ) => admin
+				? !! e.action && e.action === ( u.searchParams.get( 'action' ) || '' )
+				: !! e.query && u.searchParams.has( e.query.split( '=' )[ 0 ] ) );
+		}, built.href ) );
+		const opens = ! boot.engine || ! adminLink || packOffer || ( await page.evaluate( ( a ) => ( window.MINN.adminActions || [] ).includes( a ), action ) );
 		const more = await page.$( `.minn-row-more[data-more="${ built.id }"]` );
 		await more.click( { force: true } );
 		await page.waitForSelector( '.minn-row-menu', { timeout: 10000 } );
