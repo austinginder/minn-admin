@@ -53,67 +53,23 @@ function minn_admin_pwgc_is_pro() {
 }
 
 /**
- * Card table name, once PW has bound it.
+ * Whether PW keeps one pair of tables for the whole network
+ * (PWGC_MULTISITE_SHARED_DATABASE), on the base prefix.
  *
- * @return string
+ * @return bool
  */
-function minn_admin_pwgc_table() {
-	global $wpdb;
-	return ! empty( $wpdb->pimwick_gift_card ) ? $wpdb->pimwick_gift_card : $wpdb->prefix . 'pimwick_gift_card';
+function minn_admin_pwgc_network() {
+	return defined( 'PWGC_MULTISITE_SHARED_DATABASE' ) && true === PWGC_MULTISITE_SHARED_DATABASE;
 }
 
 /**
- * Activity table name.
+ * A card that can be spent: switched on and not past its expiry date, which
+ * PW stores as a site-local DATE.
  *
- * @return string
+ * @return array Conditions.
  */
-function minn_admin_pwgc_activity_table() {
-	global $wpdb;
-	return ! empty( $wpdb->pimwick_gift_card_activity ) ? $wpdb->pimwick_gift_card_activity : $wpdb->prefix . 'pimwick_gift_card_activity';
-}
-
-/**
- * Money as display-ready text.
- *
- * @param float|string $value Amount.
- * @return string
- */
-function minn_admin_pwgc_money( $value ) {
-	if ( ! function_exists( 'wc_price' ) ) {
-		return (string) $value;
-	}
-	return html_entity_decode( wp_strip_all_tags( wc_price( (float) $value ) ), ENT_QUOTES, 'UTF-8' );
-}
-
-/**
- * Parse a money amount from a request, or a WP_Error.
- *
- * @param mixed $raw        Request value.
- * @param bool  $allow_zero Whether 0 is a legal amount.
- * @return float|WP_Error
- */
-function minn_admin_pwgc_parse_amount( $raw, $allow_zero = false ) {
-	if ( '' === $raw || null === $raw || ! is_numeric( $raw ) ) {
-		return new WP_Error( 'minn_pwgc_amount', __( 'Enter the amount as a number.', 'minn-admin' ), array( 'status' => 400 ) );
-	}
-	$amount = (float) $raw;
-	if ( ! is_finite( $amount ) ) {
-		return new WP_Error( 'minn_pwgc_amount', __( 'Enter the amount as a number.', 'minn-admin' ), array( 'status' => 400 ) );
-	}
-	$amount = round( $amount, function_exists( 'wc_get_price_decimals' ) ? wc_get_price_decimals() : 2 );
-	if ( $amount < 0 || ( ! $allow_zero && $amount <= 0 ) ) {
-		return new WP_Error(
-			'minn_pwgc_amount',
-			$allow_zero
-				? __( 'A balance cannot be negative.', 'minn-admin' )
-				: __( 'A gift card has to be worth more than nothing.', 'minn-admin' ),
-			array( 'status' => 400 )
-		);
-	}
-	if ( $amount > 9999999.99 ) {
-		return new WP_Error( 'minn_pwgc_amount', __( 'Enter an amount no larger than 9,999,999.99.', 'minn-admin' ), array( 'status' => 400 ) );
-	}
-	return $amount;
+function minn_admin_pwgc_live() {
+	return array( 'active' => 1, 'expiration_date' => array( 'any' => array( null, array( 'op' => '>=', 'value' => current_time( 'Y-m-d' ) ) ) ) );
 }
 
 /**
@@ -250,8 +206,8 @@ function minn_admin_pwgc_row( $card ) {
 	return array(
 		'id'        => (int) $card->get_id(),
 		'code'      => (string) $card->get_number(),
-		'amount'    => minn_admin_pwgc_money( minn_admin_pwgc_original( $card ) ),
-		'balance'   => minn_admin_pwgc_money( $card->get_balance() ),
+		'amount'    => minn_admin_gift_money( minn_admin_pwgc_original( $card ) ),
+		'balance'   => minn_admin_gift_money( $card->get_balance() ),
 		'status'    => minn_admin_pwgc_status( $card ),
 		'enabled'   => (bool) $card->get_active(),
 		'recipient' => minn_admin_pwgc_recipient( $card ),
@@ -262,529 +218,267 @@ function minn_admin_pwgc_row( $card ) {
 	);
 }
 
-add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
-	if ( ! minn_admin_pwgc_active() ) {
-		return $surfaces;
-	}
-
+minn_admin_add_surface( 'pw-gift-cards', 'minn_admin_pwgc_active', function () {
 	$pro = minn_admin_pwgc_is_pro();
+	return minn_admin_gift_surface( 'pwgc/gift-cards', array(
+		'sub'      => $pro ? 'PW Pro' : 'PW',
+		'plugin'   => array( 'pw-woocommerce-gift-cards', 'pw-gift-cards' ),
+		'cap'      => minn_admin_pwgc_cap(),
+		'status'   => 'pwgc/status',
+		'statuses' => array(
+			'active'   => __( 'Active', 'minn-admin' ),
+			'disabled' => __( 'Disabled', 'minn-admin' ),
+			'expired'  => __( 'Expired', 'minn-admin' ),
+		),
+		'search'   => __( 'Search gift cards (code, recipient…)', 'minn-admin' ),
+		// The free edition stores no recipient, sender or message of its own.
+		'create'   => minn_admin_gift_create_fields( array( 'recipient' => $pro ? 'optional' : '', 'name' => $pro, 'from' => $pro, 'message' => $pro, 'send' => $pro ) ),
+	) );
+} );
 
-	$surfaces['pw-gift-cards'] = array(
-		'label'      => __( 'Gift cards', 'minn-admin' ),
-		'family'     => 'gift-cards',
-		'sub'        => $pro ? 'PW Pro' : 'PW',
-		'plugin'     => array( 'pw-woocommerce-gift-cards', 'pw-gift-cards' ),
-		'icon'       => 'gift',
-		'cap'        => minn_admin_pwgc_cap(),
-		'group'      => 'commerce',
-		'status'     => array( 'route' => 'minn-admin/v1/pwgc/status' ),
-		'collection' => array(
-			'route'     => 'minn-admin/v1/pwgc/gift-cards',
-			'itemsKey'  => 'items',
-			'totalKey'  => 'total',
-			'search'    => 'search={q}',
-			'filterBar' => array(
-				'searchPlaceholder' => __( 'Search gift cards (code, recipient…)', 'minn-admin' ),
-				'statuses'          => array(
-					array( 'active', __( 'Active', 'minn-admin' ) ),
-					array( 'disabled', __( 'Disabled', 'minn-admin' ) ),
-					array( 'expired', __( 'Expired', 'minn-admin' ) ),
-				),
-				'kinds'             => array( 'status', 'date' ),
-			),
-			'columns'   => array(
-				array( 'key' => 'code', 'label' => __( 'Code', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.4fr)' ),
-				array( 'key' => 'balance', 'label' => __( 'Balance', 'minn-admin' ), 'format' => 'num', 'width' => '110px' ),
-				array( 'key' => 'amount', 'label' => __( 'Amount', 'minn-admin' ), 'format' => 'num', 'width' => '110px' ),
-				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '120px' ),
-				array( 'key' => 'recipient', 'label' => __( 'Recipient', 'minn-admin' ), 'width' => 'minmax(0,1.2fr)' ),
-				array( 'key' => 'order', 'label' => __( 'Order', 'minn-admin' ), 'format' => 'mono', 'width' => '90px' ),
-				array( 'key' => 'created', 'label' => __( 'Created', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
-			),
-			'detail'    => array(
-				'sectionsRoute' => 'minn-admin/v1/pwgc/gift-cards/{id}/view',
-			),
-			'actions'   => array(
-				array(
-					'label'   => __( 'Disable', 'minn-admin' ),
-					'route'   => 'minn-admin/v1/pwgc/gift-cards/{id}/status',
-					'body'    => array( 'enabled' => false ),
-					'when'    => array( 'key' => 'enabled', 'equals' => true ),
-					'confirm' => __( 'Disable this gift card? Its balance can no longer be spent.', 'minn-admin' ),
-					'danger'  => true,
-				),
-				array(
-					'label' => __( 'Enable', 'minn-admin' ),
-					'route' => 'minn-admin/v1/pwgc/gift-cards/{id}/status',
-					'body'  => array( 'enabled' => true ),
-					'when'  => array( 'key' => 'enabled', 'equals' => false ),
-				),
-				array(
-					'label'  => __( 'Adjust balance', 'minn-admin' ),
-					'route'  => 'minn-admin/v1/pwgc/gift-cards/{id}/balance',
-					'fields' => array(
-						array(
-							'key'   => 'balance',
-							'label' => __( 'New balance', 'minn-admin' ),
-							'type'  => 'number',
-						),
-					),
-				),
-				array(
-					'label' => __( 'Resend email', 'minn-admin' ),
-					'route' => 'minn-admin/v1/pwgc/gift-cards/{id}/resend',
-				),
-				array(
-					'label' => __( 'View order', 'minn-admin' ),
-					'href'  => home_url( '/minn-admin/orders/{order_id}' ),
-					'when'  => array( 'key' => 'has_order', 'equals' => true ),
+minn_admin_resource( 'pwgc/gift-cards', function () {
+	return array(
+		'active'  => 'minn_admin_pwgc_active',
+		'gates'   => array( 'view' => 'minn_admin_pwgc_can', 'manage' => 'minn_admin_pwgc_can' ),
+		'labels'  => array( 'not_found' => __( 'Gift card not found.', 'minn-admin' ) ),
+		'source'  => array(
+			'table'   => 'pimwick_gift_card',
+			'network' => minn_admin_pwgc_network(),
+			'key'     => 'pimwick_gift_card_id',
+			'columns' => array( 'pimwick_gift_card_id', 'number', 'active' ),
+		),
+		'list'    => array(
+			'filter' => array(
+				'param'  => 'status',
+				'many'   => true,
+				'values' => array(
+					'active'   => 'minn_admin_pwgc_live',
+					'disabled' => array( 'active' => 0 ),
+					'expired'  => function () {
+						return array( 'active' => 1, 'expiration_date' => array( 'op' => '<', 'value' => current_time( 'Y-m-d' ) ) );
+					},
 				),
 			),
-			'create'    => array(
-				'label'  => __( 'Add gift card', 'minn-admin' ),
-				'route'  => 'minn-admin/v1/pwgc/gift-cards',
-				'fields' => array_values( array_filter( array(
-					array(
-						'key'   => 'amount',
-						'label' => __( 'Amount', 'minn-admin' ),
-						'type'  => 'number',
-					),
-					array(
-						'key'         => 'code',
-						'label'       => __( 'Code', 'minn-admin' ),
-						'mono'        => true,
-						'required'    => false,
-						'placeholder' => __( 'Leave blank to generate one', 'minn-admin' ),
-					),
-					$pro ? array(
-						'key'      => 'recipient',
-						'label'    => __( 'Recipient email', 'minn-admin' ),
-						'type'     => 'email',
-						'required' => false,
-					) : null,
-					$pro ? array(
-						'key'      => 'recipient_name',
-						'label'    => __( 'Recipient name', 'minn-admin' ),
-						'required' => false,
-					) : null,
-					$pro ? array(
-						'key'      => 'sender_name',
-						'label'    => __( 'From', 'minn-admin' ),
-						'required' => false,
-					) : null,
-					$pro ? array(
-						'key'      => 'message',
-						'label'    => __( 'Message', 'minn-admin' ),
-						'type'     => 'textarea',
-						'rows'     => 3,
-						'required' => false,
-					) : null,
-					$pro ? array(
-						'key'     => 'send',
-						'label'   => __( 'Send the gift card email now', 'minn-admin' ),
-						'type'    => 'select',
-						'value'   => 'no',
-						'options' => array(
-							array( 'no', __( 'No', 'minn-admin' ) ),
-							array( 'yes', __( 'Yes', 'minn-admin' ) ),
-						),
-					) : null,
-				) ) ),
+			// Pro keeps the recipient on the card; the free edition does not.
+			'search' => array( 'param' => 'search', 'columns' => minn_admin_pwgc_is_pro() ? array( 'number', 'recipient_email' ) : array( 'number' ) ),
+			// create_date is a TIMESTAMP the database writes, read on the site's clock.
+			'range'  => array( 'column' => 'create_date', 'clock' => 'local' ),
+			'order'  => array( 'column' => 'create_date', 'dir' => 'DESC' ),
+			'row'    => function ( array $row ) {
+				$card = minn_admin_pwgc_load( (int) $row['pimwick_gift_card_id'] );
+				return is_wp_error( $card ) ? array( 'id' => (int) $row['pimwick_gift_card_id'], 'code' => (string) $row['number'] ) : minn_admin_pwgc_row( $card );
+			},
+			'fields' => minn_admin_gift_fields(),
+		),
+		'reads'   => array(
+			'view' => array(
+				'view'   => function ( array $row ) {
+					$card = minn_admin_pwgc_load( (int) $row['pimwick_gift_card_id'] );
+					if ( is_wp_error( $card ) ) {
+						return $card;
+					}
+					$built = minn_admin_pwgc_row( $card );
+					$gift  = minn_admin_gift_card_rows( $card->get_number(), 'code', $built['status'], $built['balance'], $built['amount'] );
+					$exp   = method_exists( $card, 'get_expiration_date' ) ? $card->get_expiration_date() : '';
+					if ( $exp ) {
+						$gift[] = array( 'label' => __( 'Expires', 'minn-admin' ), 'value' => $exp );
+					}
+
+					$recipient = array();
+					if ( $built['recipient'] ) {
+						$recipient[] = array( 'label' => __( 'Email', 'minn-admin' ), 'value' => $built['recipient'], 'type' => 'email' );
+					}
+					if ( method_exists( $card, 'get_recipient_name' ) && $card->get_recipient_name() ) {
+						$recipient[] = array( 'label' => __( 'Name', 'minn-admin' ), 'value' => $card->get_recipient_name() );
+					}
+					if ( method_exists( $card, 'get_from' ) && $card->get_from() ) {
+						$recipient[] = array( 'label' => __( 'From', 'minn-admin' ), 'value' => $card->get_from() );
+					}
+					if ( method_exists( $card, 'get_message' ) && $card->get_message() ) {
+						$recipient[] = array( 'label' => __( 'Message', 'minn-admin' ), 'value' => $card->get_message() );
+					}
+
+					$origin = array();
+					if ( $built['order_id'] ) {
+						$origin[] = array( 'label' => __( 'Order', 'minn-admin' ), 'value' => '#' . $built['order_id'] );
+					}
+					$created = method_exists( $card, 'get_create_date_gmt' ) ? $card->get_create_date_gmt() : $card->get_create_date();
+					if ( $created ) {
+						$ts       = strtotime( $created . ( false === strpos( (string) $created, 'Z' ) ? ' UTC' : '' ) );
+						$origin[] = array(
+							'label' => __( 'Created', 'minn-admin' ),
+							'value' => $ts ? wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $ts ) : $created,
+						);
+					}
+
+					return array(
+						'title'    => $card->get_number(),
+						'sections' => minn_admin_gift_sections( $gift, $recipient, $origin ),
+						'adminUrl' => function_exists( 'pwgc_admin_url' )
+							? pwgc_admin_url( 'balances', array( 'card_number' => $card->get_number() ) )
+							: admin_url( 'admin.php?page=wc-pw-gift-cards' ),
+					);
+				},
+				'fields' => minn_admin_gift_view_fields(),
+			),
+		),
+		'create'  => array(
+			'gate' => 'manage',
+			'run'  => function ( WP_REST_Request $r ) {
+				$amount = minn_admin_gift_amount( $r['amount'], false, 'minn_pwgc_amount' );
+				if ( is_wp_error( $amount ) ) {
+					return $amount;
+				}
+				$typed     = trim( (string) $r['recipient'] );
+				$recipient = $typed ? sanitize_email( $typed ) : '';
+				if ( $typed && ! $recipient ) {
+					return new WP_Error( 'minn_pwgc_recipient', __( 'That recipient email address is not valid.', 'minn-admin' ), array( 'status' => 400 ) );
+				}
+				$send = 'yes' === (string) $r['send'];
+				if ( $send && ! $recipient ) {
+					return new WP_Error( 'minn_pwgc_no_recipient', __( 'Add a recipient email address, or choose not to send the email.', 'minn-admin' ), array( 'status' => 400 ) );
+				}
+				$typed_code = trim( (string) $r['code'] );
+				$code       = '';
+				if ( '' !== $typed_code ) {
+					$code = sanitize_text_field( $typed_code );
+					if ( '' === $code || wp_strip_all_tags( $typed_code ) !== $code || strlen( $code ) > 128 ) {
+						return new WP_Error( 'minn_pwgc_code', __( 'That code is not valid. Use plain text, or leave the field blank to generate one.', 'minn-admin' ), array( 'status' => 400 ) );
+					}
+				}
+
+				$note = __( 'Issued from Minn Admin.', 'minn-admin' );
+				$card = '' !== $code ? PW_Gift_Card::add_card( $code, $note ) : PW_Gift_Card::create_card( $note );
+				if ( ! $card instanceof PW_Gift_Card ) {
+					$msg = is_string( $card ) ? $card : __( 'The gift card could not be created.', 'minn-admin' );
+					return new WP_Error( 'minn_pwgc_create', $msg, array( 'status' => is_string( $card ) && false !== stripos( $card, 'already' ) ? 409 : 500 ) );
+				}
+				$card->credit( $amount, $note );
+				// A card that came out holding the wrong amount is not issued,
+				// and is never emailed.
+				if ( ! minn_admin_gift_same( $card->get_balance( true ), $amount ) ) {
+					return Minn_Admin_Kernel::fail( 'not_applied', __( 'The plugin reported success, but the change is not there.', 'minn-admin' ), 500 );
+				}
+
+				$name = sanitize_text_field( (string) $r['recipient_name'] );
+				$from = sanitize_text_field( (string) $r['sender_name'] );
+				$msg  = sanitize_textarea_field( (string) $r['message'] );
+				if ( minn_admin_pwgc_is_pro() ) {
+					if ( $recipient && method_exists( $card, 'set_recipient_email' ) ) {
+						$card->set_recipient_email( $recipient );
+					}
+					if ( method_exists( $card, 'set_recipient_name' ) ) {
+						$card->set_recipient_name( $name );
+					}
+					if ( method_exists( $card, 'set_from' ) ) {
+						$card->set_from( $from );
+					}
+					if ( method_exists( $card, 'set_message' ) ) {
+						$card->set_message( $msg );
+					}
+				}
+				if ( $send ) {
+					minn_admin_pwgc_send_email( $card, $recipient, $from, $name, $msg, $amount );
+				}
+				return array( 'id' => (int) $card->get_id(), 'code' => (string) $card->get_number(), 'amount' => $amount, 'sent' => $send ? $recipient : '' );
+			},
+			'reply' => function ( $id, $fresh, $ran ) {
+				return minn_admin_gift_created( $ran['code'], $ran['sent'], minn_admin_gift_money( $ran['amount'] ) );
+			},
+		),
+		'actions' => array(
+			'status'  => array(
+				'gate'   => 'manage',
+				'args'   => minn_admin_gift_switch_args(),
+				'run'    => function ( $id, $row, WP_REST_Request $r ) {
+					$card = minn_admin_pwgc_load( $id );
+					if ( is_wp_error( $card ) ) {
+						return $card;
+					}
+					$on = (bool) $r['enabled'];
+					if ( $on ) {
+						$card->reactivate();
+					} else {
+						$card->deactivate();
+					}
+					return array( 'enabled' => $on, 'code' => (string) $card->get_number() );
+				},
+				'expect' => function ( $id, $fresh, $ran ) {
+					return is_array( $fresh ) && (int) $fresh['active'] === ( $ran['enabled'] ? 1 : 0 );
+				},
+				'reply'  => function ( $id, $fresh, $ran ) {
+					return minn_admin_gift_switched( $ran['code'], $ran['enabled'] );
+				},
+			),
+			'balance' => array(
+				'gate'   => 'manage',
+				'when'   => array( 'active' => array( 1 ) ),
+				'code'   => 'minn_pwgc_inactive',
+				'refuse' => __( 'Enable this gift card before changing its balance.', 'minn-admin' ),
+				'run'    => function ( $id, $row, WP_REST_Request $r ) {
+					$balance = minn_admin_gift_amount( $r['balance'], true, 'minn_pwgc_amount' );
+					$card    = is_wp_error( $balance ) ? $balance : minn_admin_pwgc_load( $id );
+					if ( is_wp_error( $card ) ) {
+						return $card;
+					}
+					$card->adjust_balance( $balance - (float) $card->get_balance(), __( 'Balance set from Minn Admin.', 'minn-admin' ) );
+					return array( 'balance' => $balance, 'code' => (string) $card->get_number() );
+				},
+				'expect' => function ( $id, $fresh, $ran ) {
+					$card = minn_admin_pwgc_load( $id );
+					return ! is_wp_error( $card ) && minn_admin_gift_same( $card->get_balance( true ), $ran['balance'] );
+				},
+				'reply'  => function ( $id, $fresh, $ran ) {
+					return minn_admin_gift_holds( $ran['code'], minn_admin_gift_money( $ran['balance'] ) );
+				},
+			),
+			'resend'  => array(
+				'gate'   => 'manage',
+				'expect' => 'ran',
+				'run'    => function ( $id ) {
+					$card = minn_admin_pwgc_load( $id );
+					if ( is_wp_error( $card ) ) {
+						return $card;
+					}
+					$to = minn_admin_pwgc_recipient( $card );
+					if ( ! $to ) {
+						return minn_admin_gift_no_recipient( 'minn_pwgc_no_recipient' );
+					}
+					$from = method_exists( $card, 'get_from' ) ? (string) $card->get_from() : '';
+					$name = method_exists( $card, 'get_recipient_name' ) ? (string) $card->get_recipient_name() : '';
+					$msg  = method_exists( $card, 'get_message' ) ? (string) $card->get_message() : '';
+					minn_admin_pwgc_send_email( $card, $to, $from, $name, $msg, $card->get_balance() );
+					return $to;
+				},
+				'reply'  => function ( $id, $fresh, $to ) {
+					return minn_admin_gift_sent( $to );
+				},
 			),
 		),
 	);
-
-	return $surfaces;
 } );
 
-add_action( 'rest_api_init', function () {
-	if ( ! minn_admin_pwgc_active() ) {
-		return;
-	}
-
-	$permission = 'minn_admin_pwgc_can';
-
-	register_rest_route( 'minn-admin/v1', '/pwgc/gift-cards', array(
-		'methods'             => 'GET',
-		'permission_callback' => $permission,
-		'callback'            => function ( $request ) {
-			global $wpdb;
-			$table    = minn_admin_pwgc_table();
-			$activity = minn_admin_pwgc_activity_table();
-			$per_page = min( 100, max( 1, (int) $request->get_param( 'per_page' ) ?: 25 ) );
-			$page     = max( 1, (int) $request->get_param( 'page' ) ?: 1 );
-			$search   = trim( (string) $request->get_param( 'search' ) );
-
-			$wanted = $request->get_param( 'status' );
-			$wanted = is_array( $wanted ) ? $wanted : ( ( '' === (string) $wanted ) ? array() : array( $wanted ) );
-			$wanted = array_values( array_diff( array_map( 'strval', $wanted ), array( 'any' ) ) );
-
-			$where  = array( '1=1' );
-			$params = array();
-
-			if ( $wanted ) {
-				$ors = array();
-				foreach ( $wanted as $slug ) {
-					if ( 'disabled' === $slug ) {
-						$ors[] = 'c.active = 0';
-					} elseif ( 'expired' === $slug ) {
-						$ors[] = '( c.active = 1 AND c.expiration_date IS NOT NULL AND c.expiration_date < %s )';
-						$params[] = current_time( 'Y-m-d' );
-					} elseif ( 'active' === $slug ) {
-						$ors[] = '( c.active = 1 AND ( c.expiration_date IS NULL OR c.expiration_date >= %s ) )';
-						$params[] = current_time( 'Y-m-d' );
-					} else {
-						$ors[] = '0=1';
-					}
-				}
-				$where[] = '( ' . implode( ' OR ', $ors ) . ' )';
-			}
-
-			foreach ( array( 'after' => '>=', 'before' => '<=' ) as $param => $op ) {
-				$raw = trim( (string) $request->get_param( $param ) );
-				if ( '' === $raw ) {
-					continue;
-				}
-				$ts = strtotime( $raw );
-				if ( ! $ts ) {
-					continue;
-				}
-				$where[]  = "c.create_date {$op} %s";
-				$params[] = gmdate( 'Y-m-d H:i:s', $ts );
-			}
-
-			$join = '';
-			if ( '' !== $search ) {
-				$like = '%' . $wpdb->esc_like( $search ) . '%';
-				if ( minn_admin_pwgc_is_pro() ) {
-					$where[]  = '( c.number LIKE %s OR c.recipient_email LIKE %s )';
-					$params[] = $like;
-					$params[] = $like;
-				} else {
-					$where[]  = 'c.number LIKE %s';
-					$params[] = $like;
-				}
-			}
-			$clause = implode( ' AND ', $where );
-
-			// With no status, date or search narrowing, the clause is a bare
-			// 1=1 and carries no placeholder, and prepare() answers a
-			// placeholder-free query with a _doing_it_wrong notice on every
-			// list load. Guard on $params, the way every sibling adapter's
-			// count query already does.
-			$count_sql = "SELECT COUNT(*) FROM {$table} c {$join} WHERE {$clause}";
-			$total     = (int) $wpdb->get_var( // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-				$params ? $wpdb->prepare( $count_sql, $params ) : $count_sql
-			);
-
-			$ids = $wpdb->get_col( $wpdb->prepare( // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-				"SELECT c.pimwick_gift_card_id FROM {$table} c {$join} WHERE {$clause} ORDER BY c.create_date DESC, c.pimwick_gift_card_id DESC LIMIT %d OFFSET %d",
-				array_merge( $params, array( $per_page, ( $page - 1 ) * $per_page ) )
-			) );
-
-			$items = array();
-			foreach ( array_map( 'intval', $ids ) as $id ) {
-				$card = minn_admin_pwgc_load( $id );
-				if ( ! is_wp_error( $card ) ) {
-					$items[] = minn_admin_pwgc_row( $card );
-				}
-			}
-
-			return rest_ensure_response( array( 'items' => $items, 'total' => $total ) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/pwgc/gift-cards/(?P<id>\d+)/view', array(
-		'methods'             => 'GET',
-		'permission_callback' => $permission,
-		'callback'            => function ( $request ) {
-			$card = minn_admin_pwgc_load( (int) Minn_Admin::path_param( $request ) );
-			if ( is_wp_error( $card ) ) {
-				return $card;
-			}
-			$row = minn_admin_pwgc_row( $card );
-
-			$gift = array(
-				array( 'label' => __( 'Code', 'minn-admin' ), 'value' => $card->get_number(), 'type' => 'code' ),
-				array( 'label' => __( 'Status', 'minn-admin' ), 'value' => $row['status'], 'type' => 'pill' ),
-				array( 'label' => __( 'Balance', 'minn-admin' ), 'value' => minn_admin_pwgc_money( $card->get_balance() ) ),
-				array( 'label' => __( 'Original amount', 'minn-admin' ), 'value' => minn_admin_pwgc_money( minn_admin_pwgc_original( $card ) ) ),
-			);
-			$exp = method_exists( $card, 'get_expiration_date' ) ? $card->get_expiration_date() : '';
-			if ( $exp ) {
-				$gift[] = array( 'label' => __( 'Expires', 'minn-admin' ), 'value' => $exp );
-			}
-
-			$recipient = array();
-			$email     = minn_admin_pwgc_recipient( $card );
-			if ( $email ) {
-				$recipient[] = array( 'label' => __( 'Email', 'minn-admin' ), 'value' => $email, 'type' => 'email' );
-			}
-			if ( method_exists( $card, 'get_recipient_name' ) && $card->get_recipient_name() ) {
-				$recipient[] = array( 'label' => __( 'Name', 'minn-admin' ), 'value' => $card->get_recipient_name() );
-			}
-			if ( method_exists( $card, 'get_from' ) && $card->get_from() ) {
-				$recipient[] = array( 'label' => __( 'From', 'minn-admin' ), 'value' => $card->get_from() );
-			}
-			if ( method_exists( $card, 'get_message' ) && $card->get_message() ) {
-				$recipient[] = array( 'label' => __( 'Message', 'minn-admin' ), 'value' => $card->get_message() );
-			}
-
-			$origin = array();
-			if ( $row['order_id'] ) {
-				$origin[] = array( 'label' => __( 'Order', 'minn-admin' ), 'value' => '#' . $row['order_id'] );
-			}
-			$created = method_exists( $card, 'get_create_date_gmt' ) ? $card->get_create_date_gmt() : $card->get_create_date();
-			if ( $created ) {
-				$ts = strtotime( $created . ( false === strpos( (string) $created, 'Z' ) ? ' UTC' : '' ) );
-				$origin[] = array(
-					'label' => __( 'Created', 'minn-admin' ),
-					'value' => $ts ? wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $ts ) : $created,
-				);
-			}
-
-			$sections = array( array( 'title' => __( 'Gift card', 'minn-admin' ), 'rows' => $gift ) );
-			if ( $recipient ) {
-				$sections[] = array( 'title' => __( 'Recipient', 'minn-admin' ), 'rows' => $recipient );
-			}
-			if ( $origin ) {
-				$sections[] = array( 'title' => __( 'Origin', 'minn-admin' ), 'rows' => $origin );
-			}
-
-			$admin = function_exists( 'pwgc_admin_url' )
-				? pwgc_admin_url( 'balances', array( 'card_number' => $card->get_number() ) )
-				: admin_url( 'admin.php?page=wc-pw-gift-cards' );
-
-			return rest_ensure_response( array(
-				'title'    => $card->get_number(),
-				'sections' => $sections,
-				'adminUrl' => $admin,
-			) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/pwgc/gift-cards/(?P<id>\d+)/status', array(
-		'methods'             => 'POST',
-		'permission_callback' => $permission,
-		'callback'            => function ( $request ) {
-			// `enabled` says which way to flip, so an absent one is not a
-			// default: rest_sanitize_boolean( null ) is false, which turned a
-			// request that forgot the field into a silent disable of a live
-			// gift card. Checked here rather than declared in `args` because
-			// core validates args BEFORE the permission callback, and a
-			// caller who may not touch gift cards should be told that, not
-			// handed the shape of the request.
-			if ( null === $request->get_param( 'enabled' ) ) {
-				return new WP_Error( 'minn_pwgc_enabled', __( 'Say whether the gift card should be enabled or disabled.', 'minn-admin' ), array( 'status' => 400 ) );
-			}
-			$card = minn_admin_pwgc_load( (int) Minn_Admin::path_param( $request ) );
-			if ( is_wp_error( $card ) ) {
-				return $card;
-			}
-			$enabled = rest_sanitize_boolean( $request->get_param( 'enabled' ) );
-			if ( $enabled ) {
-				$card->reactivate();
-			} else {
-				$card->deactivate();
-			}
-			return rest_ensure_response( array(
-				'message' => $enabled
-					? sprintf(
-						/* translators: %s: gift card code. */
-						__( '%s is enabled.', 'minn-admin' ),
-						$card->get_number()
-					)
-					: sprintf(
-						/* translators: %s: gift card code. */
-						__( '%s is disabled and can no longer be spent.', 'minn-admin' ),
-						$card->get_number()
-					),
-			) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/pwgc/gift-cards', array(
-		'methods'             => 'POST',
-		'permission_callback' => $permission,
-		'callback'            => function ( $request ) {
-			$amount = minn_admin_pwgc_parse_amount( $request->get_param( 'amount' ) );
-			if ( is_wp_error( $amount ) ) {
-				return $amount;
-			}
-
-			$typed     = trim( (string) $request->get_param( 'recipient' ) );
-			$recipient = $typed ? sanitize_email( $typed ) : '';
-			if ( $typed && ! $recipient ) {
-				return new WP_Error( 'minn_pwgc_recipient', __( 'That recipient email address is not valid.', 'minn-admin' ), array( 'status' => 400 ) );
-			}
-			$send = 'yes' === (string) $request->get_param( 'send' );
-			if ( $send && ! $recipient ) {
-				return new WP_Error( 'minn_pwgc_no_recipient', __( 'Add a recipient email address, or choose not to send the email.', 'minn-admin' ), array( 'status' => 400 ) );
-			}
-
-			$typed_code = trim( (string) $request->get_param( 'code' ) );
-			$code       = '';
-			if ( '' !== $typed_code ) {
-				$code = sanitize_text_field( $typed_code );
-				if ( '' === $code || $code !== wp_strip_all_tags( $typed_code ) || strlen( $code ) > 128 ) {
-					return new WP_Error( 'minn_pwgc_code', __( 'That code is not valid. Use plain text, or leave the field blank to generate one.', 'minn-admin' ), array( 'status' => 400 ) );
-				}
-			}
-
-			$note = __( 'Issued from Minn Admin.', 'minn-admin' );
-			if ( '' !== $code ) {
-				$card = PW_Gift_Card::add_card( $code, $note );
-			} else {
-				$card = PW_Gift_Card::create_card( $note );
-			}
-			if ( ! $card instanceof PW_Gift_Card ) {
-				$msg = is_string( $card ) ? $card : __( 'The gift card could not be created.', 'minn-admin' );
-				$status = is_string( $card ) && false !== stripos( $card, 'already' ) ? 409 : 500;
-				return new WP_Error( 'minn_pwgc_create', $msg, array( 'status' => $status ) );
-			}
-
-			$card->credit( $amount, $note );
-
-			if ( minn_admin_pwgc_is_pro() ) {
-				if ( $recipient && method_exists( $card, 'set_recipient_email' ) ) {
-					$card->set_recipient_email( $recipient );
-				}
-				if ( method_exists( $card, 'set_recipient_name' ) ) {
-					$card->set_recipient_name( sanitize_text_field( (string) $request->get_param( 'recipient_name' ) ) );
-				}
-				if ( method_exists( $card, 'set_from' ) ) {
-					$card->set_from( sanitize_text_field( (string) $request->get_param( 'sender_name' ) ) );
-				}
-				if ( method_exists( $card, 'set_message' ) ) {
-					$card->set_message( sanitize_textarea_field( (string) $request->get_param( 'message' ) ) );
-				}
-			}
-
-			if ( $send && $recipient ) {
-				$from = sanitize_text_field( (string) $request->get_param( 'sender_name' ) );
-				$name = sanitize_text_field( (string) $request->get_param( 'recipient_name' ) );
-				$msg  = sanitize_textarea_field( (string) $request->get_param( 'message' ) );
-				minn_admin_pwgc_send_email( $card, $recipient, $from, $name, $msg, $amount );
-			}
-
-			return rest_ensure_response( array(
-				'id'      => (int) $card->get_id(),
-				'message' => $send
-					? sprintf(
-						/* translators: 1: gift card code; 2: recipient email address. */
-						__( '%1$s created and sent to %2$s.', 'minn-admin' ),
-						$card->get_number(),
-						$recipient
-					)
-					: sprintf(
-						/* translators: 1: gift card code; 2: formatted money amount. */
-						__( '%1$s created, holding %2$s.', 'minn-admin' ),
-						$card->get_number(),
-						minn_admin_pwgc_money( $amount )
-					),
-			) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/pwgc/gift-cards/(?P<id>\d+)/balance', array(
-		'methods'             => 'POST',
-		'permission_callback' => $permission,
-		'callback'            => function ( $request ) {
-			$card = minn_admin_pwgc_load( (int) Minn_Admin::path_param( $request ) );
-			if ( is_wp_error( $card ) ) {
-				return $card;
-			}
-			$balance = minn_admin_pwgc_parse_amount( $request->get_param( 'balance' ), true );
-			if ( is_wp_error( $balance ) ) {
-				return $balance;
-			}
-			if ( ! $card->get_active() ) {
-				return new WP_Error( 'minn_pwgc_inactive', __( 'Enable this gift card before changing its balance.', 'minn-admin' ), array( 'status' => 400 ) );
-			}
-			$delta = $balance - (float) $card->get_balance();
-			$card->adjust_balance( $delta, __( 'Balance set from Minn Admin.', 'minn-admin' ) );
-			return rest_ensure_response( array(
-				'message' => sprintf(
-					/* translators: 1: gift card code; 2: formatted money amount. */
-					__( '%1$s now holds %2$s.', 'minn-admin' ),
-					$card->get_number(),
-					minn_admin_pwgc_money( $balance )
-				),
-			) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/pwgc/gift-cards/(?P<id>\d+)/resend', array(
-		'methods'             => 'POST',
-		'permission_callback' => $permission,
-		'callback'            => function ( $request ) {
-			$card = minn_admin_pwgc_load( (int) Minn_Admin::path_param( $request ) );
-			if ( is_wp_error( $card ) ) {
-				return $card;
-			}
-			$recipient = minn_admin_pwgc_recipient( $card );
-			if ( ! $recipient ) {
-				return new WP_Error(
-					'minn_pwgc_no_recipient',
-					__( 'This gift card has no recipient address, so there is nothing to resend.', 'minn-admin' ),
-					array( 'status' => 400 )
-				);
-			}
-			$from = method_exists( $card, 'get_from' ) ? (string) $card->get_from() : '';
-			$name = method_exists( $card, 'get_recipient_name' ) ? (string) $card->get_recipient_name() : '';
-			$msg  = method_exists( $card, 'get_message' ) ? (string) $card->get_message() : '';
-			minn_admin_pwgc_send_email( $card, $recipient, $from, $name, $msg, $card->get_balance() );
-			return rest_ensure_response( array(
-				'message' => sprintf(
-					/* translators: %s: recipient email address. */
-					__( 'Gift card sent to %s.', 'minn-admin' ),
-					$recipient
-				),
-			) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/pwgc/status', array(
-		'methods'             => 'GET',
-		'permission_callback' => $permission,
-		'callback'            => function () {
-			global $wpdb;
-			$table    = minn_admin_pwgc_table();
-			$activity = minn_admin_pwgc_activity_table();
-			$today    = current_time( 'Y-m-d' );
-			$decimals = function_exists( 'wc_get_price_decimals' ) ? (int) wc_get_price_decimals() : 2;
-
-			$active = (int) $wpdb->get_var( $wpdb->prepare(
-				"SELECT COUNT(*) FROM {$table} WHERE active = 1 AND ( expiration_date IS NULL OR expiration_date >= %s )",
-				$today
-			) );
-			$outstanding = (float) $wpdb->get_var( $wpdb->prepare(
-				"SELECT SUM( ROUND( a.amount, %d ) ) FROM {$activity} a
-				 INNER JOIN {$table} c ON c.pimwick_gift_card_id = a.pimwick_gift_card_id
-				 WHERE c.active = 1 AND ( c.expiration_date IS NULL OR c.expiration_date >= %s )",
-				$decimals,
-				$today
-			) );
-
-			return rest_ensure_response( array(
-				'rows'    => array(
-					array(
-						'label' => __( 'Outstanding balance', 'minn-admin' ),
-						'value' => minn_admin_pwgc_money( $outstanding ),
-						'hint'  => sprintf(
-							/* translators: %s: number of active gift cards. */
-							_n( 'across %s active gift card', 'across %s active gift cards', $active, 'minn-admin' ),
-							number_format_i18n( $active )
-						),
-					),
-				),
-				'actions' => array(
-					array(
-						'label' => __( 'Open PW Gift Cards ↗', 'minn-admin' ),
-						'href'  => admin_url( 'admin.php?page=wc-pw-gift-cards' ),
-					),
-				),
-			) );
-		},
-	) );
-} );
+minn_admin_endpoint( 'pwgc/status', array(
+	'active' => 'minn_admin_pwgc_active',
+	'gate'   => 'minn_admin_pwgc_can',
+	'run'    => function () {
+		// The balance is the ledger's sum, each entry rounded as the store
+		// shows money, over the cards that can still be spent.
+		$live = array();
+		foreach ( minn_admin_pwgc_live() as $col => $rule ) {
+			$live[ 'c.' . $col ] = $rule;
+		}
+		$ledger = array(
+			'table'   => 'pimwick_gift_card_activity',
+			'network' => minn_admin_pwgc_network(),
+			'joins'   => array( 'c' => array( 'table' => 'pimwick_gift_card', 'network' => minn_admin_pwgc_network(), 'on' => array( 'pimwick_gift_card_id' => 'e.pimwick_gift_card_id' ) ) ),
+		);
+		return minn_admin_gift_status(
+			Minn_Admin_Kernel_SQL::sum( $ledger, 'amount', $live, minn_admin_gift_decimals() ),
+			Minn_Admin_Kernel::count( 'pwgc/gift-cards', minn_admin_pwgc_live() ),
+			null,
+			__( 'Open PW Gift Cards ↗', 'minn-admin' ),
+			admin_url( 'admin.php?page=wc-pw-gift-cards' )
+		);
+	},
+) );

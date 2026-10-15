@@ -422,5 +422,5 @@
 			]
 		}
 	],
-	"shared": ["core-blocks.php", "field-groups.php", "mail-kit.php", "media-localize.php", "network.php", "option-pages.php", "redirects-kit.php", "shared-links.php", "shared-media.php", "shared-meta.php", "snippets-kit.php", "status-chart.php"]
+	"shared": ["core-blocks.php", "field-groups.php", "gift-cards-kit.php", "mail-kit.php", "media-localize.php", "network.php", "option-pages.php", "redirects-kit.php", "shared-links.php", "shared-media.php", "shared-meta.php", "snippets-kit.php", "status-chart.php"]
 }
