@@ -257,6 +257,12 @@ activity-log one. A port, one adapter at a time:
    gained) is read and either fixed or explained in the commit.
 6. **Delete what the kernel replaced:** the adapter's guard helpers, its hand-built SQL
    for lists and rows, its error plumbing.
+7. **Shrink the family.** What every adapter of a family builds again goes into one kit,
+   `includes/adapters/<family>-kit.php`: the mail kit builds a log's surface over its
+   resource, its detail sections, its status card and its delete and resend declarations,
+   and each mail adapter passes only its vendor's values. A kit is adapter tier
+   (presentation and vendor-neutral formatting), never routes, gates or queries; an
+   adapter on a kit registers its surface with `minn_admin_add_surface()`.
 
 Declare with a function (`minn_admin_resource( 'x/y', function () { return array( … ); } )`)
 when the declaration carries labels or messages: the kernel builds it on first use,
@@ -320,7 +326,8 @@ fixed baseline every change is measured against
 
 ## Later
 
-- **Next:** mail, bookings, redirects and backups, after forms and activity logs.
+- **Next:** redirects, snippets, gift cards, dev tools and backups, after forms,
+  activity logs, bookings and mail; then the earlier families' kits.
   In v0.47, publish the kernel API for third-party authors. A kernel-only
   adapter shows as such on the Integrations card, and one with its own routes
   is flagged, which is what the site-owner extension policy acts on.

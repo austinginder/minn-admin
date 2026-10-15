@@ -103,19 +103,10 @@ function minn_admin_site_mailer_view( array $r ) {
 	if ( '' !== $iso ) {
 		$delivery[] = array( 'label' => __( 'Date', 'minn-admin' ), 'value' => $iso );
 	}
-	$body         = (string) $row->message;
-	$message_rows = array( array( 'label' => __( 'Subject', 'minn-admin' ), 'value' => (string) $row->subject ) );
-	if ( minn_admin_site_mailer_shows_content() && '' !== $body ) {
-		$message_rows[] = preg_match( '/<\/?[a-z][^>]*>/i', $body )
-			? array( 'label' => __( 'Body', 'minn-admin' ), 'value' => $body, 'type' => 'html-preview' )
-			: array( 'label' => __( 'Body', 'minn-admin' ), 'value' => $body, 'type' => 'code' );
-	}
-	return array(
-		'sections' => array(
-			array( 'title' => __( 'Delivery', 'minn-admin' ), 'rows' => $delivery ),
-			array( 'title' => __( 'Message', 'minn-admin' ), 'rows' => $message_rows ),
-		),
-	);
+	// The subject, the delivery details and the list all stay; only the
+	// body answers to their content switch, as on their own screen.
+	$body = (string) $row->message;
+	return minn_admin_mail_sections( $delivery, $row->subject, minn_admin_site_mailer_shows_content() && '' !== $body ? $body : null );
 }
 
 function minn_admin_site_mailer_can() {
@@ -177,18 +168,9 @@ minn_admin_resource( 'site-mailer/emails', function () {
 			// Not their Log_Entry::delete_logs(): it deletes by api_id, which is
 			// '' on every row their cloud never accepted, so one of those would
 			// take every other with it. By the row's own key instead.
-			'delete' => array(
-				'method' => 'DELETE',
-				'gate'   => 'view',
-				'run'    => function ( $id ) {
-					return Minn_Admin_Kernel_SQL::delete( 'site_mail_logs', 'id', $id );
-				},
-				'expect' => 'gone',
-				'reply'  => function () {
-					return array( 'deleted' => true );
-				},
-				'done'   => __( 'Log entry deleted.', 'minn-admin' ),
-			),
+			'delete' => minn_admin_mail_delete( function ( $id ) {
+				return Minn_Admin_Kernel_SQL::delete( 'site_mail_logs', 'id', $id );
+			} ),
 		),
 	);
 } );
@@ -197,98 +179,35 @@ minn_admin_endpoint( 'site-mailer/status', array(
 	'active' => 'minn_admin_site_mailer_active',
 	'gate'   => 'minn_admin_site_mailer_can',
 	'run'    => function () {
-		$open = array( array( 'label' => __( 'Open Site Mailer ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=site-mailer' ) ) );
-		if ( ! Minn_Admin_Kernel_SQL::exists( 'site_mail_logs' ) ) {
-			return array(
-				'rows'    => array( array( 'label' => __( 'Email log', 'minn-admin' ), 'value' => '—', 'hint' => __( 'Site Mailer has not logged any sends yet', 'minn-admin' ) ) ),
-				'actions' => $open,
-			);
-		}
 		$id     = 'site-mailer/emails';
-		$failed = Minn_Admin_Kernel::count( $id, array( 'status' => MINN_ADMIN_SITE_MAILER_FAILED ) );
+		$open   = array( array( 'label' => __( 'Open Site Mailer ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=site-mailer' ) ) );
 		$opened = Minn_Admin_Kernel::count( $id, array( 'opened' => 1 ) );
-		return array(
-			'rows'    => array(
-				array(
-					'label' => __( 'Logged emails', 'minn-admin' ),
-					'value' => number_format_i18n( Minn_Admin_Kernel::count( $id ) ),
-					/* translators: %s: number of failed emails. */
-					'hint'  => $failed ? sprintf( __( '%s failed', 'minn-admin' ), number_format_i18n( $failed ) ) : __( 'All delivered', 'minn-admin' ),
-				),
+		return minn_admin_mail_card( $id, array(
+			'table'         => 'site_mail_logs',
+			'missing_value' => '—',
+			'missing'       => __( 'Site Mailer has not logged any sends yet', 'minn-admin' ),
+			'failed'        => array( 'status' => MINN_ADMIN_SITE_MAILER_FAILED ),
+			'ok'            => __( 'All delivered', 'minn-admin' ),
+			'primary'       => 'Delivered',
+			'chart'         => array( 'column' => 'created_at', 'clock' => 'local', 'split' => 'status', 'secondary' => MINN_ADMIN_SITE_MAILER_FAILED, 'label' => 'M j' ),
+			'rows'          => array(
 				array(
 					'label' => __( 'Delivered', 'minn-admin' ),
 					'value' => number_format_i18n( Minn_Admin_Kernel::count( $id, array( 'status' => MINN_ADMIN_SITE_MAILER_DELIVERED ) ) ),
 					'hint'  => $opened ? number_format_i18n( $opened ) . ' opened' : '',
 				),
 			),
-			'chart'   => array(
-				'title'     => __( 'Last 14 days', 'minn-admin' ),
-				'primary'   => 'Delivered',
-				'secondary' => 'Failed',
-				'points'    => array_values( Minn_Admin_Kernel::days( $id, array( 'column' => 'created_at', 'clock' => 'local', 'split' => 'status', 'secondary' => MINN_ADMIN_SITE_MAILER_FAILED, 'label' => 'M j' ) ) ),
-			),
-			'actions' => $open,
-		);
+			'actions'       => $open,
+		) );
 	},
 ) );
 
-add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
-	if ( ! minn_admin_site_mailer_active() ) {
-		return $surfaces;
-	}
-	$surfaces['site-mailer'] = array(
-		'label'      => __( 'Email', 'minn-admin' ),
-		'family'     => 'mail',
-		'sub'        => 'Site Mailer',
-		'plugin'     => 'site-mailer',
-		'icon'       => 'send',
-		'cap'        => 'manage_options',
-		'status'     => array( 'route' => 'minn-admin/v1/site-mailer/status' ),
-		'collection' => array(
-			'route'     => 'minn-admin/v1/site-mailer/emails',
-			// A status-chart bar narrows the log to that day (the chart's
-			// points carry from/to; the route reads after/before).
-			'dateQuery' => 'after={from}&before={to}',
-			'pageQuery' => 'per_page=25&page={page}',
-			'search'    => 'search={q}',
-			'itemsKey'  => 'items',
-			'totalKey'  => 'total',
-			'tabs'      => array(
-				'param'    => 'status',
-				'static'   => array(
-					array( 'delivered', 'Delivered' ),
-					array( 'failed', 'Failed' ),
-				),
-				'allLabel' => 'All',
-			),
-			'columns'   => array(
-				array( 'key' => 'subject', 'label' => __( 'Subject', 'minn-admin' ), 'format' => 'title' ),
-				array( 'key' => 'to', 'label' => __( 'To', 'minn-admin' ), 'format' => 'text' ),
-				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill' ),
-				array( 'key' => 'created_at', 'label' => __( 'Date', 'minn-admin' ), 'format' => 'ago' ),
-			),
-			'detail'    => array(
-				'sectionsRoute' => 'minn-admin/v1/site-mailer/emails/{id}/view',
-			),
-			'actions'   => array(
-				array(
-					'label'   => __( 'Delete', 'minn-admin' ),
-					'route'   => 'minn-admin/v1/site-mailer/emails/{id}',
-					'method'  => 'DELETE',
-					'confirm' => __( 'Delete this log entry permanently? There is no trash.', 'minn-admin' ),
-					'danger'  => true,
-				),
-			),
-			'bulk'      => array(
-				array(
-					'label'   => __( 'Delete', 'minn-admin' ),
-					'route'   => 'minn-admin/v1/site-mailer/emails/{id}',
-					'method'  => 'DELETE',
-					'confirm' => __( 'Delete the selected log entries permanently?', 'minn-admin' ),
-					'danger'  => true,
-				),
-			),
-		),
-	);
-	return $surfaces;
+minn_admin_add_surface( 'site-mailer', 'minn_admin_site_mailer_active', function () {
+	return minn_admin_mail_surface( 'site-mailer/emails', array(
+		'sub'    => 'Site Mailer',
+		'plugin' => 'site-mailer',
+		'cap'    => 'manage_options',
+		'status' => 'site-mailer/status',
+		'tabs'   => array( 'delivered' => 'Delivered', 'failed' => 'Failed' ),
+	) );
 } );

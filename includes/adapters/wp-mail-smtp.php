@@ -67,17 +67,8 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'cap'        => 'read',
 		'family'     => 'mail',
 		'status'     => array( 'route' => 'minn-admin/v1/wp-mail-smtp/status' ),
-		'collection' => array(
-			'route'     => 'minn-admin/v1/wp-mail-smtp/events',
-			'pageQuery' => 'per_page=25&page={page}',
-			// Their own EventsCollection does the searching, so this matches
-			// their Debug Events screen rather than approximating it.
-			'search'    => 'search={q}',
-			// A status-chart bar narrows the list to that day (the chart's
-			// points carry from/to; the route reads after/before).
-			'dateQuery' => 'after={from}&before={to}',
-			'itemsKey'  => 'items',
-			'totalKey'  => 'total',
+		// A status-chart bar narrows the list to that day (the kernel's dateQuery).
+		'collection' => Minn_Admin_Kernel::collection( 'wp-mail-smtp/events', array(
 			'tabs'      => array(
 				'param'  => 'type',
 				'static' => array(
@@ -97,7 +88,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'messageKey'  => 'message',
 				'skip'        => array( 'message' ),
 			),
-		),
+		) ),
 	);
 	return $surfaces;
 } );

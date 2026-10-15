@@ -61,8 +61,9 @@ const both = [ ...shared ].filter( ( f ) => plugins.some( ( p ) => p.adapters.in
 check( 'a shared file is not also a plugin adapter', ! both.length, both.join( ', ' ) );
 
 /* ===== Demo links ===== */
-// The keys an adapter registers on minn_admin_surfaces: $surfaces['id'] = ...
-const registered = ( f ) => [ ...source[ f ].matchAll( /\$surfaces\[\s*'([a-z0-9-]+)'\s*\]\s*=/g ) ].map( ( m ) => m[ 1 ] );
+// The keys an adapter registers on minn_admin_surfaces: $surfaces['id'] = ...,
+// or minn_admin_add_surface( 'id', … ) for an adapter on a family kit.
+const registered = ( f ) => [ ...source[ f ].matchAll( /\$surfaces\[\s*'([a-z0-9-]+)'\s*\]\s*=|minn_admin_add_surface\(\s*'([a-z0-9-]+)'/g ) ].map( ( m ) => m[ 1 ] || m[ 2 ] );
 const wrongSurface = plugins.filter( ( p ) => p.surface && ! p.adapters.some( ( f ) => source[ f ] && registered( f ).includes( p.surface ) ) );
 check( "a plugin's surface is registered by its own adapter files", ! wrongSurface.length, wrongSurface.map( ( p ) => p.name + ' → ' + p.surface ).join( ', ' ) );
 const linked = new Set( plugins.map( ( p ) => p.surface ).filter( Boolean ) );

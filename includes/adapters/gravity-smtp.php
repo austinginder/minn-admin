@@ -294,213 +294,121 @@ function minn_admin_gsmtp_active_connector_count() {
 	}
 }
 
-add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
-	if ( ! minn_admin_gravity_smtp_active() ) {
-		return $surfaces;
-	}
-
-	$surfaces['gravity-smtp'] = array(
-		'label'      => __( 'Email', 'minn-admin' ),
+minn_admin_add_surface( 'gravity-smtp', 'minn_admin_gravity_smtp_active', function () {
+	return minn_admin_mail_surface( 'gravity-smtp/events', array(
 		'sub'        => 'Gravity SMTP',
 		'plugin'     => 'gravitysmtp',
-		'icon'       => 'send',
 		'cap'        => minn_admin_gsmtp_cap( 'VIEW_EMAIL_LOG' ),
-		'family'     => 'mail',
+		'status'     => 'gravity-smtp/status',
+		// Event timestamps are UTC MySQL datetimes (no zone suffix).
+		'date'       => 'date_created',
+		'utc'        => true,
+		// 2.3.0: suppressed recipients stripped from to/cc/bcc.
+		'tabs'       => array( 'sent' => 'Sent', 'failed' => 'Failed', 'sandboxed' => 'Sandboxed', 'partially-sent' => 'Filtered' ),
+		'resend'     => array( 'key' => 'can_resend', 'when' => true ),
+		'columns'    => array(
+			array( 'key' => 'source', 'label' => __( 'Source', 'minn-admin' ), 'width' => '128px' ),
+			array( 'key' => 'service', 'label' => __( 'Service', 'minn-admin' ), 'width' => '120px' ),
+		),
 		'collection' => array(
 			'viewLabel' => __( 'Log', 'minn-admin' ),
-			'route'     => 'minn-admin/v1/gravity-smtp/events',
-			'pageQuery' => 'per_page=25&page={page}',
-			'search'    => 'search={q}',
-			// A status-chart bar narrows the log to that day (the chart's
-			// points carry from/to; the route reads after/before).
-			'dateQuery' => 'after={from}&before={to}',
-			'itemsKey'  => 'items',
-			'totalKey'  => 'total',
-			'tabs'      => array(
-				'param'  => 'status',
-				'static' => array(
-					array( 'sent', 'Sent' ),
-					array( 'failed', 'Failed' ),
-					array( 'sandboxed', 'Sandboxed' ),
-					// 2.3.0: suppressed recipients stripped from to/cc/bcc.
-					array( 'partially-sent', 'Filtered' ),
-				),
-				'allLabel' => 'All',
-			),
 			// Origins live in extra and grow as plugins send mail, so the
 			// list is fetched on demand (filter.route) rather than at boot.
 			'filter'    => array(
-				'label'     => __( 'Source', 'minn-admin' ),
-				'route'     => 'minn-admin/v1/gravity-smtp/sources',
-				'valueKey'  => 'id',
-				'labelKey'  => 'title',
-				'allLabel'  => __( 'All sources', 'minn-admin' ),
-				'query'     => 'source={v}',
-			),
-			'columns'   => array(
-				array( 'key' => 'subject', 'label' => __( 'Subject', 'minn-admin' ), 'format' => 'title' ),
-				array( 'key' => 'to', 'label' => __( 'To', 'minn-admin' ), 'format' => 'text' ),
-				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill' ),
-				array( 'key' => 'source', 'label' => __( 'Source', 'minn-admin' ), 'width' => '128px' ),
-				array( 'key' => 'service', 'label' => __( 'Service', 'minn-admin' ), 'width' => '120px' ),
-				// Event timestamps are UTC MySQL datetimes (no zone suffix).
-				array( 'key' => 'date_created', 'label' => __( 'Date', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
-			),
-			'detail'    => array(
-				// v0.18.0: server-built sections (status pill, sandboxed
-				// html-preview body, headers kv-table). The flat
-				// /events/{id} route stays for API consumers.
-				'sectionsRoute' => 'minn-admin/v1/gravity-smtp/events/{id}/view',
-			),
-			'actions'   => array(
-				array(
-					'label'   => __( 'Resend', 'minn-admin' ),
-					'route'   => 'minn-admin/v1/gravity-smtp/events/{id}/resend',
-					'method'  => 'POST',
-					'confirm' => __( 'Resend this email to the original recipients?', 'minn-admin' ),
-					'when'    => array( 'key' => 'can_resend', 'equals' => true ),
-				),
-				array(
-					'label'   => __( 'Delete', 'minn-admin' ),
-					'route'   => 'minn-admin/v1/gravity-smtp/events/{id}',
-					'method'  => 'DELETE',
-					'confirm' => __( 'Delete this log entry permanently? There is no trash.', 'minn-admin' ),
-					'danger'  => true,
-				),
-			),
-			'bulk'      => array(
-				array(
-					'label'   => __( 'Delete', 'minn-admin' ),
-					'route'   => 'minn-admin/v1/gravity-smtp/events/{id}',
-					'method'  => 'DELETE',
-					'confirm' => __( 'Delete the selected log entries permanently?', 'minn-admin' ),
-					'danger'  => true,
-				),
+				'label'    => __( 'Source', 'minn-admin' ),
+				'route'    => 'minn-admin/v1/gravity-smtp/sources',
+				'valueKey' => 'id',
+				'labelKey' => 'title',
+				'allLabel' => __( 'All sources', 'minn-admin' ),
+				'query'    => 'source={v}',
 			),
 		),
-		// Suppressed addresses Gravity SMTP refuses to send to — list, add,
-		// reactivate through their own model. Reads/writes gate on their
-		// granular suppression caps server-side.
-		'manage'     => array(
-			'viewLabel' => __( 'Suppressions', 'minn-admin' ),
-			'route'     => 'minn-admin/v1/gravity-smtp/suppressed',
-			'pageQuery' => 'per_page=25&page={page}',
-			'itemsKey'  => 'items',
-			'totalKey'  => 'total',
-			'search'    => 'search={q}',
-			'columns'   => array(
-				array( 'key' => 'email', 'label' => __( 'Email', 'minn-admin' ), 'format' => 'title' ),
-				array( 'key' => 'reason', 'label' => __( 'Reason', 'minn-admin' ), 'format' => 'pill' ),
-				array( 'key' => 'notes', 'label' => __( 'Notes', 'minn-admin' ) ),
-				// Their model stamps current_time( 'mysql', true ) — UTC.
-				array( 'key' => 'date_created', 'label' => __( 'Since', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
-			),
-			'detail'    => array(),
-			'create'    => array(
-				'label'  => __( 'Suppress email', 'minn-admin' ),
-				'route'  => 'minn-admin/v1/gravity-smtp/suppressed',
-				'fields' => array(
-					array( 'key' => 'email', 'label' => __( 'Email address', 'minn-admin' ), 'type' => 'email' ),
-					array( 'key' => 'notes', 'label' => __( 'Notes', 'minn-admin' ), 'required' => false, 'placeholder' => __( 'Why sending to this address is off', 'minn-admin' ) ),
-				),
-			),
-			'actions'   => array(
-				array(
-					'label'   => __( 'Reactivate (allow sending again)', 'minn-admin' ),
-					'method'  => 'POST',
-					'route'   => 'minn-admin/v1/gravity-smtp/suppressed/{id}/reactivate',
-					'confirm' => __( 'Allow Gravity SMTP to send to this address again?', 'minn-admin' ),
-				),
-			),
-		),
-		// Extra list views beyond collection/manage. The debug log lived as a
-		// wp-admin link-out on the status card until surfaces grew this slot.
-		'views'      => array_values( array_filter( array(
-			array(
-				'viewLabel' => __( 'Debug log', 'minn-admin' ),
-				'cap'       => minn_admin_gsmtp_cap( 'VIEW_DEBUG_LOG' ),
-				'route'     => 'minn-admin/v1/gravity-smtp/debug',
-				'pageQuery' => 'per_page=25&page={page}',
-				'itemsKey'  => 'items',
-				'totalKey'  => 'total',
-				'search'    => 'search={q}',
-				'tabs'      => array(
-					'param'    => 'priority',
-					'static'   => array(
-						array( 'error', 'Errors' ),
-						array( 'warning', 'Warnings' ),
-						array( 'info', 'Info' ),
-						array( 'debug', 'Debug' ),
-					),
-					'allLabel' => 'All',
-				),
+		'surface'    => array(
+			// Suppressed addresses Gravity SMTP refuses to send to — list, add,
+			// reactivate through their own model. Reads/writes gate on their
+			// granular suppression caps server-side.
+			'manage'     => Minn_Admin_Kernel::collection( 'gravity-smtp/suppressed', array(
+				'viewLabel' => __( 'Suppressions', 'minn-admin' ),
 				'columns'   => array(
-					array( 'key' => 'line', 'label' => __( 'Message', 'minn-admin' ), 'format' => 'title' ),
-					array( 'key' => 'priority', 'label' => __( 'Priority', 'minn-admin' ), 'format' => 'pill' ),
-					// Their Debug_Log_Model stamps current_time( 'mysql', true ) — UTC.
-					array( 'key' => 'date_created', 'label' => __( 'Date', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
+					array( 'key' => 'email', 'label' => __( 'Email', 'minn-admin' ), 'format' => 'title' ),
+					array( 'key' => 'reason', 'label' => __( 'Reason', 'minn-admin' ), 'format' => 'pill' ),
+					array( 'key' => 'notes', 'label' => __( 'Notes', 'minn-admin' ) ),
+					// Their model stamps current_time( 'mysql', true ) — UTC.
+					array( 'key' => 'date_created', 'label' => __( 'Since', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
 				),
 				'detail'    => array(),
-			),
-			// Email Routing (2.3.0+). List + enable/disable/delete only —
-			// the condition builder stays on their React screen.
-			minn_admin_gsmtp_routing_available() ? array(
-				'viewLabel' => __( 'Routing', 'minn-admin' ),
-				'cap'       => minn_admin_gsmtp_cap( 'VIEW_ROUTING' ),
-				'route'     => 'minn-admin/v1/gravity-smtp/routing',
-				'pageQuery' => 'per_page=50&page={page}',
-				'itemsKey'  => 'items',
-				'totalKey'  => 'total',
-				'columns'   => array(
-					array( 'key' => 'order', 'label' => '#', 'format' => 'text', 'width' => '48px' ),
-					array( 'key' => 'name', 'label' => __( 'Rule', 'minn-admin' ), 'format' => 'title' ),
-					array( 'key' => 'provider', 'label' => __( 'Send with', 'minn-admin' ), 'format' => 'text' ),
-					array( 'key' => 'conditions', 'label' => __( 'When', 'minn-admin' ), 'format' => 'text' ),
-					array( 'key' => 'enabled', 'label' => __( 'Enabled', 'minn-admin' ), 'format' => 'pill' ),
-				),
-				'detail'    => array(
-					'skip' => array( 'order', 'connector' ),
+				'create'    => array(
+					'label'  => __( 'Suppress email', 'minn-admin' ),
+					'route'  => 'minn-admin/v1/gravity-smtp/suppressed',
+					'fields' => array(
+						array( 'key' => 'email', 'label' => __( 'Email address', 'minn-admin' ), 'type' => 'email' ),
+						array( 'key' => 'notes', 'label' => __( 'Notes', 'minn-admin' ), 'required' => false, 'placeholder' => __( 'Why sending to this address is off', 'minn-admin' ) ),
+					),
 				),
 				'actions'   => array(
-					array(
-						'label'  => __( 'Enable', 'minn-admin' ),
-						'method' => 'POST',
-						'route'  => 'minn-admin/v1/gravity-smtp/routing/{id}/enable',
-						'when'   => array( 'key' => 'enabled', 'equals' => 'off' ),
-					),
-					array(
-						'label'  => __( 'Disable', 'minn-admin' ),
-						'method' => 'POST',
-						'route'  => 'minn-admin/v1/gravity-smtp/routing/{id}/disable',
-						'when'   => array( 'key' => 'enabled', 'equals' => 'on' ),
-					),
-					array(
-						'label'   => __( 'Delete rule', 'minn-admin' ),
-						'method'  => 'DELETE',
-						'route'   => 'minn-admin/v1/gravity-smtp/routing/{id}',
-						'confirm' => __( 'Delete this routing rule permanently?', 'minn-admin' ),
-						'danger'  => true,
-					),
-					array(
-						'label' => __( 'Edit in Gravity SMTP ↗', 'minn-admin' ),
-						'href'  => minn_admin_gsmtp_routing_admin_url(),
-					),
+					Minn_Admin_Kernel::ui( 'gravity-smtp/suppressed', 'reactivate', array( 'label' => __( 'Reactivate (allow sending again)', 'minn-admin' ), 'confirm' => __( 'Allow Gravity SMTP to send to this address again?', 'minn-admin' ) ) ),
 				),
-			) : null,
-		) ) ),
-		'settings'   => array(
-			'cap'   => minn_admin_gsmtp_cap( 'VIEW_GENERAL_SETTINGS' ),
-			'tabs'  => array(
-				array( 'id' => 'sending', 'label' => __( 'Sending', 'minn-admin' ) ),
-				array( 'id' => 'general', 'label' => __( 'General', 'minn-admin' ) ),
+			) ),
+			// Extra list views beyond collection/manage. The debug log lived as a
+			// wp-admin link-out on the status card until surfaces grew this slot.
+			'views'      => array_values( array_filter( array(
+				Minn_Admin_Kernel::collection( 'gravity-smtp/debug', array(
+					'viewLabel' => __( 'Debug log', 'minn-admin' ),
+					'cap'       => minn_admin_gsmtp_cap( 'VIEW_DEBUG_LOG' ),
+					'tabs'      => array(
+						'param'    => 'priority',
+						'static'   => array(
+							array( 'error', 'Errors' ),
+							array( 'warning', 'Warnings' ),
+							array( 'info', 'Info' ),
+							array( 'debug', 'Debug' ),
+						),
+						'allLabel' => 'All',
+					),
+					'columns'   => array(
+						array( 'key' => 'line', 'label' => __( 'Message', 'minn-admin' ), 'format' => 'title' ),
+						array( 'key' => 'priority', 'label' => __( 'Priority', 'minn-admin' ), 'format' => 'pill' ),
+						// Their Debug_Log_Model stamps current_time( 'mysql', true ) — UTC.
+						array( 'key' => 'date_created', 'label' => __( 'Date', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
+					),
+					'detail'    => array(),
+				) ),
+				// Email Routing (2.3.0+). List + enable/disable/delete only —
+				// the condition builder stays on their React screen.
+				minn_admin_gsmtp_routing_available() ? Minn_Admin_Kernel::collection( 'gravity-smtp/routing', array(
+					'viewLabel' => __( 'Routing', 'minn-admin' ),
+					'cap'       => minn_admin_gsmtp_cap( 'VIEW_ROUTING' ),
+					'columns'   => array(
+						array( 'key' => 'order', 'label' => '#', 'format' => 'text', 'width' => '48px' ),
+						array( 'key' => 'name', 'label' => __( 'Rule', 'minn-admin' ), 'format' => 'title' ),
+						array( 'key' => 'provider', 'label' => __( 'Send with', 'minn-admin' ), 'format' => 'text' ),
+						array( 'key' => 'conditions', 'label' => __( 'When', 'minn-admin' ), 'format' => 'text' ),
+						array( 'key' => 'enabled', 'label' => __( 'Enabled', 'minn-admin' ), 'format' => 'pill' ),
+					),
+					'detail'    => array(
+						'skip' => array( 'order', 'connector' ),
+					),
+					'actions'   => array(
+						Minn_Admin_Kernel::ui( 'gravity-smtp/routing', 'enable', array( 'label' => __( 'Enable', 'minn-admin' ), 'key' => 'enabled', 'when' => 'off' ) ),
+						Minn_Admin_Kernel::ui( 'gravity-smtp/routing', 'disable', array( 'label' => __( 'Disable', 'minn-admin' ), 'key' => 'enabled', 'when' => 'on' ) ),
+						Minn_Admin_Kernel::ui( 'gravity-smtp/routing', 'delete', array( 'label' => __( 'Delete rule', 'minn-admin' ), 'confirm' => __( 'Delete this routing rule permanently?', 'minn-admin' ), 'danger' => true ) ),
+						array(
+							'label' => __( 'Edit in Gravity SMTP ↗', 'minn-admin' ),
+							'href'  => minn_admin_gsmtp_routing_admin_url(),
+						),
+					),
+				) ) : null,
+			) ) ),
+			'settings'   => array(
+				'cap'   => minn_admin_gsmtp_cap( 'VIEW_GENERAL_SETTINGS' ),
+				'tabs'  => array(
+					array( 'id' => 'sending', 'label' => __( 'Sending', 'minn-admin' ) ),
+					array( 'id' => 'general', 'label' => __( 'General', 'minn-admin' ) ),
+				),
+				'route' => 'minn-admin/v1/gravity-smtp/settings/{tab}',
 			),
-			'route' => 'minn-admin/v1/gravity-smtp/settings/{tab}',
 		),
-		'status'     => array(
-			'route' => 'minn-admin/v1/gravity-smtp/status',
-		),
-	);
-	return $surfaces;
+	) );
 } );
 
 /**
@@ -696,17 +604,6 @@ function minn_admin_gsmtp_event_view( array $r ) {
 	$delivery[] = array( 'label' => __( 'Service', 'minn-admin' ), 'value' => (string) $r['service'] );
 	$delivery[] = array( 'label' => __( 'Date', 'minn-admin' ), 'value' => $r['date_created'] . ' UTC' );
 
-	$message      = (string) $r['message'];
-	$message_rows = array( array( 'label' => __( 'Subject', 'minn-admin' ), 'value' => (string) $r['subject'] ) );
-	if ( minn_admin_gsmtp_can_preview() ) {
-		$message_rows[] = preg_match( '/<\/?[a-z][^>]*>/i', $message )
-			? array( 'label' => __( 'Body', 'minn-admin' ), 'value' => $message, 'type' => 'html-preview' )
-			: array( 'label' => __( 'Body', 'minn-admin' ), 'value' => $message, 'type' => 'code' );
-	}
-	$sections = array(
-		array( 'title' => __( 'Delivery', 'minn-admin' ), 'rows' => $delivery ),
-		array( 'title' => __( 'Message', 'minn-admin' ), 'rows' => $message_rows ),
-	);
 	// Stored headers ride the serialized `extra` blob. Regex-decode only
 	// (never unserialize third-party blobs): plain string headers alone.
 	$headers = array();
@@ -717,13 +614,8 @@ function minn_admin_gsmtp_event_view( array $r ) {
 			}
 		}
 	}
-	if ( $headers ) {
-		$sections[] = array(
-			'title' => __( 'Headers', 'minn-admin' ),
-			'rows'  => array( array( 'label' => __( 'Stored headers', 'minn-admin' ), 'value' => $headers, 'type' => 'kv-table' ) ),
-		);
-	}
-	return array( 'sections' => $sections );
+	$more = $headers ? array( array( 'title' => __( 'Headers', 'minn-admin' ), 'rows' => array( array( 'label' => __( 'Stored headers', 'minn-admin' ), 'value' => $headers, 'type' => 'kv-table' ) ) ) ) : array();
+	return minn_admin_mail_sections( $delivery, $r['subject'], minn_admin_gsmtp_can_preview() ? (string) $r['message'] : null, $more );
 }
 
 // date_created is UTC (current_time( 'mysql', true )), and a chart bar hands
@@ -853,35 +745,23 @@ minn_admin_resource( 'gravity-smtp/events', function () {
 		'actions' => array(
 			// Their Event_Model::delete(), so their hooks match wp-admin; a
 			// model that is missing or no-ops leaves the kernel's delete.
-			'delete' => array(
-				'method' => 'DELETE',
-				'gate'   => 'delete',
-				'run'    => function ( $id ) {
-					$events = minn_admin_gsmtp_events_model();
-					try {
-						if ( $events && method_exists( $events, 'delete' ) ) {
-							$events->delete( $id );
-						}
-					} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
-						// The kernel's delete below.
+			'delete' => minn_admin_mail_delete( function ( $id ) {
+				$events = minn_admin_gsmtp_events_model();
+				try {
+					if ( $events && method_exists( $events, 'delete' ) ) {
+						$events->delete( $id );
 					}
-					if ( Minn_Admin_Kernel_SQL::count( 'gravitysmtp_events', array( 'id' => $id ) ) ) {
-						Minn_Admin_Kernel_SQL::delete( 'gravitysmtp_events', 'id', $id );
-					}
-					return true;
-				},
-				'expect' => 'gone',
-				'fail'   => __( 'Could not delete this log entry.', 'minn-admin' ),
-				'reply'  => function () {
-					return array( 'deleted' => true );
-				},
-				'done'   => __( 'Log entry deleted.', 'minn-admin' ),
-			),
-			'resend' => array(
-				'gate'   => 'resend',
-				'run'    => 'minn_admin_gravity_smtp_resend',
-				'expect' => 'ran',
-				'reply'  => function ( $id, $fresh, $ran ) {
+				} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
+					// The kernel's delete below.
+				}
+				if ( Minn_Admin_Kernel_SQL::count( 'gravitysmtp_events', array( 'id' => $id ) ) ) {
+					Minn_Admin_Kernel_SQL::delete( 'gravitysmtp_events', 'id', $id );
+				}
+				return true;
+			}, array( 'gate' => 'delete', 'fail' => __( 'Could not delete this log entry.', 'minn-admin' ) ) ),
+			'resend' => minn_admin_mail_resend( 'minn_admin_gravity_smtp_resend', array(
+				'gate'  => 'resend',
+				'reply' => function ( $id, $fresh, $ran ) {
 					return array(
 						'resent'  => true,
 						'logged'  => ! empty( $ran['logged'] ),
@@ -890,7 +770,7 @@ minn_admin_resource( 'gravity-smtp/events', function () {
 							: __( 'Resent, but another active mail plugin carried it, so the new send appears in that plugin’s log, not Gravity SMTP’s.', 'minn-admin' ),
 					);
 				},
-			),
+			) ),
 		),
 	);
 } );

@@ -212,40 +212,19 @@ function minn_admin_fluent_smtp_checks() {
 
 /** Server-built model for the surface status card. */
 function minn_admin_fluent_smtp_status_model() {
-	if ( ! Minn_Admin_Kernel_SQL::exists( 'fsmpt_email_logs' ) ) {
-		return array(
-			'rows'    => array( array( 'label' => __( 'Email log', 'minn-admin' ), 'value' => 'Not ready', 'hint' => __( 'FluentSMTP has not created its log table yet', 'minn-admin' ) ) ),
-			'actions' => array(
-				array( 'label' => __( 'Open FluentSMTP ↗', 'minn-admin' ), 'href' => admin_url( 'options-general.php?page=fluent-mail#/' ) ),
-			),
-		);
-	}
-	$id     = 'fluent-smtp/emails';
-	$total  = Minn_Admin_Kernel::count( $id );
-	$failed = Minn_Admin_Kernel::count( $id, array( 'status' => 'failed' ) );
-	// created_at is site-local current_time.
-	$by_day = Minn_Admin_Kernel::days( $id, array( 'column' => 'created_at', 'clock' => 'local', 'split' => 'status', 'secondary' => array( 'failed' ) ) );
-
 	// Connection count from FluentSMTP settings (never touch secrets).
 	$connections = 0;
 	$settings    = get_option( 'fluentmail-settings', array() );
 	if ( is_array( $settings ) && ! empty( $settings['connections'] ) && is_array( $settings['connections'] ) ) {
 		$connections = count( $settings['connections'] );
 	}
-
 	$rows = array(
-		array(
-			'label' => __( 'Logged emails', 'minn-admin' ),
-			'value' => number_format_i18n( $total ),
-			'hint'  => $failed ? number_format_i18n( $failed ) . ' failed' : __( 'All logged sends', 'minn-admin' ),
-		),
 		array(
 			'label' => __( 'Connections', 'minn-admin' ),
 			'value' => (string) $connections,
 			'hint'  => $connections ? __( 'Configured in FluentSMTP', 'minn-admin' ) : __( 'No mailer connected yet', 'minn-admin' ),
 		),
 	);
-
 	// Connection health (FluentSMTP 2.3.0+): their daily cron stores the
 	// report in an option; getReport() already reconciles deleted
 	// connections, so this is a zero-network read of their own verdict.
@@ -253,16 +232,15 @@ function minn_admin_fluent_smtp_status_model() {
 	if ( null !== $health ) {
 		$rows[] = $health;
 	}
-
-	return array(
-		'rows'    => $rows,
-		'chart'   => array(
-			'title'     => __( 'Last 14 days', 'minn-admin' ),
-			'primary'   => 'Sent',
-			'secondary' => 'Failed',
-			'points'    => array_values( $by_day ),
-		),
-		'actions' => array(
+	return minn_admin_mail_card( 'fluent-smtp/emails', array(
+		'table'           => 'fsmpt_email_logs',
+		'missing'         => __( 'FluentSMTP has not created its log table yet', 'minn-admin' ),
+		'missing_actions' => array( array( 'label' => __( 'Open FluentSMTP ↗', 'minn-admin' ), 'href' => admin_url( 'options-general.php?page=fluent-mail#/' ) ) ),
+		'failed'          => array( 'status' => 'failed' ),
+		// created_at is site-local current_time.
+		'chart'           => array( 'column' => 'created_at', 'clock' => 'local', 'split' => 'status', 'secondary' => array( 'failed' ) ),
+		'rows'            => $rows,
+		'actions'         => array(
 			array(
 				'label'  => __( 'Send a test email', 'minn-admin' ),
 				'route'  => 'minn-admin/v1/fluent-smtp/test',
@@ -281,101 +259,42 @@ function minn_admin_fluent_smtp_status_model() {
 				'href'  => admin_url( 'options-general.php?page=fluent-mail#/' ),
 			),
 		),
-	);
+	) );
 }
 
-add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
-	if ( ! minn_admin_fluent_smtp_active() ) {
-		return $surfaces;
-	}
-
-	$surfaces['fluent-smtp'] = array(
-		'label'      => __( 'Email', 'minn-admin' ),
-		'sub'        => 'FluentSMTP',
-		'plugin'     => 'fluent-smtp',
-		'icon'       => 'send',
-		'cap'        => minn_admin_fluent_smtp_cap(),
-		'family'     => 'mail',
-		'status'     => array( 'route' => 'minn-admin/v1/fluent-smtp/status' ),
-		// v0.18.0: the daily-ops misc settings (connections routing, logging,
-		// simulation) through their Settings model. The connection WIZARD
-		// (per-provider credential forms) stays FluentSMTP's own app.
-		'settings'   => array(
-			'cap'   => minn_admin_fluent_smtp_cap(),
-			'tabs'  => array( array( 'id' => 'general', 'label' => __( 'General', 'minn-admin' ) ) ),
-			'route' => 'minn-admin/v1/fluent-smtp/settings/{tab}',
-		),
-		'collection' => array(
-			'route'     => 'minn-admin/v1/fluent-smtp/emails',
-			'pageQuery' => 'per_page=25&page={page}',
-			'search'    => 'search={q}',
-			// A status-chart bar narrows the log to that day (the chart's
-			// points carry from/to; the route reads after/before).
-			'dateQuery' => 'after={from}&before={to}',
-			'itemsKey'  => 'items',
-			'totalKey'  => 'total',
-			'tabs'      => array(
-				'param'  => 'status',
-				'static' => array(
-					array( 'sent', 'Sent' ),
-					array( 'failed', 'Failed' ),
-				),
-				'allLabel' => 'All',
-			),
-			'columns'   => array(
-				array( 'key' => 'subject', 'label' => __( 'Subject', 'minn-admin' ), 'format' => 'title' ),
-				array( 'key' => 'to', 'label' => __( 'To', 'minn-admin' ), 'format' => 'text' ),
-				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill' ),
-				array( 'key' => 'created_at', 'label' => __( 'Date', 'minn-admin' ), 'format' => 'ago' ),
-			),
-			'detail'    => array(
-				// v0.18.0: server-built sections (status pill, sandboxed HTML
-				// body). The flat /emails/{id} route stays for API consumers.
-				'sectionsRoute' => 'minn-admin/v1/fluent-smtp/emails/{id}/view',
-			),
-			'actions'   => array(
-				array(
-					'label'   => __( 'Resend', 'minn-admin' ),
-					'route'   => 'minn-admin/v1/fluent-smtp/emails/{id}/resend',
-					'method'  => 'POST',
-					'confirm' => __( 'Resend this email to the original recipients?', 'minn-admin' ),
-				),
-				// Their 2.3.0 Recipient Picker equivalent: a parameterized
-				// action lives in the detail modal (field-less actions are
-				// the only ones list rows render — by design).
-				array(
-					'label'  => __( 'Resend to…', 'minn-admin' ),
-					'route'  => 'minn-admin/v1/fluent-smtp/emails/{id}/resend',
-					'method' => 'POST',
-					'fields' => array(
-						array(
-							'key'         => 'to',
-							'label'       => __( 'Send to', 'minn-admin' ),
-							'placeholder' => __( 'address@example.com, second@example.com', 'minn-admin' ),
-							'required'    => true,
-						),
+minn_admin_add_surface( 'fluent-smtp', 'minn_admin_fluent_smtp_active', function () {
+	return minn_admin_mail_surface( 'fluent-smtp/emails', array(
+		'sub'     => 'FluentSMTP',
+		'plugin'  => 'fluent-smtp',
+		'cap'     => minn_admin_fluent_smtp_cap(),
+		'status'  => 'fluent-smtp/status',
+		'resend'  => true,
+		// Their 2.3.0 Recipient Picker equivalent: a parameterized action
+		// lives in the detail modal (field-less actions are the only ones
+		// list rows render, by design).
+		'actions' => array(
+			array_merge( Minn_Admin_Kernel::ui( 'fluent-smtp/emails', 'resend', array( 'label' => __( 'Resend to…', 'minn-admin' ) ) ), array(
+				'fields' => array(
+					array(
+						'key'         => 'to',
+						'label'       => __( 'Send to', 'minn-admin' ),
+						'placeholder' => __( 'address@example.com, second@example.com', 'minn-admin' ),
+						'required'    => true,
 					),
 				),
-				array(
-					'label'   => __( 'Delete', 'minn-admin' ),
-					'route'   => 'minn-admin/v1/fluent-smtp/emails/{id}',
-					'method'  => 'DELETE',
-					'confirm' => __( 'Delete this log entry permanently? There is no trash.', 'minn-admin' ),
-					'danger'  => true,
-				),
-			),
-			'bulk'      => array(
-				array(
-					'label'   => __( 'Delete', 'minn-admin' ),
-					'route'   => 'minn-admin/v1/fluent-smtp/emails/{id}',
-					'method'  => 'DELETE',
-					'confirm' => __( 'Delete the selected log entries permanently?', 'minn-admin' ),
-					'danger'  => true,
-				),
+			) ),
+		),
+		// The daily-ops misc settings (connections routing, logging,
+		// simulation) through their Settings model. The connection WIZARD
+		// (per-provider credential forms) stays FluentSMTP's own app.
+		'surface' => array(
+			'settings' => array(
+				'cap'   => minn_admin_fluent_smtp_cap(),
+				'tabs'  => array( array( 'id' => 'general', 'label' => __( 'General', 'minn-admin' ) ) ),
+				'route' => 'minn-admin/v1/fluent-smtp/settings/{tab}',
 			),
 		),
-	);
-	return $surfaces;
+	) );
 } );
 
 /**
@@ -566,19 +485,7 @@ function minn_admin_fluent_smtp_view( array $r ) {
 		$delivery[] = array( 'label' => __( 'Retries', 'minn-admin' ), 'value' => (string) (int) $r['retries'] );
 	}
 	$delivery[] = array( 'label' => __( 'Date', 'minn-admin' ), 'value' => (string) $r['created_at'] );
-	$body       = (string) $r['body'];
-	$sections   = array(
-		array( 'title' => __( 'Delivery', 'minn-admin' ), 'rows' => $delivery ),
-		array(
-			'title' => __( 'Message', 'minn-admin' ),
-			'rows'  => array(
-				array( 'label' => __( 'Subject', 'minn-admin' ), 'value' => (string) $r['subject'] ),
-				preg_match( '/<\/?[a-z][^>]*>/i', $body )
-					? array( 'label' => __( 'Body', 'minn-admin' ), 'value' => $body, 'type' => 'html-preview' )
-					: array( 'label' => __( 'Body', 'minn-admin' ), 'value' => $body, 'type' => 'code' ),
-			),
-		),
-	);
+	$sections   = array();
 	$response = minn_admin_fluent_smtp_response( $r['response'] );
 	if ( '' !== $response ) {
 		$sections[] = array(
@@ -623,7 +530,7 @@ function minn_admin_fluent_smtp_view( array $r ) {
 			// The trail is a bonus; the detail renders without it.
 		}
 	}
-	return array( 'sections' => $sections );
+	return minn_admin_mail_sections( $delivery, $r['subject'], (string) $r['body'], $sections );
 }
 
 /**
@@ -687,12 +594,7 @@ function minn_admin_fluent_smtp_resend( $id, array $row, WP_REST_Request $reques
 		return $to_str;
 	}
 	// Pre-2.3.0 fallback: plain wp_mail (no trail is recorded).
-	$to      = $override ? $override : $original;
-	$is_html = (bool) preg_match( '/<\/?[a-z][\s\S]*>/i', (string) $row['body'] );
-	if ( ! wp_mail( $to, (string) $row['subject'], (string) $row['body'], $is_html ? array( 'Content-Type: text/html; charset=UTF-8' ) : array() ) ) {
-		return new WP_Error( 'send_failed', 'wp_mail() reported the message could not be sent.', array( 'status' => 500 ) );
-	}
-	return implode( ', ', $to );
+	return minn_admin_mail_wp_mail( $override ? $override : $original, $row['subject'], $row['body'] );
 }
 
 // created_at is the site's wall clock (current_time), and so are a chart bar's bounds.
@@ -765,34 +667,17 @@ minn_admin_resource( 'fluent-smtp/emails', function () {
 		'reads'   => array( 'view' => array( 'view' => 'minn_admin_fluent_smtp_view', 'fields' => array( 'sections' => 'raw' ) ) ),
 		'actions' => array(
 			// Their Logger::delete() (its own whereIn path) when it loads.
-			'delete' => array(
-				'method' => 'DELETE',
-				'gate'   => 'view',
-				'run'    => function ( $id ) {
-					if ( class_exists( 'FluentMail\\App\\Models\\Logger' ) ) {
-						try {
-							return ( new \FluentMail\App\Models\Logger() )->delete( array( $id ) );
-						} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
-							// Fall through to the kernel's delete.
-						}
+			'delete' => minn_admin_mail_delete( function ( $id ) {
+				if ( class_exists( 'FluentMail\\App\\Models\\Logger' ) ) {
+					try {
+						return ( new \FluentMail\App\Models\Logger() )->delete( array( $id ) );
+					} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
+						// Fall through to the kernel's delete.
 					}
-					return Minn_Admin_Kernel_SQL::delete( 'fsmpt_email_logs', 'id', $id );
-				},
-				'expect' => 'gone',
-				'fail'   => __( 'Log entry still exists after delete.', 'minn-admin' ),
-				'reply'  => function () {
-					return array( 'deleted' => true );
-				},
-				'done'   => __( 'Log entry deleted.', 'minn-admin' ),
-			),
-			'resend' => array(
-				'gate'   => 'view',
-				'run'    => 'minn_admin_fluent_smtp_resend',
-				'expect' => 'ran',
-				'reply'  => function ( $id, $fresh, $to ) {
-					return array( 'resent' => true, 'to' => $to, 'message' => __( 'Resent to ', 'minn-admin' ) . $to );
-				},
-			),
+				}
+				return Minn_Admin_Kernel_SQL::delete( 'fsmpt_email_logs', 'id', $id );
+			}, array( 'fail' => __( 'Log entry still exists after delete.', 'minn-admin' ) ) ),
+			'resend' => minn_admin_mail_resend( 'minn_admin_fluent_smtp_resend' ),
 		),
 	);
 } );

@@ -98,24 +98,9 @@ function minn_admin_suremails_view( array $r ) {
 	if ( '' !== $iso ) {
 		$delivery[] = array( 'label' => __( 'Date', 'minn-admin' ), 'value' => $iso );
 	}
-	$body     = (string) $row->body;
-	$sections = array(
-		array( 'title' => __( 'Delivery', 'minn-admin' ), 'rows' => $delivery ),
-		array(
-			'title' => __( 'Message', 'minn-admin' ),
-			'rows'  => array(
-				array( 'label' => __( 'Subject', 'minn-admin' ), 'value' => (string) $row->subject ),
-				preg_match( '/<\/?[a-z][^>]*>/i', $body )
-					? array( 'label' => __( 'Body', 'minn-admin' ), 'value' => $body, 'type' => 'html-preview' )
-					: array( 'label' => __( 'Body', 'minn-admin' ), 'value' => $body, 'type' => 'code' ),
-			),
-		),
-	);
 	$peek = minn_admin_suremails_response_peek( $row->response );
-	if ( '' !== $peek ) {
-		$sections[] = array( 'title' => __( 'Provider reply', 'minn-admin' ), 'rows' => array( array( 'label' => __( 'Response', 'minn-admin' ), 'value' => $peek ) ) );
-	}
-	return array( 'sections' => $sections );
+	$more = '' !== $peek ? array( array( 'title' => __( 'Provider reply', 'minn-admin' ), 'rows' => array( array( 'label' => __( 'Response', 'minn-admin' ), 'value' => $peek ) ) ) ) : array();
+	return minn_admin_mail_sections( $delivery, $row->subject, (string) $row->body, $more );
 }
 
 function minn_admin_suremails_can() {
@@ -160,18 +145,9 @@ minn_admin_resource( 'suremails/emails', function () {
 		'reads'   => array( 'view' => array( 'view' => 'minn_admin_suremails_view', 'fields' => array( 'sections' => 'raw' ) ) ),
 		'actions' => array(
 			// SureMails keeps no per-entry delete of its own (only its expiry).
-			'delete' => array(
-				'method' => 'DELETE',
-				'gate'   => 'view',
-				'run'    => function ( $id ) {
-					return Minn_Admin_Kernel_SQL::delete( 'suremails_email_log', 'id', $id );
-				},
-				'expect' => 'gone',
-				'reply'  => function () {
-					return array( 'deleted' => true );
-				},
-				'done'   => __( 'Log entry deleted.', 'minn-admin' ),
-			),
+			'delete' => minn_admin_mail_delete( function ( $id ) {
+				return Minn_Admin_Kernel_SQL::delete( 'suremails_email_log', 'id', $id );
+			} ),
 		),
 	);
 } );
@@ -181,74 +157,24 @@ minn_admin_endpoint( 'suremails/status', array(
 	'gate'   => 'minn_admin_suremails_can',
 	'run'    => function () {
 		$open = array( array( 'label' => __( 'Open SureMails ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=suremails' ) ) );
-		if ( ! Minn_Admin_Kernel_SQL::exists( 'suremails_email_log' ) ) {
-			return array(
-				'rows'    => array( array( 'label' => __( 'Email log', 'minn-admin' ), 'value' => '—', 'hint' => __( 'SureMails has not logged any sends yet', 'minn-admin' ) ) ),
-				'actions' => $open,
-			);
-		}
-		$id     = 'suremails/emails';
-		$failed = Minn_Admin_Kernel::count( $id, array( 'status' => 'failed' ) );
-		return array(
-			'rows'    => array(
-				array(
-					'label' => __( 'Logged emails', 'minn-admin' ),
-					'value' => number_format_i18n( Minn_Admin_Kernel::count( $id ) ),
-					/* translators: %s: number of failed emails. */
-					'hint'  => $failed ? sprintf( __( '%s failed', 'minn-admin' ), number_format_i18n( $failed ) ) : __( 'All logged sends', 'minn-admin' ),
-				),
-			),
+		return minn_admin_mail_card( 'suremails/emails', array(
+			'table'         => 'suremails_email_log',
+			'missing_value' => '—',
+			'missing'       => __( 'SureMails has not logged any sends yet', 'minn-admin' ),
+			'failed'        => array( 'status' => 'failed' ),
 			// Fourteen site-local days, sent and failed apart; a clicked bar
 			// sends its day back to the list.
-			'chart'   => array(
-				'title'     => __( 'Last 14 days', 'minn-admin' ),
-				'primary'   => 'Sent',
-				'secondary' => 'Failed',
-				'points'    => array_values( Minn_Admin_Kernel::days( $id, array( 'column' => 'created_at', 'clock' => 'local', 'split' => 'status', 'secondary' => array( 'failed' ), 'label' => 'M j' ) ) ),
-			),
-			'actions' => $open,
-		);
+			'chart'         => array( 'column' => 'created_at', 'clock' => 'local', 'split' => 'status', 'secondary' => array( 'failed' ), 'label' => 'M j' ),
+			'actions'       => $open,
+		) );
 	},
 ) );
 
-add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
-	if ( ! minn_admin_suremails_active() ) {
-		return $surfaces;
-	}
-	$surfaces['suremails'] = array(
-		'label'      => __( 'Email', 'minn-admin' ),
-		'family'     => 'mail',
-		'sub'        => 'SureMails',
-		'plugin'     => 'suremails',
-		'icon'       => 'send',
-		'cap'        => 'manage_options',
-		'status'     => array( 'route' => 'minn-admin/v1/suremails/status' ),
-		// A status-chart bar narrows the log to that day.
-		'collection' => Minn_Admin_Kernel::collection( 'suremails/emails', array(
-			'tabs'      => array(
-				'param'    => 'status',
-				'static'   => array(
-					array( 'sent', 'Sent' ),
-					array( 'failed', 'Failed' ),
-				),
-				'allLabel' => 'All',
-			),
-			'columns'   => array(
-				array( 'key' => 'subject', 'label' => __( 'Subject', 'minn-admin' ), 'format' => 'title' ),
-				array( 'key' => 'to', 'label' => __( 'To', 'minn-admin' ), 'format' => 'text' ),
-				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill' ),
-				array( 'key' => 'created_at', 'label' => __( 'Date', 'minn-admin' ), 'format' => 'ago' ),
-			),
-			'detail'    => array(
-				'sectionsRoute' => 'minn-admin/v1/suremails/emails/{id}/view',
-			),
-			'actions'   => array(
-				Minn_Admin_Kernel::ui( 'suremails/emails', 'delete', array( 'label' => __( 'Delete', 'minn-admin' ), 'confirm' => __( 'Delete this log entry permanently? There is no trash.', 'minn-admin' ), 'danger' => true ) ),
-			),
-			'bulk'      => array(
-				Minn_Admin_Kernel::ui( 'suremails/emails', 'delete', array( 'label' => __( 'Delete', 'minn-admin' ), 'confirm' => __( 'Delete the selected log entries permanently?', 'minn-admin' ), 'danger' => true ) ),
-			),
-		) ),
-	);
-	return $surfaces;
+minn_admin_add_surface( 'suremails', 'minn_admin_suremails_active', function () {
+	return minn_admin_mail_surface( 'suremails/emails', array(
+		'sub'    => 'SureMails',
+		'plugin' => 'suremails',
+		'cap'    => 'manage_options',
+		'status' => 'suremails/status',
+	) );
 } );

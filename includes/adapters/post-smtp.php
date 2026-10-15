@@ -94,20 +94,7 @@ function minn_admin_post_smtp_sent_rule() {
 
 /** Server-built model for the surface status card. */
 function minn_admin_post_smtp_status_model() {
-	$open = array( array( 'label' => __( 'Open Post SMTP ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=postman' ) ) );
-	if ( ! Minn_Admin_Kernel_SQL::exists( 'post_smtp_logs' ) ) {
-		return array(
-			'rows'    => array( array( 'label' => __( 'Email log', 'minn-admin' ), 'value' => 'Not ready', 'hint' => __( 'Post SMTP has not created its log table yet', 'minn-admin' ) ) ),
-			'actions' => array(
-				array( 'label' => __( 'Open Post SMTP ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=postman_email_log' ) ),
-			),
-		);
-	}
-	$id     = 'post-smtp/emails';
-	$failed = Minn_Admin_Kernel::count( $id, array( 'success' => array( 'none' => minn_admin_post_smtp_sent_rule() ) ) );
-	// `time` is a WP-local epoch (Aryo trap): the chart buckets it on that clock.
-	$days = Minn_Admin_Kernel::days( $id, array( 'column' => 'time', 'clock' => 'local-epoch', 'split' => 'success', 'secondary' => array( 'none' => minn_admin_post_smtp_sent_rule() ) ) );
-
+	$failed    = array( 'success' => array( 'none' => minn_admin_post_smtp_sent_rule() ) );
 	$transport = '';
 	if ( class_exists( 'PostmanOptions' ) ) {
 		try {
@@ -119,31 +106,16 @@ function minn_admin_post_smtp_status_model() {
 			$transport = '';
 		}
 	}
-
-	return array(
-		'rows'    => array(
-			array(
-				'label' => __( 'Logged emails', 'minn-admin' ),
-				'value' => number_format_i18n( Minn_Admin_Kernel::count( $id ) ),
-				'hint'  => $failed
-					/* translators: %s: number of failed sends. */
-					? sprintf( _n( '%s failed', '%s failed', $failed, 'minn-admin' ), number_format_i18n( $failed ) )
-					: __( 'All logged sends', 'minn-admin' ),
-			),
-			array(
-				'label' => __( 'Transport', 'minn-admin' ),
-				'value' => $transport ? $transport : '—',
-				'hint'  => __( 'Configured in Post SMTP', 'minn-admin' ),
-			),
-		),
-		'chart'   => array(
-			'title'     => __( 'Last 14 days', 'minn-admin' ),
-			'primary'   => 'Sent',
-			'secondary' => 'Failed',
-			'points'    => array_values( $days ),
-		),
-		'actions' => $open,
-	);
+	return minn_admin_mail_card( 'post-smtp/emails', array(
+		'table'           => 'post_smtp_logs',
+		'missing'         => __( 'Post SMTP has not created its log table yet', 'minn-admin' ),
+		'missing_actions' => array( array( 'label' => __( 'Open Post SMTP ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=postman_email_log' ) ) ),
+		'failed'          => $failed,
+		// `time` is a WP-local epoch (Aryo trap): the chart buckets it on that clock.
+		'chart'           => array( 'column' => 'time', 'clock' => 'local-epoch', 'split' => 'success', 'secondary' => $failed['success'] ),
+		'rows'            => array( array( 'label' => __( 'Transport', 'minn-admin' ), 'value' => $transport ? $transport : '—', 'hint' => __( 'Configured in Post SMTP', 'minn-admin' ) ) ),
+		'actions'         => array( array( 'label' => __( 'Open Post SMTP ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=postman' ) ) ),
+	) );
 }
 
 /**
@@ -167,74 +139,16 @@ function minn_admin_post_smtp_can() {
 	return current_user_can( minn_admin_post_smtp_cap() );
 }
 
-add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
-	if ( ! minn_admin_post_smtp_active() ) {
-		return $surfaces;
-	}
-
-	$surfaces['post-smtp'] = array(
-		'label'      => __( 'Email', 'minn-admin' ),
-		'sub'        => 'Post SMTP',
-		'plugin'     => 'post-smtp',
-		'icon'       => 'send',
-		'cap'        => minn_admin_post_smtp_cap(),
-		'family'     => 'mail',
-		'status'     => array( 'route' => 'minn-admin/v1/post-smtp/status' ),
-		'collection' => array(
-			'route'     => 'minn-admin/v1/post-smtp/emails',
-			// A status-chart bar narrows the log to that day (the chart's
-			// points carry from/to; the route reads after/before).
-			'dateQuery' => 'after={from}&before={to}',
-			'pageQuery' => 'per_page=25&page={page}',
-			'search'    => 'search={q}',
-			'itemsKey'  => 'items',
-			'totalKey'  => 'total',
-			'tabs'      => array(
-				'param'  => 'status',
-				'static' => array(
-					array( 'sent', 'Sent' ),
-					array( 'failed', 'Failed' ),
-				),
-				'allLabel' => 'All',
-			),
-			'columns'   => array(
-				array( 'key' => 'subject', 'label' => __( 'Subject', 'minn-admin' ), 'format' => 'title' ),
-				array( 'key' => 'to', 'label' => __( 'To', 'minn-admin' ), 'format' => 'text' ),
-				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill' ),
-				array( 'key' => 'date', 'label' => __( 'Date', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
-			),
-			'detail'    => array(
-				// v0.18.0: server-built sections (status pill, sandboxed HTML
-				// body, failure code row). Flat route stays for API consumers.
-				'sectionsRoute' => 'minn-admin/v1/post-smtp/emails/{id}/view',
-			),
-			'actions'   => array(
-				array(
-					'label'   => __( 'Resend', 'minn-admin' ),
-					'route'   => 'minn-admin/v1/post-smtp/emails/{id}/resend',
-					'method'  => 'POST',
-					'confirm' => __( 'Resend this email to the original recipients?', 'minn-admin' ),
-				),
-				array(
-					'label'   => __( 'Delete', 'minn-admin' ),
-					'route'   => 'minn-admin/v1/post-smtp/emails/{id}',
-					'method'  => 'DELETE',
-					'confirm' => __( 'Delete this log entry permanently? There is no trash.', 'minn-admin' ),
-					'danger'  => true,
-				),
-			),
-			'bulk'      => array(
-				array(
-					'label'   => __( 'Delete', 'minn-admin' ),
-					'route'   => 'minn-admin/v1/post-smtp/emails/{id}',
-					'method'  => 'DELETE',
-					'confirm' => __( 'Delete the selected log entries permanently?', 'minn-admin' ),
-					'danger'  => true,
-				),
-			),
-		),
-	);
-	return $surfaces;
+minn_admin_add_surface( 'post-smtp', 'minn_admin_post_smtp_active', function () {
+	return minn_admin_mail_surface( 'post-smtp/emails', array(
+		'sub'    => 'Post SMTP',
+		'plugin' => 'post-smtp',
+		'cap'    => minn_admin_post_smtp_cap(),
+		'status' => 'post-smtp/status',
+		'date'   => 'date',
+		'utc'    => true,
+		'resend' => true,
+	) );
 } );
 
 /** Addresses on record for a resend: never unserialized, each one checked. */
@@ -260,27 +174,8 @@ function minn_admin_post_smtp_view( array $r ) {
 		$delivery[] = array( 'label' => __( 'Delivered by', 'minn-admin' ), 'value' => __( 'Backup mailer (the primary connection failed)', 'minn-admin' ) );
 	}
 	$delivery[] = array( 'label' => __( 'Date', 'minn-admin' ), 'value' => minn_admin_post_smtp_iso( $r['time'] ) );
-	$body       = (string) $r['original_message'];
-	$sections   = array(
-		array( 'title' => __( 'Delivery', 'minn-admin' ), 'rows' => $delivery ),
-		array(
-			'title' => __( 'Message', 'minn-admin' ),
-			'rows'  => array(
-				array( 'label' => __( 'Subject', 'minn-admin' ), 'value' => (string) $r['original_subject'] ),
-				preg_match( '/<\/?[a-z][^>]*>/i', $body )
-					? array( 'label' => __( 'Body', 'minn-admin' ), 'value' => $body, 'type' => 'html-preview' )
-					: array( 'label' => __( 'Body', 'minn-admin' ), 'value' => $body, 'type' => 'code' ),
-			),
-		),
-	);
-	if ( 'failed' === $status ) {
-		$fail = array( array( 'label' => __( 'Error', 'minn-admin' ), 'value' => (string) $r['success'], 'type' => 'code' ) );
-		if ( '' !== (string) $r['solution'] ) {
-			$fail[] = array( 'label' => __( 'Suggested fix', 'minn-admin' ), 'value' => (string) $r['solution'] );
-		}
-		$sections[] = array( 'title' => __( 'Failure', 'minn-admin' ), 'rows' => $fail );
-	}
-	return array( 'sections' => $sections );
+	$fix        = '' !== (string) $r['solution'] ? array( array( 'label' => __( 'Suggested fix', 'minn-admin' ), 'value' => (string) $r['solution'] ) ) : array();
+	return minn_admin_mail_sections( $delivery, $r['original_subject'], (string) $r['original_message'], 'failed' === $status ? array( minn_admin_mail_failure( $r['success'], $fix ) ) : array() );
 }
 
 minn_admin_resource( 'post-smtp/emails', function () {
@@ -356,41 +251,21 @@ minn_admin_resource( 'post-smtp/emails', function () {
 		'actions' => array(
 			// Their own delete_logs(), which takes the entry's logmeta rows
 			// with it; the id is an int the kernel loaded.
-			'delete' => array(
-				'method' => 'DELETE',
-				'gate'   => 'view',
-				'run'    => function ( $id ) {
-					if ( class_exists( 'PostmanEmailQueryLog' ) && method_exists( 'PostmanEmailQueryLog', 'delete_logs' ) ) {
-						return ( new PostmanEmailQueryLog() )->delete_logs( array( (int) $id ) );
-					}
-					return Minn_Admin_Kernel_SQL::delete( 'post_smtp_logs', 'id', $id );
-				},
-				'expect' => 'gone',
-				'reply'  => function () {
-					return array( 'deleted' => true );
-				},
-				'done'   => __( 'Log entry deleted.', 'minn-admin' ),
-			),
+			'delete' => minn_admin_mail_delete( function ( $id ) {
+				if ( class_exists( 'PostmanEmailQueryLog' ) && method_exists( 'PostmanEmailQueryLog', 'delete_logs' ) ) {
+					return ( new PostmanEmailQueryLog() )->delete_logs( array( (int) $id ) );
+				}
+				return Minn_Admin_Kernel_SQL::delete( 'post_smtp_logs', 'id', $id );
+			} ),
 			// wp_mail with the stored subject and body (the FluentSMTP
 			// pattern); their stored headers stay out so nothing unserializes.
-			'resend' => array(
-				'gate'   => 'view',
-				'run'    => function ( $id, array $r ) {
-					$to = minn_admin_post_smtp_resend_to( $r );
-					if ( ! $to ) {
-						return new WP_Error( 'no_recipients', __( 'No recipient address on record for this email.', 'minn-admin' ), array( 'status' => 422 ) );
-					}
-					$is_html = (bool) preg_match( '/<\/?[a-z][\s\S]*>/i', (string) $r['original_message'] );
-					if ( ! wp_mail( $to, (string) $r['original_subject'], (string) $r['original_message'], $is_html ? array( 'Content-Type: text/html; charset=UTF-8' ) : array() ) ) {
-						return new WP_Error( 'send_failed', 'wp_mail() reported the message could not be sent.', array( 'status' => 500 ) );
-					}
-					return implode( ', ', $to );
-				},
-				'expect' => 'ran',
-				'reply'  => function ( $id, $fresh, $to ) {
-					return array( 'resent' => true, 'to' => $to, 'message' => __( 'Resent to ', 'minn-admin' ) . $to );
-				},
-			),
+			'resend' => minn_admin_mail_resend( function ( $id, array $r ) {
+				$to = minn_admin_post_smtp_resend_to( $r );
+				if ( ! $to ) {
+					return new WP_Error( 'no_recipients', __( 'No recipient address on record for this email.', 'minn-admin' ), array( 'status' => 422 ) );
+				}
+				return minn_admin_mail_wp_mail( $to, $r['original_subject'], $r['original_message'] );
+			} ),
 		),
 	);
 } );
