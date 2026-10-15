@@ -320,21 +320,22 @@ const fs = require( 'fs' );
 	t.check( 'cron row opens the events modal with recurrences', cronModal.rows > 2 && cronModal.hasRecurrence, JSON.stringify( cronModal ) );
 	await page.keyboard.press( 'Escape' );
 
-	/* ===== Run this site on Minn: experimental, so hidden until seven quick
-	   clicks on the footer unlock it in this browser (WordPress only, for
-	   someone who may update core). Checking asks the Minn update service;
-	   with no release published it says so, and nothing is switched here. ===== */
+	/* ===== Run this site on Minn: experimental, so hidden until a ⌥-click
+	   (or Ctrl-click) on the footer unlocks it in this browser (WordPress
+	   only, for someone who may update core). Checking asks the Minn update
+	   service; with no release published it says so, and nothing is
+	   switched here. ===== */
 	const labs = await page.evaluate( () => ( { engine: !! window.MINN.engine, core: !! window.MINN.caps.core } ) );
 	if ( ! labs.engine && labs.core ) {
 		await page.evaluate( () => { try { localStorage.removeItem( 'minn-labs-switch' ); } catch ( e ) {} } );
 		await page.goto( BASE + '/minn-admin/system', { waitUntil: 'domcontentloaded' } );
 		await page.waitForSelector( '.minn-sys-foot', { timeout: 20000 } );
 		t.check( 'the Run on Minn card is hidden until unlocked', ! ( await page.$( '#minn-labs' ) ) );
-		for ( let i = 0; i < 6; i++ ) await page.click( '.minn-sys-foot' );
-		t.check( 'six clicks are not enough', ! ( await page.$( '#minn-labs' ) ) );
-		await page.click( '.minn-sys-foot' );
+		for ( let i = 0; i < 7; i++ ) await page.click( '.minn-sys-foot' );
+		t.check( 'plain clicks do not unlock it', ! ( await page.$( '#minn-labs' ) ) );
+		await page.click( '.minn-sys-foot', { modifiers: [ 'Alt' ] } );
 		const card = await page.waitForSelector( '#minn-labs', { timeout: 5000 } ).catch( () => null );
-		t.check( 'the seventh click unlocks it', !! card );
+		t.check( 'a ⌥-click unlocks it', !! card );
 		if ( card ) {
 			await page.click( '[data-minnswitch="check"]' );
 			await page.waitForFunction( () => ! /Downloading Minn/.test( document.querySelector( '#minn-labs' ).textContent ), null, { timeout: 180000 } );
@@ -347,6 +348,11 @@ const fs = require( 'fs' );
 				await hide.click();
 				await page.waitForTimeout( 300 );
 				t.check( 'Hide puts it away again', ! ( await page.$( '#minn-labs' ) ) && null === ( await page.evaluate( () => { try { return localStorage.getItem( 'minn-labs-switch' ); } catch ( e ) { return 'x'; } } ) ) );
+				// On macOS Control-click is the secondary click and never arrives as a click.
+				if ( 'darwin' !== process.platform ) {
+					await page.click( '.minn-sys-foot', { modifiers: [ 'Control' ] } );
+					t.check( 'a Ctrl-click unlocks it too', !! ( await page.waitForSelector( '#minn-labs', { timeout: 5000 } ).catch( () => null ) ) );
+				}
 			}
 		}
 		await page.evaluate( () => { try { localStorage.removeItem( 'minn-labs-switch' ); } catch ( e ) {} } );

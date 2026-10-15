@@ -27938,10 +27938,11 @@
 	}
 
 	// Running the site on Minn Engine from here: experimental, so the card
-	// stays hidden until seven quick clicks on the System screen's footer
-	// unlock it in this browser (Minn_Admin_Switch on the server, which
-	// also answers `wp minn install`). WordPress only, for someone who may
-	// update core; the engine has no such card.
+	// stays hidden until a ⌥-click on the System screen's footer (Ctrl-click
+	// on Windows and Linux, as on the WordPress button) unlocks it in this
+	// browser (Minn_Admin_Switch on the server, which also answers `wp minn
+	// install`). WordPress only, for someone who may update core; the engine
+	// has no such card.
 	const MINN_LABS_KEY = 'minn-labs-switch';
 	function minnLabsOn() {
 		try {
@@ -28012,15 +28013,11 @@
 	}
 
 	function bindMinnSwitch( view ) {
-		// The unlock: seven clicks on the footer within a few seconds.
+		// The unlock: ⌥-click the footer (Ctrl-click where Minn says ⌘ means Ctrl).
 		const foot = $( '.minn-sys-foot', view );
 		if ( foot && ! ENGINE && B.caps.core ) {
-			let clicks = [];
-			foot.addEventListener( 'click', () => {
-				const now = Date.now();
-				clicks = [ ...clicks.filter( ( t ) => now - t < 4000 ), now ];
-				if ( clicks.length < 7 || minnLabsOn() ) return;
-				clicks = [];
+			foot.addEventListener( 'click', ( e ) => {
+				if ( ! ( e.altKey || e.ctrlKey ) || minnLabsOn() ) return;
 				setMinnLabs( true );
 				toast( __( 'Minn Labs unlocked: Run this site on Minn' ) );
 				renderSystem();
