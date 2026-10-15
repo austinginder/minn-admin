@@ -104,29 +104,32 @@ function minn_admin_novamira_iso( $value ) {
  * admin-created client ids, and this user's Novamira Application Passwords.
  */
 function minn_admin_novamira_connections() {
-	global $wpdb;
 	$items = array();
 	$uid   = get_current_user_id();
 	if ( minn_admin_novamira_oauth_ready() ) {
-		$t   = $wpdb->prefix . 'novamira_oauth_access_tokens';
-		$r   = $wpdb->prefix . 'novamira_oauth_refresh_tokens';
-		$c   = $wpdb->prefix . 'novamira_oauth_clients';
-		$now = gmdate( 'Y-m-d H:i:s' );
 		// The same query the plugin's Connections page runs: a connection is
 		// a client with an unrevoked, unexpired refresh token for this user.
 		// Their access tokens keep no creation time; the client row's is
-		// when the app registered.
-		$rows = $wpdb->get_results( $wpdb->prepare( // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			"SELECT c.client_name, at.client_id, MAX(rt.expires_at) AS expires_at, MAX(c.created_at) AS created_at
-			   FROM `{$r}` rt
-			   JOIN `{$t}` at ON at.identifier_hash = rt.access_token_hash
-			   JOIN `{$c}` c ON c.client_id = at.client_id
-			  WHERE at.user_id = %d AND rt.revoked = 0 AND rt.expires_at > %s
-			  GROUP BY at.client_id, c.client_name
-			  ORDER BY expires_at DESC",
-			$uid,
-			$now
-		), ARRAY_A );
+		// when the app registered. Both joins are inner, as theirs are.
+		$rows = Minn_Admin_Kernel_SQL::totals(
+			array(
+				'table' => 'novamira_oauth_refresh_tokens',
+				'joins' => array(
+					'at' => array( 'table' => 'novamira_oauth_access_tokens', 'on' => array( 'identifier_hash' => 'e.access_token_hash' ) ),
+					'c'  => array( 'table' => 'novamira_oauth_clients', 'on' => array( 'client_id' => 'at.client_id' ) ),
+				),
+			),
+			array( 'at.client_id' => 'client_id', 'c.client_name' => 'client_name' ),
+			array( 'expires_at' => array( 'max' => 'expires_at' ), 'created_at' => array( 'max' => 'c.created_at' ) ),
+			array(
+				'at.user_id'    => $uid,
+				'revoked'       => 0,
+				'expires_at'    => array( 'op' => '>', 'value' => gmdate( 'Y-m-d H:i:s' ) ),
+				'c.client_id'   => array( 'none' => array( null ) ),
+			),
+			array( 'expires_at' => 'DESC' ),
+			5000
+		);
 		foreach ( (array) $rows as $row ) {
 			$items[] = array(
 				'id'       => 'oauth:' . $row['client_id'],
@@ -139,7 +142,7 @@ function minn_admin_novamira_connections() {
 				'expires'  => minn_admin_novamira_iso( $row['expires_at'] ),
 			);
 		}
-		$clients = $wpdb->get_results( "SELECT client_id, client_name, created_at, last_used_at FROM `{$c}` WHERE admin_created = 1 ORDER BY created_at DESC", ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$clients = Minn_Admin_Kernel_SQL::select( 'novamira_oauth_clients', array( 'client_id', 'client_name', 'created_at', 'last_used_at' ), array( 'admin_created' => 1 ), array( 'created_at' => 'DESC' ) );
 		foreach ( (array) $clients as $row ) {
 			$items[] = array(
 				'id'       => 'client:' . $row['client_id'],
@@ -823,17 +826,17 @@ add_action( 'rest_api_init', function () {
 		remove_action( 'wp_abilities_api_init', 'novamira_apply_ability_policy', PHP_INT_MAX );
 	}
 
-	register_rest_route( 'minn-admin/v1', '/novamira/status', array(
+	minn_admin_endpoint( '/novamira/status', array(
 		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function () {
+		'gate'                => $perm,
+		'run'                 => function () {
 			return rest_ensure_response( minn_admin_novamira_status_model() );
 		},
 	) );
-	register_rest_route( 'minn-admin/v1', '/novamira/enabled/(?P<state>on|off)', array(
+	minn_admin_endpoint( '/novamira/enabled/(?P<state>on|off)', array(
 		'methods'             => 'POST',
-		'permission_callback' => 'minn_admin_novamira_can_write',
-		'callback'            => function ( $req ) {
+		'gate'                => 'minn_admin_novamira_can_write',
+		'run'                 => function ( $req ) {
 			$on = 'on' === Minn_Admin::path_param( $req, 'state' );
 			$ok   = $on ? novamira_enable_ai_abilities() : novamira_disable_ai_abilities();
 			if ( ! $ok ) {
@@ -842,93 +845,89 @@ add_action( 'rest_api_init', function () {
 			return rest_ensure_response( array( 'ok' => true, 'enabled' => minn_admin_novamira_enabled(), 'status' => minn_admin_novamira_status_model() ) );
 		},
 	) );
-	register_rest_route( 'minn-admin/v1', '/novamira/connections', array(
+	minn_admin_endpoint( '/novamira/connections', array(
 		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function () {
+		'gate'                => $perm,
+		'run'                 => function () {
 			$items = minn_admin_novamira_connections();
 			return rest_ensure_response( array( 'items' => $items, 'total' => count( $items ) ) );
 		},
 	) );
-	register_rest_route( 'minn-admin/v1', '/novamira/connections/(?P<id>[a-z]+:[A-Za-z0-9_\-]+)/revoke', array(
+	minn_admin_endpoint( '/novamira/connections/(?P<id>[a-z]+:[A-Za-z0-9_\-]+)/revoke', array(
 		'methods'             => 'POST',
-		'permission_callback' => 'minn_admin_novamira_can_write',
-		'callback'            => function ( $req ) {
+		'gate'                => 'minn_admin_novamira_can_write',
+		'run'                 => function ( $req ) {
 			$r = minn_admin_novamira_revoke( (string) Minn_Admin::path_param( $req, 'id' ) );
 			return is_wp_error( $r ) ? $r : rest_ensure_response( array( 'ok' => true ) );
 		},
 	) );
 	if ( minn_admin_novamira_memory_ready() ) {
-		register_rest_route( 'minn-admin/v1', '/novamira/memories', array(
+		minn_admin_endpoint( '/novamira/memories', array(
 			'methods'             => 'GET',
-			'permission_callback' => $perm,
-			'callback'            => function ( $req ) {
+			'gate'                => $perm,
+			'run'                 => function ( $req ) {
 				$items = minn_admin_novamira_memories( sanitize_text_field( (string) $req->get_param( 'search' ) ), sanitize_key( (string) $req->get_param( 'type' ) ) );
 				return rest_ensure_response( array( 'items' => $items, 'total' => count( $items ) ) );
 			},
 		) );
-		register_rest_route( 'minn-admin/v1', '/novamira/memories/(?P<id>\d+)', array(
-			array(
-				'methods'             => 'POST',
-				'permission_callback' => 'minn_admin_novamira_can_write',
-				'callback'            => function ( $req ) {
-					$post = get_post( (int) Minn_Admin::path_param( $req, 'id' ) );
-					if ( ! $post || 'novamira_memory' !== $post->post_type ) {
-						return new WP_Error( 'not_found', __( 'No such memory.', 'minn-admin' ), array( 'status' => 404 ) );
-					}
-					$b     = (array) $req->get_json_params();
-					$types = minn_admin_novamira_memory_types();
-					$upd   = array( 'ID' => $post->ID );
-					if ( isset( $b['name'] ) ) {
-						$upd['post_title'] = sanitize_text_field( (string) $b['name'] );
-					}
-					if ( isset( $b['description'] ) ) {
-						$upd['post_excerpt'] = sanitize_text_field( (string) $b['description'] );
-					}
-					if ( isset( $b['content'] ) ) {
-						$upd['post_content'] = wp_strip_all_tags( (string) $b['content'] );
-					}
-					$r = wp_update_post( wp_slash( $upd ), true );
-					if ( is_wp_error( $r ) ) {
-						return $r;
-					}
-					if ( isset( $b['type'] ) && isset( $types[ (string) $b['type'] ] ) ) {
-						update_post_meta( $post->ID, '_novamira_memory_type', (string) $b['type'] );
-					}
-					return rest_ensure_response( minn_admin_novamira_memory_item( get_post( $post->ID ) ) );
-				},
-			),
-			array(
-				'methods'             => 'DELETE',
-				'permission_callback' => 'minn_admin_novamira_can_write',
-				'callback'            => function ( $req ) {
-					$post = get_post( (int) Minn_Admin::path_param( $req, 'id' ) );
-					if ( ! $post || 'novamira_memory' !== $post->post_type ) {
-						return new WP_Error( 'not_found', __( 'No such memory.', 'minn-admin' ), array( 'status' => 404 ) );
-					}
-					wp_trash_post( $post->ID );
-					return rest_ensure_response( array( 'ok' => true ) );
-				},
-			),
+		minn_admin_endpoint( '/novamira/memories/(?P<id>\d+)', array(
+			'methods'             => 'POST',
+			'gate'                => 'minn_admin_novamira_can_write',
+			'run'                 => function ( $req ) {
+				$post = get_post( (int) Minn_Admin::path_param( $req, 'id' ) );
+				if ( ! $post || 'novamira_memory' !== $post->post_type ) {
+					return new WP_Error( 'not_found', __( 'No such memory.', 'minn-admin' ), array( 'status' => 404 ) );
+				}
+				$b     = (array) $req->get_json_params();
+				$types = minn_admin_novamira_memory_types();
+				$upd   = array( 'ID' => $post->ID );
+				if ( isset( $b['name'] ) ) {
+					$upd['post_title'] = sanitize_text_field( (string) $b['name'] );
+				}
+				if ( isset( $b['description'] ) ) {
+					$upd['post_excerpt'] = sanitize_text_field( (string) $b['description'] );
+				}
+				if ( isset( $b['content'] ) ) {
+					$upd['post_content'] = wp_strip_all_tags( (string) $b['content'] );
+				}
+				$r = wp_update_post( wp_slash( $upd ), true );
+				if ( is_wp_error( $r ) ) {
+					return $r;
+				}
+				if ( isset( $b['type'] ) && isset( $types[ (string) $b['type'] ] ) ) {
+					update_post_meta( $post->ID, '_novamira_memory_type', (string) $b['type'] );
+				}
+				return rest_ensure_response( minn_admin_novamira_memory_item( get_post( $post->ID ) ) );
+			},
+		) );
+		minn_admin_endpoint( '/novamira/memories/(?P<id>\d+)', array(
+			'methods'             => 'DELETE',
+			'gate'                => 'minn_admin_novamira_can_write',
+			'run'                 => function ( $req ) {
+				$post = get_post( (int) Minn_Admin::path_param( $req, 'id' ) );
+				if ( ! $post || 'novamira_memory' !== $post->post_type ) {
+					return new WP_Error( 'not_found', __( 'No such memory.', 'minn-admin' ), array( 'status' => 404 ) );
+				}
+				wp_trash_post( $post->ID );
+				return rest_ensure_response( array( 'ok' => true ) );
+			},
 		) );
 	}
-	register_rest_route( 'minn-admin/v1', '/novamira/abilities/(?P<tab>[a-z0-9_\-]+)', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => $perm,
-			'callback'            => function ( $req ) {
-				return rest_ensure_response( minn_admin_novamira_tab_shape( Minn_Admin::path_param( $req, 'tab' ) ) );
-			},
-		),
-		array(
-			'methods'             => 'POST',
-			'permission_callback' => 'minn_admin_novamira_can_write',
-			'callback'            => function ( $req ) {
-				$body   = $req->get_json_params();
-				$values = isset( $body['values'] ) && is_array( $body['values'] ) ? $body['values'] : array();
-				minn_admin_novamira_save( $values );
-				return rest_ensure_response( minn_admin_novamira_tab_shape( Minn_Admin::path_param( $req, 'tab' ) ) );
-			},
-		),
+	minn_admin_endpoint( '/novamira/abilities/(?P<tab>[a-z0-9_\-]+)', array(
+		'methods'             => 'GET',
+		'gate'                => $perm,
+		'run'                 => function ( $req ) {
+			return rest_ensure_response( minn_admin_novamira_tab_shape( Minn_Admin::path_param( $req, 'tab' ) ) );
+		},
+	) );
+	minn_admin_endpoint( '/novamira/abilities/(?P<tab>[a-z0-9_\-]+)', array(
+		'methods'             => 'POST',
+		'gate'                => 'minn_admin_novamira_can_write',
+		'run'                 => function ( $req ) {
+			$body   = $req->get_json_params();
+			$values = isset( $body['values'] ) && is_array( $body['values'] ) ? $body['values'] : array();
+			minn_admin_novamira_save( $values );
+			return rest_ensure_response( minn_admin_novamira_tab_shape( Minn_Admin::path_param( $req, 'tab' ) ) );
+		},
 	) );
 } );

@@ -241,17 +241,18 @@ function minn_admin_localize_images( $template, $url_re = null ) {
 			// to drop the trailing wildcard through meta_query, so ask
 			// directly. Uploads that are not organised into month folders have
 			// no '/' at all, hence the equality arm.
-			global $wpdb;
-			$existing = (int) $wpdb->get_var( $wpdb->prepare(
-				"SELECT pm.post_id FROM {$wpdb->postmeta} pm
-				 INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
-				 WHERE pm.meta_key = '_wp_attached_file'
-				   AND ( pm.meta_value LIKE %s OR pm.meta_value = %s )
-				   AND p.post_type = 'attachment'
-				 LIMIT 1",
-				'%/' . $wpdb->esc_like( $basename ),
-				$basename
-			) );
+			$found    = Minn_Admin_Kernel_SQL::select(
+				array( 'core' => 'postmeta', 'joins' => array( 'p' => array( 'core' => 'posts', 'on' => array( 'ID' => 'e.post_id' ) ) ) ),
+				array( 'post_id' ),
+				array(
+					'meta_key'    => '_wp_attached_file',
+					'meta_value'  => array( 'any' => array( array( 'ends' => '/' . $basename ), $basename ) ),
+					'p.post_type' => 'attachment',
+				),
+				array(),
+				1
+			);
+			$existing = $found ? (int) $found[0]['post_id'] : 0;
 
 			if ( $existing ) {
 				$media_id = $existing;

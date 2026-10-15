@@ -16,6 +16,8 @@
  */
 defined( 'ABSPATH' ) || exit;
 
+const MINN_ADMIN_JET_SEARCH_TABLE = 'jet_search_suggestions';
+
 function minn_admin_jet_search_active() {
 	return function_exists( 'jet_search' ) && class_exists( 'Jet_Search' );
 }
@@ -26,32 +28,22 @@ function minn_admin_jet_search_can() {
 
 function minn_admin_jet_search_table() {
 	global $wpdb;
-	return $wpdb->prefix . 'jet_search_suggestions';
+	return $wpdb->prefix . MINN_ADMIN_JET_SEARCH_TABLE;
 }
 
 function minn_admin_jet_search_has_table() {
-	global $wpdb;
-	$t = minn_admin_jet_search_table();
-	return 0 === strcasecmp( (string) $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $t ) ), $t );
-}
-
-function minn_admin_jet_search_row( $id ) {
-	global $wpdb;
-	$t = minn_admin_jet_search_table();
-	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-	return $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$t} WHERE id = %d", (int) $id ) );
+	return Minn_Admin_Kernel_SQL::exists( MINN_ADMIN_JET_SEARCH_TABLE );
 }
 
 /**
- * id => name for the parents a set of rows points at, in one query. Their
+ * id => name for the parents a page of rows points at, in one query. Their
  * manage screen stores a child's parent as the parent's id, which the list
  * printed as "71".
  */
-function minn_admin_jet_search_parent_names( $rows ) {
-	global $wpdb;
+function minn_admin_jet_search_parent_names( array $rows ) {
 	$ids = array();
-	foreach ( (array) $rows as $r ) {
-		$p = trim( (string) $r->parent );
+	foreach ( $rows as $r ) {
+		$p = trim( (string) ( $r['parent'] ?? '' ) );
 		if ( ctype_digit( $p ) && (int) $p > 0 ) {
 			$ids[] = (int) $p;
 		}
@@ -60,52 +52,171 @@ function minn_admin_jet_search_parent_names( $rows ) {
 	if ( ! $ids ) {
 		return array();
 	}
-	$t     = minn_admin_jet_search_table();
-	$in    = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
 	$names = array();
-	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders
-	foreach ( (array) $wpdb->get_results( $wpdb->prepare( "SELECT id, name FROM {$t} WHERE id IN ({$in})", $ids ) ) as $row ) {
-		$names[ (int) $row->id ] = (string) $row->name;
+	foreach ( Minn_Admin_Kernel_SQL::select( MINN_ADMIN_JET_SEARCH_TABLE, array( 'id', 'name' ), array( 'id' => $ids ) ) as $row ) {
+		$names[ (int) $row['id'] ] = (string) $row['name'];
 	}
 	return $names;
 }
 
 /** The parent as a name: '' for none or a parent since deleted. */
-function minn_admin_jet_search_parent_label( $r, $names ) {
-	$p = trim( (string) $r->parent );
+function minn_admin_jet_search_parent_label( array $r, array $names ) {
+	$p = trim( (string) ( $r['parent'] ?? '' ) );
 	if ( ! ctype_digit( $p ) ) {
 		return $p;
 	}
 	return isset( $names[ (int) $p ] ) ? $names[ (int) $p ] : '';
 }
 
-function minn_admin_jet_search_item( $r, $names = null ) {
+function minn_admin_jet_search_item( array $r, $names = null ) {
 	if ( null === $names ) {
 		$names = minn_admin_jet_search_parent_names( array( $r ) );
 	}
 	return array(
-		'id'     => (int) $r->id,
-		'name'   => (string) $r->name,
-		'weight' => (int) $r->weight,
+		'id'     => (int) $r['id'],
+		'name'   => (string) $r['name'],
+		'weight' => (int) $r['weight'],
 		// The weight as served, carried back by the edit form: JetSearch adds
 		// to it on every search, so a save that did not change it must not
 		// write back the count it loaded.
-		'weight_seen' => (int) $r->weight,
-		'parent' => minn_admin_jet_search_parent_label( $r, $names ),
+		'weight_seen' => (int) $r['weight'],
+		'parent' => minn_admin_jet_search_parent_label( $r, (array) $names ),
 	);
+}
+
+/** Whether another suggestion already has this text. */
+function minn_admin_jet_search_taken( $name, $except = 0 ) {
+	$where = array( 'name' => (string) $name );
+	if ( $except > 0 ) {
+		$where['id'] = array( 'not' => array( (int) $except ) );
+	}
+	return Minn_Admin_Kernel_SQL::count( MINN_ADMIN_JET_SEARCH_TABLE, $where ) > 0;
 }
 
 function minn_admin_jet_search_admin_url() {
 	return admin_url( 'admin.php?page=jet-search-settings&subpage=jet-search-suggestions-settings' );
 }
 
-add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
-	if ( ! minn_admin_jet_search_active() || ! minn_admin_jet_search_can() ) {
-		return $surfaces;
-	}
+minn_admin_resource( 'jet-search/suggestions', function () {
+	$fields = array(
+		'id'          => 'int',
+		'name'        => 'text',
+		'weight'      => 'int',
+		'weight_seen' => 'int',
+		'parent'      => 'text',
+	);
+	return array(
+		'active'  => 'minn_admin_jet_search_active',
+		'gates'   => array( 'view' => 'minn_admin_jet_search_can' ),
+		'labels'  => array( 'not_found' => __( 'Suggestion not found', 'minn-admin' ) ),
+		'source'  => array(
+			'table'   => MINN_ADMIN_JET_SEARCH_TABLE,
+			'key'     => 'id',
+			'columns' => array( 'id', 'name', 'weight', 'parent' ),
+		),
+		'list'    => array(
+			'search' => array( 'columns' => array( 'name' ) ),
+			'order'  => array( 'column' => 'weight', 'dir' => 'DESC' ),
+			'sort'   => array( 'columns' => array( 'name', 'weight' ) ),
+			'batch'  => 'minn_admin_jet_search_parent_names',
+			'row'    => function ( array $row, array $q ) {
+				return minn_admin_jet_search_item( $row, (array) $q['batch'] );
+			},
+			'fields' => $fields,
+		),
+		'item'    => array(
+			'view'   => function ( array $row ) {
+				return minn_admin_jet_search_item( $row );
+			},
+			'fields' => $fields,
+		),
+		'create'  => array(
+			'gate'  => 'view',
+			'run'   => function ( WP_REST_Request $request ) {
+				$name = sanitize_text_field( (string) $request->get_param( 'name' ) );
+				if ( '' === $name ) {
+					return new WP_Error( 'missing_name', __( 'A suggestion needs some text.', 'minn-admin' ), array( 'status' => 400 ) );
+				}
+				if ( minn_admin_jet_search_taken( $name ) ) {
+					/* translators: %s: the suggestion text. */
+					return new WP_Error( 'exists', sprintf( __( 'The suggestion "%s" already exists.', 'minn-admin' ), $name ), array( 'status' => 409 ) );
+				}
+				return Minn_Admin_Kernel_SQL::insert( MINN_ADMIN_JET_SEARCH_TABLE, array(
+					'name'   => $name,
+					'weight' => max( 0, (int) $request->get_param( 'weight' ) ),
+					'parent' => '',
+					'term'   => '',
+				) );
+			},
+			'fail_code' => 'insert_failed',
+			'fail'      => __( 'JetSearch could not save that suggestion.', 'minn-admin' ),
+		),
+		'actions' => array(
+			'edit'   => array(
+				'method' => 'POST',
+				'item'   => true,
+				'gate'   => 'view',
+				'run'    => function ( $id, array $row, WP_REST_Request $request ) {
+					$data = array();
+					if ( null !== $request->get_param( 'name' ) ) {
+						$name = sanitize_text_field( (string) $request->get_param( 'name' ) );
+						if ( '' === $name ) {
+							return new WP_Error( 'missing_name', __( 'A suggestion needs some text.', 'minn-admin' ), array( 'status' => 400 ) );
+						}
+						if ( minn_admin_jet_search_taken( $name, $id ) ) {
+							/* translators: %s: the suggestion text. */
+							return new WP_Error( 'exists', sprintf( __( 'The suggestion "%s" already exists.', 'minn-admin' ), $name ), array( 'status' => 409 ) );
+						}
+						$data['name'] = $name;
+					}
+					$seen = $request->get_param( 'weight_seen' );
+					if ( null !== $request->get_param( 'weight' ) && ( null === $seen || (int) $request->get_param( 'weight' ) !== (int) $seen ) ) {
+						$data['weight'] = max( 0, (int) $request->get_param( 'weight' ) );
+					}
+					if ( $data ) {
+						Minn_Admin_Kernel_SQL::update( MINN_ADMIN_JET_SEARCH_TABLE, 'id', $id, $data );
+					}
+					return $data;
+				},
+				// Saved when the row reads as written (an unchanged value
+				// changes no row, so the count proves nothing). JetSearch adds
+				// to the weight on every visitor search, so a weight at or
+				// above the one written is the one written.
+				'expect' => function ( $id, $fresh, $data ) {
+					if ( ! is_array( $fresh ) || ! is_array( $data ) ) {
+						return false;
+					}
+					if ( isset( $data['name'] ) && (string) $fresh['name'] !== (string) $data['name'] ) {
+						return false;
+					}
+					return ! isset( $data['weight'] ) || (int) $fresh['weight'] >= (int) $data['weight'];
+				},
+				'fail'   => __( 'JetSearch\'s table did not keep that change.', 'minn-admin' ),
+				'reply'  => function ( $id, $fresh ) {
+					return minn_admin_jet_search_item( $fresh );
+				},
+			),
+			'delete' => array(
+				'method' => 'DELETE',
+				'gate'   => 'view',
+				'run'    => function ( $id ) {
+					return Minn_Admin_Kernel_SQL::delete( MINN_ADMIN_JET_SEARCH_TABLE, 'id', $id );
+				},
+				'expect' => 'gone',
+				'done'   => __( 'Suggestion deleted.', 'minn-admin' ),
+			),
+		),
+	);
+} );
+
+minn_admin_add_surface( 'jet-search', function () {
+	return minn_admin_jet_search_active() && minn_admin_jet_search_can();
+}, function () {
+	$res  = 'jet-search/suggestions';
+	$item = 'minn-admin/v1/' . $res . '/{id}';
 	// JetSearch's suggestions. JetSmartFilters' filters and indexer are a
 	// Tools item of their own (jet-smart-filters.php), as their menu is.
-	$surfaces['jet-search'] = array(
+	return array(
 		'label'      => __( 'Search', 'minn-admin' ),
 		'sub'        => 'JetSearch',
 		'plugin'     => 'jet-search',
@@ -117,14 +228,8 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'group'      => 'tools',
 		'cap'        => 'manage_options',
 		'status'     => array( 'route' => 'minn-admin/v1/jet-search/status' ),
-		'collection' => array(
+		'collection' => Minn_Admin_Kernel::collection( $res, array(
 			'viewLabel' => __( 'Suggestions', 'minn-admin' ),
-			'route'     => 'minn-admin/v1/jet-search/suggestions',
-			'pageQuery' => 'per_page=25&page={page}',
-			'search'    => 'search={q}',
-			'itemsKey'  => 'items',
-			'totalKey'  => 'total',
-			'sortQuery' => 'orderby={by}&order={dir}',
 			'columns'   => array(
 				array( 'key' => 'name', 'label' => __( 'Suggestion', 'minn-admin' ), 'format' => 'title', 'sort' => 'name' ),
 				array( 'key' => 'weight', 'label' => __( 'Weight', 'minn-admin' ), 'format' => 'num', 'width' => '110px', 'sort' => 'weight' ),
@@ -132,7 +237,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'create'    => array(
 				'label'  => __( 'Add suggestion', 'minn-admin' ),
-				'route'  => 'minn-admin/v1/jet-search/suggestions',
+				'route'  => 'minn-admin/v1/' . $res,
 				'method' => 'POST',
 				'fields' => array(
 					array( 'key' => 'name', 'label' => __( 'Suggestion', 'minn-admin' ) ),
@@ -142,10 +247,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'detail'    => array(
 				'skip' => array( 'id', 'weight_seen' ),
 				'edit' => array(
-					'route'    => 'minn-admin/v1/jet-search/suggestions/{id}',
+					'route'    => $item,
 					'method'   => 'POST',
 					'preserve' => array( 'weight_seen' ),
-					'fields' => array(
+					'fields'   => array(
 						array( 'key' => 'name', 'label' => __( 'Suggestion', 'minn-admin' ) ),
 						array( 'key' => 'weight', 'label' => __( 'Weight', 'minn-admin' ), 'type' => 'number' ),
 					),
@@ -155,7 +260,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				array(
 					'label'   => __( 'Delete', 'minn-admin' ),
 					'method'  => 'DELETE',
-					'route'   => 'minn-admin/v1/jet-search/suggestions/{id}',
+					'route'   => $item,
 					'confirm' => __( 'Delete this suggestion?', 'minn-admin' ),
 					'danger'  => true,
 				),
@@ -165,199 +270,76 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				array(
 					'label'   => __( 'Delete', 'minn-admin' ),
 					'method'  => 'DELETE',
-					'route'   => 'minn-admin/v1/jet-search/suggestions/{id}',
+					'route'   => $item,
 					'confirm' => __( 'Delete the selected suggestions?', 'minn-admin' ),
 					'danger'  => true,
 				),
 			),
-		),
+		) ),
 	);
-	return $surfaces;
 } );
 
-add_action( 'rest_api_init', function () {
-	if ( ! minn_admin_jet_search_active() ) {
-		return;
-	}
-	$perm = 'minn_admin_jet_search_can';
+// Their suggestions_remove_duplicates(), statement for statement. It is an
+// ajax handler that checks its own nonce and answers with wp_send_json, so
+// it cannot be called; the two statements stay as JetSearch writes them
+// (a multi-table UPDATE over a grouped derived table, then a self-join
+// DELETE), which the kernel's statements do not express.
+minn_admin_endpoint( 'jet-search/dedupe', array(
+	'active'  => 'minn_admin_jet_search_active',
+	'methods' => 'POST',
+	'gate'    => 'minn_admin_jet_search_can',
+	'run'     => function () {
+		if ( ! minn_admin_jet_search_has_table() ) {
+			return array( 'ok' => true, 'message' => __( 'Nothing to merge.', 'minn-admin' ) );
+		}
+		global $wpdb;
+		$t = minn_admin_jet_search_table();
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$wpdb->query( "UPDATE {$t} t1 INNER JOIN ( SELECT MIN(id) as min_id, TRIM(name) as trimmed_name, SUM(weight) as total_weight FROM {$t} GROUP BY trimmed_name HAVING COUNT(*) > 1 ) t2 ON t1.id = t2.min_id SET t1.weight = t2.total_weight" );
+		$removed = $wpdb->query( "DELETE t1 FROM {$t} t1 INNER JOIN {$t} t2 WHERE t1.id > t2.id AND TRIM(t1.name) = TRIM(t2.name)" );
+		// phpcs:enable
+		if ( false === $removed ) {
+			return new WP_Error( 'dedupe_failed', __( 'JetSearch could not merge the duplicates.', 'minn-admin' ), array( 'status' => 500 ) );
+		}
+		return array(
+			'ok'      => true,
+			/* translators: %d: number of duplicate rows removed. */
+			'message' => sprintf( _n( '%d duplicate merged.', '%d duplicates merged.', (int) $removed, 'minn-admin' ), (int) $removed ),
+		);
+	},
+) );
 
-	register_rest_route( 'minn-admin/v1', '/jet-search/suggestions', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) {
-				if ( ! minn_admin_jet_search_has_table() ) {
-					return rest_ensure_response( array( 'items' => array(), 'total' => 0 ) );
-				}
-				global $wpdb;
-				$t        = minn_admin_jet_search_table();
-				$per_page = min( 100, max( 1, (int) $request->get_param( 'per_page' ) ?: 25 ) );
-				$page     = max( 1, (int) $request->get_param( 'page' ) ?: 1 );
-				$search   = sanitize_text_field( (string) $request->get_param( 'search' ) );
-				$by       = in_array( $request->get_param( 'orderby' ), array( 'name', 'weight' ), true ) ? $request->get_param( 'orderby' ) : 'weight';
-				$dir      = 'asc' === strtolower( (string) $request->get_param( 'order' ) ) ? 'ASC' : 'DESC';
-				$where    = '1=1';
-				$params   = array();
-				if ( '' !== $search ) {
-					$where    = 'name LIKE %s';
-					$params[] = '%' . $wpdb->esc_like( $search ) . '%';
-				}
-				// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
-				$count_sql = "SELECT COUNT(*) FROM {$t} WHERE {$where}";
-				$total     = (int) ( $params ? $wpdb->get_var( $wpdb->prepare( $count_sql, $params ) ) : $wpdb->get_var( $count_sql ) );
-				$rows      = $wpdb->get_results( $wpdb->prepare(
-					"SELECT * FROM {$t} WHERE {$where} ORDER BY {$by} {$dir}, id DESC LIMIT %d OFFSET %d",
-					array_merge( $params, array( $per_page, ( $page - 1 ) * $per_page ) )
-				) );
-				// phpcs:enable
-				$rows  = $rows ? $rows : array();
-				$names = minn_admin_jet_search_parent_names( $rows );
-				$items = array();
-				foreach ( $rows as $r ) {
-					$items[] = minn_admin_jet_search_item( $r, $names );
-				}
-				return rest_ensure_response( array( 'items' => $items, 'total' => $total ) );
-			},
-		),
-		array(
-			'methods'             => 'POST',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) {
-				global $wpdb;
-				$t      = minn_admin_jet_search_table();
-				$name   = sanitize_text_field( (string) $request->get_param( 'name' ) );
-				$weight = max( 0, (int) $request->get_param( 'weight' ) );
-				if ( '' === $name ) {
-					return new WP_Error( 'missing_name', __( 'A suggestion needs some text.', 'minn-admin' ), array( 'status' => 400 ) );
-				}
-				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				if ( $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$t} WHERE name = %s", $name ) ) ) {
-					/* translators: %s: the suggestion text. */
-					return new WP_Error( 'exists', sprintf( __( 'The suggestion "%s" already exists.', 'minn-admin' ), $name ), array( 'status' => 409 ) );
-				}
-				$wpdb->insert( $t, array( 'name' => $name, 'weight' => $weight, 'parent' => '', 'term' => '' ), array( '%s', '%d', '%s', '%s' ) );
-				if ( ! $wpdb->insert_id ) {
-					return new WP_Error( 'insert_failed', __( 'JetSearch could not save that suggestion.', 'minn-admin' ), array( 'status' => 500 ) );
-				}
-				return rest_ensure_response( array( 'ok' => true, 'id' => (int) $wpdb->insert_id ) );
-			},
-		),
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/jet-search/suggestions/(?P<id>\d+)', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) {
-				$r = minn_admin_jet_search_has_table() ? minn_admin_jet_search_row( (int) Minn_Admin::path_param( $request ) ) : null;
-				return $r ? rest_ensure_response( minn_admin_jet_search_item( $r ) ) : new WP_Error( 'not_found', __( 'Suggestion not found', 'minn-admin' ), array( 'status' => 404 ) );
-			},
-		),
-		array(
-			'methods'             => 'POST',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) {
-				global $wpdb;
-				$t  = minn_admin_jet_search_table();
-				$id = (int) Minn_Admin::path_param( $request );
-				$r  = minn_admin_jet_search_row( $id );
-				if ( ! $r ) {
-					return new WP_Error( 'not_found', __( 'Suggestion not found', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				$data = array();
-				if ( null !== $request->get_param( 'name' ) ) {
-					$name = sanitize_text_field( (string) $request->get_param( 'name' ) );
-					if ( '' === $name ) {
-						return new WP_Error( 'missing_name', __( 'A suggestion needs some text.', 'minn-admin' ), array( 'status' => 400 ) );
-					}
-					// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-					if ( $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$t} WHERE id != %d AND name = %s", $id, $name ) ) ) {
-						/* translators: %s: the suggestion text. */
-						return new WP_Error( 'exists', sprintf( __( 'The suggestion "%s" already exists.', 'minn-admin' ), $name ), array( 'status' => 409 ) );
-					}
-					$data['name'] = $name;
-				}
-				$seen = $request->get_param( 'weight_seen' );
-				if ( null !== $request->get_param( 'weight' ) && ( null === $seen || (int) $request->get_param( 'weight' ) !== (int) $seen ) ) {
-					$data['weight'] = max( 0, (int) $request->get_param( 'weight' ) );
-				}
-				if ( $data ) {
-					$wpdb->update( $t, $data, array( 'id' => $id ) );
-				}
-				return rest_ensure_response( minn_admin_jet_search_item( minn_admin_jet_search_row( $id ) ) );
-			},
-		),
-		array(
-			'methods'             => 'DELETE',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) {
-				global $wpdb;
-				$id = (int) Minn_Admin::path_param( $request );
-				if ( ! minn_admin_jet_search_row( $id ) ) {
-					return new WP_Error( 'not_found', __( 'Suggestion not found', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				$wpdb->delete( minn_admin_jet_search_table(), array( 'id' => $id ), array( '%d' ) );
-				return rest_ensure_response( array( 'ok' => true, 'message' => __( 'Suggestion deleted.', 'minn-admin' ) ) );
-			},
-		),
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/jet-search/dedupe', array(
-		'methods'             => 'POST',
-		'permission_callback' => $perm,
-		'callback'            => function () {
-			if ( ! minn_admin_jet_search_has_table() ) {
-				return rest_ensure_response( array( 'ok' => true, 'message' => __( 'Nothing to merge.', 'minn-admin' ) ) );
-			}
-			global $wpdb;
-			$t = minn_admin_jet_search_table();
-			// Their suggestions_remove_duplicates(), statement for statement.
-			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			$wpdb->query( "UPDATE {$t} t1 INNER JOIN ( SELECT MIN(id) as min_id, TRIM(name) as trimmed_name, SUM(weight) as total_weight FROM {$t} GROUP BY trimmed_name HAVING COUNT(*) > 1 ) t2 ON t1.id = t2.min_id SET t1.weight = t2.total_weight" );
-			$removed = $wpdb->query( "DELETE t1 FROM {$t} t1 INNER JOIN {$t} t2 WHERE t1.id > t2.id AND TRIM(t1.name) = TRIM(t2.name)" );
-			// phpcs:enable
-			if ( false === $removed ) {
-				return new WP_Error( 'dedupe_failed', __( 'JetSearch could not merge the duplicates.', 'minn-admin' ), array( 'status' => 500 ) );
-			}
-			return rest_ensure_response( array(
-				'ok'      => true,
-				/* translators: %d: number of duplicate rows removed. */
-				'message' => sprintf( _n( '%d duplicate merged.', '%d duplicates merged.', (int) $removed, 'minn-admin' ), (int) $removed ),
-			) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/jet-search/status', array(
-		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function () {
-			$open = array( array( 'label' => __( 'Open JetSearch ↗', 'minn-admin' ), 'href' => minn_admin_jet_search_admin_url() ) );
-			if ( ! minn_admin_jet_search_has_table() ) {
-				return rest_ensure_response( array( 'rows' => array( array( 'label' => __( 'Suggestions', 'minn-admin' ), 'value' => '—' ) ), 'actions' => $open ) );
-			}
-			global $wpdb;
-			$t = minn_admin_jet_search_table();
-			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			$total = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$t}" );
-			$top   = $wpdb->get_row( "SELECT name, weight FROM {$t} ORDER BY weight DESC, id ASC LIMIT 1" );
-			$dupes = (int) $wpdb->get_var( "SELECT COUNT(*) - COUNT(DISTINCT TRIM(name)) FROM {$t}" );
-			// phpcs:enable
-			$actions = array();
-			if ( $dupes > 0 ) {
-				$actions[] = array(
-					'label'   => __( 'Merge duplicates', 'minn-admin' ),
-					'route'   => 'minn-admin/v1/jet-search/dedupe',
-					'method'  => 'POST',
-					/* translators: %d: number of duplicate rows. */
-					'confirm' => sprintf( _n( 'Merge %d duplicate into its first entry (weights are added up)?', 'Merge %d duplicates into their first entries (weights are added up)?', $dupes, 'minn-admin' ), $dupes ),
-				);
-			}
-			$rows = array(
-				array( 'label' => __( 'Suggestions', 'minn-admin' ), 'value' => number_format_i18n( $total ) ),
-				array( 'label' => __( 'Top', 'minn-admin' ), 'value' => $top ? (string) $top->name : '—', 'hint' => $top ? sprintf( /* translators: %s: weight */ __( 'weight %s', 'minn-admin' ), number_format_i18n( (int) $top->weight ) ) : '' ),
-				array( 'label' => __( 'Duplicates', 'minn-admin' ), 'value' => number_format_i18n( $dupes ) ),
+minn_admin_endpoint( 'jet-search/status', array(
+	'active' => 'minn_admin_jet_search_active',
+	'gate'   => 'minn_admin_jet_search_can',
+	'run'    => function () {
+		$open = array( array( 'label' => __( 'Open JetSearch ↗', 'minn-admin' ), 'href' => minn_admin_jet_search_admin_url() ) );
+		if ( ! minn_admin_jet_search_has_table() ) {
+			return array( 'rows' => array( array( 'label' => __( 'Suggestions', 'minn-admin' ), 'value' => '—' ) ), 'actions' => $open );
+		}
+		global $wpdb;
+		$total = Minn_Admin_Kernel::count( 'jet-search/suggestions' );
+		$top   = Minn_Admin_Kernel_SQL::select( MINN_ADMIN_JET_SEARCH_TABLE, array( 'name', 'weight' ), array(), array( 'weight' => 'DESC', 'id' => 'ASC' ), 1 );
+		$top   = $top ? $top[0] : null;
+		// Duplicates by the dedupe's own rule (the same TRIM), so the card
+		// offers the merge exactly when it would remove something.
+		$t     = minn_admin_jet_search_table();
+		$dupes = (int) $wpdb->get_var( "SELECT COUNT(*) - COUNT(DISTINCT TRIM(name)) FROM {$t}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$actions = array();
+		if ( $dupes > 0 ) {
+			$actions[] = array(
+				'label'   => __( 'Merge duplicates', 'minn-admin' ),
+				'route'   => 'minn-admin/v1/jet-search/dedupe',
+				'method'  => 'POST',
+				/* translators: %d: number of duplicate rows. */
+				'confirm' => sprintf( _n( 'Merge %d duplicate into its first entry (weights are added up)?', 'Merge %d duplicates into their first entries (weights are added up)?', $dupes, 'minn-admin' ), $dupes ),
 			);
-			return rest_ensure_response( array( 'rows' => $rows, 'actions' => array_merge( $actions, $open ) ) );
-		},
-	) );
-} );
+		}
+		$rows = array(
+			array( 'label' => __( 'Suggestions', 'minn-admin' ), 'value' => number_format_i18n( $total ) ),
+			array( 'label' => __( 'Top', 'minn-admin' ), 'value' => $top ? (string) $top['name'] : '—', 'hint' => $top ? sprintf( /* translators: %s: weight */ __( 'weight %s', 'minn-admin' ), number_format_i18n( (int) $top['weight'] ) ) : '' ),
+			array( 'label' => __( 'Duplicates', 'minn-admin' ), 'value' => number_format_i18n( $dupes ) ),
+		);
+		return array( 'rows' => $rows, 'actions' => array_merge( $actions, $open ) );
+	},
+) );

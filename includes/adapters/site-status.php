@@ -32,8 +32,8 @@ defined( 'ABSPATH' ) || exit;
  * @return string|null Raw option_value, null when the row is absent.
  */
 function minn_admin_raw_option( $name ) {
-	global $wpdb;
-	return $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s LIMIT 1", $name ) );
+	$row = Minn_Admin_Kernel_SQL::select( array( 'core' => 'options' ), array( 'option_value' ), array( 'option_name' => (string) $name ), array(), 1 );
+	return $row ? (string) $row[0]['option_value'] : null;
 }
 
 /**
@@ -515,66 +515,58 @@ function minn_admin_rsssl_check() {
 // topbar chip refetch this after a maintenance/search toggle to update
 // without a full page reload.
 add_action( 'rest_api_init', function () {
-	register_rest_route(
-		'minn-admin/v1',
-		'/visibility',
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => function () {
-				return current_user_can( 'manage_options' );
-			},
-			'callback'            => function () {
-				return rest_ensure_response( minn_admin_site_visibility() );
-			},
-		)
-	);
+	minn_admin_endpoint( '/visibility', array(
+		'methods'             => 'GET',
+		'gate'                => function () {
+			return current_user_can( 'manage_options' );
+		},
+		'run'                 => function () {
+			return rest_ensure_response( minn_admin_site_visibility() );
+		},
+	) );
 
 	// Turn a provider's mode off (or back on, for Undo) through its registered
 	// writer. Turning off remembers which mode was on (option map, capped) so
 	// an Undo restores exactly it; the response is the fresh visibility state
 	// so the client repaints in one round trip (license-action precedent).
-	register_rest_route(
-		'minn-admin/v1',
-		'/visibility/toggle',
-		array(
-			'methods'             => 'POST',
-			'permission_callback' => function () {
-				return current_user_can( 'manage_options' );
-			},
-			'callback'            => function ( $request ) {
-				$id      = sanitize_key( (string) $request['id'] );
-				$on      = ! empty( $request['on'] );
-				$toggles = minn_admin_visibility_toggles();
-				if ( '' === $id || ! isset( $toggles[ $id ] ) ) {
-					return new WP_Error( 'minn_no_toggle', __( 'No visibility toggle is registered for that provider.', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				if ( ! empty( $toggles[ $id ]['can'] ) && is_callable( $toggles[ $id ]['can'] ) && ! call_user_func( $toggles[ $id ]['can'] ) ) {
-					return new WP_Error( 'rest_forbidden', __( 'This site keeps that switch to people with the plugin’s own settings access.', 'minn-admin' ), array( 'status' => 403 ) );
-				}
-				$mem = get_option( 'minn_admin_vis_restore', array() );
-				if ( ! is_array( $mem ) ) {
-					$mem = array();
-				}
-				$ctx = array();
-				if ( $on ) {
-					$ctx['kind'] = isset( $mem[ $id ] ) ? (string) $mem[ $id ] : '';
-				} else {
-					foreach ( minn_admin_site_visibility()['providers'] as $p ) {
-						if ( $p['id'] === $id ) {
-							$mem[ $id ] = $p['kind'];
-							$mem        = array_slice( $mem, -20, null, true );
-							update_option( 'minn_admin_vis_restore', $mem, false );
-							break;
-						}
+	minn_admin_endpoint( '/visibility/toggle', array(
+		'methods'             => 'POST',
+		'gate'                => function () {
+			return current_user_can( 'manage_options' );
+		},
+		'run'                 => function ( $request ) {
+			$id      = sanitize_key( (string) $request['id'] );
+			$on      = ! empty( $request['on'] );
+			$toggles = minn_admin_visibility_toggles();
+			if ( '' === $id || ! isset( $toggles[ $id ] ) ) {
+				return new WP_Error( 'minn_no_toggle', __( 'No visibility toggle is registered for that provider.', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			if ( ! empty( $toggles[ $id ]['can'] ) && is_callable( $toggles[ $id ]['can'] ) && ! call_user_func( $toggles[ $id ]['can'] ) ) {
+				return new WP_Error( 'rest_forbidden', __( 'This site keeps that switch to people with the plugin’s own settings access.', 'minn-admin' ), array( 'status' => 403 ) );
+			}
+			$mem = get_option( 'minn_admin_vis_restore', array() );
+			if ( ! is_array( $mem ) ) {
+				$mem = array();
+			}
+			$ctx = array();
+			if ( $on ) {
+				$ctx['kind'] = isset( $mem[ $id ] ) ? (string) $mem[ $id ] : '';
+			} else {
+				foreach ( minn_admin_site_visibility()['providers'] as $p ) {
+					if ( $p['id'] === $id ) {
+						$mem[ $id ] = $p['kind'];
+						$mem        = array_slice( $mem, -20, null, true );
+						update_option( 'minn_admin_vis_restore', $mem, false );
+						break;
 					}
 				}
-				try {
-					call_user_func( $toggles[ $id ]['set'], $on, $ctx );
-				} catch ( \Throwable $e ) {
-					return new WP_Error( 'minn_toggle_failed', $e->getMessage(), array( 'status' => 500 ) );
-				}
-				return rest_ensure_response( minn_admin_site_visibility() );
-			},
-		)
-	);
+			}
+			try {
+				call_user_func( $toggles[ $id ]['set'], $on, $ctx );
+			} catch ( \Throwable $e ) {
+				return new WP_Error( 'minn_toggle_failed', $e->getMessage(), array( 'status' => 500 ) );
+			}
+			return rest_ensure_response( minn_admin_site_visibility() );
+		},
+	) );
 } );

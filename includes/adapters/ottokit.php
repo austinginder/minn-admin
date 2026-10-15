@@ -48,21 +48,18 @@ function minn_admin_ottokit_table() {
 	return $wpdb->prefix . 'suretriggers_webhook_requests';
 }
 
+/** Their table as the kernel names it (their name, without this site's prefix). */
+function minn_admin_ottokit_spec() {
+	return Minn_Admin_Kernel_SQL::named( minn_admin_ottokit_table() );
+}
+
 /**
  * Whether the log table exists. Their logging is a feature that can be off,
  * and the table is only created when their controller installs it, so the
  * surface must not assume it.
  */
 function minn_admin_ottokit_has_table() {
-	static $has = null;
-	if ( null !== $has ) {
-		return $has;
-	}
-	global $wpdb;
-	$table = minn_admin_ottokit_table();
-	// phpcs:ignore WordPress.DB.PreparedSQL.NoCaching, WordPress.DB.DirectDatabaseQuery.DirectQuery
-	$has = ! empty( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) );
-	return $has;
+	return Minn_Admin_Kernel_SQL::exists( minn_admin_ottokit_spec() );
 }
 
 /**
@@ -140,12 +137,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'family'     => 'automation',
 		'group'      => 'tools',
 		'status'     => array( 'route' => 'minn-admin/v1/ottokit/status' ),
-		'collection' => array(
-			'route'     => 'minn-admin/v1/ottokit/requests',
-			'pageQuery' => 'per_page=25&page={page}',
-			'search'    => 'search={q}',
-			'itemsKey'  => 'items',
-			'totalKey'  => 'total',
+		'collection' => Minn_Admin_Kernel::collection( 'ottokit/requests', array(
 			'viewLabel' => __( 'Outgoing requests', 'minn-admin' ),
 			'tabs'      => array(
 				'param'    => 'status',
@@ -191,187 +183,155 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'when'   => array( 'key' => 'status', 'equals' => 'failed' ),
 				),
 			),
-		),
+		) ),
 	);
 	return $surfaces;
 } );
 
-add_action( 'rest_api_init', function () {
-	if ( ! minn_admin_ottokit_active() ) {
-		return;
+/** The detail view's sections: the request, then its payload without headers. */
+function minn_admin_ottokit_view( array $row ) {
+	$rows = array(
+		array( 'label' => __( 'Endpoint', 'minn-admin' ), 'value' => (string) ( $row['request_url'] ?? '' ), 'type' => 'url' ),
+		array( 'label' => __( 'Method', 'minn-admin' ), 'value' => strtoupper( (string) ( $row['request_method'] ?? '' ) ) ),
+		array( 'label' => __( 'Status', 'minn-admin' ), 'value' => (string) ( $row['status'] ?? '' ), 'type' => 'pill' ),
+		array( 'label' => __( 'Response code', 'minn-admin' ), 'value' => (string) ( $row['response_code'] ?? '' ) ),
+		array( 'label' => __( 'Sent', 'minn-admin' ), 'value' => (string) ( $row['created_at'] ?? '' ) ),
+	);
+	if ( ! empty( $row['processed_at'] ) ) {
+		$rows[] = array( 'label' => __( 'Processed', 'minn-admin' ), 'value' => (string) $row['processed_at'] );
 	}
-	$can = function () {
-		return current_user_can( minn_admin_ottokit_cap() );
-	};
+	if ( (int) ( $row['retry_attempts'] ?? 0 ) > 0 ) {
+		$rows[] = array( 'label' => __( 'Retries', 'minn-admin' ), 'value' => (string) (int) $row['retry_attempts'] );
+	}
+	if ( ! empty( $row['error_info'] ) ) {
+		$rows[] = array( 'label' => __( 'Error', 'minn-admin' ), 'value' => (string) $row['error_info'] );
+	}
+	$sections = array( array( 'title' => __( 'Request', 'minn-admin' ), 'rows' => $rows ) );
 
-	register_rest_route( 'minn-admin/v1', '/ottokit/requests', array(
-		'methods'             => 'GET',
-		'permission_callback' => $can,
-		'callback'            => function ( WP_REST_Request $req ) {
-			global $wpdb;
-			if ( ! minn_admin_ottokit_has_table() ) {
-				return rest_ensure_response( array( 'items' => array(), 'total' => 0 ) );
-			}
-			$table    = minn_admin_ottokit_table();
-			$per_page = max( 1, min( 100, (int) $req->get_param( 'per_page' ) ?: 25 ) );
-			$page     = max( 1, (int) $req->get_param( 'page' ) ?: 1 );
-			$offset   = ( $page - 1 ) * $per_page;
+	// Their payload is JSON; decode only, and show it as escaped code.
+	// A retried request is re-persisted WITH its outbound headers,
+	// and those carry the SaaS bearer token; their own screen unsets
+	// `headers` before rendering, so this one does too.
+	$raw = (string) ( $row['request_data'] ?? '' );
+	if ( '' !== trim( $raw ) ) {
+		$decoded = json_decode( $raw, true );
+		if ( is_array( $decoded ) ) {
+			unset( $decoded['headers'] );
+		}
+		$pretty     = ( null !== $decoded )
+			? (string) wp_json_encode( $decoded, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES )
+			: $raw;
+		$sections[] = array(
+			'title' => __( 'Payload', 'minn-admin' ),
+			'rows'  => array( array( 'label' => __( 'Sent to OttoKit', 'minn-admin' ), 'value' => $pretty, 'type' => 'code' ) ),
+		);
+	}
+	return array( 'sections' => $sections );
+}
 
-			$where  = array( '1=1' );
-			$params = array();
-			$status = sanitize_text_field( (string) $req->get_param( 'status' ) );
-			if ( '' !== $status ) {
-				$where[]  = 'status = %s';
-				$params[] = $status;
-			}
-			$search = trim( (string) $req->get_param( 'search' ) );
-			if ( '' !== $search ) {
-				$like     = '%' . $wpdb->esc_like( $search ) . '%';
-				$where[]  = '( request_url LIKE %s OR error_info LIKE %s )';
-				$params[] = $like;
-				$params[] = $like;
-			}
-			$clause = implode( ' AND ', $where );
-
-			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table is prefix-fixed, clause is built from placeholders only.
-			$count_sql = "SELECT COUNT(*) FROM {$table} WHERE {$clause}";
-			$total     = (int) ( $params
-				? $wpdb->get_var( $wpdb->prepare( $count_sql, $params ) )
-				: $wpdb->get_var( $count_sql ) );
-
-			$rows_sql = "SELECT id, request_url, status, response_code, created_at FROM {$table} WHERE {$clause} ORDER BY id DESC LIMIT %d OFFSET %d";
-			$rows     = (array) $wpdb->get_results(
-				$wpdb->prepare( $rows_sql, array_merge( $params, array( $per_page, $offset ) ) ),
-				ARRAY_A
-			);
-			// phpcs:enable
-
-			return rest_ensure_response( array(
-				'items' => array_map( 'minn_admin_ottokit_item', $rows ),
-				'total' => $total,
-			) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/ottokit/requests/(?P<id>\d+)/view', array(
-		'methods'             => 'GET',
-		'permission_callback' => $can,
-		'callback'            => function ( WP_REST_Request $req ) {
-			global $wpdb;
-			$table = minn_admin_ottokit_table();
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table is prefix-fixed.
-			$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", (int) Minn_Admin::path_param( $req ) ), ARRAY_A );
-			if ( ! $row ) {
-				return new WP_Error( 'not_found', __( 'That request is gone.', 'minn-admin' ), array( 'status' => 404 ) );
-			}
-			$rows = array(
-				array( 'label' => __( 'Endpoint', 'minn-admin' ), 'value' => (string) ( $row['request_url'] ?? '' ), 'type' => 'url' ),
-				array( 'label' => __( 'Method', 'minn-admin' ), 'value' => strtoupper( (string) ( $row['request_method'] ?? '' ) ) ),
-				array( 'label' => __( 'Status', 'minn-admin' ), 'value' => (string) ( $row['status'] ?? '' ), 'type' => 'pill' ),
-				array( 'label' => __( 'Response code', 'minn-admin' ), 'value' => (string) ( $row['response_code'] ?? '' ) ),
-				array( 'label' => __( 'Sent', 'minn-admin' ), 'value' => (string) ( $row['created_at'] ?? '' ) ),
-			);
-			if ( ! empty( $row['processed_at'] ) ) {
-				$rows[] = array( 'label' => __( 'Processed', 'minn-admin' ), 'value' => (string) $row['processed_at'] );
-			}
-			if ( (int) ( $row['retry_attempts'] ?? 0 ) > 0 ) {
-				$rows[] = array( 'label' => __( 'Retries', 'minn-admin' ), 'value' => (string) (int) $row['retry_attempts'] );
-			}
-			if ( ! empty( $row['error_info'] ) ) {
-				$rows[] = array( 'label' => __( 'Error', 'minn-admin' ), 'value' => (string) $row['error_info'] );
-			}
-			$sections = array( array( 'title' => __( 'Request', 'minn-admin' ), 'rows' => $rows ) );
-
-			// Their payload is JSON; decode only, and show it as escaped code.
-			// A retried request is re-persisted WITH its outbound headers,
-			// and those carry the SaaS bearer token; their own screen unsets
-			// `headers` before rendering, so this one does too.
-			$raw = (string) ( $row['request_data'] ?? '' );
-			if ( '' !== trim( $raw ) ) {
-				$decoded = json_decode( $raw, true );
-				if ( is_array( $decoded ) ) {
-					unset( $decoded['headers'] );
-				}
-				$pretty  = ( null !== $decoded )
-					? (string) wp_json_encode( $decoded, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES )
-					: $raw;
-				$sections[] = array(
-					'title' => __( 'Payload', 'minn-admin' ),
-					'rows'  => array( array( 'label' => __( 'Sent to OttoKit', 'minn-admin' ), 'value' => $pretty, 'type' => 'code' ) ),
-				);
-			}
-			return rest_ensure_response( array( 'sections' => $sections ) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/ottokit/requests/(?P<id>\d+)/retry', array(
-		'methods'             => 'POST',
-		'permission_callback' => $can,
-		'callback'            => function ( WP_REST_Request $req ) {
-			global $wpdb;
-			$id    = (int) Minn_Admin::path_param( $req );
-			$table = minn_admin_ottokit_table();
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table is prefix-fixed.
-			$before = $wpdb->get_row( $wpdb->prepare( "SELECT id, status, retry_attempts FROM {$table} WHERE id = %d", $id ), ARRAY_A );
-			if ( ! $before ) {
-				return new WP_Error( 'not_found', __( 'That request is gone.', 'minn-admin' ), array( 'status' => 404 ) );
-			}
-			try {
+minn_admin_resource( 'ottokit/requests', function () {
+	$fields = array(
+		'id'            => 'int',
+		'request_url'   => 'text',
+		'status'        => 'text',
+		'response_code' => 'int',
+		'created_at'    => 'text',
+	);
+	return array(
+		'active'  => 'minn_admin_ottokit_active',
+		'gates'   => array(
+			'view' => function () {
+				return current_user_can( minn_admin_ottokit_cap() );
+			},
+		),
+		'labels'  => array( 'not_found' => __( 'That request is gone.', 'minn-admin' ) ),
+		'source'  => array(
+			'table'   => minn_admin_ottokit_spec(),
+			'key'     => 'id',
+			'columns' => array( 'id', 'request_url', 'status', 'response_code', 'created_at' ),
+			// Every column, as their screen reads the row, so an older schema
+			// still opens.
+			'detail'  => array(),
+		),
+		'list'    => array(
+			// Their statuses are success and failed; no status is every row.
+			'facets' => array( array( 'param' => 'status', 'column' => 'status', 'type' => 'key' ) ),
+			'search' => array( 'columns' => array( 'request_url', 'error_info' ) ),
+			'order'  => array( 'column' => 'id', 'dir' => 'DESC' ),
+			'row'    => 'minn_admin_ottokit_item',
+			'fields' => $fields,
+		),
+		'item'    => array( 'view' => 'minn_admin_ottokit_item', 'fields' => $fields ),
+		'reads'   => array( 'view' => array( 'view' => 'minn_admin_ottokit_view', 'fields' => array( 'sections' => 'raw' ) ) ),
+		'actions' => array(
+			'retry' => array(
+				'method' => 'POST',
+				'gate'   => 'view',
 				// Their own retry: re-fires the webhook, records the response,
-				// bumps the attempt count and flips the status.
-				\SureTriggers\Controllers\WebhookRequestsController::suretriggers_retry_trigger_request( $id );
-			} catch ( \Throwable $e ) {
-				return new WP_Error( 'retry_failed', __( 'OttoKit could not resend that request.', 'minn-admin' ), array( 'status' => 500 ) );
-			}
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table is prefix-fixed.
-			$after = $wpdb->get_row( $wpdb->prepare( "SELECT status, response_code FROM {$table} WHERE id = %d", $id ), ARRAY_A );
-			return rest_ensure_response( array(
-				'ok'     => true,
-				'status' => (string) ( $after['status'] ?? '' ),
-				'code'   => (int) ( $after['response_code'] ?? 0 ),
-			) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/ottokit/status', array(
-		'methods'             => 'GET',
-		'permission_callback' => $can,
-		'callback'            => function () {
-			global $wpdb;
-			$conn  = minn_admin_ottokit_connection();
-			$table = minn_admin_ottokit_table();
-			$counts = array( 'failed' => 0, 'success' => 0, 'total' => 0 );
-			if ( minn_admin_ottokit_has_table() ) {
-				// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table is prefix-fixed.
-				$counts['total']   = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
-				$counts['failed']  = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE status = %s", 'failed' ) );
-				$counts['success'] = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE status = %s", 'success' ) );
-				// phpcs:enable
-			}
-
-			$rows = array(
-				array(
-					'label' => __( 'Account', 'minn-admin' ),
-					'value' => $conn['connected'] ? ( $conn['email'] ? $conn['email'] : __( 'Connected', 'minn-admin' ) ) : __( 'Not connected', 'minn-admin' ),
-					'hint'  => $conn['note'],
-				),
-				array( 'label' => __( 'Outgoing requests', 'minn-admin' ), 'value' => (string) $counts['total'] ),
-				array(
-					'label' => __( 'Failed', 'minn-admin' ),
-					'value' => (string) $counts['failed'],
-					'hint'  => $counts['failed'] ? __( 'retry from the Failed tab', 'minn-admin' ) : '',
-				),
-			);
-
-			$actions = array();
-			if ( current_user_can( 'manage_options' ) ) {
-				// Workflows and run history are cloud state with no local
-				// copy, so this links to OttoKit's own screens rather than
-				// pretending Minn can list them.
-				$actions[] = array( 'label' => __( 'Workflows ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=suretriggers' ) );
-				$actions[] = array( 'label' => __( 'OttoKit status ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=suretriggers-status' ) );
-			}
-			return rest_ensure_response( array( 'rows' => $rows, 'actions' => $actions ) );
-		},
-	) );
+				// bumps the attempt count and flips the status, and answers
+				// true once it sent. It sends nothing for a payload that does
+				// not decode. It can send and then fail to record the answer
+				// (a response body longer than their error column), so a send
+				// is done whether or not the row moved, and the reply says
+				// which: retrying an unrecorded send would run it twice.
+				'run'    => function ( $id, array $row ) {
+					$sent = \SureTriggers\Controllers\WebhookRequestsController::suretriggers_retry_trigger_request( $id );
+					return array( 'sent' => true === $sent, 'before' => (int) ( $row['retry_attempts'] ?? 0 ) );
+				},
+				'expect' => function ( $id, $fresh, $ran ) {
+					return is_array( $fresh ) && is_array( $ran ) && ( $ran['sent'] || (int) ( $fresh['retry_attempts'] ?? 0 ) > $ran['before'] );
+				},
+				'fail'   => __( 'OttoKit did not resend that request.', 'minn-admin' ),
+				'reply'  => function ( $id, $fresh, $ran ) {
+					$recorded = (int) ( $fresh['retry_attempts'] ?? 0 ) > (int) ( $ran['before'] ?? 0 );
+					$out      = array(
+						'status'   => (string) ( $fresh['status'] ?? '' ),
+						'code'     => (int) ( $fresh['response_code'] ?? 0 ),
+						'recorded' => $recorded,
+					);
+					if ( ! $recorded ) {
+						$out['message'] = __( 'OttoKit sent the request again but could not record the answer, so the log still shows the earlier attempt. Check the automation before sending it again.', 'minn-admin' );
+					}
+					return $out;
+				},
+			),
+		),
+	);
 } );
+
+minn_admin_endpoint( 'ottokit/status', array(
+	'active' => 'minn_admin_ottokit_active',
+	'gate'   => function () {
+		return current_user_can( minn_admin_ottokit_cap() );
+	},
+	'run'    => function () {
+		$conn   = minn_admin_ottokit_connection();
+		$counts = array( 'failed' => 0, 'total' => 0 );
+		if ( minn_admin_ottokit_has_table() ) {
+			$counts['total']  = Minn_Admin_Kernel::count( 'ottokit/requests' );
+			$counts['failed'] = Minn_Admin_Kernel::count( 'ottokit/requests', array( 'status' => 'failed' ) );
+		}
+		$rows = array(
+			array(
+				'label' => __( 'Account', 'minn-admin' ),
+				'value' => $conn['connected'] ? ( $conn['email'] ? $conn['email'] : __( 'Connected', 'minn-admin' ) ) : __( 'Not connected', 'minn-admin' ),
+				'hint'  => $conn['note'],
+			),
+			array( 'label' => __( 'Outgoing requests', 'minn-admin' ), 'value' => (string) $counts['total'] ),
+			array(
+				'label' => __( 'Failed', 'minn-admin' ),
+				'value' => (string) $counts['failed'],
+				'hint'  => $counts['failed'] ? __( 'retry from the Failed tab', 'minn-admin' ) : '',
+			),
+		);
+		$actions = array();
+		if ( current_user_can( 'manage_options' ) ) {
+			// Workflows and run history are cloud state with no local
+			// copy, so this links to OttoKit's own screens rather than
+			// pretending Minn can list them.
+			$actions[] = array( 'label' => __( 'Workflows ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=suretriggers' ) );
+			$actions[] = array( 'label' => __( 'OttoKit status ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=suretriggers-status' ) );
+		}
+		return array( 'rows' => $rows, 'actions' => $actions );
+	},
+) );

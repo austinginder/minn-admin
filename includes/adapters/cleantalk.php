@@ -213,10 +213,7 @@ function minn_admin_cleantalk_spam_count() {
 			return (int) \Cleantalk\ApbctWP\FindSpam\UsersChecker::getCountSpammers();
 		} catch ( \Throwable $e ) { /* fall through to the meta count */ }
 	}
-	global $wpdb;
-	return (int) $wpdb->get_var(
-		"SELECT COUNT(user_id) FROM {$wpdb->usermeta} WHERE meta_key = 'ct_marked_as_spam'"
-	);
+	return Minn_Admin_Kernel_SQL::count( array( 'core' => 'usermeta' ), array( 'meta_key' => 'ct_marked_as_spam' ) );
 }
 
 function minn_admin_cleantalk_user_is_marked( $user_id ) {
@@ -296,49 +293,41 @@ add_action( 'rest_api_init', function () {
 		return;
 	}
 
-	register_rest_route(
-		'minn-admin/v1',
-		'/cleantalk/spam-users',
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => function () {
-				return current_user_can( 'list_users' ) && minn_admin_cleantalk_can_manage();
-			},
-			'callback'            => 'minn_admin_cleantalk_list_spam_users',
-		)
-	);
+	minn_admin_endpoint( '/cleantalk/spam-users', array(
+		'methods'             => 'GET',
+		'gate'                => function () {
+			return current_user_can( 'list_users' ) && minn_admin_cleantalk_can_manage();
+		},
+		'run'                 => 'minn_admin_cleantalk_list_spam_users',
+	) );
 
-	register_rest_route(
-		'minn-admin/v1',
-		'/cleantalk/spam-users/(?P<id>\d+)',
-		array(
-			'methods'             => 'POST',
-			'permission_callback' => function ( WP_REST_Request $request ) {
-				// The account this acts on is the one in the URL, which is the
-				// one the operator was shown and confirmed. Reading it from the
-				// merged request lets a body or query parameter name a
-				// different account than the path did, and this verb deletes
-				// the account it is given.
-				$id     = (int) Minn_Admin::path_param( $request );
-				$action = (string) $request->get_param( 'action' );
-				if ( ! minn_admin_cleantalk_can_manage() ) {
-					return false;
-				}
-				if ( 'approve' === $action ) {
-					return current_user_can( 'edit_users' ) && current_user_can( 'edit_user', $id );
-				}
-				if ( 'delete' === $action ) {
-					// The per-target meta cap, the way core's own users.php and the
-					// REST users controller do it: wp_delete_user() checks nothing
-					// itself, and third-party map_meta_cap filters narrow deletion
-					// per target rather than through the blanket primitive.
-					return current_user_can( 'delete_users' ) && current_user_can( 'delete_user', $id );
-				}
+	minn_admin_endpoint( '/cleantalk/spam-users/(?P<id>\d+)', array(
+		'methods'             => 'POST',
+		'gate'                => function ( WP_REST_Request $request ) {
+			// The account this acts on is the one in the URL, which is the
+			// one the operator was shown and confirmed. Reading it from the
+			// merged request lets a body or query parameter name a
+			// different account than the path did, and this verb deletes
+			// the account it is given.
+			$id     = (int) Minn_Admin::path_param( $request );
+			$action = (string) $request->get_param( 'action' );
+			if ( ! minn_admin_cleantalk_can_manage() ) {
 				return false;
-			},
-			'callback'            => 'minn_admin_cleantalk_spam_user_action',
-		)
-	);
+			}
+			if ( 'approve' === $action ) {
+				return current_user_can( 'edit_users' ) && current_user_can( 'edit_user', $id );
+			}
+			if ( 'delete' === $action ) {
+				// The per-target meta cap, the way core's own users.php and the
+				// REST users controller do it: wp_delete_user() checks nothing
+				// itself, and third-party map_meta_cap filters narrow deletion
+				// per target rather than through the blanket primitive.
+				return current_user_can( 'delete_users' ) && current_user_can( 'delete_user', $id );
+			}
+			return false;
+		},
+		'run'                 => 'minn_admin_cleantalk_spam_user_action',
+	) );
 } );
 
 /**

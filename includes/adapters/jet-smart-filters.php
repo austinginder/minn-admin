@@ -73,13 +73,9 @@ function minn_admin_jsf_item( $post, $types ) {
 
 /** The indexer rows + Reindex for the Filters status card. */
 function minn_admin_jsf_status_rows() {
-	global $wpdb;
 	$counts = wp_count_posts( 'jet-smart-filters' );
 	$on     = minn_admin_jsf_indexer_on();
-	$t      = $wpdb->prefix . 'jet_smart_filters_indexer';
-	$has    = 0 === strcasecmp( (string) $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $t ) ), $t );
-	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-	$n      = $has ? (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$t}" ) : 0;
+	$n      = minn_admin_jsf_index_rows();
 	$rows   = array(
 		array( 'label' => __( 'Filters', 'minn-admin' ), 'value' => number_format_i18n( (int) ( $counts->publish ?? 0 ) ) ),
 		array( 'label' => __( 'Indexer', 'minn-admin' ), 'value' => $on ? sprintf( /* translators: %s: number of index rows */ __( 'On · %s rows', 'minn-admin' ), number_format_i18n( $n ) ) : __( 'Off', 'minn-admin' ), 'hint' => $on ? '' : __( 'switch it on in JetSmartFilters settings', 'minn-admin' ) ),
@@ -114,11 +110,9 @@ function minn_admin_jsf_job_write( $token, array $rec ) {
 	set_transient( minn_admin_jsf_job_key( $token ), $rec, 6 * HOUR_IN_SECONDS );
 }
 
+/** Rows in their index table, 0 when it is not there yet. */
 function minn_admin_jsf_index_rows() {
-	global $wpdb;
-	$t = $wpdb->prefix . 'jet_smart_filters_indexer';
-	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-	return (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$t}" );
+	return Minn_Admin_Kernel_SQL::exists( 'jet_smart_filters_indexer' ) ? Minn_Admin_Kernel_SQL::count( 'jet_smart_filters_indexer' ) : 0;
 }
 
 /** The cron worker: their rebuild, outcome recorded for the status route. */
@@ -208,10 +202,10 @@ add_action( 'rest_api_init', function () {
 	}
 	$perm = 'minn_admin_jsf_can';
 
-	register_rest_route( 'minn-admin/v1', '/jet-smart-filters/filters', array(
+	minn_admin_endpoint( '/jet-smart-filters/filters', array(
 		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) {
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) {
 			$q = new WP_Query( array(
 				'post_type'      => 'jet-smart-filters',
 				'post_status'    => array( 'publish', 'draft', 'pending', 'private' ),
@@ -230,38 +224,36 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/jet-smart-filters/filters/(?P<id>\d+)', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) {
-				$p = get_post( (int) Minn_Admin::path_param( $request ) );
-				if ( ! $p || 'jet-smart-filters' !== $p->post_type ) {
-					return new WP_Error( 'not_found', __( 'Filter not found', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				return rest_ensure_response( minn_admin_jsf_item( $p, minn_admin_jsf_types() ) );
-			},
-		),
-		array(
-			'methods'             => 'DELETE',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) {
-				$p = get_post( (int) Minn_Admin::path_param( $request ) );
-				if ( ! $p || 'jet-smart-filters' !== $p->post_type || ! current_user_can( 'delete_post', $p->ID ) ) {
-					return new WP_Error( 'not_found', __( 'Filter not found', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				if ( ! wp_trash_post( $p->ID ) ) {
-					return new WP_Error( 'trash_failed', __( 'Could not trash that filter.', 'minn-admin' ), array( 'status' => 500 ) );
-				}
-				return rest_ensure_response( array( 'ok' => true, 'message' => __( 'Filter moved to the trash.', 'minn-admin' ) ) );
-			},
-		),
+	minn_admin_endpoint( '/jet-smart-filters/filters/(?P<id>\d+)', array(
+		'methods'             => 'GET',
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) {
+			$p = get_post( (int) Minn_Admin::path_param( $request ) );
+			if ( ! $p || 'jet-smart-filters' !== $p->post_type ) {
+				return new WP_Error( 'not_found', __( 'Filter not found', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			return rest_ensure_response( minn_admin_jsf_item( $p, minn_admin_jsf_types() ) );
+		},
+	) );
+	minn_admin_endpoint( '/jet-smart-filters/filters/(?P<id>\d+)', array(
+		'methods'             => 'DELETE',
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) {
+			$p = get_post( (int) Minn_Admin::path_param( $request ) );
+			if ( ! $p || 'jet-smart-filters' !== $p->post_type || ! current_user_can( 'delete_post', $p->ID ) ) {
+				return new WP_Error( 'not_found', __( 'Filter not found', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			if ( ! wp_trash_post( $p->ID ) ) {
+				return new WP_Error( 'trash_failed', __( 'Could not trash that filter.', 'minn-admin' ), array( 'status' => 500 ) );
+			}
+			return rest_ensure_response( array( 'ok' => true, 'message' => __( 'Filter moved to the trash.', 'minn-admin' ) ) );
+		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/jet-smart-filters/reindex', array(
+	minn_admin_endpoint( '/jet-smart-filters/reindex', array(
 		'methods'             => 'POST',
-		'permission_callback' => $perm,
-		'callback'            => function () {
+		'gate'                => $perm,
+		'run'                 => function () {
 			if ( ! minn_admin_jsf_indexer_on() ) {
 				return new WP_Error( 'indexer_off', __( 'The indexer is switched off in JetSmartFilters settings.', 'minn-admin' ), array( 'status' => 400 ) );
 			}
@@ -294,68 +286,66 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/jet-smart-filters/reindex/(?P<token>[A-Za-z0-9]{12})', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) {
-				$token = (string) Minn_Admin::path_param( $request, 'token' );
-				$rec   = minn_admin_jsf_job_read( $token );
-				if ( ! $rec ) {
-					return new WP_Error( 'not_found', __( 'Unknown reindex job', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				$status = (string) ( $rec['status'] ?? 'queued' );
-				if ( 'queued' === $status && time() - (int) ( $rec['started'] ?? time() ) > 10 * MINUTE_IN_SECONDS ) {
-					// No cron run ever picked it up: say so rather than spin forever.
-					$rec['status']  = 'error';
-					$rec['message'] = __( 'The rebuild never started. WP-Cron did not run; check DISABLE_WP_CRON and the site\'s cron setup.', 'minn-admin' );
-					minn_admin_jsf_job_write( $token, $rec );
-					$status = 'error';
-				}
-				$out = array(
-					'status'  => 'queued' === $status ? 'running' : $status,
-					'message' => (string) ( $rec['message'] ?? '' ),
+	minn_admin_endpoint( '/jet-smart-filters/reindex/(?P<token>[A-Za-z0-9]{12})', array(
+		'methods'             => 'GET',
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) {
+			$token = (string) Minn_Admin::path_param( $request, 'token' );
+			$rec   = minn_admin_jsf_job_read( $token );
+			if ( ! $rec ) {
+				return new WP_Error( 'not_found', __( 'Unknown reindex job', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			$status = (string) ( $rec['status'] ?? 'queued' );
+			if ( 'queued' === $status && time() - (int) ( $rec['started'] ?? time() ) > 10 * MINUTE_IN_SECONDS ) {
+				// No cron run ever picked it up: say so rather than spin forever.
+				$rec['status']  = 'error';
+				$rec['message'] = __( 'The rebuild never started. WP-Cron did not run; check DISABLE_WP_CRON and the site\'s cron setup.', 'minn-admin' );
+				minn_admin_jsf_job_write( $token, $rec );
+				$status = 'error';
+			}
+			$out = array(
+				'status'  => 'queued' === $status ? 'running' : $status,
+				'message' => (string) ( $rec['message'] ?? '' ),
+			);
+			if ( 'done' === $status ) {
+				$out['percent'] = 100;
+				$out['result']  = array(
+					/* translators: %s: number of index rows. */
+					'label' => sprintf( __( '%s index rows', 'minn-admin' ), number_format_i18n( (int) ( $rec['rows'] ?? 0 ) ) ),
 				);
-				if ( 'done' === $status ) {
-					$out['percent'] = 100;
-					$out['result']  = array(
-						/* translators: %s: number of index rows. */
-						'label' => sprintf( __( '%s index rows', 'minn-admin' ), number_format_i18n( (int) ( $rec['rows'] ?? 0 ) ) ),
-					);
-				}
-				return rest_ensure_response( $out );
-			},
-		),
-		array(
-			'methods'             => 'DELETE',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) {
-				$token = (string) Minn_Admin::path_param( $request, 'token' );
-				$rec   = minn_admin_jsf_job_read( $token );
-				if ( ! $rec ) {
-					return new WP_Error( 'not_found', __( 'Unknown reindex job', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				if ( 'queued' === ( $rec['status'] ?? '' ) ) {
-					// Still waiting for cron: pull the event so it never runs.
-					wp_clear_scheduled_hook( 'minn_admin_jsf_reindex', array( $token ) );
-					$rec['status']  = 'canceled';
-					$rec['message'] = __( 'Reindex canceled before it started.', 'minn-admin' );
-					minn_admin_jsf_job_write( $token, $rec );
-					return rest_ensure_response( array( 'ok' => true, 'status' => 'canceled', 'message' => $rec['message'] ) );
-				}
-				if ( 'running' === ( $rec['status'] ?? '' ) ) {
-					// Their rebuild is one call with no steps; once it runs it finishes.
-					return rest_ensure_response( array( 'ok' => false, 'status' => 'running', 'message' => __( 'The rebuild is already running and finishes on its own; it cannot be stopped mid-way.', 'minn-admin' ) ) );
-				}
-				return rest_ensure_response( array( 'ok' => true, 'status' => (string) $rec['status'], 'message' => (string) ( $rec['message'] ?? '' ) ) );
-			},
-		),
+			}
+			return rest_ensure_response( $out );
+		},
+	) );
+	minn_admin_endpoint( '/jet-smart-filters/reindex/(?P<token>[A-Za-z0-9]{12})', array(
+		'methods'             => 'DELETE',
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) {
+			$token = (string) Minn_Admin::path_param( $request, 'token' );
+			$rec   = minn_admin_jsf_job_read( $token );
+			if ( ! $rec ) {
+				return new WP_Error( 'not_found', __( 'Unknown reindex job', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			if ( 'queued' === ( $rec['status'] ?? '' ) ) {
+				// Still waiting for cron: pull the event so it never runs.
+				wp_clear_scheduled_hook( 'minn_admin_jsf_reindex', array( $token ) );
+				$rec['status']  = 'canceled';
+				$rec['message'] = __( 'Reindex canceled before it started.', 'minn-admin' );
+				minn_admin_jsf_job_write( $token, $rec );
+				return rest_ensure_response( array( 'ok' => true, 'status' => 'canceled', 'message' => $rec['message'] ) );
+			}
+			if ( 'running' === ( $rec['status'] ?? '' ) ) {
+				// Their rebuild is one call with no steps; once it runs it finishes.
+				return rest_ensure_response( array( 'ok' => false, 'status' => 'running', 'message' => __( 'The rebuild is already running and finishes on its own; it cannot be stopped mid-way.', 'minn-admin' ) ) );
+			}
+			return rest_ensure_response( array( 'ok' => true, 'status' => (string) $rec['status'], 'message' => (string) ( $rec['message'] ?? '' ) ) );
+		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/jet-smart-filters/status', array(
+	minn_admin_endpoint( '/jet-smart-filters/status', array(
 		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function () {
+		'gate'                => $perm,
+		'run'                 => function () {
 			$st              = minn_admin_jsf_status_rows();
 			$st['actions'][] = array( 'label' => __( 'Open JetSmartFilters ↗', 'minn-admin' ), 'href' => admin_url( 'edit.php?post_type=jet-smart-filters' ) );
 			return rest_ensure_response( $st );

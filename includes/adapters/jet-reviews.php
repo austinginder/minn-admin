@@ -43,10 +43,13 @@ function minn_admin_jet_reviews_table( $key = 'reviews' ) {
 	return $wpdb->prefix . 'jet_' . $key;
 }
 
+/** A table of theirs as the kernel names it. */
+function minn_admin_jet_reviews_spec( $key = 'reviews' ) {
+	return Minn_Admin_Kernel_SQL::named( minn_admin_jet_reviews_table( $key ) );
+}
+
 function minn_admin_jet_reviews_has_table() {
-	global $wpdb;
-	$t = minn_admin_jet_reviews_table();
-	return 0 === strcasecmp( (string) $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $t ) ), $t );
+	return Minn_Admin_Kernel_SQL::exists( minn_admin_jet_reviews_spec() );
 }
 
 /** Their user manager resolves users and guests alike. */
@@ -61,13 +64,6 @@ function minn_admin_jet_reviews_author( $author ) {
 
 function minn_admin_jet_reviews_admin_url() {
 	return admin_url( 'admin.php?page=jet-reviews-list-page' );
-}
-
-function minn_admin_jet_reviews_row( $id ) {
-	global $wpdb;
-	$t = minn_admin_jet_reviews_table();
-	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-	return $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$t} WHERE id = %d", (int) $id ) );
 }
 
 /**
@@ -115,13 +111,8 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'icon'       => 'star',
 		'cap'        => 'manage_options',
 		'status'     => array( 'route' => 'minn-admin/v1/jet-reviews/status' ),
-		'collection' => array(
+		'collection' => Minn_Admin_Kernel::collection( 'jet-reviews/reviews', array(
 			'viewLabel' => __( 'Reviews', 'minn-admin' ),
-			'route'     => 'minn-admin/v1/jet-reviews/reviews',
-			'pageQuery' => 'per_page=25&page={page}',
-			'search'    => 'search={q}',
-			'itemsKey'  => 'items',
-			'totalKey'  => 'total',
 			'tabs'      => array(
 				'param'    => 'status',
 				'static'   => array( array( 'pending', __( 'Pending', 'minn-admin' ) ), array( 'approved', __( 'Approved', 'minn-admin' ) ) ),
@@ -152,189 +143,194 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				array( 'label' => __( 'Unapprove', 'minn-admin' ), 'method' => 'POST', 'route' => $route, 'body' => array( 'approved' => false ) ),
 				array( 'label' => __( 'Delete', 'minn-admin' ), 'method' => 'DELETE', 'route' => 'minn-admin/v1/jet-reviews/reviews/{id}', 'confirm' => __( 'Delete the selected reviews permanently?', 'minn-admin' ), 'danger' => true ),
 			),
-		),
+		) ),
 	);
 	return $surfaces;
 } );
 
-add_action( 'rest_api_init', function () {
-	if ( ! minn_admin_jet_reviews_active() ) {
-		return;
+/** A review's detail: the reviewer, then the review with its per-question scores. */
+function minn_admin_jet_reviews_view( array $row ) {
+	$r     = (object) $row;
+	$a     = minn_admin_jet_reviews_author( $r->author );
+	$item  = minn_admin_jet_reviews_item( $r );
+	$title = minn_admin_jet_reviews_item_title( $r );
+	$rows  = array(
+		array( 'label' => __( 'Rating', 'minn-admin' ), 'value' => $item['rating'] ),
+		array( 'label' => __( 'Status', 'minn-admin' ), 'value' => $item['status'] ),
+		array( 'label' => __( 'Reviewed', 'minn-admin' ), 'value' => '' !== $title ? $title : '—', 'type' => $r->post_id ? 'link' : '', 'href' => $r->post_id ? get_permalink( (int) $r->post_id ) : '' ),
+		array( 'label' => __( 'Source', 'minn-admin' ), 'value' => (string) $r->source ),
+		array( 'label' => __( 'Type', 'minn-admin' ), 'value' => (string) $r->type_slug ),
+		array( 'label' => __( 'Likes / dislikes', 'minn-admin' ), 'value' => (int) $r->likes . ' / ' . (int) $r->dislikes ),
+		array( 'label' => __( 'Date', 'minn-admin' ), 'value' => $r->date ? date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), strtotime( $r->date ) ) : '—' ),
+	);
+	// Per-question scores, in the shape their submit endpoint stores:
+	// maybe_serialize() of [ { field_label, field_value, field_step,
+	// field_max } ], read through decode_serialized (arrays and
+	// scalars only).
+	$breakdown = Minn_Admin::decode_serialized( $r->rating_data, null );
+	if ( is_array( $breakdown ) ) {
+		foreach ( $breakdown as $f ) {
+			if ( ! is_array( $f ) || ! isset( $f['field_label'], $f['field_value'] ) || ! is_scalar( $f['field_label'] ) || ! is_numeric( $f['field_value'] ) ) {
+				continue;
+			}
+			$max    = isset( $f['field_max'] ) && is_numeric( $f['field_max'] ) ? 0 + $f['field_max'] : 0;
+			$rows[] = array(
+				'label' => Minn_Admin::plain_text( $f['field_label'] ),
+				'value' => $max > 0 ? ( 0 + $f['field_value'] ) . '/' . $max : (string) ( 0 + $f['field_value'] ),
+			);
+		}
 	}
-	$perm = 'minn_admin_jet_reviews_can';
-
-	register_rest_route( 'minn-admin/v1', '/jet-reviews/reviews', array(
-		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) {
-			if ( ! minn_admin_jet_reviews_has_table() ) {
-				return rest_ensure_response( array( 'items' => array(), 'total' => 0 ) );
-			}
-			global $wpdb;
-			$t        = minn_admin_jet_reviews_table();
-			$per_page = min( 100, max( 1, (int) $request->get_param( 'per_page' ) ?: 25 ) );
-			$page     = max( 1, (int) $request->get_param( 'page' ) ?: 1 );
-			$status   = sanitize_key( (string) $request->get_param( 'status' ) );
-			$search   = sanitize_text_field( (string) $request->get_param( 'search' ) );
-			$where    = array( '1=1' );
-			$params   = array();
-			if ( 'pending' === $status ) {
-				$where[] = 'r.approved = 0';
-			} elseif ( 'approved' === $status ) {
-				$where[] = 'r.approved = 1';
-			}
-			if ( '' !== $search ) {
-				$like     = '%' . $wpdb->esc_like( $search ) . '%';
-				$where[]  = '(r.title LIKE %s OR r.content LIKE %s OR p.post_title LIKE %s OR u.display_name LIKE %s OR u.user_email LIKE %s OR g.name LIKE %s OR g.mail LIKE %s)';
-				$params   = array_merge( $params, array_fill( 0, 7, $like ) );
-			}
-			$guests = minn_admin_jet_reviews_table( 'review_guests' );
-			$from   = "{$t} r LEFT JOIN {$wpdb->posts} p ON p.ID = r.post_id LEFT JOIN {$wpdb->users} u ON u.ID = r.author LEFT JOIN {$guests} g ON g.guest_id = r.author";
-			$wsql   = 'WHERE ' . implode( ' AND ', $where );
-			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
-			$count_sql = "SELECT COUNT(*) FROM {$from} {$wsql}";
-			$total     = (int) ( $params ? $wpdb->get_var( $wpdb->prepare( $count_sql, $params ) ) : $wpdb->get_var( $count_sql ) );
-			$rows      = $wpdb->get_results( $wpdb->prepare( "SELECT r.* FROM {$from} {$wsql} ORDER BY r.id DESC LIMIT %d OFFSET %d", array_merge( $params, array( $per_page, ( $page - 1 ) * $per_page ) ) ) );
-			// phpcs:enable
-			return rest_ensure_response( array( 'items' => array_map( 'minn_admin_jet_reviews_item', $rows ? $rows : array() ), 'total' => $total ) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/jet-reviews/reviews/(?P<id>\d+)', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) {
-				$r = minn_admin_jet_reviews_has_table() ? minn_admin_jet_reviews_row( (int) Minn_Admin::path_param( $request ) ) : null;
-				if ( ! $r ) {
-					return new WP_Error( 'not_found', __( 'Review not found', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				$a     = minn_admin_jet_reviews_author( $r->author );
-				$item  = minn_admin_jet_reviews_item( $r );
-				$title = minn_admin_jet_reviews_item_title( $r );
-				$rows  = array(
-					array( 'label' => __( 'Rating', 'minn-admin' ), 'value' => $item['rating'] ),
-					array( 'label' => __( 'Status', 'minn-admin' ), 'value' => $item['status'] ),
-					array( 'label' => __( 'Reviewed', 'minn-admin' ), 'value' => '' !== $title ? $title : '—', 'type' => $r->post_id ? 'link' : '', 'href' => $r->post_id ? get_permalink( (int) $r->post_id ) : '' ),
-					array( 'label' => __( 'Source', 'minn-admin' ), 'value' => (string) $r->source ),
-					array( 'label' => __( 'Type', 'minn-admin' ), 'value' => (string) $r->type_slug ),
-					array( 'label' => __( 'Likes / dislikes', 'minn-admin' ), 'value' => (int) $r->likes . ' / ' . (int) $r->dislikes ),
-					array( 'label' => __( 'Date', 'minn-admin' ), 'value' => $r->date ? date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), strtotime( $r->date ) ) : '—' ),
-				);
-				// Per-question scores, in the shape their submit endpoint stores:
-				// maybe_serialize() of [ { field_label, field_value, field_step,
-				// field_max } ], read through decode_serialized (arrays and
-				// scalars only).
-				$breakdown = Minn_Admin::decode_serialized( $r->rating_data, null );
-				if ( is_array( $breakdown ) ) {
-					foreach ( $breakdown as $f ) {
-						if ( ! is_array( $f ) || ! isset( $f['field_label'], $f['field_value'] ) || ! is_scalar( $f['field_label'] ) || ! is_numeric( $f['field_value'] ) ) {
-							continue;
-						}
-						$max    = isset( $f['field_max'] ) && is_numeric( $f['field_max'] ) ? 0 + $f['field_max'] : 0;
-						$rows[] = array(
-							'label' => Minn_Admin::plain_text( $f['field_label'] ),
-							'value' => $max > 0 ? ( 0 + $f['field_value'] ) . '/' . $max : (string) ( 0 + $f['field_value'] ),
-						);
-					}
-				}
-				// Title and body are the visitor's, stored HTML-encoded: through
-				// wp_kses on submit, esc_html with <br> line breaks on edit.
-				// Plain text, line breaks kept; the client escapes it.
-				$title_text = Minn_Admin::plain_text( $r->title );
-				$body       = Minn_Admin::plain_text( preg_replace( '/<br\s*\/?>/i', "\n", (string) $r->content ) );
-				return rest_ensure_response( array(
-					'kind'     => 'entry',
-					'status'   => $item['status'],
-					'title'    => '' !== $title_text ? $title_text : __( 'Review', 'minn-admin' ),
-					'sections' => array(
-						array( 'title' => __( 'Reviewer', 'minn-admin' ), 'rows' => array(
-							array( 'label' => __( 'Name', 'minn-admin' ), 'value' => $a['name'] . ( $a['guest'] ? ' (' . __( 'guest', 'minn-admin' ) . ')' : '' ) ),
-							array( 'label' => __( 'Email', 'minn-admin' ), 'value' => '' !== $a['mail'] ? $a['mail'] : '—', 'type' => 'email' ),
-							array( 'label' => __( 'Message', 'minn-admin' ), 'value' => $body ),
-						) ),
-						array( 'title' => __( 'Review', 'minn-admin' ), 'rows' => $rows ),
-					),
-					'adminUrl' => minn_admin_jet_reviews_admin_url(),
-				) );
-			},
+	// Title and body are the visitor's, stored HTML-encoded: through
+	// wp_kses on submit, esc_html with <br> line breaks on edit.
+	// Plain text, line breaks kept; the client escapes it.
+	$title_text = Minn_Admin::plain_text( $r->title );
+	$body       = Minn_Admin::plain_text( preg_replace( '/<br\s*\/?>/i', "\n", (string) $r->content ) );
+	return array(
+		'kind'     => 'entry',
+		'status'   => $item['status'],
+		'title'    => '' !== $title_text ? $title_text : __( 'Review', 'minn-admin' ),
+		'sections' => array(
+			array( 'title' => __( 'Reviewer', 'minn-admin' ), 'rows' => array(
+				array( 'label' => __( 'Name', 'minn-admin' ), 'value' => $a['name'] . ( $a['guest'] ? ' (' . __( 'guest', 'minn-admin' ) . ')' : '' ) ),
+				array( 'label' => __( 'Email', 'minn-admin' ), 'value' => '' !== $a['mail'] ? $a['mail'] : '—', 'type' => 'email' ),
+				array( 'label' => __( 'Message', 'minn-admin' ), 'value' => $body ),
+			) ),
+			array( 'title' => __( 'Review', 'minn-admin' ), 'rows' => $rows ),
 		),
-		array(
-			'methods'             => 'DELETE',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) {
-				$id = (int) Minn_Admin::path_param( $request );
-				$r  = minn_admin_jet_reviews_row( $id );
-				if ( ! $r ) {
-					return new WP_Error( 'not_found', __( 'Review not found', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				try {
-					// Their delete-review endpoint, step for step.
+		'adminUrl' => minn_admin_jet_reviews_admin_url(),
+	);
+}
+
+/**
+ * A search's extra matches: reviews of posts whose title holds the term, and
+ * by users or guests whose name or email holds it (at most 500 of each).
+ *
+ * @return array|null Conditions, or null when nothing else matches.
+ */
+function minn_admin_jet_reviews_search_ids( $term ) {
+	$like    = array( 'contains' => (string) $term );
+	$posts   = array_map( 'intval', array_column( Minn_Admin_Kernel_SQL::select( array( 'core' => 'posts' ), array( 'ID' ), array( 'post_title' => $like ), array(), 500 ), 'ID' ) );
+	$authors = array_map( 'strval', array_column( Minn_Admin_Kernel_SQL::select( array( 'core' => 'users' ), array( 'ID' ), array( '#any' => array( array( 'display_name' => $like ), array( 'user_email' => $like ) ) ), array(), 500 ), 'ID' ) );
+	$guests  = minn_admin_jet_reviews_spec( 'review_guests' );
+	if ( Minn_Admin_Kernel_SQL::exists( $guests ) ) {
+		$authors = array_merge( $authors, array_map( 'strval', array_column( Minn_Admin_Kernel_SQL::select( $guests, array( 'guest_id' ), array( '#any' => array( array( 'name' => $like ), array( 'mail' => $like ) ) ), array(), 500 ), 'guest_id' ) ) );
+	}
+	$any = array();
+	if ( $posts ) {
+		$any[] = array( 'post_id' => $posts );
+	}
+	if ( $authors ) {
+		$any[] = array( 'author' => array_values( array_unique( $authors ) ) );
+	}
+	return $any ? array( '#any' => $any ) : null;
+}
+
+minn_admin_resource( 'jet-reviews/reviews', function () {
+	return array(
+		'active'  => 'minn_admin_jet_reviews_active',
+		'gates'   => array( 'view' => 'minn_admin_jet_reviews_can' ),
+		'labels'  => array( 'not_found' => __( 'Review not found', 'minn-admin' ) ),
+		'source'  => array(
+			'table'   => minn_admin_jet_reviews_spec(),
+			'key'     => 'id',
+			'columns' => array( 'id', 'post_id', 'author', 'date', 'rating', 'approved' ),
+			// Every column, as their own reads take a review (the rating
+			// sync reads source and post_type from it).
+			'detail'  => array(),
+		),
+		'list'    => array(
+			'facets' => array( array( 'param' => 'status', 'values' => array( 'pending' => array( 'approved' => 0 ), 'approved' => array( 'approved' => 1 ) ) ) ),
+			'search' => array(
+				'columns' => array( 'title', 'content' ),
+				// The reviewed item's title and the reviewer, a user or a
+				// guest, matched first and named by id, so no join rides
+				// every read of the table.
+				'also'    => 'minn_admin_jet_reviews_search_ids',
+			),
+			'order'  => array( 'column' => 'id', 'dir' => 'DESC' ),
+			'row'    => function ( array $row ) {
+				return minn_admin_jet_reviews_item( (object) $row );
+			},
+			'fields' => array(
+				'id'       => 'int',
+				'author'   => 'text',
+				'item'     => 'text',
+				'rating'   => 'text',
+				'status'   => 'text',
+				'date'     => 'text',
+				'approved' => 'int',
+			),
+		),
+		'item'    => array(
+			'view'   => 'minn_admin_jet_reviews_view',
+			'fields' => array( 'kind' => 'text', 'status' => 'text', 'title' => 'text', 'sections' => 'raw', 'adminUrl' => 'text' ),
+		),
+		'actions' => array(
+			'approve' => array(
+				'method' => 'POST',
+				'gate'   => 'view',
+				// Their toggle-review-approve endpoint: the same table update,
+				// then the source sync.
+				'run'    => function ( $id, array $row, WP_REST_Request $request ) {
+					$on = filter_var( $request->get_param( 'approved' ), FILTER_VALIDATE_BOOLEAN ) ? 1 : 0;
+					Minn_Admin_Kernel_SQL::update( minn_admin_jet_reviews_spec(), 'id', $id, array( 'approved' => $on ) );
+					minn_admin_jet_reviews_sync( (object) $row );
+					return $on;
+				},
+				'expect' => function ( $id, $fresh, $on ) {
+					return is_array( $fresh ) && (int) $fresh['approved'] === (int) $on;
+				},
+				'fail'   => __( 'JetReviews could not update that review.', 'minn-admin' ),
+				'reply'  => function ( $id, $fresh, $on ) {
+					return array(
+						'status'  => $on ? 'approved' : 'pending',
+						'message' => $on ? __( 'Review approved.', 'minn-admin' ) : __( 'Review unapproved.', 'minn-admin' ),
+					);
+				},
+			),
+			'delete'  => array(
+				'method' => 'DELETE',
+				'gate'   => 'view',
+				// Their delete-review endpoint, step for step.
+				'run'    => function ( $id, array $row ) {
 					jet_reviews()->user_manager->delete_user_approval_review( $id );
 					$deleted = \Jet_Reviews\Reviews\Data::get_instance()->delete_review_by_id( $id );
 					if ( class_exists( '\Jet_Reviews\Reviews\Media' ) ) {
 						\Jet_Reviews\Reviews\Media::get_instance()->delete_media_by_review_id( $id );
 					}
-					minn_admin_jet_reviews_sync( $r );
-				} catch ( \Throwable $e ) {
-					return new WP_Error( 'delete_failed', __( 'JetReviews could not delete that review.', 'minn-admin' ), array( 'status' => 500 ) );
-				}
-				if ( empty( $deleted ) || minn_admin_jet_reviews_row( $id ) ) {
-					return new WP_Error( 'delete_failed', __( 'JetReviews could not delete that review.', 'minn-admin' ), array( 'status' => 500 ) );
-				}
-				return rest_ensure_response( array( 'ok' => true, 'message' => __( 'Review deleted.', 'minn-admin' ) ) );
-			},
+					minn_admin_jet_reviews_sync( (object) $row );
+					return $deleted;
+				},
+				'expect' => 'gone',
+				'fail'   => __( 'JetReviews could not delete that review.', 'minn-admin' ),
+				'done'   => __( 'Review deleted.', 'minn-admin' ),
+			),
 		),
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/jet-reviews/reviews/(?P<id>\d+)/approve', array(
-		'methods'             => 'POST',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) {
-			global $wpdb;
-			$id = (int) Minn_Admin::path_param( $request );
-			$r  = minn_admin_jet_reviews_row( $id );
-			if ( ! $r ) {
-				return new WP_Error( 'not_found', __( 'Review not found', 'minn-admin' ), array( 'status' => 404 ) );
-			}
-			$on = filter_var( $request->get_param( 'approved' ), FILTER_VALIDATE_BOOLEAN );
-			// Their toggle-review-approve endpoint: the same table update, then the source sync.
-			$ok = $wpdb->update( minn_admin_jet_reviews_table(), array( 'approved' => $on ? 1 : 0 ), array( 'id' => $id ), array( '%d' ), array( '%d' ) );
-			if ( false === $ok ) {
-				return new WP_Error( 'update_failed', __( 'JetReviews could not update that review.', 'minn-admin' ), array( 'status' => 500 ) );
-			}
-			minn_admin_jet_reviews_sync( $r );
-			return rest_ensure_response( array(
-				'ok'      => true,
-				'status'  => $on ? 'approved' : 'pending',
-				'message' => $on ? __( 'Review approved.', 'minn-admin' ) : __( 'Review unapproved.', 'minn-admin' ),
-			) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/jet-reviews/status', array(
-		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function () {
-			$open = array( array( 'label' => __( 'Open JetReviews ↗', 'minn-admin' ), 'href' => minn_admin_jet_reviews_admin_url() ) );
-			if ( ! minn_admin_jet_reviews_has_table() ) {
-				return rest_ensure_response( array( 'rows' => array( array( 'label' => __( 'Reviews', 'minn-admin' ), 'value' => '—' ) ), 'actions' => $open ) );
-			}
-			global $wpdb;
-			$t = minn_admin_jet_reviews_table();
-			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			$pending = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$t} WHERE approved = 0" );
-			$total   = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$t}" );
-			$avg     = $wpdb->get_var( "SELECT AVG(rating) FROM {$t} WHERE approved = 1 AND rating > 0" );
-			// phpcs:enable
-			return rest_ensure_response( array(
-				'rows'    => array(
-					array( 'label' => __( 'Pending', 'minn-admin' ), 'value' => number_format_i18n( $pending ) ),
-					array( 'label' => __( 'Reviews', 'minn-admin' ), 'value' => number_format_i18n( $total ) ),
-					array( 'label' => __( 'Average', 'minn-admin' ), 'value' => $avg ? number_format_i18n( (float) $avg / 20, 1 ) . '/5' : '—', 'hint' => __( 'approved reviews', 'minn-admin' ) ),
-				),
-				'actions' => $open,
-			) );
-		},
-	) );
+	);
 } );
+
+minn_admin_endpoint( 'jet-reviews/status', array(
+	'active' => 'minn_admin_jet_reviews_active',
+	'gate'   => 'minn_admin_jet_reviews_can',
+	'run'    => function () {
+		$open = array( array( 'label' => __( 'Open JetReviews ↗', 'minn-admin' ), 'href' => minn_admin_jet_reviews_admin_url() ) );
+		if ( ! minn_admin_jet_reviews_has_table() ) {
+			return array( 'rows' => array( array( 'label' => __( 'Reviews', 'minn-admin' ), 'value' => '—' ) ), 'actions' => $open );
+		}
+		$t       = minn_admin_jet_reviews_spec();
+		$pending = Minn_Admin_Kernel_SQL::count( $t, array( 'approved' => 0 ) );
+		$total   = Minn_Admin_Kernel_SQL::count( $t );
+		// The average of the approved reviews that carry a rating.
+		$rated   = array( 'approved' => 1, 'rating' => array( 'op' => '>', 'value' => 0 ) );
+		$n       = Minn_Admin_Kernel_SQL::count( $t, $rated );
+		$avg     = $n ? Minn_Admin_Kernel_SQL::sum( $t, 'rating', $rated ) / $n : 0;
+		return array(
+			'rows'    => array(
+				array( 'label' => __( 'Pending', 'minn-admin' ), 'value' => number_format_i18n( $pending ) ),
+				array( 'label' => __( 'Reviews', 'minn-admin' ), 'value' => number_format_i18n( $total ) ),
+				array( 'label' => __( 'Average', 'minn-admin' ), 'value' => $avg ? number_format_i18n( (float) $avg / 20, 1 ) . '/5' : '—', 'hint' => __( 'approved reviews', 'minn-admin' ) ),
+			),
+			'actions' => $open,
+		);
+	},
+) );

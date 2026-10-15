@@ -745,7 +745,7 @@
             "shop_manager",
             "administrator"
         ],
-        "GET /minn-admin/v1/media/folders/(?P<id>\\d+)/ids": [
+        "GET /minn-admin/v1/media/folders/(?P<folder>\\d+)/ids": [
             "author",
             "editor",
             "shop_manager",

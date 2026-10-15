@@ -78,146 +78,142 @@ add_action( 'rest_api_init', function () {
 	}
 
 	// The folder list, tree-ordered with depth for combobox indentation.
-	register_rest_route(
-		'minn-admin/v1',
-		'/media/folders',
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => function () {
-				// upload_files, the bar every provider sets on this same data:
-				// FileBird's own folder API asks for it, and Real Media Library
-				// and Folders surface the tree only inside the media library.
-				// A folder tree is not neutral on a site that files by client
-				// or by embargo — the names are the roster.
-				return current_user_can( 'upload_files' );
-			},
-			'callback'            => function () {
-				$p = minn_admin_media_folders_provider();
-				try {
-					$raw = call_user_func( $p['folders'] );
-				} catch ( \Throwable $e ) {
-					return new WP_Error( 'minn_folders_failed', $e->getMessage(), array( 'status' => 500 ) );
+	minn_admin_endpoint( '/media/folders', array(
+		'methods'             => 'GET',
+		'gate'                => function () {
+			// upload_files, the bar every provider sets on this same data:
+			// FileBird's own folder API asks for it, and Real Media Library
+			// and Folders surface the tree only inside the media library.
+			// A folder tree is not neutral on a site that files by client
+			// or by embargo — the names are the roster.
+			return current_user_can( 'upload_files' );
+		},
+		'run'                 => function () {
+			$p = minn_admin_media_folders_provider();
+			try {
+				$raw = call_user_func( $p['folders'] );
+			} catch ( \Throwable $e ) {
+				return new WP_Error( 'minn_folders_failed', $e->getMessage(), array( 'status' => 500 ) );
+			}
+			$rows = array();
+			foreach ( (array) $raw as $f ) {
+				if ( ! is_array( $f ) || ! isset( $f['id'] ) || ! isset( $f['label'] ) ) {
+					continue;
 				}
-				$rows = array();
-				foreach ( (array) $raw as $f ) {
-					if ( ! is_array( $f ) || ! isset( $f['id'] ) || ! isset( $f['label'] ) ) {
+				$rows[] = array(
+					'id'     => (int) $f['id'],
+					'label'  => (string) $f['label'],
+					'parent' => isset( $f['parent'] ) ? (int) $f['parent'] : 0,
+					'count'  => isset( $f['count'] ) && null !== $f['count'] ? (int) $f['count'] : null,
+				);
+			}
+			// Depth-first walk from the roots, provider order preserved
+			// (the terms-manager tree convention; orphans surface at root).
+			// id 0 is the reserved Uncategorized row: emitted first, never
+			// a parent.
+			$special = array_values( array_filter( $rows, function ( $r ) {
+				return 0 === $r['id'];
+			} ) );
+			$rows    = array_values( array_filter( $rows, function ( $r ) {
+				return 0 !== $r['id'];
+			} ) );
+			$by_parent = array();
+			foreach ( $rows as $r ) {
+				$by_parent[ $r['parent'] ][] = $r;
+			}
+			$seen = array();
+			$out  = array();
+			$walk = function ( $parent, $depth ) use ( &$walk, &$by_parent, &$seen, &$out ) {
+				if ( $depth > 12 || empty( $by_parent[ $parent ] ) ) {
+					return;
+				}
+				foreach ( $by_parent[ $parent ] as $r ) {
+					if ( isset( $seen[ $r['id'] ] ) ) {
 						continue;
 					}
-					$rows[] = array(
-						'id'     => (int) $f['id'],
-						'label'  => (string) $f['label'],
-						'parent' => isset( $f['parent'] ) ? (int) $f['parent'] : 0,
-						'count'  => isset( $f['count'] ) && null !== $f['count'] ? (int) $f['count'] : null,
-					);
+					$seen[ $r['id'] ] = true;
+					$r['depth']       = $depth;
+					unset( $r['parent'] );
+					$out[] = $r;
+					$walk( $r['id'], $depth + 1 );
 				}
-				// Depth-first walk from the roots, provider order preserved
-				// (the terms-manager tree convention; orphans surface at root).
-				// id 0 is the reserved Uncategorized row: emitted first, never
-				// a parent.
-				$special = array_values( array_filter( $rows, function ( $r ) {
-					return 0 === $r['id'];
-				} ) );
-				$rows    = array_values( array_filter( $rows, function ( $r ) {
-					return 0 !== $r['id'];
-				} ) );
-				$by_parent = array();
-				foreach ( $rows as $r ) {
-					$by_parent[ $r['parent'] ][] = $r;
+			};
+			$walk( 0, 0 );
+			foreach ( $rows as $r ) { // orphans (parent id missing)
+				if ( ! isset( $seen[ $r['id'] ] ) ) {
+					$r['depth'] = 0;
+					unset( $r['parent'] );
+					$out[] = $r;
 				}
-				$seen = array();
-				$out  = array();
-				$walk = function ( $parent, $depth ) use ( &$walk, &$by_parent, &$seen, &$out ) {
-					if ( $depth > 12 || empty( $by_parent[ $parent ] ) ) {
-						return;
-					}
-					foreach ( $by_parent[ $parent ] as $r ) {
-						if ( isset( $seen[ $r['id'] ] ) ) {
-							continue;
-						}
-						$seen[ $r['id'] ] = true;
-						$r['depth']       = $depth;
-						unset( $r['parent'] );
-						$out[] = $r;
-						$walk( $r['id'], $depth + 1 );
-					}
-				};
-				$walk( 0, 0 );
-				foreach ( $rows as $r ) { // orphans (parent id missing)
-					if ( ! isset( $seen[ $r['id'] ] ) ) {
-						$r['depth'] = 0;
-						unset( $r['parent'] );
-						$out[] = $r;
-					}
-				}
-				foreach ( $special as $s ) {
-					$s['depth'] = 0;
-					unset( $s['parent'] );
-					array_unshift( $out, $s );
-				}
-				return rest_ensure_response( array(
-					'name'    => (string) $p['name'],
-					'folders' => array_slice( $out, 0, 500 ),
-				) );
-			},
-		)
-	);
+			}
+			foreach ( $special as $s ) {
+				$s['depth'] = 0;
+				unset( $s['parent'] );
+				array_unshift( $out, $s );
+			}
+			return rest_ensure_response( array(
+				'name'    => (string) $p['name'],
+				'folders' => array_slice( $out, 0, 500 ),
+			) );
+		},
+	) );
 
 	// A folder's attachment ids, date-ordered newest-first and capped at 500
 	// so the include= URL stays sane. capped=true says the folder holds more.
-	register_rest_route(
-		'minn-admin/v1',
-		'/media/folders/(?P<id>\d+)/ids',
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => function () {
-				// upload_files, the bar every provider sets on this same data:
-				// FileBird's own folder API asks for it, and Real Media Library
-				// and Folders surface the tree only inside the media library.
-				// A folder tree is not neutral on a site that files by client
-				// or by embargo — the names are the roster.
-				return current_user_can( 'upload_files' );
-			},
-			'callback'            => function ( $req ) {
-				global $wpdb;
-				$p = minn_admin_media_folders_provider();
-				try {
-					$ids = call_user_func( $p['ids'], (int) Minn_Admin::path_param( $req ) );
-				} catch ( \Throwable $e ) {
-					return new WP_Error( 'minn_folder_ids_failed', $e->getMessage(), array( 'status' => 500 ) );
-				}
-				if ( is_wp_error( $ids ) ) {
-					return $ids;
-				}
-				$ids = array_values( array_unique( array_filter( array_map( 'intval', (array) $ids ) ) ) );
-				if ( ! $ids ) {
-					return rest_ensure_response( array( 'ids' => array(), 'capped' => false ) );
-				}
-				// Order and cap in SQL first, then authorize that bounded set.
-				// Checking read_post on every id before the cap cost an
-				// uncached post lookup (and its parent's) per attachment, so
-				// one request on a large library ran tens of thousands of
-				// queries.
-				$in      = implode( ',', $ids );
-				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- int-cast list built above
-				$ordered = $wpdb->get_col(
-					"SELECT ID FROM {$wpdb->posts} WHERE ID IN ($in) AND post_type = 'attachment' AND post_status != 'trash' ORDER BY post_date DESC LIMIT 501"
-				);
-				$capped  = count( $ordered ) > 500;
-				$ordered = array_map( 'intval', array_slice( $ordered, 0, 500 ) );
-				_prime_post_caches( $ordered, false, false );
-				// Folder plugins return their whole membership set. Core's
-				// media collection still applies read_post per attachment, so
-				// this include-list helper must preserve the same boundary.
-				$ordered = array_values( array_filter( $ordered, function ( $id ) {
-					return current_user_can( 'read_post', $id );
-				} ) );
-				return rest_ensure_response( array(
-					'ids'    => $ordered,
-					'capped' => $capped,
-				) );
-			},
-		)
-	);
+	minn_admin_endpoint( '/media/folders/(?P<folder>\d+)/ids', array(
+		'methods'             => 'GET',
+		'gate'                => function () {
+			// upload_files, the bar every provider sets on this same data:
+			// FileBird's own folder API asks for it, and Real Media Library
+			// and Folders surface the tree only inside the media library.
+			// A folder tree is not neutral on a site that files by client
+			// or by embargo — the names are the roster.
+			return current_user_can( 'upload_files' );
+		},
+		'run'                 => function ( $req ) {
+			$p = minn_admin_media_folders_provider();
+			try {
+				// Folder 0 is "no folder" (FileBird's Uncategorized, Folders'
+				// Unassigned), so the capture is not the kernel's id, which
+				// answers 404 for 0 before the handler runs.
+				$ids = call_user_func( $p['ids'], (int) Minn_Admin::path_param( $req, 'folder' ) );
+			} catch ( \Throwable $e ) {
+				return new WP_Error( 'minn_folder_ids_failed', $e->getMessage(), array( 'status' => 500 ) );
+			}
+			if ( is_wp_error( $ids ) ) {
+				return $ids;
+			}
+			$ids = array_values( array_unique( array_filter( array_map( 'intval', (array) $ids ) ) ) );
+			if ( ! $ids ) {
+				return rest_ensure_response( array( 'ids' => array(), 'capped' => false ) );
+			}
+			// Order and cap in SQL first, then authorize that bounded set.
+			// Checking read_post on every id before the cap cost an
+			// uncached post lookup (and its parent's) per attachment, so
+			// one request on a large library ran tens of thousands of
+			// queries.
+			$ordered = array_column( Minn_Admin_Kernel_SQL::select(
+				array( 'core' => 'posts' ),
+				array( 'ID' ),
+				array( 'ID' => $ids, 'post_type' => 'attachment', 'post_status' => array( 'not' => array( 'trash' ) ) ),
+				array( 'post_date' => 'DESC' ),
+				501
+			), 'ID' );
+			$capped  = count( $ordered ) > 500;
+			$ordered = array_map( 'intval', array_slice( $ordered, 0, 500 ) );
+			_prime_post_caches( $ordered, false, false );
+			// Folder plugins return their whole membership set. Core's
+			// media collection still applies read_post per attachment, so
+			// this include-list helper must preserve the same boundary.
+			$ordered = array_values( array_filter( $ordered, function ( $id ) {
+				return current_user_can( 'read_post', $id );
+			} ) );
+			return rest_ensure_response( array(
+				'ids'    => $ordered,
+				'capped' => $capped,
+			) );
+		},
+	) );
 
 	// Move attachments into a folder (0 = out of every folder) through the
 	// provider's own machinery. Registered only when the provider offers it.
@@ -225,55 +221,51 @@ add_action( 'rest_api_init', function () {
 	if ( empty( $provider['move'] ) || ! is_callable( $provider['move'] ) ) {
 		return;
 	}
-	register_rest_route(
-		'minn-admin/v1',
-		'/media/folders/move',
-		array(
-			'methods'             => 'POST',
-			'permission_callback' => function () {
-				return current_user_can( 'upload_files' );
-			},
-			'args'                => array(
-				'folder' => array( 'type' => 'integer', 'required' => true, 'minimum' => 0 ),
-				// Every id is authorized one at a time below, so this is not a
-				// permission bound. It is the same ceiling the folder listing
-				// already uses, so one request cannot turn into a five figure
-				// run of term writes and their recounts.
-				'ids'    => array( 'type' => 'array', 'required' => true, 'maxItems' => 500, 'items' => array( 'type' => 'integer' ) ),
-			),
-			'callback'            => function ( $req ) {
-				$p   = minn_admin_media_folders_provider();
-				$ids = array_values( array_unique( array_filter( array_map( 'intval', (array) $req['ids'] ) ) ) );
-				$submitted = count( $ids );
-				$ids       = array_values( array_filter( $ids, function ( $id ) {
-					// upload_files alone lets an Author reorganise the whole
-					// library, including attachments they do not own.
-					return 'attachment' === get_post_type( $id ) && current_user_can( 'edit_post', $id );
-				} ) );
-				if ( count( $ids ) !== $submitted ) {
-					return new WP_Error(
-						'forbidden',
-						__( 'You cannot move one or more of those items.', 'minn-admin' ),
-						array( 'status' => 403 )
-					);
-				}
-				if ( ! $ids ) {
-					return new WP_Error( 'minn_move_no_ids', __( 'Nothing to move.', 'minn-admin' ), array( 'status' => 400 ) );
-				}
-				try {
-					// The folder the items are being moved OUT of (the folder being
-					// viewed), for providers whose own move removes only that one.
-					$result = call_user_func( $p['move'], (int) $req['folder'], $ids, max( 0, (int) $req->get_param( 'from' ) ) );
-				} catch ( \Throwable $e ) {
-					return new WP_Error( 'minn_move_failed', $e->getMessage(), array( 'status' => 500 ) );
-				}
-				if ( is_wp_error( $result ) ) {
-					return $result;
-				}
-				return rest_ensure_response( array( 'ok' => true, 'moved' => count( $ids ) ) );
-			},
-		)
-	);
+	minn_admin_endpoint( '/media/folders/move', array(
+		'methods'             => 'POST',
+		'gate'                => function () {
+			return current_user_can( 'upload_files' );
+		},
+		'args'                => array(
+			'folder' => array( 'type' => 'integer', 'required' => true, 'minimum' => 0 ),
+			// Every id is authorized one at a time below, so this is not a
+			// permission bound. It is the same ceiling the folder listing
+			// already uses, so one request cannot turn into a five figure
+			// run of term writes and their recounts.
+			'ids'    => array( 'type' => 'array', 'required' => true, 'maxItems' => 500, 'items' => array( 'type' => 'integer' ) ),
+		),
+		'run'                 => function ( $req ) {
+			$p   = minn_admin_media_folders_provider();
+			$ids = array_values( array_unique( array_filter( array_map( 'intval', (array) $req['ids'] ) ) ) );
+			$submitted = count( $ids );
+			$ids       = array_values( array_filter( $ids, function ( $id ) {
+				// upload_files alone lets an Author reorganise the whole
+				// library, including attachments they do not own.
+				return 'attachment' === get_post_type( $id ) && current_user_can( 'edit_post', $id );
+			} ) );
+			if ( count( $ids ) !== $submitted ) {
+				return new WP_Error(
+					'forbidden',
+					__( 'You cannot move one or more of those items.', 'minn-admin' ),
+					array( 'status' => 403 )
+				);
+			}
+			if ( ! $ids ) {
+				return new WP_Error( 'minn_move_no_ids', __( 'Nothing to move.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
+			try {
+				// The folder the items are being moved OUT of (the folder being
+				// viewed), for providers whose own move removes only that one.
+				$result = call_user_func( $p['move'], (int) $req['folder'], $ids, max( 0, (int) $req->get_param( 'from' ) ) );
+			} catch ( \Throwable $e ) {
+				return new WP_Error( 'minn_move_failed', $e->getMessage(), array( 'status' => 500 ) );
+			}
+			if ( is_wp_error( $result ) ) {
+				return $result;
+			}
+			return rest_ensure_response( array( 'ok' => true, 'moved' => count( $ids ) ) );
+		},
+	) );
 } );
 
 /**
@@ -420,17 +412,17 @@ add_filter( 'minn_admin_media_folders', function ( $provider ) {
 			return $out;
 		},
 		'ids'     => function ( $folder_id ) {
-			global $wpdb;
 			if ( 0 === (int) $folder_id ) {
 				// Their "Unassigned": attachments carrying no media_folder term.
-				return $wpdb->get_col(
-					"SELECT p.ID FROM {$wpdb->posts} p
-					 WHERE p.post_type = 'attachment' AND p.ID NOT IN (
-						SELECT tr.object_id FROM {$wpdb->term_relationships} tr
-						INNER JOIN {$wpdb->term_taxonomy} tt ON tr.term_taxonomy_id = tt.term_taxonomy_id
-						WHERE tt.taxonomy = 'media_folder'
-					 )"
-				);
+				return get_posts( array(
+					'post_type'        => 'attachment',
+					'post_status'      => 'any',
+					'fields'           => 'ids',
+					'posts_per_page'   => -1,
+					'no_found_rows'    => true,
+					'suppress_filters' => true,
+					'tax_query'        => array( array( 'taxonomy' => 'media_folder', 'operator' => 'NOT EXISTS' ) ), // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
+				) );
 			}
 			if ( ! term_exists( (int) $folder_id, 'media_folder' ) ) {
 				return new WP_Error( 'minn_folder_missing', __( 'That folder no longer exists.', 'minn-admin' ), array( 'status' => 404 ) );
