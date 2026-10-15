@@ -923,199 +923,195 @@ add_action( 'rest_api_init', function () {
 		return minn_admin_bricks_can_view_templates();
 	};
 
-	register_rest_route( 'minn-admin/v1', '/bricks/templates', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) {
-				$type    = sanitize_key( (string) $request['type'] );
-				$search  = trim( (string) $request['search'] );
-				$page    = max( 1, (int) ( $request['page'] ?: 1 ) );
-				$orderby = in_array( $request['orderby'], array( 'title', 'modified' ), true ) ? $request['orderby'] : 'modified';
-				$order   = 'asc' === strtolower( (string) $request['order'] ) ? 'ASC' : 'DESC';
-				$args    = array(
-					'post_type'      => BRICKS_DB_TEMPLATE_SLUG,
-					'post_status'    => array( 'publish', 'draft', 'pending', 'future', 'private' ),
-					// Naming the unpublished statuses explicitly switches off
-					// the scoping WP_Query would otherwise apply. 'readable'
-					// does NOT restore it: core only author-scopes draft,
-					// pending and future under 'editable' ('readable' scopes
-					// private alone), so this needs the stricter value for
-					// anyone who cannot read other people's posts. Bricks' own
-					// list screen is scoped the same way.
-					'perm'           => current_user_can( 'edit_others_posts' ) ? 'readable' : 'editable',
-					'posts_per_page' => 25,
-					'paged'          => $page,
-					'orderby'        => $orderby,
-					'order'          => $order,
+	minn_admin_endpoint( '/bricks/templates', array(
+		'methods'             => 'GET',
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) {
+			$type    = sanitize_key( (string) $request['type'] );
+			$search  = trim( (string) $request['search'] );
+			$page    = max( 1, (int) ( $request['page'] ?: 1 ) );
+			$orderby = in_array( $request['orderby'], array( 'title', 'modified' ), true ) ? $request['orderby'] : 'modified';
+			$order   = 'asc' === strtolower( (string) $request['order'] ) ? 'ASC' : 'DESC';
+			$args    = array(
+				'post_type'      => BRICKS_DB_TEMPLATE_SLUG,
+				'post_status'    => array( 'publish', 'draft', 'pending', 'future', 'private' ),
+				// Naming the unpublished statuses explicitly switches off
+				// the scoping WP_Query would otherwise apply. 'readable'
+				// does NOT restore it: core only author-scopes draft,
+				// pending and future under 'editable' ('readable' scopes
+				// private alone), so this needs the stricter value for
+				// anyone who cannot read other people's posts. Bricks' own
+				// list screen is scoped the same way.
+				'perm'           => current_user_can( 'edit_others_posts' ) ? 'readable' : 'editable',
+				'posts_per_page' => 25,
+				'paged'          => $page,
+				'orderby'        => $orderby,
+				'order'          => $order,
+			);
+			if ( '' !== $search ) {
+				$args['s'] = $search;
+			}
+			if ( 'trash' === $type ) {
+				$args['post_status'] = 'trash';
+			} elseif ( '' !== $type ) {
+				$args['meta_query'] = array(
+					array(
+						'key'   => BRICKS_DB_TEMPLATE_TYPE,
+						'value' => $type,
+					),
 				);
-				if ( '' !== $search ) {
-					$args['s'] = $search;
-				}
-				if ( 'trash' === $type ) {
-					$args['post_status'] = 'trash';
-				} elseif ( '' !== $type ) {
-					$args['meta_query'] = array(
-						array(
-							'key'   => BRICKS_DB_TEMPLATE_TYPE,
-							'value' => $type,
-						),
-					);
-				}
-				$query = new WP_Query( $args );
-				return rest_ensure_response( array(
-					'items' => array_map( 'minn_admin_bricks_template_item', $query->posts ),
-					'total' => (int) $query->found_posts,
-				) );
-			},
-		),
-		array(
-			'methods'             => 'POST',
-			'permission_callback' => function () {
-				return minn_admin_bricks_can_create();
-			},
-			'callback'            => function ( WP_REST_Request $request ) {
-				$title = trim( (string) $request['title'] );
-				$type  = sanitize_key( (string) $request['type'] );
-				if ( '' === $title ) {
-					return new WP_Error( 'invalid', __( 'A template needs a title.', 'minn-admin' ), array( 'status' => 400 ) );
-				}
-				if ( ! isset( minn_admin_bricks_template_types()[ $type ] ) ) {
-					return new WP_Error( 'invalid', __( 'Pick a template type.', 'minn-admin' ), array( 'status' => 400 ) );
-				}
-				// Mirrors Bricks' own create_template: publish for publishers,
-				// pending otherwise, type stored as postmeta after insert.
-				$id = wp_insert_post( wp_slash( array(
-					'post_status' => current_user_can( 'publish_posts' ) ? 'publish' : 'pending',
-					'post_title'  => esc_html( $title ),
-					'post_type'   => BRICKS_DB_TEMPLATE_SLUG,
-				) ), true );
-				if ( is_wp_error( $id ) ) {
-					return $id;
-				}
-				update_post_meta( $id, BRICKS_DB_TEMPLATE_TYPE, $type );
-				if ( 'password_protection' === $type && class_exists( '\Bricks\Password_Protection' ) && method_exists( '\Bricks\Password_Protection', 'populate_template' ) ) {
-					\Bricks\Password_Protection::populate_template( $id );
-				}
-				return rest_ensure_response( minn_admin_bricks_template_item( get_post( $id ) ) );
-			},
-		),
+			}
+			$query = new WP_Query( $args );
+			return rest_ensure_response( array(
+				'items' => array_map( 'minn_admin_bricks_template_item', $query->posts ),
+				'total' => (int) $query->found_posts,
+			) );
+		},
+	) );
+	minn_admin_endpoint( '/bricks/templates', array(
+		'methods'             => 'POST',
+		'gate'                => function () {
+			return minn_admin_bricks_can_create();
+		},
+		'run'                 => function ( WP_REST_Request $request ) {
+			$title = trim( (string) $request['title'] );
+			$type  = sanitize_key( (string) $request['type'] );
+			if ( '' === $title ) {
+				return new WP_Error( 'invalid', __( 'A template needs a title.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
+			if ( ! isset( minn_admin_bricks_template_types()[ $type ] ) ) {
+				return new WP_Error( 'invalid', __( 'Pick a template type.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
+			// Mirrors Bricks' own create_template: publish for publishers,
+			// pending otherwise, type stored as postmeta after insert.
+			$id = wp_insert_post( wp_slash( array(
+				'post_status' => current_user_can( 'publish_posts' ) ? 'publish' : 'pending',
+				'post_title'  => esc_html( $title ),
+				'post_type'   => BRICKS_DB_TEMPLATE_SLUG,
+			) ), true );
+			if ( is_wp_error( $id ) ) {
+				return $id;
+			}
+			update_post_meta( $id, BRICKS_DB_TEMPLATE_TYPE, $type );
+			if ( 'password_protection' === $type && class_exists( '\Bricks\Password_Protection' ) && method_exists( '\Bricks\Password_Protection', 'populate_template' ) ) {
+				\Bricks\Password_Protection::populate_template( $id );
+			}
+			return rest_ensure_response( minn_admin_bricks_template_item( get_post( $id ) ) );
+		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/bricks/templates/(?P<id>\d+)', array(
-		array(
-			'methods'             => 'PUT',
-			'permission_callback' => function ( WP_REST_Request $request ) {
-				// PUT was the last verb here with no Bricks-side check. It is
-				// not a rename-only route: changing a template's type MOVES
-				// the design tree between the content/header/footer meta keys,
-				// so it can promote an arbitrary tree into the site header. A
-				// site that took template editing away in their permission
-				// matrix means that.
-				return minn_admin_bricks_can_view_templates() && current_user_can( 'edit_post', (int) Minn_Admin::path_param( $request ) );
-			},
-			'callback'            => function ( WP_REST_Request $request ) {
-				$post = get_post( (int) Minn_Admin::path_param( $request ) );
-				if ( ! $post || BRICKS_DB_TEMPLATE_SLUG !== $post->post_type ) {
-					return new WP_Error( 'not_found', __( 'Template not found.', 'minn-admin' ), array( 'status' => 404 ) );
+	minn_admin_endpoint( '/bricks/templates/(?P<id>\d+)', array(
+		'methods'             => 'PUT',
+		'gate'                => function ( WP_REST_Request $request ) {
+			// PUT was the last verb here with no Bricks-side check. It is
+			// not a rename-only route: changing a template's type MOVES
+			// the design tree between the content/header/footer meta keys,
+			// so it can promote an arbitrary tree into the site header. A
+			// site that took template editing away in their permission
+			// matrix means that.
+			return minn_admin_bricks_can_view_templates() && current_user_can( 'edit_post', (int) Minn_Admin::path_param( $request ) );
+		},
+		'run'                 => function ( WP_REST_Request $request ) {
+			$post = get_post( (int) Minn_Admin::path_param( $request ) );
+			if ( ! $post || BRICKS_DB_TEMPLATE_SLUG !== $post->post_type ) {
+				return new WP_Error( 'not_found', __( 'Template not found.', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			$title    = trim( (string) $request['title'] );
+			$type     = sanitize_key( (string) $request['type'] );
+			$previous = (string) get_post_meta( $post->ID, BRICKS_DB_TEMPLATE_TYPE, true );
+			// The form sends the stored type back on every save, and a type
+			// Bricks no longer offers (a WooCommerce type with Woo off) still
+			// round-trips: an unchanged type is no change. A NEW type is
+			// validated before anything is written, so a refusal never
+			// leaves a half-applied rename behind.
+			$retype = '' !== $type && $type !== $previous;
+			if ( $retype && ! isset( minn_admin_bricks_template_types()[ $type ] ) ) {
+				return new WP_Error( 'invalid', __( 'Unknown template type.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
+			if ( '' !== $title && $title !== $post->post_title ) {
+				$result = wp_update_post( wp_slash( array( 'ID' => $post->ID, 'post_title' => esc_html( $title ) ) ), true );
+				if ( is_wp_error( $result ) ) {
+					return $result;
 				}
-				$title    = trim( (string) $request['title'] );
-				$type     = sanitize_key( (string) $request['type'] );
-				$previous = (string) get_post_meta( $post->ID, BRICKS_DB_TEMPLATE_TYPE, true );
-				// The form sends the stored type back on every save, and a type
-				// Bricks no longer offers (a WooCommerce type with Woo off) still
-				// round-trips: an unchanged type is no change. A NEW type is
-				// validated before anything is written, so a refusal never
-				// leaves a half-applied rename behind.
-				$retype = '' !== $type && $type !== $previous;
-				if ( $retype && ! isset( minn_admin_bricks_template_types()[ $type ] ) ) {
-					return new WP_Error( 'invalid', __( 'Unknown template type.', 'minn-admin' ), array( 'status' => 400 ) );
-				}
-				if ( '' !== $title && $title !== $post->post_title ) {
-					$result = wp_update_post( wp_slash( array( 'ID' => $post->ID, 'post_title' => esc_html( $title ) ) ), true );
-					if ( is_wp_error( $result ) ) {
-						return $result;
-					}
-				}
-				if ( $retype ) {
-					update_post_meta( $post->ID, BRICKS_DB_TEMPLATE_TYPE, $type );
-					// A template's design is stored under one of three keys
-					// chosen by its type, so changing the type without moving
-					// the design leaves it behind and the template renders
-					// empty everywhere it is used. Their own type control moves
-					// it; so must this. Ask them which key each type reads,
-					// rather than keeping a copy of that mapping here.
-					// An untyped template's design is under the content key,
-					// which is what Bricks answers for an empty type.
-					if ( class_exists( '\Bricks\Database' ) && method_exists( '\Bricks\Database', 'get_bricks_data_key' ) ) {
-						$from = \Bricks\Database::get_bricks_data_key( $previous );
-						$to   = \Bricks\Database::get_bricks_data_key( $type );
-						if ( $from && $to && $from !== $to ) {
-							$tree = get_post_meta( $post->ID, $from, true );
-							if ( ! empty( $tree ) ) {
-								$stored = update_post_meta( $post->ID, $to, is_array( $tree ) ? wp_slash( $tree ) : $tree );
-								// Only let go of the original once the copy is
-								// safely in place.
-								if ( $stored ) {
-									delete_post_meta( $post->ID, $from );
-								}
+			}
+			if ( $retype ) {
+				update_post_meta( $post->ID, BRICKS_DB_TEMPLATE_TYPE, $type );
+				// A template's design is stored under one of three keys
+				// chosen by its type, so changing the type without moving
+				// the design leaves it behind and the template renders
+				// empty everywhere it is used. Their own type control moves
+				// it; so must this. Ask them which key each type reads,
+				// rather than keeping a copy of that mapping here.
+				// An untyped template's design is under the content key,
+				// which is what Bricks answers for an empty type.
+				if ( class_exists( '\Bricks\Database' ) && method_exists( '\Bricks\Database', 'get_bricks_data_key' ) ) {
+					$from = \Bricks\Database::get_bricks_data_key( $previous );
+					$to   = \Bricks\Database::get_bricks_data_key( $type );
+					if ( $from && $to && $from !== $to ) {
+						$tree = get_post_meta( $post->ID, $from, true );
+						if ( ! empty( $tree ) ) {
+							$stored = update_post_meta( $post->ID, $to, is_array( $tree ) ? wp_slash( $tree ) : $tree );
+							// Only let go of the original once the copy is
+							// safely in place.
+							if ( $stored ) {
+								delete_post_meta( $post->ID, $from );
 							}
 						}
 					}
 				}
-				// Tags ride as an array (an empty one clears); by NAME so new
-				// tags create on the fly, like their tax_input create path.
-				if ( is_array( $request['tags'] ) ) {
-					$tags = array_values( array_filter( array_map( function ( $tag ) {
-						return sanitize_text_field( (string) $tag );
-					}, $request['tags'] ) ) );
-					// Slashed: a new tag is created through wp_insert_term(), which
-					// unslashes the name (term_exists() unslashes to match).
-					$set  = wp_set_object_terms( $post->ID, wp_slash( $tags ), BRICKS_DB_TEMPLATE_TAX_TAG );
-					if ( is_wp_error( $set ) ) {
-						return $set;
-					}
+			}
+			// Tags ride as an array (an empty one clears); by NAME so new
+			// tags create on the fly, like their tax_input create path.
+			if ( is_array( $request['tags'] ) ) {
+				$tags = array_values( array_filter( array_map( function ( $tag ) {
+					return sanitize_text_field( (string) $tag );
+				}, $request['tags'] ) ) );
+				// Slashed: a new tag is created through wp_insert_term(), which
+				// unslashes the name (term_exists() unslashes to match).
+				$set  = wp_set_object_terms( $post->ID, wp_slash( $tags ), BRICKS_DB_TEMPLATE_TAX_TAG );
+				if ( is_wp_error( $set ) ) {
+					return $set;
 				}
-				return rest_ensure_response( minn_admin_bricks_template_item( get_post( $post->ID ) ) );
-			},
-		),
-		array(
-			'methods'             => 'DELETE',
-			'permission_callback' => function ( WP_REST_Request $request ) {
-				// Trash was the one verb here with no Bricks-side check while
-				// create, export and duplicate all route through their
-				// resolver. A site that took template deletion away in their
-				// permission matrix means it.
-				return minn_admin_bricks_can_delete() && current_user_can( 'delete_post', (int) Minn_Admin::path_param( $request ) );
-			},
-			'callback'            => function ( WP_REST_Request $request ) {
-				$post = get_post( (int) Minn_Admin::path_param( $request ) );
-				if ( ! $post || BRICKS_DB_TEMPLATE_SLUG !== $post->post_type ) {
-					return new WP_Error( 'not_found', __( 'Template not found.', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			return rest_ensure_response( minn_admin_bricks_template_item( get_post( $post->ID ) ) );
+		},
+	) );
+	minn_admin_endpoint( '/bricks/templates/(?P<id>\d+)', array(
+		'methods'             => 'DELETE',
+		'gate'                => function ( WP_REST_Request $request ) {
+			// Trash was the one verb here with no Bricks-side check while
+			// create, export and duplicate all route through their
+			// resolver. A site that took template deletion away in their
+			// permission matrix means it.
+			return minn_admin_bricks_can_delete() && current_user_can( 'delete_post', (int) Minn_Admin::path_param( $request ) );
+		},
+		'run'                 => function ( WP_REST_Request $request ) {
+			$post = get_post( (int) Minn_Admin::path_param( $request ) );
+			if ( ! $post || BRICKS_DB_TEMPLATE_SLUG !== $post->post_type ) {
+				return new WP_Error( 'not_found', __( 'Template not found.', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			if ( 'trash' === $post->post_status ) {
+				if ( ! wp_delete_post( $post->ID, true ) ) {
+					return new WP_Error( 'failed', __( 'The template could not be deleted.', 'minn-admin' ), array( 'status' => 500 ) );
 				}
-				if ( 'trash' === $post->post_status ) {
-					if ( ! wp_delete_post( $post->ID, true ) ) {
-						return new WP_Error( 'failed', __( 'The template could not be deleted.', 'minn-admin' ), array( 'status' => 500 ) );
-					}
-					return rest_ensure_response( array( 'deleted' => (int) $post->ID ) );
-				}
-				if ( ! wp_trash_post( $post->ID ) ) {
-					return new WP_Error( 'failed', __( 'The template could not be trashed.', 'minn-admin' ), array( 'status' => 500 ) );
-				}
-				return rest_ensure_response( array( 'trashed' => (int) $post->ID ) );
-			},
-		),
+				return rest_ensure_response( array( 'deleted' => (int) $post->ID ) );
+			}
+			if ( ! wp_trash_post( $post->ID ) ) {
+				return new WP_Error( 'failed', __( 'The template could not be trashed.', 'minn-admin' ), array( 'status' => 500 ) );
+			}
+			return rest_ensure_response( array( 'trashed' => (int) $post->ID ) );
+		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/bricks/templates/import', array(
+	minn_admin_endpoint( '/bricks/templates/import', array(
 		'methods'             => 'POST',
-		'permission_callback' => function () {
+		'gate'                => function () {
 			// An import is a WRITE that lands site-wide markup, so it needs the
 			// create permission too — can_export alone is the permission to
 			// read a template out, not to put one in.
 			return minn_admin_bricks_can_export() && minn_admin_bricks_can_create();
 		},
-		'callback'            => function ( WP_REST_Request $request ) {
+		'run'                 => function ( WP_REST_Request $request ) {
 			$result = minn_admin_bricks_import_templates( (string) $request['content'] );
 			if ( is_wp_error( $result ) ) {
 				return $result;
@@ -1124,12 +1120,12 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/bricks/templates/(?P<id>\d+)/restore', array(
+	minn_admin_endpoint( '/bricks/templates/(?P<id>\d+)/restore', array(
 		'methods'             => 'POST',
-		'permission_callback' => function ( WP_REST_Request $request ) {
+		'gate'                => function ( WP_REST_Request $request ) {
 			return minn_admin_bricks_can_delete() && current_user_can( 'delete_post', (int) Minn_Admin::path_param( $request ) );
 		},
-		'callback'            => function ( WP_REST_Request $request ) {
+		'run'                 => function ( WP_REST_Request $request ) {
 			$post = get_post( (int) Minn_Admin::path_param( $request ) );
 			if ( ! $post || BRICKS_DB_TEMPLATE_SLUG !== $post->post_type ) {
 				return new WP_Error( 'not_found', __( 'Template not found.', 'minn-admin' ), array( 'status' => 404 ) );
@@ -1148,12 +1144,12 @@ add_action( 'rest_api_init', function () {
 	// ajax it returns { name, content } — the same payload their screen
 	// downloads (element tree, settings, the global classes and variables the
 	// template uses), so the file imports cleanly via Bricks' own importer.
-	register_rest_route( 'minn-admin/v1', '/bricks/templates/(?P<id>\d+)/export', array(
+	minn_admin_endpoint( '/bricks/templates/(?P<id>\d+)/export', array(
 		'methods'             => 'GET',
-		'permission_callback' => function ( WP_REST_Request $request ) {
+		'gate'                => function ( WP_REST_Request $request ) {
 			return minn_admin_bricks_can_export() && current_user_can( 'edit_post', (int) Minn_Admin::path_param( $request ) );
 		},
-		'callback'            => function ( WP_REST_Request $request ) {
+		'run'                 => function ( WP_REST_Request $request ) {
 			$post = get_post( (int) Minn_Admin::path_param( $request ) );
 			if ( ! $post || BRICKS_DB_TEMPLATE_SLUG !== $post->post_type ) {
 				return new WP_Error( 'not_found', __( 'Template not found.', 'minn-admin' ), array( 'status' => 404 ) );
@@ -1170,12 +1166,12 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/bricks/templates/(?P<id>\d+)/duplicate', array(
+	minn_admin_endpoint( '/bricks/templates/(?P<id>\d+)/duplicate', array(
 		'methods'             => 'POST',
-		'permission_callback' => function ( WP_REST_Request $request ) {
+		'gate'                => function ( WP_REST_Request $request ) {
 			return minn_admin_bricks_can_create() && current_user_can( 'edit_post', (int) Minn_Admin::path_param( $request ) );
 		},
-		'callback'            => function ( WP_REST_Request $request ) {
+		'run'                 => function ( WP_REST_Request $request ) {
 			$post = get_post( (int) Minn_Admin::path_param( $request ) );
 			if ( ! $post || BRICKS_DB_TEMPLATE_SLUG !== $post->post_type ) {
 				return new WP_Error( 'not_found', __( 'Template not found.', 'minn-admin' ), array( 'status' => 404 ) );
@@ -1457,129 +1453,127 @@ add_action( 'rest_api_init', function () {
 	}
 	// Settings are the one thing this adapter does NOT route through Bricks'
 	// permission model: see minn_admin_bricks_can_manage_settings().
-	register_rest_route( 'minn-admin/v1', '/bricks/settings/(?P<tab>[a-z-]+)', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => function () {
-				return minn_admin_bricks_can_manage_settings();
-			},
-			'callback'            => function ( WP_REST_Request $request ) {
-				return rest_ensure_response( minn_admin_bricks_settings_payload( (string) Minn_Admin::path_param( $request, 'tab' ) ) );
-			},
-		),
-		array(
-			'methods'             => 'POST',
-			'permission_callback' => function () {
-				return minn_admin_bricks_can_manage_settings();
-			},
-			'callback'            => function ( WP_REST_Request $request ) {
-				$tab    = (string) Minn_Admin::path_param( $request, 'tab' );
-				$groups = minn_admin_bricks_settings_fields( $tab );
-				if ( null === $groups ) {
-					return new WP_Error( 'not_found', __( 'Unknown settings tab.', 'minn-admin' ), array( 'status' => 404 ) );
+	minn_admin_endpoint( '/bricks/settings/(?P<tab>[a-z-]+)', array(
+		'methods'             => 'GET',
+		'gate'                => function () {
+			return minn_admin_bricks_can_manage_settings();
+		},
+		'run'                 => function ( WP_REST_Request $request ) {
+			return rest_ensure_response( minn_admin_bricks_settings_payload( (string) Minn_Admin::path_param( $request, 'tab' ) ) );
+		},
+	) );
+	minn_admin_endpoint( '/bricks/settings/(?P<tab>[a-z-]+)', array(
+		'methods'             => 'POST',
+		'gate'                => function () {
+			return minn_admin_bricks_can_manage_settings();
+		},
+		'run'                 => function ( WP_REST_Request $request ) {
+			$tab    = (string) Minn_Admin::path_param( $request, 'tab' );
+			$groups = minn_admin_bricks_settings_fields( $tab );
+			if ( null === $groups ) {
+				return new WP_Error( 'not_found', __( 'Unknown settings tab.', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			$incoming = $request['values'];
+			$incoming = is_array( $incoming ) ? $incoming : array();
+			$specs    = array();
+			foreach ( $groups as $group ) {
+				foreach ( $group['fields'] as $field ) {
+					$specs[ $field['key'] ] = $field;
 				}
-				$incoming = $request['values'];
-				$incoming = is_array( $incoming ) ? $incoming : array();
-				$specs    = array();
-				foreach ( $groups as $group ) {
-					foreach ( $group['fields'] as $field ) {
-						$specs[ $field['key'] ] = $field;
-					}
+			}
+			$s = get_option( 'bricks_global_settings' );
+			$s = is_array( $s ) ? $s : array();
+			$was_saving_submissions = isset( $s['saveFormSubmissions'] );
+			// Only edited keys ride the save; each one validates against
+			// its spec and lands (or unsets) in their storage shape.
+			foreach ( $incoming as $key => $value ) {
+				if ( ! isset( $specs[ $key ] ) ) {
+					continue;
 				}
-				$s = get_option( 'bricks_global_settings' );
-				$s = is_array( $s ) ? $s : array();
-				$was_saving_submissions = isset( $s['saveFormSubmissions'] );
-				// Only edited keys ride the save; each one validates against
-				// its spec and lands (or unsets) in their storage shape.
-				foreach ( $incoming as $key => $value ) {
-					if ( ! isset( $specs[ $key ] ) ) {
-						continue;
-					}
-					$spec = $specs[ $key ];
-					switch ( $spec['store'] ) {
-						case 'toggle':
-							if ( ! empty( $value ) ) {
-								// Remote template access is the only thing
-								// standing in front of an endpoint that answers
-								// anyone, and the two things that narrow it, a
-								// password and a list of allowed sites, are
-								// optional and live on their settings screen
-								// beside the switch. Minn does not map either,
-								// so turning this on here with neither set
-								// would publish every template on the site to
-								// anyone who asks for them.
-								if ( 'myTemplatesAccess' === $key
-									&& '' === trim( (string) ( $s['myTemplatesPassword'] ?? '' ) )
-									&& empty( $s['myTemplatesWhitelist'] ) ) {
-									return new WP_Error(
-										'invalid',
-										__( 'Set a remote templates password, or list the sites allowed to ask, in Bricks first. Without one of those this opens every template on this site to anyone.', 'minn-admin' ),
-										array( 'status' => 400 )
-									);
-								}
-								$s[ $key ] = 'on';
-							} else {
-								unset( $s[ $key ] );
+				$spec = $specs[ $key ];
+				switch ( $spec['store'] ) {
+					case 'toggle':
+						if ( ! empty( $value ) ) {
+							// Remote template access is the only thing
+							// standing in front of an endpoint that answers
+							// anyone, and the two things that narrow it, a
+							// password and a list of allowed sites, are
+							// optional and live on their settings screen
+							// beside the switch. Minn does not map either,
+							// so turning this on here with neither set
+							// would publish every template on the site to
+							// anyone who asks for them.
+							if ( 'myTemplatesAccess' === $key
+								&& '' === trim( (string) ( $s['myTemplatesPassword'] ?? '' ) )
+								&& empty( $s['myTemplatesWhitelist'] ) ) {
+								return new WP_Error(
+									'invalid',
+									__( 'Set a remote templates password, or list the sites allowed to ask, in Bricks first. Without one of those this opens every template on this site to anyone.', 'minn-admin' ),
+									array( 'status' => 400 )
+								);
 							}
+							$s[ $key ] = 'on';
+						} else {
+							unset( $s[ $key ] );
+						}
+						break;
+					case 'multicheck':
+						$allowed = array_map( function ( $o ) {
+							return $o[0];
+						}, $spec['options'] );
+						$picked  = array_values( array_intersect( array_map( 'strval', (array) $value ), $allowed ) );
+						if ( $picked ) {
+							$s[ $key ] = $picked;
+						} else {
+							unset( $s[ $key ] );
+						}
+						break;
+					case 'enum':
+						$value = (string) $value;
+						if ( ! in_array( $value, $spec['enum'], true ) ) {
+							return new WP_Error( 'invalid', __( 'That is not one of the offered choices.', 'minn-admin' ), array( 'status' => 400 ) );
+						}
+						if ( '' === $value ) {
+							unset( $s[ $key ] );
+						} else {
+							$s[ $key ] = $value;
+						}
+						break;
+					case 'int':
+						if ( '' === trim( (string) $value ) ) {
+							unset( $s[ $key ] );
 							break;
-						case 'multicheck':
-							$allowed = array_map( function ( $o ) {
-								return $o[0];
-							}, $spec['options'] );
-							$picked  = array_values( array_intersect( array_map( 'strval', (array) $value ), $allowed ) );
-							if ( $picked ) {
-								$s[ $key ] = $picked;
-							} else {
-								unset( $s[ $key ] );
-							}
+						}
+						$n = (int) $value;
+						if ( isset( $spec['min'] ) && $n < $spec['min'] ) {
+							/* translators: %d: the smallest allowed value. */
+							return new WP_Error( 'invalid', sprintf( __( 'The smallest allowed value is %d.', 'minn-admin' ), $spec['min'] ), array( 'status' => 400 ) );
+						}
+						$s[ $key ] = (string) $n;
+						break;
+					case 'template':
+						$value = (string) $value;
+						if ( '' === $value ) {
+							unset( $s[ $key ] );
 							break;
-						case 'enum':
-							$value = (string) $value;
-							if ( ! in_array( $value, $spec['enum'], true ) ) {
-								return new WP_Error( 'invalid', __( 'That is not one of the offered choices.', 'minn-admin' ), array( 'status' => 400 ) );
-							}
-							if ( '' === $value ) {
-								unset( $s[ $key ] );
-							} else {
-								$s[ $key ] = $value;
-							}
-							break;
-						case 'int':
-							if ( '' === trim( (string) $value ) ) {
-								unset( $s[ $key ] );
-								break;
-							}
-							$n = (int) $value;
-							if ( isset( $spec['min'] ) && $n < $spec['min'] ) {
-								/* translators: %d: the smallest allowed value. */
-								return new WP_Error( 'invalid', sprintf( __( 'The smallest allowed value is %d.', 'minn-admin' ), $spec['min'] ), array( 'status' => 400 ) );
-							}
-							$s[ $key ] = (string) $n;
-							break;
-						case 'template':
-							$value = (string) $value;
-							if ( '' === $value ) {
-								unset( $s[ $key ] );
-								break;
-							}
-							$tpl = get_post( (int) $value );
-							if ( ! $tpl || BRICKS_DB_TEMPLATE_SLUG !== $tpl->post_type || 'content' !== get_post_meta( $tpl->ID, BRICKS_DB_TEMPLATE_TYPE, true ) ) {
-								return new WP_Error( 'invalid', __( 'Pick a Single-type Bricks template.', 'minn-admin' ), array( 'status' => 400 ) );
-							}
-							$s[ $key ] = (string) $tpl->ID;
-							break;
-					}
+						}
+						$tpl = get_post( (int) $value );
+						if ( ! $tpl || BRICKS_DB_TEMPLATE_SLUG !== $tpl->post_type || 'content' !== get_post_meta( $tpl->ID, BRICKS_DB_TEMPLATE_TYPE, true ) ) {
+							return new WP_Error( 'invalid', __( 'Pick a Single-type Bricks template.', 'minn-admin' ), array( 'status' => 400 ) );
+						}
+						$s[ $key ] = (string) $tpl->ID;
+						break;
 				}
-				update_option( 'bricks_global_settings', $s );
-				// Their own save creates the submissions table the moment the
-				// feature turns on; without it the first submission fatals.
-				if ( ! $was_saving_submissions && isset( $s['saveFormSubmissions'] )
-					&& class_exists( '\Bricks\Integrations\Form\Submission_Database' ) ) {
-					\Bricks\Integrations\Form\Submission_Database::maybe_create_table();
-				}
-				return rest_ensure_response( minn_admin_bricks_settings_payload( $tab ) );
-			},
-		),
+			}
+			update_option( 'bricks_global_settings', $s );
+			// Their own save creates the submissions table the moment the
+			// feature turns on; without it the first submission fatals.
+			if ( ! $was_saving_submissions && isset( $s['saveFormSubmissions'] )
+				&& class_exists( '\Bricks\Integrations\Form\Submission_Database' ) ) {
+				\Bricks\Integrations\Form\Submission_Database::maybe_create_table();
+			}
+			return rest_ensure_response( minn_admin_bricks_settings_payload( $tab ) );
+		},
 	) );
 } );
 
@@ -1607,9 +1601,7 @@ function minn_admin_bricks_forms_ready() {
 	if ( ! is_array( $s ) || ! isset( $s['saveFormSubmissions'] ) ) {
 		return false;
 	}
-	global $wpdb;
-	$table = \Bricks\Integrations\Form\Submission_Database::get_table_name();
-	return (bool) $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
+	return Minn_Admin_Kernel_SQL::exists( minn_admin_bricks_forms_table() );
 }
 
 function minn_admin_bricks_forms_can_view() {
@@ -1775,110 +1767,47 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	return $surfaces;
 } );
 
-add_action( 'rest_api_init', function () {
-	if ( ! minn_admin_bricks_forms_ready() ) {
-		return;
-	}
-	$view_perm = function () {
-		return minn_admin_bricks_forms_can_view();
-	};
-	$table = \Bricks\Integrations\Form\Submission_Database::get_table_name();
+/** Bricks' submissions table as the kernel's SQL layer names it (no prefix). */
+function minn_admin_bricks_forms_table() {
+	global $wpdb;
+	$table = class_exists( '\Bricks\Integrations\Form\Submission_Database' )
+		? (string) \Bricks\Integrations\Form\Submission_Database::get_table_name()
+		: $wpdb->prefix . 'bricks_form_submissions';
+	return 0 === strpos( $table, $wpdb->prefix ) ? substr( $table, strlen( $wpdb->prefix ) ) : $table;
+}
 
-	// The forms tab list: entries grouped by form_id (their overview query).
-	register_rest_route( 'minn-admin/v1', '/bricks/forms', array(
-		'methods'             => 'GET',
-		'permission_callback' => $view_perm,
-		'callback'            => function () use ( $table ) {
-			global $wpdb;
-			// phpcs:ignore WordPress.DB.PreparedSQL -- table name is prefix-built
-			$rows  = $wpdb->get_results( "SELECT form_id, MAX(post_id) AS post_id, COUNT(*) AS entries FROM {$table} GROUP BY form_id ORDER BY MAX(id) DESC LIMIT 50" );
-			$items = array();
-			foreach ( (array) $rows as $row ) {
-				$items[] = array(
-					'id'      => (string) $row->form_id,
-					'title'   => minn_admin_bricks_form_title( (int) $row->post_id, (string) $row->form_id ),
-					'entries' => (int) $row->entries,
-				);
-			}
-			return rest_ensure_response( $items );
-		},
-	) );
+/** Removal is theirs to grant: their delete_data gate is manage_options. */
+function minn_admin_bricks_forms_can_delete() {
+	return current_user_can( 'manage_options' );
+}
 
-	register_rest_route( 'minn-admin/v1', '/bricks/forms-status', array(
-		'methods'             => 'GET',
-		'permission_callback' => $view_perm,
-		'callback'            => function () use ( $table ) {
-			global $wpdb;
-			// phpcs:disable WordPress.DB.PreparedSQL -- table name is prefix-built
-			$total = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
-			$forms = (int) $wpdb->get_var( "SELECT COUNT(DISTINCT form_id) FROM {$table}" );
-			$last  = $wpdb->get_var( "SELECT created_at FROM {$table} ORDER BY id DESC LIMIT 1" );
-			// phpcs:enable
-			$rows = array(
-				array( 'label' => __( 'Submissions', 'minn-admin' ), 'value' => number_format_i18n( $total ) ),
-				array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => (string) $forms ),
-			);
-			if ( $last ) {
-				$rows[] = array(
-					'label' => __( 'Last submission', 'minn-admin' ),
-					// created_at is UTC; show it in the site's timezone.
-					'value' => date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), strtotime( get_date_from_gmt( $last ) ) ),
-				);
-			}
-			return rest_ensure_response( array(
-				'rows'    => $rows,
-				'actions' => array(
-					array( 'label' => __( 'Open Bricks form submissions ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=bricks-form-submissions' ) ),
+minn_admin_resource( 'bricks/entries', function () {
+	return array(
+		'active'  => 'minn_admin_bricks_forms_ready',
+		'gates'   => array( 'view' => 'minn_admin_bricks_forms_can_view', 'delete' => 'minn_admin_bricks_forms_can_delete' ),
+		'labels'  => array( 'not_found' => __( 'Submission not found.', 'minn-admin' ) ),
+		'source'  => array( 'table' => minn_admin_bricks_forms_table(), 'key' => 'id', 'columns' => array( '*' ) ),
+		'list'    => array(
+			// The tab is a form's id, a string Bricks mints.
+			'facets' => array(
+				array(
+					'param'  => 'form_id',
+					'values' => function ( $v ) {
+						return array( 'form_id' => (string) $v );
+					},
 				),
-			) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/bricks/entries', array(
-		'methods'             => 'GET',
-		'permission_callback' => $view_perm,
-		'callback'            => function ( WP_REST_Request $request ) use ( $table ) {
-			global $wpdb;
-			$form_id  = trim( (string) $request['form_id'] );
-			$search   = trim( (string) $request['search'] );
-			$page     = max( 1, (int) ( $request['page'] ?: 1 ) );
-			$per_page = min( 100, max( 1, (int) ( $request['per_page'] ?: 25 ) ) );
-			$where    = '1=1';
-			$args     = array();
-			if ( '' !== $form_id ) {
-				$where .= ' AND form_id = %s';
-				$args[] = $form_id;
-			}
-			if ( '' !== $search ) {
-				// Their screen searches the raw form_data JSON the same way.
-				$where .= ' AND form_data LIKE %s';
-				$args[] = '%' . $wpdb->esc_like( $search ) . '%';
-			}
-			// phpcs:disable WordPress.DB.PreparedSQL -- table name is prefix-built, where prepared above
-			$total = (int) $wpdb->get_var( $args ? $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE {$where}", $args ) : "SELECT COUNT(*) FROM {$table} WHERE {$where}" );
-			$rows  = $wpdb->get_results( $wpdb->prepare(
-				"SELECT * FROM {$table} WHERE {$where} ORDER BY id DESC LIMIT %d OFFSET %d",
-				array_merge( $args, array( $per_page, ( $page - 1 ) * $per_page ) )
-			) );
-			// phpcs:enable
-			return rest_ensure_response( array(
-				'items' => array_map( 'minn_admin_bricks_entry_item', (array) $rows ),
-				'total' => $total,
-			) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/bricks/entries/(?P<id>\d+)', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => $view_perm,
-			'callback'            => function ( WP_REST_Request $request ) use ( $table ) {
-				global $wpdb;
-				// phpcs:ignore WordPress.DB.PreparedSQL -- table name is prefix-built
-				$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", (int) Minn_Admin::path_param( $request ) ) );
-				if ( ! $row ) {
-					return new WP_Error( 'not_found', __( 'Submission not found.', 'minn-admin' ), array( 'status' => 404 ) );
-				}
+			),
+			// Their screen searches the raw form_data JSON the same way.
+			'search' => array( 'param' => 'search', 'columns' => array( 'form_data' ) ),
+			'order'  => array( 'column' => 'id', 'dir' => 'DESC' ),
+			'row'    => function ( array $row ) {
+				return minn_admin_bricks_entry_item( (object) $row );
+			},
+			'fields' => array( 'id' => 'int', 'summary' => 'text', 'form' => 'text', 'form_id' => 'text', 'when' => 'text' ),
+		),
+		'item'    => array(
+			'view'   => function ( array $r ) {
+				$row      = (object) $r;
 				$info     = minn_admin_bricks_form_labels( (int) $row->post_id, (string) $row->form_id );
 				$data     = json_decode( (string) $row->form_data, true );
 				$response = array();
@@ -1886,8 +1815,8 @@ add_action( 'rest_api_init', function () {
 					if ( ! is_array( $field ) ) {
 						continue;
 					}
-					$label = $info['labels'][ (string) $field_id ] ?? (string) $field_id;
-					$type  = (string) ( $field['type'] ?? '' );
+					$label     = $info['labels'][ (string) $field_id ] ?? (string) $field_id;
+					$type      = (string) ( $field['type'] ?? '' );
 					$field_row = array(
 						'label' => $label,
 						'value' => minn_admin_bricks_field_text( $field ),
@@ -1915,40 +1844,88 @@ add_action( 'rest_api_init', function () {
 					$user   = get_user_by( 'id', (int) $row->user_id );
 					$meta[] = array( 'label' => __( 'User', 'minn-admin' ), 'value' => $user ? $user->display_name : ( '#' . (int) $row->user_id ) );
 				}
-				return rest_ensure_response( array(
+				return array(
 					'kind'     => 'entry',
 					'sections' => array(
 						array( 'title' => __( 'Response', 'minn-admin' ), 'rows' => $response ),
 						array( 'title' => __( 'Submission', 'minn-admin' ), 'rows' => $meta ),
 					),
 					'adminUrl' => admin_url( 'admin.php?page=bricks-form-submissions&view=form_entries&form_id=' . rawurlencode( (string) $row->form_id ) ),
-				) );
+				);
 			},
+			'fields' => array( 'kind' => 'text', 'sections' => 'raw', 'adminUrl' => 'text' ),
 		),
-		array(
-			'methods'             => 'DELETE',
-			'permission_callback' => function () {
-				// Their delete_data gate: viewing is submission access, but
-				// removal is manage_options only.
-				return current_user_can( 'manage_options' );
-			},
-			'callback'            => function ( WP_REST_Request $request ) use ( $table ) {
-				global $wpdb;
-				$id = (int) Minn_Admin::path_param( $request );
-				// phpcs:ignore WordPress.DB.PreparedSQL -- table name is prefix-built
-				$exists = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE id = %d", $id ) );
-				if ( ! $exists ) {
-					return new WP_Error( 'not_found', __( 'Submission not found.', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				$deleted = \Bricks\Integrations\Form\Submission_Database::delete_data( $id );
-				if ( ! $deleted ) {
-					return new WP_Error( 'failed', __( 'The submission could not be deleted.', 'minn-admin' ), array( 'status' => 500 ) );
-				}
-				return rest_ensure_response( array( 'deleted' => $id ) );
-			},
+		'actions' => array(
+			// Bricks keeps no trash for submissions: their own delete.
+			'delete' => array(
+				'method' => 'DELETE',
+				'gate'   => 'delete',
+				'run'    => function ( $id ) {
+					return \Bricks\Integrations\Form\Submission_Database::delete_data( (int) $id )
+						? true
+						: new WP_Error( 'failed', __( 'The submission could not be deleted.', 'minn-admin' ), array( 'status' => 500 ) );
+				},
+				'expect' => 'gone',
+				'fail'   => __( 'The submission could not be deleted.', 'minn-admin' ),
+				'reply'  => function ( $id ) {
+					return array( 'deleted' => (int) $id );
+				},
+			),
 		),
-	) );
+	);
 } );
+
+// The forms tab list: entries grouped by form_id (their overview query).
+minn_admin_endpoint( 'bricks/forms', array(
+	'active' => 'minn_admin_bricks_forms_ready',
+	'gate'   => 'minn_admin_bricks_forms_can_view',
+	'run'    => function () {
+		$items = array();
+		foreach ( Minn_Admin_Kernel_SQL::totals(
+			minn_admin_bricks_forms_table(),
+			array( 'form_id' ),
+			array( 'post_id' => array( 'max' => 'post_id' ), 'entries' => array( 'count' => '*' ), 'newest' => array( 'max' => 'id' ) ),
+			array(),
+			array( 'newest' => 'DESC' ),
+			50
+		) as $row ) {
+			$items[] = array(
+				'id'      => (string) $row['form_id'],
+				'title'   => minn_admin_bricks_form_title( (int) $row['post_id'], (string) $row['form_id'] ),
+				'entries' => (int) $row['entries'],
+			);
+		}
+		return $items;
+	},
+) );
+
+minn_admin_endpoint( 'bricks/forms-status', array(
+	'active' => 'minn_admin_bricks_forms_ready',
+	'gate'   => 'minn_admin_bricks_forms_can_view',
+	'run'    => function () {
+		$table = minn_admin_bricks_forms_table();
+		$total = Minn_Admin_Kernel_SQL::count( $table );
+		$forms = count( Minn_Admin_Kernel_SQL::totals( $table, array( 'form_id' ), array( 'n' => array( 'count' => '*' ) ), array(), array(), 5000 ) );
+		$last  = Minn_Admin_Kernel_SQL::latest( $table, 'created_at', array(), 'id' );
+		$rows  = array(
+			array( 'label' => __( 'Submissions', 'minn-admin' ), 'value' => number_format_i18n( $total ) ),
+			array( 'label' => __( 'Forms', 'minn-admin' ), 'value' => (string) $forms ),
+		);
+		if ( $last ) {
+			$rows[] = array(
+				'label' => __( 'Last submission', 'minn-admin' ),
+				// created_at is UTC; show it in the site's timezone.
+				'value' => date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), strtotime( get_date_from_gmt( $last ) ) ),
+			);
+		}
+		return array(
+			'rows'    => $rows,
+			'actions' => array(
+				array( 'label' => __( 'Open Bricks form submissions ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=bricks-form-submissions' ) ),
+			),
+		);
+	},
+) );
 
 /*
  * Bricks latches its capability answers (Capabilities::$capabilities_set) for
