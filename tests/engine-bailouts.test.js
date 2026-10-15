@@ -123,7 +123,9 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	/* ===== A page builder's own editor: its content row menu offers
 	   "Edit in <builder>", and the editor's banner links there. On the
 	   engine a wp-admin link stays only when the engine opens that page
-	   (MINN.adminActions, while the Minn Legacy Pack is active). ===== */
+	   (MINN.adminActions, while the Minn Legacy Pack is active), or when
+	   the editor needs the pack and it is not active (MINN.legacyPack):
+	   following the link then offers to install the pack. ===== */
 	await page.goto( BASE + '/minn-admin/content', { waitUntil: 'domcontentloaded' } );
 	await page.waitForSelector( '.minn-table-row[data-id]', { timeout: 20000 } );
 	const built = await page.evaluate( () => {
@@ -132,12 +134,24 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	} );
 	if ( built ) {
 		const action = new URL( built.href, BASE ).searchParams.get( 'action' ) || '';
-		const opens = ! boot.engine || ( await page.evaluate( ( a ) => ( window.MINN.adminActions || [] ).includes( a ), action ) );
+		const packOffer = boot.engine && ( await page.evaluate( ( a ) => {
+			const pack = window.MINN.legacyPack;
+			return !! pack && ! pack.active && ( pack.editors || [] ).some( ( e ) => e.action === a );
+		}, action ) );
+		const opens = ! boot.engine || packOffer || ( await page.evaluate( ( a ) => ( window.MINN.adminActions || [] ).includes( a ), action ) );
 		const more = await page.$( `.minn-row-more[data-more="${ built.id }"]` );
 		await more.click( { force: true } );
 		await page.waitForSelector( '.minn-row-menu', { timeout: 10000 } );
 		const offered = await page.evaluate( ( name ) => [ ...document.querySelectorAll( '.minn-row-menu a' ) ]
 			.filter( ( a ) => a.textContent.includes( 'Edit in ' + name ) ).map( ( a ) => a.getAttribute( 'href' ) ), built.name );
+		if ( packOffer && offered.length === 1 ) {
+			// Following it, with the pack not active, asks first; cancelling leaves the site as it was.
+			await page.click( `.minn-row-menu a[href="${ built.href.replace( /"/g, '\\"' ) }"]` );
+			const dialog = await page.waitForSelector( '.minn-confirm-modal', { timeout: 10000 } ).catch( () => null );
+			const title = dialog ? await dialog.evaluate( ( el ) => el.textContent || '' ) : '';
+			t.check( `following Edit in ${ built.name } offers the Minn Legacy Pack first`, /Minn Legacy Pack/.test( title ) && page.url().includes( '/minn-admin/' ), title.slice( 0, 120 ) );
+			if ( dialog ) await page.click( '.minn-confirm-modal [data-cancel]' );
+		}
 		await page.keyboard.press( 'Escape' );
 		if ( opens ) {
 			t.check( `the row menu offers Edit in ${ built.name }`, offered.length === 1 && offered[ 0 ] === built.href, JSON.stringify( offered ) );

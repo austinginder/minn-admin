@@ -17,6 +17,13 @@
 	// answers itself (a page builder's editor, post.php?action=elementor),
 	// which it lists while the Minn Legacy Pack is active.
 	const ENGINE_ADMIN_ACTIONS = new Set( ENGINE && Array.isArray( B.adminActions ) ? B.adminActions.map( String ) : [] );
+	// The Minn Legacy Pack (WordPress's own browser files, a plugin of its
+	// own): whether it is active, and the editors on this site that need it.
+	// While it is not active a link to one of those editors stays, and
+	// following it offers the pack (offerLegacyPack) instead of opening an
+	// editor that cannot load.
+	const LEGACY_PACK = ENGINE && B.legacyPack && typeof B.legacyPack === 'object' ? B.legacyPack : null;
+	const LEGACY_PACK_EDITORS = new Map( LEGACY_PACK && ! LEGACY_PACK.active && Array.isArray( LEGACY_PACK.editors ) ? LEGACY_PACK.editors.map( ( e ) => [ String( e.action ), e ] ) : [] );
 
 	// Classic wp-admin screens. The engine has no /wp-admin/, and its
 	// adminUrl is /minn-admin/, so a deep link there is swallowed by the
@@ -49,6 +56,7 @@
 			const file = ( pth.split( '/' ).pop() || '' ).toLowerCase();
 			if ( file === 'admin-ajax.php' ) return false;
 			if ( ENGINE_ADMIN_ACTIONS.size && /\/wp-admin\/[a-z0-9-]+\.php$/i.test( pth ) && ENGINE_ADMIN_ACTIONS.has( u.searchParams.get( 'action' ) || '' ) ) return false;
+			if ( LEGACY_PACK_EDITORS.size && /\/wp-admin\/[a-z0-9-]+\.php$/i.test( pth ) && LEGACY_PACK_EDITORS.has( u.searchParams.get( 'action' ) || '' ) ) return false;
 			if ( /\/wp-admin(?:\/|$)/i.test( pth ) ) return true;
 			if ( file === 'index.php' ) {
 				return /\/wp-admin\//i.test( pth ) || /\/minn-admin\//i.test( pth );
@@ -1619,6 +1627,71 @@
 				setTimeout( () => ok.focus(), 30 );
 			}
 		} );
+	}
+
+	// The editor a wp-admin link opens that needs the Minn Legacy Pack while
+	// the pack is not active, or null.
+	function legacyPackEditorFor( href ) {
+		if ( ! LEGACY_PACK_EDITORS.size || ! href ) return null;
+		try {
+			const u = new URL( String( href ), location.href );
+			if ( u.origin !== location.origin || ! /\/wp-admin\/[a-z0-9-]+\.php$/i.test( u.pathname ) ) return null;
+			return LEGACY_PACK_EDITORS.get( u.searchParams.get( 'action' ) || '' ) || null;
+		} catch ( e ) {
+			return null;
+		}
+	}
+
+	// Offers the Minn Legacy Pack for an editor that needs it: installed from
+	// the Minn update service and turned on (the engine checks the package),
+	// then on to the editor when there is one to open.
+	async function offerLegacyPack( editor, href ) {
+		const name = editor && editor.name ? String( editor.name ) : __( 'This editor' );
+		if ( ! B.caps.install ) {
+			toast( sprintf( /* translators: %s: the page builder's name. */ __( '%s’s editor needs the Minn Legacy Pack. Ask an administrator to install it.' ), name ), true );
+			return false;
+		}
+		const ok = await minnConfirm( {
+			title: sprintf( /* translators: %s: the page builder's name. */ __( 'Install the Minn Legacy Pack to edit with %s?' ), name ),
+			body: sprintf( /* translators: %s: the page builder's name. */ __( '%s’s editor is built on WordPress’s own editor scripts, which Minn doesn’t include. The Minn Legacy Pack brings them back.' ), name ),
+			changes: [
+				__( 'Installs and turns on the Minn Legacy Pack, from the Minn update service' ),
+				href ? sprintf( /* translators: %s: the page builder's name. */ __( 'Opens %s’s editor' ), name ) : __( 'Its updates arrive with your other plugin updates' ),
+			],
+			keeps: [ __( 'Your content and the rest of your plugins' ) ],
+			confirmLabel: href ? sprintf( /* translators: %s: the page builder's name. */ __( 'Install and open %s' ), name ) : __( 'Install' ),
+		} );
+		if ( ! ok ) return false;
+		toast( __( 'Installing the Minn Legacy Pack…' ) );
+		try {
+			await api( 'minn-admin/v1/legacy-pack/install', { method: 'POST', body: '{}' } );
+		} catch ( e ) {
+			toast( sprintf( /* translators: %s: why the install failed. */ __( 'The Minn Legacy Pack could not be installed: %s' ), e.message || String( e ) ), true );
+			return false;
+		}
+		toast( __( 'The Minn Legacy Pack is installed.' ) );
+		if ( href ) location.assign( href ); else location.reload();
+		return true;
+	}
+
+	// On Minn, the editors on the site that need the Minn Legacy Pack while it
+	// is not active: offered on the Plugins tab too, not only at their links.
+	function legacyPackBannerHtml() {
+		if ( ! LEGACY_PACK_EDITORS.size || ! B.caps.install ) return '';
+		const names = [ ...LEGACY_PACK_EDITORS.values() ].map( ( e ) => String( e.name ) );
+		return `
+		<div class="minn-card minn-core-banner minn-legacy-pack-banner">
+			<div class="minn-core-info">
+				<div class="minn-panel-title">${ esc( sprintf( /* translators: %s: page builder names, joined with commas. */ __( '%s needs the Minn Legacy Pack' ), names.join( ', ' ) ) ) }</div>
+				<div class="minn-toggle-desc">${ esc( __( 'Its editor is built on WordPress’s own editor scripts, which Minn doesn’t include. The Minn Legacy Pack brings them back, and Minn keeps it updated.' ) ) }</div>
+			</div>
+			<button class="minn-btn-primary" id="minn-legacy-pack-install">${ icon( 'plus' ) } ${ esc( __( 'Install' ) ) }</button>
+		</div>`;
+	}
+
+	function bindLegacyPackBanner( view ) {
+		const btn = $( '#minn-legacy-pack-install', view );
+		if ( btn ) btn.addEventListener( 'click', () => offerLegacyPack( [ ...LEGACY_PACK_EDITORS.values() ][ 0 ], '' ) );
 	}
 
 	function runPendingToastUndo() {
@@ -25903,6 +25976,7 @@
 
 		view.innerHTML = `
 		${ coreBannerHtml() }
+		${ legacyPackBannerHtml() }
 		<div class="minn-toolbar minn-toolbar-views">
 			${ extTabsHtml() }
 			${ B.caps.update ? `
@@ -25970,6 +26044,7 @@
 
 		if ( scroller ) scroller.scrollTop = keepScrollTop;
 		bindCoreBanner( view );
+		bindLegacyPackBanner( view );
 		bindExtFilterBar( view );
 		bindAutoToggles( view );
 		// Broken icon URLs fall back to the letter tile underneath.
@@ -59098,6 +59173,34 @@
 
 		window.addEventListener( 'popstate', onHistoryNav );
 		if ( ! PATH_MODE ) window.addEventListener( 'hashchange', onHistoryNav );
+
+		// A link to an editor that needs the Minn Legacy Pack, while the pack
+		// is not active, offers the pack first; the engine sends a wp-admin
+		// visit to such an editor here, as ?legacy-pack=<action>&return=<url>.
+		if ( LEGACY_PACK ) {
+			document.addEventListener( 'click', ( e ) => {
+				const a = e.target && e.target.closest ? e.target.closest( 'a[href]' ) : null;
+				const editor = a ? legacyPackEditorFor( a.getAttribute( 'href' ) ) : null;
+				if ( ! editor || e.defaultPrevented ) return;
+				e.preventDefault();
+				offerLegacyPack( editor, a.href );
+			}, true );
+			const asked = new URLSearchParams( location.search );
+			if ( asked.has( 'legacy-pack' ) ) {
+				const action = asked.get( 'legacy-pack' ) || '';
+				let target = '';
+				try {
+					const u = new URL( asked.get( 'return' ) || '', location.href );
+					if ( u.origin === location.origin && /\/wp-admin\/[a-z0-9-]+\.php$/i.test( u.pathname ) ) target = u.href;
+				} catch ( e ) { /* no way back: the offer still stands */ }
+				asked.delete( 'legacy-pack' );
+				asked.delete( 'return' );
+				history.replaceState( history.state, '', location.pathname + ( asked.toString() ? '?' + asked : '' ) + location.hash );
+				const editor = LEGACY_PACK_EDITORS.get( action );
+				if ( editor ) offerLegacyPack( editor, target );
+				else if ( LEGACY_PACK.active && target ) location.assign( target );
+			}
+		}
 
 		// Closing the tab with unsaved editor changes gets the standard warning.
 		window.addEventListener( 'beforeunload', ( e ) => {
