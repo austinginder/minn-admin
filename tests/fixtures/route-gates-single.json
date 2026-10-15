@@ -800,7 +800,9 @@
         "GET /minn-admin/v1/novamira/status": [
             "administrator"
         ],
-        "GET /minn-admin/v1/options/(?P<tab>tab-\\d+)": [],
+        "GET /minn-admin/v1/options/(?P<tab>tab-\\d+)": [
+            "administrator"
+        ],
         "GET /minn-admin/v1/orders/(?P<id>\\d+)/emails": [
             "shop_manager",
             "administrator"
@@ -1729,7 +1731,9 @@
         "POST /minn-admin/v1/novamira/abilities/(?P<tab>[a-z0-9_\\-]+)": [],
         "POST /minn-admin/v1/novamira/connections/(?P<id>[a-z]+:[A-Za-z0-9_\\-]+)/revoke": [],
         "POST /minn-admin/v1/novamira/enabled/(?P<state>on|off)": [],
-        "POST /minn-admin/v1/options/(?P<tab>tab-\\d+)": [],
+        "POST /minn-admin/v1/options/(?P<tab>tab-\\d+)": [
+            "administrator"
+        ],
         "POST /minn-admin/v1/orders/(?P<id>\\d+)/email": [
             "shop_manager",
             "administrator"

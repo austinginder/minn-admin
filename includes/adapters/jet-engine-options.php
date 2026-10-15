@@ -166,30 +166,28 @@ add_action( 'rest_api_init', function () {
 		$pages = minn_admin_jet_options_pages_allowed(); // the page's own capability decides
 		return isset( $pages[ $slug ] ) ? $slug : null;
 	};
-	register_rest_route( 'minn-admin/v1', '/jet-engine/options/(?P<page>[A-Za-z0-9_%.\-]+)/(?P<tab>tab-0)', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => function ( $req ) use ( $resolve ) {
-				return (bool) $resolve( $req );
-			},
-			'callback'            => function ( $req ) use ( $resolve ) {
-				return rest_ensure_response( minn_admin_jet_options_shape( $resolve( $req ) ) );
-			},
-		),
-		array(
-			'methods'             => 'POST',
-			'permission_callback' => function ( $req ) use ( $resolve ) {
-				return (bool) $resolve( $req );
-			},
-			'callback'            => function ( $req ) use ( $resolve ) {
-				$slug = $resolve( $req );
-				$body = $req->get_json_params(); // the body only, like every settings route
-				if ( ! is_array( $body ) ) {
-					return new WP_Error( 'invalid_body', __( 'Send the values as JSON.', 'minn-admin' ), array( 'status' => 400 ) );
-				}
-				minn_admin_jet_options_save( $slug, isset( $body['values'] ) && is_array( $body['values'] ) ? $body['values'] : array() );
-				return rest_ensure_response( minn_admin_jet_options_shape( $slug ) );
-			},
-		),
+	minn_admin_endpoint( '/jet-engine/options/(?P<page>[A-Za-z0-9_%.\-]+)/(?P<tab>tab-0)', array(
+		'methods'             => 'GET',
+		'gate'                => function ( WP_REST_Request $req ) use ( $resolve ) {
+			return (bool) $resolve( $req );
+		},
+		'run'                 => function ( $req ) use ( $resolve ) {
+			return rest_ensure_response( minn_admin_jet_options_shape( $resolve( $req ) ) );
+		},
+	) );
+	minn_admin_endpoint( '/jet-engine/options/(?P<page>[A-Za-z0-9_%.\-]+)/(?P<tab>tab-0)', array(
+		'methods'             => 'POST',
+		'gate'                => function ( WP_REST_Request $req ) use ( $resolve ) {
+			return (bool) $resolve( $req );
+		},
+		'run'                 => function ( $req ) use ( $resolve ) {
+			$slug = $resolve( $req );
+			$body = $req->get_json_params(); // the body only, like every settings route
+			if ( ! is_array( $body ) ) {
+				return new WP_Error( 'invalid_body', __( 'Send the values as JSON.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
+			minn_admin_jet_options_save( $slug, isset( $body['values'] ) && is_array( $body['values'] ) ? $body['values'] : array() );
+			return rest_ensure_response( minn_admin_jet_options_shape( $slug ) );
+		},
 	) );
 } );

@@ -735,18 +735,18 @@ add_action( 'rest_api_init', function () {
 	if ( ! minn_admin_jet_fields_active() ) {
 		return;
 	}
-	register_rest_route( 'minn-admin/v1', '/jet-engine/fields', array(
+	minn_admin_endpoint( '/jet-engine/fields', array(
 		'methods'             => 'GET',
-		'permission_callback' => function () {
+		'gate'                => function () {
 			return current_user_can( 'edit_posts' );
 		},
 		'args'                => array(
-			'post_id'   => array( 'type' => 'integer', 'default' => 0 ),
-			'post_type' => array( 'type' => 'string', 'default' => 'posts' ),
+			'post_id'   => array( 'type' => 'integer' ),
+			'post_type' => array( 'type' => 'string' ),
 		),
-		'callback'            => function ( WP_REST_Request $request ) {
+		'run'                 => function ( WP_REST_Request $request ) {
 			$post_id   = (int) $request['post_id'];
-			$post_type = minn_admin_jet_resolve_type( $request['post_type'] );
+			$post_type = minn_admin_jet_resolve_type( (string) ( $request['post_type'] ?? 'posts' ) );
 			if ( $post_id ) {
 				$post = get_post( $post_id );
 				if ( ! $post ) {

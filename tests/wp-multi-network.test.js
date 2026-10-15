@@ -130,7 +130,7 @@ async function api( page, method, path, body ) {
 		check( 'network directory lists both lab networks', directory.rows.length >= 2 && directory.rows.some( ( row ) => /Lab Network 2/.test( row ) ), `${ directory.rows.length } rows` );
 		check( 'network directory shows operational counts', directory.columns.some( ( c ) => /Sites/.test( c ) ) && directory.columns.some( ( c ) => /Administrators/.test( c ) ), directory.columns.join( ' | ' ) );
 		// Probes that change nothing whichever guard answers: the route requires
-		// delete_sites (WordPress validates it before any guard), and false keeps
+		// delete_sites (the kernel checks it once the gate has passed), and false keeps
 		// the current-network guard and the vendor's refusal to drop a network
 		// with sites behind the main-network one. The move names the main site's
 		// own network, which the super admin administers, so the destination

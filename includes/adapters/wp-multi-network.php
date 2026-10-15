@@ -217,51 +217,49 @@ add_action( 'rest_api_init', function () {
 		return;
 	}
 
-	register_rest_route( 'minn-admin/v1', '/wp-multi-network/networks', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => function () {
-				return current_user_can( 'list_networks' );
-			},
-			'callback'            => 'minn_admin_wpmn_networks_list',
-		),
-		array(
-			'methods'             => 'POST',
-			// Creating, deleting or moving between networks reshapes the
-			// install, which every network shares: the main network's super
-			// admins. (A secondary network's super admin, whom WP Multi
-			// Network admits, would also be refused the new network's roles
-			// and administrator by the write fence, leaving it half built.)
-			'permission_callback' => function () {
-				return current_user_can( 'create_networks' ) && Minn_Admin::install_owner();
-			},
-			'callback'            => 'minn_admin_wpmn_network_create',
-			'args'                => array(
-				'title'      => array( 'type' => 'string', 'required' => true ),
-				'domain'     => array( 'type' => 'string', 'required' => true ),
-				'path'       => array( 'type' => 'string', 'required' => true ),
-				'site_title' => array( 'type' => 'string', 'required' => false ),
-			),
+	minn_admin_endpoint( '/wp-multi-network/networks', array(
+		'methods'             => 'GET',
+		'gate'                => function () {
+			return current_user_can( 'list_networks' );
+		},
+		'run'                 => 'minn_admin_wpmn_networks_list',
+	) );
+	minn_admin_endpoint( '/wp-multi-network/networks', array(
+		'methods'             => 'POST',
+		// Creating, deleting or moving between networks reshapes the
+		// install, which every network shares: the main network's super
+		// admins. (A secondary network's super admin, whom WP Multi
+		// Network admits, would also be refused the new network's roles
+		// and administrator by the write fence, leaving it half built.)
+		'gate'                => function () {
+			return current_user_can( 'create_networks' ) && Minn_Admin::install_owner();
+		},
+		'run'                 => 'minn_admin_wpmn_network_create',
+		'args'                => array(
+			'title'      => array( 'type' => 'string', 'required' => true ),
+			'domain'     => array( 'type' => 'string', 'required' => true ),
+			'path'       => array( 'type' => 'string', 'required' => true ),
+			'site_title' => array( 'type' => 'string', 'required' => false ),
 		),
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/wp-multi-network/networks/(?P<id>\d+)', array(
+	minn_admin_endpoint( '/wp-multi-network/networks/(?P<id>\d+)', array(
 		'methods'             => 'DELETE',
-		'permission_callback' => function ( WP_REST_Request $request ) {
+		'gate'                => function ( WP_REST_Request $request ) {
 			// Same source the handler acts on, so the gate and the action can
 			// never be answering about different networks.
 			return minn_admin_wpmn_can_delete( minn_admin_wpmn_path_id( $request ) );
 		},
-		'callback'            => 'minn_admin_wpmn_network_delete',
+		'run'                 => 'minn_admin_wpmn_network_delete',
 		'args'                => array(
 			'delete_sites' => array( 'type' => 'boolean', 'required' => true ),
 		),
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/wp-multi-network/sites/(?P<id>\d+)/move', array(
+	minn_admin_endpoint( '/wp-multi-network/sites/(?P<id>\d+)/move', array(
 		'methods'             => 'POST',
-		'permission_callback' => 'minn_admin_wpmn_can_move',
-		'callback'            => 'minn_admin_wpmn_site_move',
+		'gate'                => 'minn_admin_wpmn_can_move',
+		'run'                 => 'minn_admin_wpmn_site_move',
 		'args'                => array(
 			'network' => array( 'type' => 'integer', 'required' => true ),
 		),

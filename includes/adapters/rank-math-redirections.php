@@ -205,7 +205,6 @@ minn_admin_add_surface( 'rank-math-redirections', function () {
 	};
 	$log_view = Minn_Admin_Kernel::collection( 'rankmath/404', array(
 		'viewLabel' => __( '404 log', 'minn-admin' ),
-		'sortQuery' => 'orderby={by}&order={dir}',
 		'columns'   => array(
 			array( 'key' => 'uri', 'label' => __( 'Address', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.6fr)', 'sort' => 'uri' ),
 			array( 'key' => 'times_accessed', 'label' => __( 'Hits', 'minn-admin' ), 'format' => 'num', 'width' => '72px', 'sort' => 'times_accessed' ),
@@ -222,7 +221,6 @@ minn_admin_add_surface( 'rank-math-redirections', function () {
 		),
 	) );
 	$redirect_coll = Minn_Admin_Kernel::collection( $rr, array(
-		'sortQuery' => 'orderby={by}&order={dir}',
 		'tabs'      => array(
 			'param'    => 'status',
 			'static'   => array(
@@ -286,12 +284,11 @@ minn_admin_add_surface( 'rank-math-redirections', function () {
 	return $surface;
 } );
 
-/** Their sort and direction for a list, from the request: only the columns their reader orders by. */
-function minn_admin_rm_order( array $q, array $allowed, $fallback ) {
-	$by = sanitize_key( (string) ( $q['request']->get_param( 'orderby' ) ?: $fallback ) );
+/** Their reader's sort and direction: the column a person picked (the kernel holds it to the declared ones), or the list's default. */
+function minn_admin_rm_order( array $q, $fallback ) {
 	return array(
-		'orderby' => $allowed && ! in_array( $by, $allowed, true ) ? $fallback : $by,
-		'order'   => 'asc' === strtolower( (string) $q['request']->get_param( 'order' ) ) ? 'ASC' : 'DESC',
+		'orderby' => $q['sort']['column'] ?? $fallback,
+		'order'   => $q['sort']['dir'] ?? 'DESC',
 	);
 }
 
@@ -398,7 +395,7 @@ minn_admin_resource( 'rankmath/redirects', function () use ( $minn_rm_item ) {
 					'search' => sanitize_text_field( $q['search'] ),
 					'paged'  => $q['page'],
 					'limit'  => $q['per_page'],
-				), minn_admin_rm_order( $q, array(), 'id' ) ) );
+				), minn_admin_rm_order( $q, 'id' ) ) );
 				return array( array_map( 'minn_admin_rm_redirect_item', (array) ( $res['redirections'] ?? array() ) ), (int) ( $res['count'] ?? 0 ) );
 			},
 			'get'    => 'minn_admin_rm_redirect',
@@ -413,6 +410,7 @@ minn_admin_resource( 'rankmath/redirects', function () use ( $minn_rm_item ) {
 				'trashed'  => array( 'status' => 'trashed' ),
 			) ) ),
 			'search' => array( 'columns' => array( 'source', 'url_to' ) ),
+			'sort'   => array( 'columns' => array( 'id', 'url_to', 'header_code', 'hits', 'last_accessed' ) ),
 			'fields' => $minn_rm_item,
 		),
 		// Exact-match source like their quick form; contains/regex and
@@ -500,7 +498,7 @@ minn_admin_resource( 'rankmath/404', function () {
 					'search' => sanitize_text_field( $q['search'] ),
 					'paged'  => $q['page'],
 					'limit'  => $q['per_page'],
-				), minn_admin_rm_order( $q, array( 'id', 'uri', 'accessed', 'times_accessed' ), 'accessed' ) ) );
+				), minn_admin_rm_order( $q, 'accessed' ) ) );
 				return array( array_map( 'minn_admin_rm_log_item', (array) ( $res['logs'] ?? array() ) ), (int) ( $res['count'] ?? 0 ) );
 			},
 			'get'    => 'minn_admin_rm_log',
@@ -510,6 +508,7 @@ minn_admin_resource( 'rankmath/404', function () {
 		),
 		'list'    => array(
 			'search' => array( 'columns' => array( 'uri' ) ),
+			'sort'   => array( 'columns' => array( 'id', 'uri', 'accessed', 'times_accessed' ) ),
 			'fields' => array(
 				'id'             => 'int',
 				'uri'            => 'text',

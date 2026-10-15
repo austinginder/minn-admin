@@ -1430,7 +1430,6 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'status'     => array( 'route' => 'minn-admin/v1/wcm/status' ),
 		'collection' => Minn_Admin_Kernel::collection( 'wcm/members', array(
 			'viewLabel' => __( 'Members', 'minn-admin' ),
-			'sortQuery' => 'orderby={by}&order={dir}',
 			'filterBar' => array(
 				'searchPlaceholder' => __( 'Search members (name, email, username…)', 'minn-admin' ),
 				'statuses'          => $statuses,
@@ -1610,8 +1609,8 @@ function minn_admin_wcm_list( array $q ) {
 		'orderby'        => array( 'date' => 'DESC', 'ID' => 'DESC' ),
 	);
 
-	$orderby = (string) $request->get_param( 'orderby' );
-	$dir     = 'asc' === strtolower( (string) $request->get_param( 'order' ) ) ? 'ASC' : 'DESC';
+	$orderby = (string) ( $q['sort']['by'] ?? '' );
+	$dir     = (string) ( $q['sort']['dir'] ?? 'DESC' );
 	if ( 'since' === $orderby || 'expires' === $orderby ) {
 		// The plugin's own list sorts these columns on the same meta.
 		$args['meta_key'] = 'since' === $orderby ? '_start_date' : '_end_date'; // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
@@ -1979,6 +1978,8 @@ minn_admin_resource( 'wcm/members', function () {
 			'search' => array( 'param' => 'search' ),
 			// Applied by the source: the day each membership was created.
 			'range'  => array( 'column' => 'post_date', 'clock' => 'local' ),
+			// Applied by the source, on the plugin's own meta and parent.
+			'sort'   => array( 'columns' => array( 'plan', 'since', 'expires' ) ),
 			'fields' => array(
 				'id'          => 'int',
 				'member'      => 'text',

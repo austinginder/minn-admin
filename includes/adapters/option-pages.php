@@ -186,36 +186,40 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 } );
 
 add_action( 'rest_api_init', function () {
-	register_rest_route( 'minn-admin/v1', '/options/(?P<tab>tab-\d+)', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => function ( $req ) {
-				// A tab that does not resolve is either not there or not this
-				// reader's; either way the honest answer is that there is no
-				// such settings tab, and the provider decides the rest.
-				return minn_admin_option_tab_target( (string) Minn_Admin::path_param( $req, 'tab' ) )
-					? true
-					: new WP_Error( 'minn_no_tab', __( 'Unknown settings tab.', 'minn-admin' ), array( 'status' => 404 ) );
-			},
-			'callback'            => function ( $req ) {
-				$target = minn_admin_option_tab_target( (string) Minn_Admin::path_param( $req, 'tab' ) );
-				return minn_admin_option_dispatch( $target, 'GET' );
-			},
-		),
-		array(
-			'methods'             => 'POST',
-			'permission_callback' => function ( $req ) {
-				// A tab that does not resolve is either not there or not this
-				// reader's; either way the honest answer is that there is no
-				// such settings tab, and the provider decides the rest.
-				return minn_admin_option_tab_target( (string) Minn_Admin::path_param( $req, 'tab' ) )
-					? true
-					: new WP_Error( 'minn_no_tab', __( 'Unknown settings tab.', 'minn-admin' ), array( 'status' => 404 ) );
-			},
-			'callback'            => function ( $req ) {
-				$target = minn_admin_option_tab_target( (string) Minn_Admin::path_param( $req, 'tab' ) );
-				return minn_admin_option_dispatch( $target, 'POST', (array) $req->get_json_params() );
-			},
-		),
+	minn_admin_endpoint( '/options/(?P<tab>tab-\d+)', array(
+		'methods'             => 'GET',
+		// Someone who may open at least one contributed page; each
+		// provider's own route still asks its capability.
+		'gate'                => function () {
+			return (bool) minn_admin_option_pages();
+		},
+		'run'                 => function ( WP_REST_Request $req ) {
+			// A tab that does not resolve is either not there or not this
+			// reader's; either way the honest answer is that there is no
+			// such settings tab, and the provider decides the rest.
+			$target = minn_admin_option_tab_target( (string) Minn_Admin::path_param( $req, 'tab' ) );
+			if ( ! $target ) {
+				return new WP_Error( 'minn_no_tab', __( 'Unknown settings tab.', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			return minn_admin_option_dispatch( $target, 'GET' );
+		},
+	) );
+	minn_admin_endpoint( '/options/(?P<tab>tab-\d+)', array(
+		'methods'             => 'POST',
+		// Someone who may open at least one contributed page; each
+		// provider's own route still asks its capability.
+		'gate'                => function () {
+			return (bool) minn_admin_option_pages();
+		},
+		'run'                 => function ( WP_REST_Request $req ) {
+			// A tab that does not resolve is either not there or not this
+			// reader's; either way the honest answer is that there is no
+			// such settings tab, and the provider decides the rest.
+			$target = minn_admin_option_tab_target( (string) Minn_Admin::path_param( $req, 'tab' ) );
+			if ( ! $target ) {
+				return new WP_Error( 'minn_no_tab', __( 'Unknown settings tab.', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			return minn_admin_option_dispatch( $target, 'POST', (array) $req->get_json_params() );
+		},
 	) );
 } );
