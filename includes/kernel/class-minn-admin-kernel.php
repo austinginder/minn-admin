@@ -76,8 +76,17 @@
  *                 // more GET routes on one item (GET /<id>/view: a mail log's rendered message),
  *                 // each answering to its gate (the item's when it names none) and loaded like
  *                 // the item, only its declared fields leaving
+ *     'create'    => array( 'gate' => 'manage', 'run' => callable( WP_REST_Request $r ): int|array|WP_Error,
+ *                   'expect' => 'exists' | callable( int $id, ?array $fresh, mixed $ran ): bool,
+ *                   'reply' => callable( int $id, ?array $fresh, mixed $ran ): array, 'done' => … ),
+ *                 // POST /<id> beside the list: the vendor's own create answers the new id (a
+ *                 // positive int or digits, or array( 'id' => … )), and it is done only once that
+ *                 // row reads back for the caller (a table source's above every key before it ran);
+ *                 // a source that is not a table declares its own expect; no create on a resource
+ *                 // with a scope or a row gate
  *     'actions'   => array( 'trash' => array(
- *       'method' => 'POST',           // POST /<id>/(?P<id>\d+)/trash; DELETE uses the item route
+ *       'method' => 'POST',           // POST /<id>/(?P<id>\d+)/trash; DELETE, PUT and PATCH use the
+ *       'item'   => true,             // item route itself, and so does a POST that says 'item' (an edit)
  *       'gate'   => 'delete',         // a declared gate; no gate, no route
  *       'when'   => array( 'status' => array( 'publish' ) ),   // or callable( array $row ): bool
  *       'code'   => 'bad_status', 'refuse' => …,               // the 400 when the row is not in that state
@@ -86,6 +95,8 @@
  *                   // or 'ran' for a send, which leaves nothing to read back: the run's answer
  *                   // must be true, the text of whom it sent to or array( 'sent' => true, … ),
  *                   // and no wp_mail_failed may fire while it runs
+ *       'args'   => array( name => schema ),   // JSON-schema keys only, checked after the gate and the
+ *                                      // row: 400 rest_missing_callback_param / rest_invalid_param
  *       'fail'   => …,                // the 500 when the expectation does not hold
  *       'reply'  => callable( int $id, ?array $fresh, mixed $ran ): array,   // merged over { ok: true }
  *       'done'   => …,                // the reply's message
@@ -306,15 +317,41 @@ class Minn_Admin_Kernel {
 			_doing_it_wrong( 'minn_admin_resource', esc_html( "{$res['id']} declares a filter with no values, so it has no list route." ), 'Minn Admin 0.46.0' );
 			$res['list'] = array();
 		}
+		$base_eps = array();
 		if ( ! empty( $res['list'] ) ) {
-			register_rest_route( self::NS, $base, array(
+			$base_eps[] = array(
 				'minn_file'           => $res['file'],
 				'methods'             => 'GET',
 				'permission_callback' => $view,
 				'callback'            => self::guarded( function ( WP_REST_Request $r ) use ( $res ) {
 					return Minn_Admin_Kernel::handle_list( $res, $r );
 				} ),
-			) );
+			);
+		}
+		if ( ! empty( $res['create'] ) ) {
+			$c_gate = (string) ( $res['create']['gate'] ?? '' );
+			$c_perm = '' === $c_gate ? null : self::gate( $res, $c_gate );
+			if ( ! $c_perm || empty( $res['create']['run'] ) ) {
+				self::missing_gate( $res['id'] . ' create', $c_gate );
+			} elseif ( ! empty( $res['list']['scope'] ) || ! empty( $res['item_gate'] ) ) {
+				// A create cannot ask a scope or a row gate before its row exists.
+				_doing_it_wrong( 'minn_admin_resource', esc_html( "{$res['id']} declares a create beside a scope or a row gate, so it has no route." ), 'Minn Admin 0.46.0' );
+			} elseif ( empty( $res['source']['table'] ) && ( empty( $res['create']['expect'] ) || 'exists' === $res['create']['expect'] ) ) {
+				// Only a table proves a row is new (its key); any other source says how.
+				_doing_it_wrong( 'minn_admin_resource', esc_html( "{$res['id']} creates through a source that is not a table and declares no expect, so it has no route." ), 'Minn Admin 0.46.0' );
+			} else {
+				$base_eps[] = array(
+					'minn_file'           => $res['file'],
+					'methods'             => 'POST',
+					'permission_callback' => $c_perm,
+					'callback'            => self::guarded( function ( WP_REST_Request $r ) use ( $res ) {
+						return Minn_Admin_Kernel::handle_create( $res, $r );
+					} ),
+				);
+			}
+		}
+		if ( $base_eps ) {
+			register_rest_route( self::NS, $base, $base_eps );
 		}
 		foreach ( (array) ( $res['reads'] ?? array() ) as $slug => $read ) {
 			$gate_name = (string) ( $read['gate'] ?? ( $res['item']['gate'] ?? 'view' ) );
@@ -335,6 +372,11 @@ class Minn_Admin_Kernel {
 			) );
 		}
 		$item_eps = array();
+		// Each method on each route once: a second would be shadowed by the first.
+		$taken = array( 'GET ' . $base => ! empty( $res['list'] ), 'POST ' . $base => ! empty( $res['create'] ), 'GET ' . $item => ! empty( $res['item'] ) );
+		foreach ( array_keys( (array) ( $res['reads'] ?? array() ) ) as $slug ) {
+			$taken[ 'GET ' . $item . '/' . sanitize_key( (string) $slug ) ] = true;
+		}
 		$item_gate = (string) ( $res['item']['gate'] ?? 'view' );
 		$item_perm = ! empty( $res['item'] ) ? self::gate( $res, $item_gate ) : null;
 		if ( ! empty( $res['item'] ) && ! $item_perm ) {
@@ -365,6 +407,22 @@ class Minn_Admin_Kernel {
 				continue;
 			}
 			$method = strtoupper( (string) ( $action['method'] ?? 'POST' ) );
+			$path   = self::on_item( $action ) ? $item : $item . '/' . (string) $slug;
+			$why    = '';
+			if ( ! in_array( $method, array( 'POST', 'PUT', 'PATCH', 'DELETE' ), true ) ) {
+				$why = "method {$method} is not one of POST, PUT, PATCH, DELETE";
+			} elseif ( '' === (string) $slug || sanitize_key( (string) $slug ) !== (string) $slug ) {
+				$why = 'its slug is not a key';
+			} elseif ( ! empty( $taken[ $method . ' ' . $path ] ) ) {
+				$why = "{$method} on its route is taken";
+			} elseif ( isset( $action['args'] ) && ! self::args_ok( $action['args'] ) ) {
+				$why = 'its args are not schemas (no callbacks, no id)';
+			}
+			if ( '' !== $why ) {
+				_doing_it_wrong( 'minn_admin_resource', esc_html( "{$res['id']} action {$slug}: {$why}, so it has no route." ), 'Minn Admin 0.46.0' );
+				continue;
+			}
+			$taken[ $method . ' ' . $path ] = true;
 			$ep     = array(
 				'minn_file'           => $res['file'],
 				'methods'             => $method,
@@ -373,7 +431,7 @@ class Minn_Admin_Kernel {
 					return Minn_Admin_Kernel::handle_action( $res, $slug, $r );
 				} ),
 			);
-			if ( 'DELETE' === $method ) {
+			if ( self::on_item( $action ) ) {
 				$item_eps[] = $ep;
 			} else {
 				register_rest_route( self::NS, $item . '/' . sanitize_key( (string) $slug ), $ep );
@@ -907,12 +965,62 @@ class Minn_Admin_Kernel {
 		return true;
 	}
 
+	public static function handle_create( array $res, WP_REST_Request $r ) {
+		$c   = $res['create'];
+		$src = $res['source'];
+		// A table proves the row is new by its key: above every key before.
+		$before = empty( $src['table'] ) ? null : (int) Minn_Admin_Kernel_SQL::latest( array( 'table' => (string) $src['table'], 'network' => ! empty( $src['network'] ) ), $src['key'], array(), $src['key'] );
+		$ran    = call_user_func( $c['run'], $r );
+		if ( $ran instanceof WP_REST_Response ) {
+			$ran = $ran->is_error() ? $ran->as_error() : $ran->get_data();
+		}
+		if ( is_wp_error( $ran ) ) {
+			return $ran;
+		}
+		$id     = self::created_id( is_array( $ran ) ? ( $ran['id'] ?? null ) : $ran );
+		$row    = $id > 0 && ( null === $before || $id > $before ) ? self::load( $res, $id, (string) $c['gate'] ) : null;
+		$fresh  = is_array( $row ) ? $row : null;
+		$expect = $c['expect'] ?? 'exists';
+		// Done only once the new row reads back for this caller, or what the
+		// declaration says must hold does.
+		$held = null !== $fresh && ( 'exists' === $expect || ( ! is_string( $expect ) && is_callable( $expect ) && self::yes( $expect, $id, $fresh, $ran ) ) );
+		if ( ! $held ) {
+			return self::fail( (string) ( $c['fail_code'] ?? 'not_applied' ), $c['fail'] ?? __( 'The plugin reported success, but the change is not there.', 'minn-admin' ), 500 );
+		}
+		$reply = empty( $c['reply'] ) ? array() : (array) call_user_func( $c['reply'], $id, $fresh, $ran );
+		if ( ! empty( $c['fields'] ) ) {
+			$reply = Minn_Admin_Kernel_Fields::out( $c['fields'], $reply );
+		}
+		$reply = array_merge( $reply, array( 'ok' => true, 'id' => $id ) );
+		if ( isset( $c['done'] ) ) {
+			$reply['message'] = $c['done'];
+		}
+		return $reply;
+	}
+
 	public static function handle_action( array $res, $slug, WP_REST_Request $r ) {
 		$a   = $res['actions'][ $slug ];
 		$id  = (int) Minn_Admin::path_param( $r );
 		$row = self::load( $res, $id, (string) $a['gate'] );
 		if ( is_wp_error( $row ) ) {
 			return $row;
+		}
+		foreach ( (array) ( $a['args'] ?? array() ) as $name => $schema ) {
+			$required = ! empty( $schema['required'] );
+			unset( $schema['required'] );
+			if ( ! $r->has_param( $name ) ) {
+				if ( $required ) {
+					/* translators: %s: the parameter's name. */
+					return new WP_Error( 'rest_missing_callback_param', sprintf( __( 'Missing parameter: %s', 'minn-admin' ), $name ), array( 'status' => 400, 'params' => array( $name ) ) );
+				}
+				continue;
+			}
+			$valid = rest_validate_value_from_schema( $r->get_param( $name ), $schema, $name );
+			if ( is_wp_error( $valid ) ) {
+				/* translators: %s: the parameter's name. */
+				return new WP_Error( 'rest_invalid_param', sprintf( __( 'Invalid parameter: %s', 'minn-admin' ), $name ), array( 'status' => 400, 'params' => array( $name => $valid->get_error_message() ) ) );
+			}
+			$r->set_param( $name, rest_sanitize_value_from_schema( $r->get_param( $name ), $schema, $name ) );
 		}
 		if ( ! self::holds( $a['when'] ?? null, $row ) ) {
 			return self::fail( (string) ( $a['code'] ?? 'bad_status' ), $a['refuse'] ?? __( 'That cannot be done to this item now.', 'minn-admin' ), 400 );
@@ -1034,7 +1142,7 @@ class Minn_Admin_Kernel {
 			'method' => $method,
 			// A query rides the route itself ("force=1"): some servers drop
 			// the body of a DELETE.
-			'route'  => self::NS . '/' . $id . '/{id}' . ( 'DELETE' === $method ? '' : '/' . $slug ) . ( isset( $ui['query'] ) ? '?' . $ui['query'] : '' ),
+			'route'  => self::action_path( $id, $slug ) . ( isset( $ui['query'] ) ? '?' . $ui['query'] : '' ),
 		);
 		foreach ( array( 'confirm', 'danger', 'body' ) as $k ) {
 			if ( isset( $ui[ $k ] ) ) {
@@ -1046,6 +1154,54 @@ class Minn_Admin_Kernel {
 			$out['when'] = array( 'key' => $ui['key'] ?? $col, 'equals' => $ui['when'] );
 		}
 		return $out;
+	}
+
+	/**
+	 * Whether an action's args are what handle_action() checks: name =>
+	 * schema arrays, no callback of any kind (which WordPress would run before
+	 * the gate), and nothing named id (the URL's own).
+	 */
+	private static function args_ok( $args ) {
+		if ( ! is_array( $args ) ) {
+			return false;
+		}
+		foreach ( $args as $name => $schema ) {
+			if ( ! is_string( $name ) || 'id' === $name || ! is_array( $schema ) ) {
+				return false;
+			}
+			foreach ( array( 'validate_callback', 'sanitize_callback', 'arg_options' ) as $k ) {
+				if ( array_key_exists( $k, $schema ) ) {
+					return false;
+				}
+			}
+		}
+		return true;
+	}
+
+	/** A create's answer as an id: a positive int, or a string of digits; anything else is 0. */
+	private static function created_id( $v ) {
+		if ( is_int( $v ) ) {
+			return max( 0, $v );
+		}
+		return is_string( $v ) && '' !== $v && ctype_digit( $v ) ? (int) $v : 0;
+	}
+
+	/** Whether an action answers on the item route itself: DELETE, PUT, PATCH, or a POST that says 'item'. */
+	private static function on_item( array $a ) {
+		return in_array( strtoupper( (string) ( $a['method'] ?? 'POST' ) ), array( 'DELETE', 'PUT', 'PATCH' ), true ) || ! empty( $a['item'] );
+	}
+
+	/**
+	 * The route a declared action answers on, as a descriptor names it
+	 * ("minn-admin/v1/x/y/{id}/trash", or the item route for one on it).
+	 *
+	 * @param string $id   Resource id.
+	 * @param string $slug Action slug.
+	 * @return string
+	 */
+	public static function action_path( $id, $slug ) {
+		$a = self::def( $id )['actions'][ $slug ] ?? array();
+		return self::NS . '/' . $id . '/{id}' . ( self::on_item( (array) $a ) ? '' : '/' . sanitize_key( (string) $slug ) );
 	}
 
 	/**
@@ -1345,6 +1501,20 @@ class Minn_Admin_Kernel {
 	public static function count( $id, array $where = array() ) {
 		$c = self::card_rows( $id, $where );
 		return $c ? Minn_Admin_Kernel_SQL::count( $c[0], $c[1] ) : 0;
+	}
+
+	/**
+	 * The sum of a column over the rows the caller may see that meet
+	 * conditions (a redirect list's hits, all time).
+	 *
+	 * @param string $id     Resource id.
+	 * @param string $column Column.
+	 * @param array  $where  Conditions.
+	 * @return int
+	 */
+	public static function sum( $id, $column, array $where = array() ) {
+		$c = self::card_rows( $id, $where );
+		return $c ? Minn_Admin_Kernel_SQL::sum( $c[0], $column, $c[1] ) : 0;
 	}
 
 	/**

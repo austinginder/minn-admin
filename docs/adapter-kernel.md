@@ -300,6 +300,15 @@ answer, and a `wp_mail_failed` during the run fails it), a chart split by a rule
 in SQL with its day labels in a date format, the `sql` datetime wire for vendors whose
 rows have always gone out as `Y-m-d H:i:s`, and date bounds held to the chart's own shape.
 
+The redirects port (six adapters) added creates and edits: `create` is a POST on the
+collection route behind its own gate, done only once a new row (on a table, its key above
+every key before) reads back for the caller, and a source that is no table says how it proves
+one; PUT, PATCH and a POST that says `item` answer on the item route, one action per method;
+an action's `args` are JSON-schema checks the kernel runs after the gate and the row. Cards
+gained `sum()` and `counts()`, the SQL layer `insert()` and `update()` (vendor tables only,
+the key never written, every value checked against its column so MySQL never cuts or casts
+it), and the database's own clock (`'stored' => 'db'`, read by the database for each date).
+
 What the kernel does not have yet: the save path for edit forms (changed fields only,
 a base stamp and a 409 on a stale copy), which the entry-edit adapters will need when
 they port (the post type and taxonomy definitions use the same stamp and partial save

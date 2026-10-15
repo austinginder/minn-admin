@@ -516,6 +516,7 @@ class Minn_Admin_Kernel_SQL {
 	 */
 	public static function delete( $table, $key, $ids, array $where = array() ) {
 		global $wpdb;
+		self::writable( $table );
 		$ids = array_values( array_unique( array_map( 'intval', (array) $ids ) ) );
 		if ( ! $ids || min( $ids ) < 1 ) {
 			throw new InvalidArgumentException( 'minn_kernel_delete_ids' );
@@ -553,15 +554,244 @@ class Minn_Admin_Kernel_SQL {
 	 * @return array|null array( 'value' => string, 'count' => int )
 	 */
 	public static function top( $table, $column, array $where ) {
+		$counts = self::counts( $table, $column, $where, 1 );
+		return $counts ? $counts[0] : null;
+	}
+
+	/**
+	 * The most frequent values of a column under conditions with their
+	 * counts, most first, ties broken by the value (a status-code mix).
+	 *
+	 * @param string|array $table  Table spec.
+	 * @param string       $column Column to group by.
+	 * @param array        $where  Conditions.
+	 * @param int          $limit  At most this many (1 to 1,000).
+	 * @return array[] array( 'value' => string, 'count' => int ) each
+	 */
+	public static function counts( $table, $column, array $where, $limit = 10 ) {
 		global $wpdb;
 		if ( ! self::exists( $table ) ) {
-			return null;
+			return array();
 		}
 		list( $sql, $args ) = self::where( $where, 'e' );
 		$col                = self::col( $column );
-		$q                  = "SELECT {$col} AS v, COUNT(*) AS n FROM " . self::from( $table ) . ( $sql ? ' WHERE ' . implode( ' AND ', $sql ) : '' ) . " GROUP BY {$col} ORDER BY n DESC, {$col} ASC LIMIT 1";
-		$row                = $wpdb->get_row( self::prepare( $q, $args ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		return is_array( $row ) ? array( 'value' => (string) $row['v'], 'count' => (int) $row['n'] ) : null;
+		$q                  = "SELECT {$col} AS v, COUNT(*) AS n FROM " . self::from( $table ) . ( $sql ? ' WHERE ' . implode( ' AND ', $sql ) : '' ) . " GROUP BY {$col} ORDER BY n DESC, {$col} ASC LIMIT " . max( 1, min( 1000, (int) $limit ) );
+		$out                = array();
+		foreach ( (array) $wpdb->get_results( self::prepare( $q, $args ), ARRAY_A ) as $row ) { // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			$out[] = array( 'value' => (string) $row['v'], 'count' => (int) $row['n'] );
+		}
+		return $out;
+	}
+
+	/**
+	 * The sum of a column under conditions; 0 for none.
+	 *
+	 * @param string|array $table  Table spec.
+	 * @param string       $column Column.
+	 * @param array        $where  Conditions.
+	 * @return int
+	 */
+	public static function sum( $table, $column, array $where = array() ) {
+		global $wpdb;
+		if ( ! self::exists( $table ) ) {
+			return 0;
+		}
+		list( $sql, $args ) = self::where( $where, 'e' );
+		$q                  = 'SELECT COALESCE(SUM(' . self::col( $column ) . '),0) FROM ' . self::from( $table ) . ( $sql ? ' WHERE ' . implode( ' AND ', $sql ) : '' );
+		return (int) round( (float) $wpdb->get_var( self::prepare( $q, $args ) ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+	}
+
+	/**
+	 * INSERT one row: its columns as declared identifiers, every value a
+	 * placeholder. For a table its vendor gives no writer for.
+	 *
+	 * @param string|array $table  Table spec (joins are not read).
+	 * @param array        $values Column => value (at least one).
+	 * @return int The new row's id, 0 when nothing was written.
+	 */
+	public static function insert( $table, array $values ) {
+		global $wpdb;
+		self::writable( $table );
+		if ( ! $values ) {
+			throw new InvalidArgumentException( 'minn_kernel_insert_without_values' );
+		}
+		list( $cols, $phs, $args ) = self::assign( $values );
+		if ( ! self::exists( $table ) || ! self::fits( $table, $values ) ) {
+			return 0;
+		}
+		$ok = $wpdb->query( self::prepare( 'INSERT INTO ' . self::table( $table ) . ' (' . implode( ', ', $cols ) . ') VALUES (' . implode( ', ', $phs ) . ')', $args ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		return $ok ? (int) $wpdb->insert_id : 0;
+	}
+
+	/**
+	 * UPDATE rows by their key, as delete() names them: only the ids given,
+	 * each above zero, further conditions only narrowing them.
+	 *
+	 * @param string|array $table  Table spec (joins are not read).
+	 * @param string       $key    Key column.
+	 * @param int|int[]    $ids    Ids.
+	 * @param array        $values Column => value (at least one).
+	 * @param array        $where  Further conditions.
+	 * @return int Rows changed.
+	 */
+	public static function update( $table, $key, $ids, array $values, array $where = array() ) {
+		global $wpdb;
+		$ids = array_values( array_unique( array_map( 'intval', (array) $ids ) ) );
+		if ( ! $ids || min( $ids ) < 1 ) {
+			throw new InvalidArgumentException( 'minn_kernel_update_ids' );
+		}
+		self::writable( $table );
+		if ( ! $values ) {
+			throw new InvalidArgumentException( 'minn_kernel_update_without_values' );
+		}
+		// The key names the rows; it is never one of the values written.
+		if ( array_key_exists( $key, $values ) ) {
+			throw new InvalidArgumentException( 'minn_kernel_update_key' );
+		}
+		list( $cols, $phs, $vargs ) = self::assign( $values );
+		if ( ! self::exists( $table ) || ! self::fits( $table, $values ) ) {
+			return 0;
+		}
+		$set                        = array();
+		foreach ( $cols as $i => $c ) {
+			$set[] = "{$c} = {$phs[ $i ]}";
+		}
+		list( $sql, $args ) = self::where( array_merge( $where, array( $key . "\0update" => $ids ) ), '' );
+		return (int) $wpdb->query( self::prepare( 'UPDATE ' . self::table( $table ) . ' SET ' . implode( ', ', $set ) . ' WHERE ' . implode( ' AND ', $sql ), array_merge( $vargs, $args ) ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+	}
+
+	/**
+	 * A table the write primitives may write: a vendor's own, never one of
+	 * WordPress's (options, users, posts …), which have their own APIs, write
+	 * fence and object cache.
+	 */
+	private static function writable( $table ) {
+		global $wpdb;
+		$name = is_array( $table ) && isset( $table['core'] ) ? '' : self::table( $table );
+		if ( '' === $name || in_array( $name, array_values( $wpdb->tables( 'all', true ) ), true ) ) {
+			throw new InvalidArgumentException( 'minn_kernel_core_table' );
+		}
+	}
+
+	/**
+	 * Whether every value fits its column as it is, so MySQL (which WordPress
+	 * runs without strict modes) never cuts, casts or nulls it into something
+	 * else: a known column, NULL only where it may be, a number for a number,
+	 * text within the column's length and charset.
+	 */
+	private static function fits( $table, array $values ) {
+		global $wpdb;
+		static $columns = array();
+		$name = self::table( $table );
+		if ( ! isset( $columns[ $name ] ) ) {
+			$found = array();
+			foreach ( (array) $wpdb->get_results( 'SHOW COLUMNS FROM ' . $name, ARRAY_A ) as $c ) { // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- identifier from table().
+				$found[ strtolower( (string) $c['Field'] ) ] = $c;
+			}
+			if ( ! $found ) {
+				return false; // Not remembered: a table read that failed proves nothing.
+			}
+			$columns[ $name ] = $found;
+		}
+		foreach ( $values as $col => $v ) {
+			$c = $columns[ $name ][ strtolower( (string) $col ) ] ?? null;
+			if ( ! $c ) {
+				return false;
+			}
+			if ( null === $v ) {
+				if ( 'NO' === strtoupper( (string) $c['Null'] ) ) {
+					return false;
+				}
+				continue;
+			}
+			if ( preg_match( '/^(tinyint|smallint|mediumint|int|integer|bigint|decimal|numeric|float|double|real|bit)\b/i', (string) $c['Type'] ) ) {
+				if ( ! is_bool( $v ) && ! is_numeric( $v ) ) {
+					return false;
+				}
+				continue;
+			}
+			$v = (string) $v;
+			if ( $wpdb->strip_invalid_text_for_column( $name, (string) $col, $v ) !== $v ) {
+				return false;
+			}
+			$len = $wpdb->get_col_length( $name, (string) $col );
+			if ( is_array( $len ) && isset( $len['length'] ) && ( 'byte' === ( $len['type'] ?? '' ) ? strlen( $v ) : mb_strlen( $v ) ) > (int) $len['length'] ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/** Columns as identifiers, a placeholder for each value (NULL as itself), and the values. */
+	private static function assign( array $values ) {
+		$cols = array();
+		$phs  = array();
+		$args = array();
+		foreach ( $values as $col => $v ) {
+			if ( ! is_null( $v ) && ! is_scalar( $v ) ) {
+				throw new InvalidArgumentException( 'minn_kernel_value=' . (string) $col );
+			}
+			$cols[] = self::ident( $col );
+			$phs[]  = null === $v ? 'NULL' : self::ph( $v );
+			if ( null !== $v ) {
+				$args[] = $v;
+			}
+		}
+		return array( $cols, $phs, $args );
+	}
+
+	/** Epochs of datetimes on the database's own clock, by value, as the database read them. */
+	private static $epochs = array();
+
+	/**
+	 * Datetimes a vendor wrote with NOW() (the database's own clock, which is
+	 * the server's, not the site's) as the instants they are, read by the
+	 * database itself so its zone's daylight saving holds for each date: one
+	 * query for many values; a value that is no datetime, or a read that
+	 * failed, is null (and a failure is not remembered).
+	 *
+	 * @param string[] $values Stored values.
+	 * @return array Value => epoch or null.
+	 */
+	public static function db_epochs( array $values ) {
+		global $wpdb;
+		$want = array();
+		foreach ( array_unique( array_map( 'strval', $values ) ) as $v ) {
+			if ( ! array_key_exists( $v, self::$epochs ) && self::is_datetime( $v ) ) {
+				$want[] = $v;
+			}
+		}
+		foreach ( array_chunk( $want, 100 ) as $chunk ) {
+			$cols = array();
+			foreach ( array_keys( $chunk ) as $i ) {
+				$cols[] = "UNIX_TIMESTAMP(%s) AS t{$i}";
+			}
+			$row = $wpdb->get_row( $wpdb->prepare( 'SELECT ' . implode( ', ', $cols ), $chunk ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- only placeholders.
+			if ( ! is_array( $row ) ) {
+				continue;
+			}
+			foreach ( $chunk as $i => $v ) {
+				$t                  = $row[ "t{$i}" ] ?? null;
+				self::$epochs[ $v ] = is_numeric( $t ) && (int) $t > 0 ? (int) $t : null;
+			}
+		}
+		$out = array();
+		foreach ( $values as $v ) {
+			$out[ (string) $v ] = self::$epochs[ (string) $v ] ?? null;
+		}
+		return $out;
+	}
+
+	/** One datetime on the database's clock as its epoch, or null (see db_epochs()). */
+	public static function db_epoch( $v ) {
+		$v = (string) $v;
+		return self::db_epochs( array( $v ) )[ $v ];
+	}
+
+	/** Whether a value is exactly a real "Y-m-d H:i:s" from 1970-01-02 on (a never-set column sits before). */
+	private static function is_datetime( $v ) {
+		$d = DateTimeImmutable::createFromFormat( '!Y-m-d H:i:s', (string) $v, new DateTimeZone( 'UTC' ) );
+		return $d && $d->format( 'Y-m-d H:i:s' ) === (string) $v && $d->getTimestamp() >= DAY_IN_SECONDS;
 	}
 
 	/**

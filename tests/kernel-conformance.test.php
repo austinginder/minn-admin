@@ -20,7 +20,9 @@
  *    Then the booking shapes (joins, views with their own order, cards
  *    ahead) and the mail shapes: further reads of an item, NOT any, a
  *    delete that needs a condition, a send's own answer as its proof and a
- *    chart's rule-split and labels.
+ *    chart's rule-split and labels; then the redirect shapes: a create on the
+ *    collection route that reads its row back, edits on the item route,
+ *    card sums and counts, key-bound writes and the database's own clock.
  * 2. Every real declaration: each action has a declared gate and a
  *    post-condition, each descriptor action that points at a kernel route
  *    names a declared action with its method and a state the action accepts,
@@ -1099,6 +1101,223 @@ $rr->set_query_params( array( 'after' => "1' OR 1=1", 'before' => 'yesterday' ) 
 $junk = minn_admin_chart_range_clause( $rr, 'created', 'utc' );
 $check( "a date bound is the chart's own shape or none: words, impossible dates and quotes are never guessed", array( '', '', '', '', '2026-01-02 00:00:00', '2026-01-02 03:04:05', '2026-01-02 03:04:05' ) === $bounds && array() === $junk[0], wp_json_encode( array( $bounds, $junk ) ) );
 
+// --- 1e. Redirect shapes: create, edits on the item route, sums, writes ---
+$rd = $wpdb->prefix . 'minn_conf_redir';
+$wpdb->query( "CREATE TEMPORARY TABLE {$rd} ( id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, owner BIGINT NOT NULL, src VARCHAR(60) NOT NULL, dst VARCHAR(60) NULL, status VARCHAR(20) NOT NULL, hits INT NOT NULL ) ENGINE=InnoDB" ); // phpcs:ignore
+foreach ( array( array( 10, '/a', '/x', '301', 5 ), array( 10, '/b', '/y', '302', 7 ), array( 10, '/c', '/z', '301', 0 ), array( 20, '/d', '/w', '301', 100 ) ) as $r ) {
+	$wpdb->insert( $rd, array( 'owner' => $r[0], 'src' => $r[1], 'dst' => $r[2], 'status' => $r[3], 'hits' => $r[4] ) );
+}
+$rd_ids     = array_map( 'intval', $wpdb->get_col( "SELECT id FROM {$rd} ORDER BY id" ) ); // phpcs:ignore
+$rd_manage  = true;
+$rd_answer  = null;
+$rd_writes  = array();
+$rd_kernel  = method_exists( 'Minn_Admin_Kernel', 'handle_create' );
+$rd_write   = function ( $what, ...$args ) {
+	try {
+		return call_user_func_array( array( 'Minn_Admin_Kernel_SQL', $what ), $args );
+	} catch ( \Throwable $e ) {
+		return 'threw';
+	}
+};
+Minn_Admin_Kernel::resource( 'minn-conformance/redir', array(
+	'gates'   => array(
+		'view'   => '__return_true',
+		'manage' => function () use ( &$rd_manage ) {
+			return $rd_manage;
+		},
+	),
+	'source'  => array( 'table' => 'minn_conf_redir', 'key' => 'id', 'columns' => array( 'id', 'src', 'dst', 'status', 'hits' ), 'where' => array( 'owner' => 10 ) ),
+	'list'    => array( 'order' => array( 'column' => 'id' ), 'fields' => array( 'id' => 'int', 'src' => 'text' ) ),
+	'create'  => array(
+		'gate'  => 'manage',
+		'run'   => function ( WP_REST_Request $r ) use ( &$rd_answer, $rd_write ) {
+			if ( null !== $rd_answer ) {
+				return $rd_answer;
+			}
+			if ( '' === (string) $r['src'] ) {
+				return new WP_Error( 'invalid', 'Source needed.', array( 'status' => 400 ) );
+			}
+			return $rd_write( 'insert', 'minn_conf_redir', array( 'owner' => 10, 'src' => (string) $r['src'], 'dst' => (string) $r['dst'], 'status' => '301', 'hits' => 0 ) );
+		},
+		'reply' => function ( $id, $fresh ) {
+			return array( 'src' => $fresh['src'] );
+		},
+	),
+	'actions' => array(
+		'edit'  => array(
+			'method' => 'PUT',
+			'gate'   => 'manage',
+			'run'    => function ( $id, array $row, WP_REST_Request $r ) use ( $rd_write, &$rd_writes ) {
+				$dst         = (string) $r['dst'];
+				$rd_writes[] = "edit:{$id}";
+				// A vendor whose save rewrites the value the form sent ("!" drops).
+				$rd_write( 'update', 'minn_conf_redir', 'id', $id, array( 'dst' => str_replace( '!', '', $dst ) ), array( 'owner' => 10 ) );
+				return $dst;
+			},
+			'expect' => function ( $id, $fresh, $dst ) {
+				return is_array( $fresh ) && $dst === $fresh['dst'];
+			},
+		),
+		'touch' => array(
+			'item'   => true,
+			'gate'   => 'manage',
+			'run'    => function ( $id ) use ( &$rd_writes ) {
+				$rd_writes[] = "touch:{$id}";
+				return true;
+			},
+			'expect' => function () {
+				return true;
+			},
+		),
+		'flag'  => array( 'gate' => 'manage', 'run' => function ( $id, $row, WP_REST_Request $r ) use ( &$rd_writes ) {
+			$rd_writes[] = 'flag:' . gettype( $r['level'] ) . ':' . wp_json_encode( $r['level'] );
+			return true;
+		}, 'args' => array( 'level' => array( 'required' => true, 'type' => 'integer' ) ), 'expect' => function () {
+			return true;
+		} ),
+	),
+) );
+// Shapes the kernel refuses: a create it cannot prove or scope, actions it
+// cannot route once, args WordPress would run before the gate.
+Minn_Admin_Kernel::resource( 'minn-conformance/redir-scoped', array(
+	'gates'  => array( 'view' => '__return_true' ),
+	'source' => array( 'table' => 'minn_conf_redir', 'key' => 'id', 'columns' => array( 'id', 'owner' ) ),
+	'list'   => array( 'scope' => array( 'column' => 'owner', 'allowed' => function () {
+		return array( 20 );
+	} ), 'fields' => array( 'id' => 'int' ) ),
+	'create' => array( 'gate' => 'view', 'run' => '__return_true' ),
+) );
+Minn_Admin_Kernel::resource( 'minn-conformance/redir-rows', array(
+	'gates'  => array( 'view' => '__return_true' ),
+	'source' => array( 'rows' => '__return_empty_array', 'get' => '__return_null' ),
+	'list'   => array( 'fields' => array( 'id' => 'int' ) ),
+	'create' => array( 'gate' => 'view', 'run' => '__return_true' ),
+) );
+$rd_odd = array();
+$rd_yes = function () {
+	return true;
+};
+Minn_Admin_Kernel::resource( 'minn-conformance/redir-odd', array(
+	'gates'   => array( 'view' => '__return_true' ),
+	'source'  => array( 'table' => 'minn_conf_redir', 'key' => 'id', 'columns' => array( 'id' ) ),
+	'actions' => array(
+		'first'  => array( 'item' => true, 'gate' => 'view', 'run' => function () use ( &$rd_odd ) {
+			$rd_odd[] = 'first';
+			return true;
+		}, 'expect' => $rd_yes ),
+		'second' => array( 'item' => true, 'gate' => 'view', 'run' => function () use ( &$rd_odd ) {
+			$rd_odd[] = 'second';
+			return true;
+		}, 'expect' => $rd_yes ),
+		'peek'   => array( 'item' => true, 'method' => 'GET', 'gate' => 'view', 'run' => '__return_true', 'expect' => $rd_yes ),
+		'both'   => array( 'method' => 'DELETE,GET', 'gate' => 'view', 'run' => '__return_true', 'expect' => $rd_yes ),
+		'Bad Slug' => array( 'gate' => 'view', 'run' => '__return_true', 'expect' => $rd_yes ),
+		'early'  => array( 'gate' => 'view', 'run' => '__return_true', 'expect' => $rd_yes, 'args' => array( 'x' => array( 'type' => 'string', 'validate_callback' => '__return_true' ) ) ),
+		'flat'   => array( 'gate' => 'view', 'run' => '__return_true', 'expect' => $rd_yes, 'args' => 'x' ),
+		'idarg'  => array( 'gate' => 'view', 'run' => '__return_true', 'expect' => $rd_yes, 'args' => array( 'id' => array( 'type' => 'integer' ) ) ),
+	),
+) );
+Minn_Admin_Kernel::resource( 'minn-conformance/redir-nogate', array(
+	'gates'  => array( 'view' => '__return_true' ),
+	'source' => array( 'table' => 'minn_conf_redir', 'key' => 'id', 'columns' => array( 'id' ) ),
+	'list'   => array( 'fields' => array( 'id' => 'int' ) ),
+	'create' => array( 'gate' => 'undeclared', 'run' => '__return_true' ),
+) );
+$rd_base = '/minn-admin/v1/minn-conformance/redir';
+list( $st, $d ) = $call( 'POST', $rd_base, array(), array( 'src' => '/new', 'dst' => '/there' ) );
+$made           = (int) ( $d['id'] ?? 0 );
+$check( 'a create answers on the collection route, the new row read back, its reply over { ok, id }', 200 === $st && true === ( $d['ok'] ?? null ) && $made > 0 && '/new' === ( $d['src'] ?? '' ) && 1 === (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$rd} WHERE id = %d AND src = '/new'", $made ) ), $st . ' ' . wp_json_encode( $d ) ); // phpcs:ignore
+$rd_manage   = false;
+list( $st )  = $call( 'POST', $rd_base, array(), array( 'src' => '/refused' ) );
+$rd_manage   = true;
+list( $st2 ) = $call( 'POST', '/minn-admin/v1/minn-conformance/redir-nogate', array(), array() );
+$check( 'a create answers to its gate, and one naming no declared gate has no route', 403 === $st && 404 === $st2 && 0 === (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$rd} WHERE src = '/refused'" ), $st . ' ' . $st2 ); // phpcs:ignore
+$rd_fail = array();
+foreach ( array( 0, 'abc', $rd_ids[3], 999999, true, 1.0, '1abc', ' 1', array( 'id' => true ), new WP_REST_Response( array( 'id' => $rd_ids[0] ) ), $rd_ids[0], new WP_Error( 'nope', 'No.', array( 'status' => 409 ) ) ) as $answer ) {
+	$rd_answer      = $answer;
+	list( $st, $d ) = $call( 'POST', $rd_base, array(), array( 'src' => '/x' ) );
+	$rd_fail[]      = $st . ':' . ( $d['code'] ?? '' );
+}
+$rd_answer = null;
+$check( "a create is done only when a new row reads back: no odd answer becomes an id, an old row proves nothing, its own error passes as it is", array_merge( array_fill( 0, 11, '500:not_applied' ), array( '409:nope' ) ) === $rd_fail, wp_json_encode( $rd_fail ) );
+list( $st )  = $call( 'POST', '/minn-admin/v1/minn-conformance/redir-scoped', array(), array() );
+list( $st2 ) = $call( 'POST', '/minn-admin/v1/minn-conformance/redir-rows', array(), array() );
+$check( 'a create has no route beside a scope it cannot ask before its row exists, nor over a source that is no table without its own proof', 404 === $st && 404 === $st2, $st . ' ' . $st2 );
+list( $st, $d ) = $call( 'POST', $rd_base, array(), array( 'src' => str_repeat( 'x', 61 ) ) );
+$check( 'a value longer than its column is no create, and no cut row is left', 500 === $st && 0 === (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$rd} WHERE src LIKE 'xxxxxxxxxx%'" ), $st . ' ' . wp_json_encode( $d ) ); // phpcs:ignore
+list( $st )  = $call( 'POST', $rd_base, array(), array( 'src' => '' ) );
+$check( "a create's own refusal answers with its status", 400 === $st, (string) $st );
+$rd_writes      = array();
+list( $st, $d ) = $call( 'PUT', $rd_base . '/' . $rd_ids[0], array(), array( 'dst' => '/moved' ) );
+list( $st2 )    = $call( 'POST', $rd_base . '/' . $rd_ids[0], array(), array() );
+list( $st3 )    = $call( 'POST', $rd_base . '/' . $rd_ids[0] . '/flag', array(), array( 'level' => 2 ) );
+$check( 'PUT and a POST that says item answer on the item route, each its own action; a plain POST keeps its path', 200 === $st && 200 === $st2 && 200 === $st3 && array( "edit:{$rd_ids[0]}", "touch:{$rd_ids[0]}", 'flag:integer:2' ) === $rd_writes && '/moved' === $wpdb->get_var( $wpdb->prepare( "SELECT dst FROM {$rd} WHERE id = %d", $rd_ids[0] ) ), $st . ' ' . $st2 . ' ' . $st3 . ' ' . wp_json_encode( $rd_writes ) ); // phpcs:ignore
+list( $st, $d ) = $call( 'PUT', $rd_base . '/' . $rd_ids[0], array(), array( 'dst' => '/moved!' ) );
+list( $st4 )    = $call( 'PUT', $rd_base . '/' . $rd_ids[3], array(), array( 'dst' => '/nope' ) );
+$check( "an edit whose stored row does not read as sent is no success; another owner's row is not found", 500 === $st && 'not_applied' === ( $d['code'] ?? '' ) && 404 === $st4 && '/w' === $wpdb->get_var( $wpdb->prepare( "SELECT dst FROM {$rd} WHERE id = %d", $rd_ids[3] ) ), $st . ' ' . $st4 ); // phpcs:ignore
+list( $st, $d )   = $call( 'POST', $rd_base . '/' . $rd_ids[0] . '/flag', array(), array() );
+list( $st2, $d2 ) = $call( 'POST', $rd_base . '/' . $rd_ids[0] . '/flag', array(), array( 'level' => 'many' ) );
+$rd_manage        = false;
+list( $st3 )      = $call( 'POST', $rd_base . '/' . $rd_ids[0] . '/flag', array(), array() );
+$rd_manage        = true;
+$rd_writes        = array();
+$call( 'POST', $rd_base . '/' . $rd_ids[0] . '/flag', array(), array( 'level' => '3' ) );
+$check( "an action's arguments are checked after its gate, missing and invalid apart, and reach it as their type", 400 === $st && 'rest_missing_callback_param' === ( $d['code'] ?? '' ) && 400 === $st2 && 'rest_invalid_param' === ( $d2['code'] ?? '' ) && 403 === $st3 && array( 'flag:integer:3' ) === $rd_writes, $st . ' ' . $st2 . ' ' . $st3 . ' ' . wp_json_encode( $rd_writes ) );
+$odd_base = '/minn-admin/v1/minn-conformance/redir-odd/' . $rd_ids[0];
+list( $st )  = $call( 'POST', $odd_base );
+list( $st2 ) = $call( 'GET', $odd_base );
+list( $st3 ) = $call( 'GET', $odd_base . '/both' );
+list( $st4 ) = $call( 'POST', $odd_base . '/early', array(), array( 'x' => 'y' ) );
+list( $st5 ) = $call( 'POST', $odd_base . '/flat' );
+list( $st6 ) = $call( 'POST', $odd_base . '/idarg' );
+$check( 'one action per method on a route, never a GET, a slug as written, args without callbacks or an id: anything else has no route', 200 === $st && array( 'first' ) === $rd_odd && 404 === $st2 && 404 === $st3 && 404 === $st4 && 404 === $st5 && 404 === $st6, implode( ' ', array( $st, $st2, $st3, $st4, $st5, $st6 ) ) . ' ' . wp_json_encode( $rd_odd ) );
+$paths = $rd_kernel ? array( Minn_Admin_Kernel::action_path( 'minn-conformance/redir', 'edit' ), Minn_Admin_Kernel::action_path( 'minn-conformance/redir', 'touch' ), Minn_Admin_Kernel::action_path( 'minn-conformance/redir', 'flag' ) ) : array();
+$check( "a descriptor's route for an action is where it answers", array( 'minn-admin/v1/minn-conformance/redir/{id}', 'minn-admin/v1/minn-conformance/redir/{id}', 'minn-admin/v1/minn-conformance/redir/{id}/flag' ) === $paths && ( $rd_kernel && 'minn-admin/v1/minn-conformance/redir/{id}' === Minn_Admin_Kernel::ui( 'minn-conformance/redir', 'edit', array() )['route'] ), wp_json_encode( $paths ) );
+$sum = $rd_kernel ? Minn_Admin_Kernel::sum( 'minn-conformance/redir', 'hits' ) : -1;
+$check( "a card's sum counts only the rows the caller may see", 12 === $sum && 112 === $rd_write( 'sum', 'minn_conf_redir', 'hits' ) && 0 === $rd_write( 'sum', 'minn_conf_no_table', 'hits' ), $sum . ' ' . wp_json_encode( $rd_write( 'sum', 'minn_conf_redir', 'hits' ) ) );
+$counts = $rd_write( 'counts', 'minn_conf_redir', 'status', array( 'owner' => 10 ), 5 );
+$check( "counts are a column's values most first, ties by value; top is the first of them", is_array( $counts ) && array( '301', '302' ) === array_column( $counts, 'value' ) && array( 3, 1 ) === array_column( $counts, 'count' ) && Minn_Admin_Kernel_SQL::top( 'minn_conf_redir', 'status', array( 'owner' => 10 ) ) === $counts[0], wp_json_encode( $counts ) );
+$before = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$rd}" ); // phpcs:ignore
+$bad    = array(
+	$rd_write( 'update', 'minn_conf_redir', 'id', array(), array( 'dst' => '/all' ) ),
+	$rd_write( 'update', 'minn_conf_redir', 'id', 0, array( 'dst' => '/all' ) ),
+	$rd_write( 'update', 'minn_conf_redir', 'id', array( $rd_ids[1], -1 ), array( 'dst' => '/all' ) ),
+	$rd_write( 'update', 'minn_conf_redir', 'id', $rd_ids[1], array() ),
+	$rd_write( 'update', 'minn_conf_redir', 'id', $rd_ids[1], array( 'dst' => array( 'x' ) ) ),
+	$rd_write( 'insert', 'minn_conf_redir', array() ),
+	$rd_write( 'insert', 'minn_conf_redir', array( 'owner' => 10, 'src' => new stdClass(), 'status' => '301', 'hits' => 0 ) ),
+);
+$check( 'an update names its rows by key, each above zero, and a write needs scalar values; anything else is refused', method_exists( 'Minn_Admin_Kernel_SQL', 'update' ) && array_fill( 0, 7, 'threw' ) === $bad && $before === (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$rd}" ) && 0 === (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$rd} WHERE dst = '/all'" ), wp_json_encode( $bad ) ); // phpcs:ignore
+$n = $rd_write( 'update', 'minn_conf_redir', 'id', array( $rd_ids[1], $rd_ids[3] ), array( 'dst' => null ), array( 'owner' => 10 ) );
+$core = array(
+	$rd_write( 'insert', array( 'core' => 'options' ), array( 'option_name' => 'minn_conf_x', 'option_value' => 'x' ) ),
+	$rd_write( 'insert', 'options', array( 'option_name' => 'minn_conf_x', 'option_value' => 'x' ) ),
+	$rd_write( 'update', 'options', 'option_id', 999999999, array( 'option_value' => 'x' ) ),
+	$rd_write( 'delete', 'usermeta', 'umeta_id', 999999999 ),
+	$rd_write( 'update', 'minn_conf_redir', 'id', $rd_ids[2], array( 'id' => 999 ) ),
+);
+$check( "the write primitives never touch WordPress's own tables, nor write the key that names their rows", array_fill( 0, 5, 'threw' ) === $core && null === get_option( 'minn_conf_x', null ), wp_json_encode( $core ) );
+// A kernel without the refusal would have written it: never leave it behind.
+$wpdb->delete( $wpdb->options, array( 'option_name' => 'minn_conf_x' ) );
+wp_cache_delete( 'minn_conf_x', 'options' );
+wp_cache_delete( 'alloptions', 'options' );
+$fit = array(
+	$rd_write( 'update', 'minn_conf_redir', 'id', $rd_ids[2], array( 'src' => null ) ),
+	$rd_write( 'update', 'minn_conf_redir', 'id', $rd_ids[2], array( 'hits' => 'abc' ) ),
+	$rd_write( 'update', 'minn_conf_redir', 'id', $rd_ids[2], array( 'nope' => 'x' ) ),
+	$rd_write( 'insert', 'minn_conf_redir', array( 'owner' => 10, 'src' => str_repeat( 'y', 61 ), 'status' => '301', 'hits' => 0 ) ),
+);
+$c_row = $wpdb->get_row( $wpdb->prepare( "SELECT src, hits FROM {$rd} WHERE id = %d", $rd_ids[2] ), ARRAY_A ); // phpcs:ignore
+$check( 'a value that does not fit its column as it is (NULL in NOT NULL, text in a number, an unknown column, too long) writes nothing', array( 0, 0, 0, 0 ) === $fit && '/c' === $c_row['src'] && '0' === (string) $c_row['hits'], wp_json_encode( array( $fit, $c_row ) ) );
+$check( "an update's further conditions only narrow it, and NULL writes NULL", 1 === $n && null === $wpdb->get_var( $wpdb->prepare( "SELECT dst FROM {$rd} WHERE id = %d", $rd_ids[1] ) ) && '/w' === $wpdb->get_var( $wpdb->prepare( "SELECT dst FROM {$rd} WHERE id = %d", $rd_ids[3] ) ), wp_json_encode( $n ) ); // phpcs:ignore
+$check( 'an insert into a table that is not there writes nothing', 0 === $rd_write( 'insert', 'minn_conf_no_table', array( 'x' => 1 ) ) );
+$db_now = $wpdb->get_var( 'SELECT NOW()' );
+$db_iso = Minn_Admin_Kernel_Fields::datetime( $db_now, 'db', 'iso-utc' );
+$winter = '2026-01-15 12:00:00';
+$w_iso  = Minn_Admin_Kernel_Fields::datetime( $winter, 'db', 'iso-utc' );
+$w_want = gmdate( 'c', (int) $wpdb->get_var( $wpdb->prepare( 'SELECT UNIX_TIMESTAMP(%s)', $winter ) ) );
+$check( "a datetime on the database's own clock reads as the instant the database reads, on that date's offset; a never-set one, or none at all, as none", '' !== $db_iso && abs( strtotime( $db_iso ) - time() ) <= 120 && $w_want === $w_iso && '' === Minn_Admin_Kernel_Fields::datetime( '1970-01-01 00:00:00', 'db', 'iso-utc' ) && '' === Minn_Admin_Kernel_Fields::datetime( 'now', 'db', 'iso-utc' ) && '' === Minn_Admin_Kernel_Fields::datetime( '2026-02-30 00:00:00', 'db', 'iso-utc' ), $db_now . ' → ' . $db_iso . '; ' . $winter . ' → ' . $w_iso . ' want ' . $w_want );
+
 // --- 2. Every real declaration ----------------------------------------------
 $real = array_filter( Minn_Admin_Kernel::resources(), function ( $r ) {
 	return 0 !== strpos( $r['id'], 'minn-conformance/' );
@@ -1120,7 +1339,13 @@ $kernel_actions = array();
 foreach ( $real as $id => $res ) {
 	foreach ( (array) ( $res['actions'] ?? array() ) as $slug => $a ) {
 		$m = strtoupper( (string) ( $a['method'] ?? 'POST' ) );
-		$kernel_actions[ $m . ' minn-admin/v1/' . $id . '/{id}' . ( 'DELETE' === $m ? '' : '/' . $slug ) ] = $a;
+		$key = $m . ' ' . ( method_exists( 'Minn_Admin_Kernel', 'action_path' ) ? Minn_Admin_Kernel::action_path( $id, $slug ) : 'minn-admin/v1/' . $id . '/{id}' . ( 'DELETE' === $m ? '' : '/' . $slug ) );
+		$check( "{$id} {$slug}: the only {$m} action on its route", ! isset( $kernel_actions[ $key ] ), $key );
+		$kernel_actions[ $key ] = $a;
+	}
+	if ( ! empty( $res['create'] ) ) {
+		$c = (string) ( $res['create']['gate'] ?? '' );
+		$check( "{$id} create: names a declared gate", '' !== $c && is_callable( $res['gates'][ $c ] ?? null ), $c );
 	}
 }
 // Kernel endpoints a descriptor may also point at (a body-driven action).

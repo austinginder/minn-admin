@@ -10,7 +10,8 @@
  *                            stores entities ("Smith &amp; Sons"), so the
  *                            client, which escapes what it prints, gets text
  *   'enum'                   a string from 'values', or '' for anything else
- *   'datetime'               'stored' => utc | site | epoch | local-epoch, and
+ *   'datetime'               'stored' => utc | site | db (the database's own
+ *                            clock, NOW()) | epoch | local-epoch, and
  *                            'wire' => naked ("Y-m-d\TH:i:s" on the stored clock
  *                            for a datetime column, which the descriptor marks
  *                            utc or not; on the site's clock for an epoch),
@@ -106,7 +107,7 @@ class Minn_Admin_Kernel_Fields {
 	 * A stored date on the wire.
 	 *
 	 * @param mixed  $v      Stored value.
-	 * @param string $stored utc | site | epoch | local-epoch.
+	 * @param string $stored utc | site | db | epoch | local-epoch.
 	 * @param string $wire   naked | sql | iso | iso-utc | z.
 	 * @return string '' when there is no date.
 	 */
@@ -114,6 +115,17 @@ class Minn_Admin_Kernel_Fields {
 		$v = is_scalar( $v ) ? trim( (string) $v ) : '';
 		if ( '' === $v || ( 'z' === $wire && 0 === strpos( $v, '0000-00-00' ) ) ) {
 			return '';
+		}
+		// The database's own clock (a column written with NOW()): the instant
+		// the database reads it as, in its zone on that date; none for a value
+		// that is no datetime, or before 1970-01-02, where a never-set column sits.
+		if ( 'db' === $stored ) {
+			$ts = Minn_Admin_Kernel_SQL::db_epoch( $v );
+			if ( null === $ts ) {
+				return '';
+			}
+			$v      = gmdate( 'Y-m-d H:i:s', $ts );
+			$stored = 'utc';
 		}
 		if ( 'sql' === $wire ) {
 			return str_replace( 'T', ' ', self::datetime( $v, $stored, 'naked' ) );
