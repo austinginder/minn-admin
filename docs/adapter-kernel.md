@@ -47,28 +47,61 @@ tests. The kernel removes the code the classes live in.
 
 ## The shape
 
-An adapter declares a resource. Minn generates its routes, its descriptor and
-its conformance checks.
+An adapter declares a resource. Minn generates its routes, the plumbing half of
+its descriptor and its conformance checks. A cut-down copy of
+`includes/adapters/everest-forms.php` (`class-minn-admin-kernel.php` opens with every
+key):
 
 ```php
-minn_admin_resource( 'everest/entries', array(
-	'source'  => array( 'table' => 'evf_entries', 'key' => 'entry_id' ),
-	'gate'    => array( 'read' => 'minn_admin_everest_can', 'write' => array( 'minn_admin_everest_can', 'manage' ) ),
-	'scope'   => 'minn_admin_everest_allowed_form_ids', // the vendor's own row rule
-	'fields'  => array(
-		'form_id'      => array( 'type' => 'ref', 'options' => 'minn_admin_everest_titles' ),
-		'status'       => array( 'type' => 'enum', 'labels' => array( 'publish' => __( 'Received' ), 'spam' => __( 'Spam' ), 'trash' => __( 'Trash' ) ) ),
-		'date_created' => array( 'type' => 'datetime', 'stored' => 'utc', 'sort' => 'default' ),
-		'answers'      => array( 'type' => 'fields', 'load' => 'minn_admin_everest_answers', 'detail' => true ),
-	),
-	'views'   => array( 'status' => array( 'publish', 'spam', 'trash' ) ),
-	'search'  => array( 'answers' ),
-	'actions' => array(
-		'spam'   => array( 'when' => array( 'status' => 'publish' ), 'run' => fn( $id ) => minn_admin_everest_set_status( $id, 'spam' ) ),
-		'delete' => array( 'when' => array( 'status' => 'trash' ), 'confirm' => true, 'run' => 'minn_admin_everest_delete' ),
-	),
-) );
+minn_admin_resource( 'everest/entries', function () {
+	return array(
+		'active'    => 'minn_admin_everest_active',
+		'gates'     => array(
+			'view'   => 'minn_admin_everest_can',
+			'delete' => function () {
+				return minn_admin_everest_can( 'delete' );
+			},
+		),
+		'item_gate' => 'minn_admin_everest_can_entry', // the vendor's own row rule
+		'source'    => array(
+			'table'   => 'evf_entries',
+			'key'     => 'entry_id',
+			'columns' => array( 'entry_id', 'form_id', 'status', 'date_created' ),
+		),
+		'list'      => array(
+			'filter' => array( 'param' => 'status', 'column' => 'status', 'values' => array( 'publish', 'spam', 'trash' ), 'default' => 'publish' ),
+			'scope'  => array( 'column' => 'form_id', 'allowed' => 'minn_admin_everest_allowed_form_ids' ),
+			'range'  => array( 'column' => 'date_created', 'clock' => 'utc' ),
+			'order'  => array( 'column' => 'entry_id', 'dir' => 'DESC' ),
+			'row'    => 'minn_admin_everest_row',
+			'fields' => array(
+				'id'         => 'int',
+				'summary'    => 'text',
+				'form_title' => 'text',
+				'status'     => 'text',
+				'date'       => array( 'type' => 'datetime', 'stored' => 'utc', 'wire' => 'naked' ),
+			),
+		),
+		'item'      => array( 'view' => 'minn_admin_everest_view' ),
+		'actions'   => array(
+			'spam' => array(
+				'gate'   => 'delete',
+				'when'   => array( 'status' => array( 'publish' ) ),
+				'run'    => function ( $id, $row ) {
+					return minn_admin_everest_set_status( $id, 'spam', (int) $row['form_id'] );
+				},
+				'expect' => array( 'status' => 'spam' ),
+				'done'   => __( 'Entry marked as spam.', 'minn-admin' ),
+			),
+		),
+	);
+} );
 ```
+
+That is a list at `GET minn-admin/v1/everest/entries` (filtered, scoped to the caller's
+forms, paged, with a day range), an item at `/<id>`, and `POST /<id>/spam`, which answers
+not found, forbidden and wrong state in that order and reports success only once the row
+reads back as spam. Columns, labels and confirms stay in the adapter's descriptor.
 
 ### Three tiers: nothing is dropped
 
@@ -119,19 +152,28 @@ In order of preference:
   sizes are capped; every sort breaks ties by id.
 - **Output.** Only declared fields leave the server. A `secret` field is never
   serialized, and value redaction runs on every response.
-- **Writes, through one path.** The save primitive chosen on 2026-10-11, made
-  generic: only changed fields are sent, the base stamp is checked and a stale
-  copy answers 409, the vendor's own save function and capability are used
-  where they exist, and the write fence sits underneath. Batches report every
-  refused item. Every write stays; none becomes a link out.
-- **Field types.** Each type knows how its value is stored and turns it into
-  one shape for the client:
-  - `datetime` with its stored zone (`site`, `utc`, `epoch`, `epoch_site`,
-    `db`), always sent as ISO-8601 with an offset;
-  - `text` with its stored encoding (`plain`, `entities`, `kses`, `json`,
-    `serialized`), always sent as plain text for the client to escape;
-  - `enum` with the vendor's labels, the raw value kept for gates;
-  - `ref`, `bool`, `int`, `money`, `bytes`, `fields` and `secret`.
+- **Writes, through one path.** Every action and create declares what must
+  hold after it runs, and a write whose effect is not there answers 500, never
+  success. The vendor's own save function and capability are used where they
+  exist; where a vendor gives no writer, `Minn_Admin_Kernel_SQL::insert()`,
+  `update()` and `delete()` write vendor tables only, by key, every value held
+  to its column. The write fence sits underneath. Every write stays; none
+  becomes a link out. Still planned: the save path for edit forms (changed
+  fields only, a base stamp, a stale copy answering 409).
+- **Field types** (`class-minn-admin-kernel-fields.php`). Each type turns a
+  stored value into one shape for the client:
+  - `int`, `float` and `bool`, cast;
+  - `text`, a string, with `'decode' => true` for a vendor that stores
+    entities, so the client (which escapes what it prints) gets text;
+  - `enum`, one of its `values`, or empty for anything else;
+  - `datetime`, with the clock it is stored on (`'stored' => utc | site | db |
+    epoch | local-epoch`) and the shape it leaves in (`'wire' => naked | sql |
+    iso | iso-utc | z`);
+  - `raw`, as built (nested sections, an edit block), and `secret`, never sent.
+
+  A field of any other type never leaves, and a declaration naming one
+  registers nothing. Planned and not built: references, money and byte
+  sizes, and stored encodings beyond entities.
 - **The descriptor.** Columns come from fields, tabs from views, and row and
   detail actions from one list. An adapter overrides only what is unusual.
 
@@ -198,7 +240,8 @@ rises.
 6. **Leftovers from the v0.45 hardening:** the screens that still send whole
    records (post type and taxonomy definitions, site appearance, role
    defaults, the global-styles Undo), and the multisite subsite Users list.
-7. **Keep the kernel API internal** until a second family ports cleanly.
+7. **Keep the kernel API internal.** Only Minn's own adapters declare through
+   it; whether it becomes public is a v0.47 decision.
 
 Out of scope for v0.46: the licence manager, the editor field
 panels (ACF, ACPT, Meta Box), the settings mappers, network and WooCommerce
@@ -268,7 +311,19 @@ Declare with a function (`minn_admin_resource( 'x/y', function () { return array
 when the declaration carries labels or messages: the kernel builds it on first use,
 after Minn's translations load at `init` in the reader's language. A callable source
 that proves deletion (`'expect' => 'gone'`) declares `exists`, asked of the store
-directly, since its own read may hide a row from the caller.
+directly, since its own read may hide a row from the caller; a table proves it with a
+count that a failed read cannot answer.
+
+A declaration the kernel cannot read whole registers nothing, and a notice says why:
+a key its place does not take (a misspelt `when` would otherwise let an action run in
+any state), a field type it cannot encode, a scope without its column and function,
+an arg schema without a type, an endpoint gate that takes anything but the request
+(a capability check whose user id defaults would be handed the request and read user
+1), a resource id or a method on a route declared twice. A declaration whose function
+throws has no routes and stops nothing else. A filter whose values come out empty
+loses only its list route; the item and actions keep the list's scope.
+`Minn_Admin_Kernel::refused()` lists what was refused in the request, and the
+conformance runner fails when it names a real declaration.
 
 The activity-log port (nine adapters) added what the forms ports had worked around:
 a table the network shares (`'network' => true`), a fixed condition every read meets,
@@ -307,7 +362,10 @@ one; PUT, PATCH and a POST that says `item` answer on the item route, one action
 an action's `args` are JSON-schema checks the kernel runs after the gate and the row. Cards
 gained `sum()` and `counts()`, the SQL layer `insert()` and `update()` (vendor tables only,
 the key never written, every value checked against its column so MySQL never cuts or casts
-it), and the database's own clock (`'stored' => 'db'`, read by the database for each date).
+it), and the database's own clock (`'stored' => 'db'`, read by the database for each date),
+which a list's day range, a chart's days, grouped totals and a card's windows take too
+(`'clock' => 'db'`): a column written with `NOW()` or `CURRENT_TIMESTAMP` is on it, and a
+server left on its system zone keeps local time there.
 
 The search and reviews port added a sort a person picks: a list declares `sort` with the
 columns a column header may order by (a public name may map to a column or to a joined
@@ -350,9 +408,10 @@ fixed baseline every change is measured against
 
 - **Next:** redirects, snippets, gift cards, dev tools and backups, after forms,
   activity logs, bookings and mail; then the earlier families' kits.
-  In v0.47, publish the kernel API for third-party authors. A kernel-only
-  adapter shows as such on the Integrations card, and one with its own routes
-  is flagged, which is what the site-owner extension policy acts on.
+  v0.47 decides whether to publish the kernel API for third-party authors. If
+  it does, a kernel-only adapter shows as such on the Integrations card, and
+  one with its own routes is flagged, which is what the site-owner extension
+  policy acts on.
 - **Batteries.** A Minn-native forms, redirects or snippets feature is just a
   resource over Minn's own table, so the kernel makes the 2026-09-04 audit's
   "batteries included" idea cheap. Whether Minn should ship its own instead of
