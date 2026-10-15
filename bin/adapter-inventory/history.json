@@ -457,5 +457,32 @@
   "collection_lines": 46754,
   "collection_code_lines": 35798,
   "collection_routes": 197
+ },
+ {
+  "at": "2026-10-15T07:39:45.936Z",
+  "ref": "working tree",
+  "commit": "86a1b2dd",
+  "version": "0.45.0",
+  "label": "gift cards on the kernel",
+  "adapters": 145,
+  "lines": 82602,
+  "code_lines": 61860,
+  "routes": 259,
+  "permission_callbacks": 321,
+  "cap_checks": 432,
+  "sql_reads": 162,
+  "sql_writes": 33,
+  "routes_declarable": 145,
+  "routes_handler": 111,
+  "resources": 45,
+  "endpoints": 101,
+  "kernel_adapters": 46,
+  "partial_adapters": 0,
+  "kernel_core_lines": 2855,
+  "kernel_code_lines": 1832,
+  "collection_adapters": 69,
+  "collection_lines": 44462,
+  "collection_code_lines": 34121,
+  "collection_routes": 175
  }
 ]
