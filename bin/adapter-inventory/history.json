@@ -673,5 +673,32 @@
   "collection_lines": 44466,
   "collection_code_lines": 34065,
   "collection_routes": 69
+ },
+ {
+  "at": "2026-10-15T15:22:45.438Z",
+  "ref": "working tree",
+  "commit": "a57ec032",
+  "version": "0.45.0",
+  "label": "search, automation, reviews and media extras on the kernel",
+  "adapters": 146,
+  "lines": 82704,
+  "code_lines": 61759,
+  "routes": 74,
+  "permission_callbacks": 100,
+  "cap_checks": 435,
+  "sql_reads": 30,
+  "sql_writes": 13,
+  "routes_declarable": 38,
+  "routes_handler": 33,
+  "resources": 51,
+  "endpoints": 295,
+  "kernel_adapters": 99,
+  "partial_adapters": 0,
+  "kernel_core_lines": 3168,
+  "kernel_code_lines": 2043,
+  "collection_adapters": 69,
+  "collection_lines": 44393,
+  "collection_code_lines": 33987,
+  "collection_routes": 45
  }
 ]
