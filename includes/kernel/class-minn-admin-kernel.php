@@ -72,6 +72,10 @@
  *       'fields'   => array( name => type ),      // Minn_Admin_Kernel_Fields
  *     ),
  *     'item'      => array( 'view' => callable( array $row, WP_REST_Request $r ): array|WP_Error, 'fields' => … ),
+ *     'reads'     => array( 'view' => array( 'gate' => 'detail', 'view' => callable( array $row, WP_REST_Request $r ), 'fields' => … ) ),
+ *                 // more GET routes on one item (GET /<id>/view: a mail log's rendered message),
+ *                 // each answering to its gate (the item's when it names none) and loaded like
+ *                 // the item, only its declared fields leaving
  *     'actions'   => array( 'trash' => array(
  *       'method' => 'POST',           // POST /<id>/(?P<id>\d+)/trash; DELETE uses the item route
  *       'gate'   => 'delete',         // a declared gate; no gate, no route
@@ -79,6 +83,9 @@
  *       'code'   => 'bad_status', 'refuse' => …,               // the 400 when the row is not in that state
  *       'run'    => callable( int $id, array $row ): mixed|WP_Error,
  *       'expect' => array( 'status' => 'trash' ) | 'gone' | callable( int $id, ?array $fresh, mixed $ran ): bool,
+ *                   // or 'ran' for a send, which leaves nothing to read back: the run's answer
+ *                   // must be true, the text of whom it sent to or array( 'sent' => true, … ),
+ *                   // and no wp_mail_failed may fire while it runs
  *       'fail'   => …,                // the 500 when the expectation does not hold
  *       'reply'  => callable( int $id, ?array $fresh, mixed $ran ): array,   // merged over { ok: true }
  *       'done'   => …,                // the reply's message
@@ -309,6 +316,24 @@ class Minn_Admin_Kernel {
 				} ),
 			) );
 		}
+		foreach ( (array) ( $res['reads'] ?? array() ) as $slug => $read ) {
+			$gate_name = (string) ( $read['gate'] ?? ( $res['item']['gate'] ?? 'view' ) );
+			$gate      = self::gate( $res, $gate_name );
+			if ( ! $gate || empty( $read['view'] ) ) {
+				self::missing_gate( $res['id'] . ' read ' . $slug, $gate_name );
+				continue;
+			}
+			register_rest_route( self::NS, $item . '/' . sanitize_key( (string) $slug ), array(
+				'minn_file'           => $res['file'],
+				'methods'             => 'GET',
+				'permission_callback' => $gate,
+				'callback'            => self::guarded( function ( WP_REST_Request $r ) use ( $res, $read, $gate_name ) {
+					$row = Minn_Admin_Kernel::load( $res, (int) Minn_Admin::path_param( $r ), $gate_name );
+					$out = is_wp_error( $row ) ? $row : call_user_func( $read['view'], $row, $r );
+					return is_wp_error( $out ) || empty( $read['fields'] ) ? $out : Minn_Admin_Kernel_Fields::out( $read['fields'], (array) $out );
+				} ),
+			) );
+		}
 		$item_eps = array();
 		$item_gate = (string) ( $res['item']['gate'] ?? 'view' );
 		$item_perm = ! empty( $res['item'] ) ? self::gate( $res, $item_gate ) : null;
@@ -335,7 +360,7 @@ class Minn_Admin_Kernel {
 			// A write says what must hold after it runs, or it has no route:
 			// without one the kernel could not tell a refusal from success.
 			$expect = $action['expect'] ?? null;
-			if ( ! ( 'gone' === $expect || ( is_array( $expect ) && $expect ) || ( ! is_string( $expect ) && is_callable( $expect ) ) ) ) {
+			if ( ! ( 'gone' === $expect || 'ran' === $expect || ( is_array( $expect ) && $expect ) || ( ! is_string( $expect ) && is_callable( $expect ) ) ) ) {
 				_doing_it_wrong( 'minn_admin_resource', esc_html( "{$res['id']} action {$slug} declares no post-condition ('expect'), so it has no route." ), 'Minn Admin 0.46.0' );
 				continue;
 			}
@@ -892,13 +917,32 @@ class Minn_Admin_Kernel {
 		if ( ! self::holds( $a['when'] ?? null, $row ) ) {
 			return self::fail( (string) ( $a['code'] ?? 'bad_status' ), $a['refuse'] ?? __( 'That cannot be done to this item now.', 'minn-admin' ), 400 );
 		}
-		$ran = call_user_func( $a['run'], $id, $row, $r );
+		$expect = $a['expect'] ?? null;
+		$send   = 'ran' === $expect;
+		// A send's mailer may swallow its failure (WP Mail Logging's
+		// dispatcher drops wp_mail()'s answer), so WordPress's own failure
+		// action fails it too.
+		$failed = false;
+		$listen = function () use ( &$failed ) {
+			$failed = true;
+		};
+		if ( $send ) {
+			add_action( 'wp_mail_failed', $listen );
+		}
+		try {
+			$ran = call_user_func( $a['run'], $id, $row, $r );
+		} finally {
+			if ( $send ) {
+				remove_action( 'wp_mail_failed', $listen );
+			}
+		}
 		if ( is_wp_error( $ran ) ) {
 			return $ran;
 		}
-		$fresh  = self::fetch( $res, $id, 'detail' );
-		$expect = $a['expect'] ?? null;
-		$held   = false;
+		// Nothing is read back after a send: a read that failed then would
+		// answer 500 for mail that went, and invite sending it twice.
+		$fresh = $send ? null : self::fetch( $res, $id, 'detail' );
+		$held  = false;
 		if ( 'gone' === $expect ) {
 			// A callable source's own read may hide a row from this caller,
 			// so gone is asked of the store itself when the source says how.
@@ -913,12 +957,19 @@ class Minn_Admin_Kernel {
 			} else {
 				$held = null === $fresh;
 			}
+		} elseif ( $send ) {
+			// A send leaves nothing to read back, so the run's own answer is
+			// the proof: true, whom it sent to, or a list saying sent.
+			$held = ! $failed && ( true === $ran || ( is_string( $ran ) && (bool) trim( $ran ) ) || ( is_array( $ran ) && true === ( $ran['sent'] ?? null ) ) );
 		} elseif ( is_array( $expect ) ) {
 			$held = is_array( $fresh ) && self::holds( $expect, $fresh );
 		} elseif ( is_callable( $expect ) ) {
 			$held = self::yes( $expect, $id, $fresh, $ran );
 		}
 		if ( ! $held ) {
+			if ( $send ) {
+				return self::fail( (string) ( $a['fail_code'] ?? 'not_sent' ), $a['fail'] ?? __( 'The mailer reported the message could not be sent.', 'minn-admin' ), 500 );
+			}
 			return self::fail( (string) ( $a['fail_code'] ?? 'not_applied' ), $a['fail'] ?? __( 'The plugin reported success, but the change is not there.', 'minn-admin' ), 500 );
 		}
 		$reply = array( 'ok' => true );
@@ -1312,7 +1363,7 @@ class Minn_Admin_Kernel {
 
 	/**
 	 * A status chart's days over the rows the caller may see: column, clock,
-	 * where, split, secondary and ahead, as Minn_Admin_Kernel_SQL::chart_days().
+	 * where, split, secondary, ahead and label, as Minn_Admin_Kernel_SQL::chart_days().
 	 *
 	 * @param string $id Resource id.
 	 * @param array  $c  Chart.
@@ -1321,7 +1372,7 @@ class Minn_Admin_Kernel {
 	public static function days( $id, array $c ) {
 		$rows = self::card_rows( $id, (array) ( $c['where'] ?? array() ) );
 		if ( ! $rows ) {
-			return Minn_Admin_Kernel_SQL::empty_days( ! empty( $c['ahead'] ) );
+			return Minn_Admin_Kernel_SQL::empty_days( ! empty( $c['ahead'] ), (string) ( $c['label'] ?? '' ) );
 		}
 		return Minn_Admin_Kernel_SQL::chart_days( array_merge( $c, array( 'table' => $rows[0], 'where' => $rows[1] ) ) );
 	}

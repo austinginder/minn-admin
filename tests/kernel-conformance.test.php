@@ -17,6 +17,10 @@
  *    tab list) that matches nothing when it cannot be read; facets, LIKE and
  *    'any' rules that never widen; status-card counts over the list's own
  *    rows; a missing table; an array source; an id that is not a number.
+ *    Then the booking shapes (joins, views with their own order, cards
+ *    ahead) and the mail shapes: further reads of an item, NOT any, a
+ *    delete that needs a condition, a send's own answer as its proof and a
+ *    chart's rule-split and labels.
  * 2. Every real declaration: each action has a declared gate and a
  *    post-condition, each descriptor action that points at a kernel route
  *    names a declared action with its method and a state the action accepts,
@@ -917,6 +921,184 @@ $no_col = Minn_Admin_Kernel_SQL::has_column( 'minn_conf_bk', 'late_column' );
 $wpdb->query( "ALTER TABLE {$bk} ADD COLUMN late_column VARCHAR(10) NULL" ); // phpcs:ignore
 $check( 'a column a migration adds after a "no" is seen at the next read', ! $no_col && Minn_Admin_Kernel_SQL::has_column( 'minn_conf_bk', 'late_column' ) );
 
+// --- 1d. Mail shapes: more reads of an item, NOT any, deletes, sends -------
+$ml = $wpdb->prefix . 'minn_conf_mail';
+$wpdb->query( "CREATE TEMPORARY TABLE {$ml} ( id BIGINT UNSIGNED NOT NULL PRIMARY KEY, owner BIGINT NOT NULL, error VARCHAR(60) NULL, created DATETIME NOT NULL ) ENGINE=InnoDB" ); // phpcs:ignore
+$ml_now = current_time( 'mysql' );
+// id, owner, error (NULL and '' are a delivered email; any text a failure).
+foreach ( array( array( 1, 10, null ), array( 2, 10, '' ), array( 3, 10, 'SMTP timeout' ), array( 4, 10, 'Sent ( ** Fallback ** )' ), array( 5, 20, 'another owner' ), array( 6, 10, 'to purge' ), array( 7, 10, 'to keep' ) ) as $m ) {
+	$wpdb->insert( $ml, array( 'id' => $m[0], 'owner' => $m[1], 'error' => $m[2], 'created' => $ml_now ) );
+}
+$ml_ok     = array( null, '' );
+$detail_on = true;
+$ml_row_on = true;
+$ml_answer = true;
+$ml_fire   = false;
+Minn_Admin_Kernel::resource( 'minn-conformance/mail', array(
+	'gates'     => array(
+		'view'   => '__return_true',
+		'detail' => function () use ( &$detail_on ) {
+			return $detail_on;
+		},
+	),
+	'item_gate' => function () use ( &$ml_row_on ) {
+		return $ml_row_on;
+	},
+	'labels'    => array( 'not_found' => 'No such email.' ),
+	'source'    => array( 'table' => 'minn_conf_mail', 'key' => 'id', 'columns' => array( 'id', 'error', 'created' ), 'where' => array( 'owner' => 10 ) ),
+	'list'      => array(
+		'facets' => array( array( 'param' => 'status', 'values' => array(
+			'sent'   => array( 'error' => array( 'any' => $ml_ok ) ),
+			'failed' => array( 'error' => array( 'none' => $ml_ok ) ),
+		) ) ),
+		'order'  => array( 'column' => 'id' ),
+		'fields' => array( 'id' => 'int' ),
+	),
+	'item'      => array( 'gate' => 'detail', 'view' => function ( array $row ) {
+		return array( 'id' => (int) $row['id'] );
+	}, 'fields' => array( 'id' => 'int' ) ),
+	'reads'     => array(
+		'view'   => array( 'gate' => 'detail', 'view' => function ( array $row, WP_REST_Request $r ) {
+			return array( 'saw' => (int) $row['id'], 'route' => $r->get_route(), 'leak' => 'undeclared' );
+		}, 'fields' => array( 'saw' => 'int', 'route' => 'text' ) ),
+		'plain'  => array( 'view' => '__return_empty_array' ),
+		'nogate' => array( 'gate' => 'undeclared', 'view' => '__return_empty_array' ),
+	),
+	'actions'   => array(
+		'send'  => array( 'gate' => 'view', 'run' => function () use ( &$ml_answer, &$ml_fire ) {
+			if ( $ml_fire ) {
+				do_action( 'wp_mail_failed', new WP_Error( 'wp_mail_failed', 'SMTP connect() failed.' ) );
+			}
+			return $ml_answer;
+		}, 'expect' => 'ran' ),
+		'purge' => array( 'method' => 'DELETE', 'gate' => 'view', 'run' => function ( $id ) {
+			return Minn_Admin_Kernel_SQL::delete( 'minn_conf_mail', 'id', $id, array( 'owner' => 10 ) );
+		}, 'expect' => 'gone' ),
+	),
+) );
+list( $st, $d ) = $call( 'GET', '/minn-admin/v1/minn-conformance/mail/1/view' );
+$check( 'a further read of an item answers on its own route with the loaded row, only its declared fields leaving', 200 === $st && 1 === ( $d['saw'] ?? 0 ) && '/minn-admin/v1/minn-conformance/mail/1/view' === ( $d['route'] ?? '' ) && ! array_key_exists( 'leak', (array) $d ), $st . ' ' . wp_json_encode( $d ) );
+list( $st, $d ) = $call( 'GET', '/minn-admin/v1/minn-conformance/mail/99/view' );
+list( $st5 )    = $call( 'GET', '/minn-admin/v1/minn-conformance/mail/5/view' );
+$check( "a further read of a missing item, or of one the source's conditions exclude, is not found", 404 === $st && 'No such email.' === ( $d['message'] ?? '' ) && 404 === $st5, $st . ' ' . $st5 );
+$detail_on   = false;
+list( $st )  = $call( 'GET', '/minn-admin/v1/minn-conformance/mail/1/view' );
+list( $stp ) = $call( 'GET', '/minn-admin/v1/minn-conformance/mail/1/plain' );
+$detail_on   = true;
+list( $stq ) = $call( 'GET', '/minn-admin/v1/minn-conformance/mail/1/plain' );
+$check( "a further read that names no gate answers to the item's", 403 === $stp && 200 === $stq, $stp . ' ' . $stq );
+$ml_row_on   = false;
+list( $st2 ) = $call( 'GET', '/minn-admin/v1/minn-conformance/mail/1/view' );
+$ml_row_on   = true;
+$check( 'a further read answers to its own gate, then to the row gate', 403 === $st && 403 === $st2, $st . ' ' . $st2 );
+list( $st, $d ) = $call( 'GET', '/minn-admin/v1/minn-conformance/mail/1/nogate' );
+$check( 'a further read naming no declared gate has no route', 404 === $st && 'rest_no_route' === ( $d['code'] ?? '' ), $st . ' ' . wp_json_encode( $d ) );
+$ml_ids = function ( $params ) use ( $call ) {
+	list( $st, $d ) = $call( 'GET', '/minn-admin/v1/minn-conformance/mail', $params );
+	return 200 === $st ? array_column( (array) ( $d['items'] ?? array() ), 'id' ) : $st;
+};
+$failed = $ml_ids( array( 'status' => 'failed' ) );
+$sent   = $ml_ids( array( 'status' => 'sent' ) );
+$check( "'none' is NOT any of its rules in SQL, a NULL value meeting its IS NULL arm", array( 7, 6, 4, 3 ) === $failed && array( 2, 1 ) === $sent, wp_json_encode( array( $failed, $sent ) ) );
+$none = function ( $v, $rule ) {
+	try {
+		return Minn_Admin_Kernel_SQL::matches( array( 'error' => $v ), array( 'error' => $rule ) );
+	} catch ( InvalidArgumentException $e ) {
+		return 'refused';
+	}
+};
+$check( "'none' is SQL only: held in PHP it is refused, where NOT of a narrower test would be wider", 'refused' === $none( null, array( 'none' => array( 'sent' ) ) ) && 'refused' === $none( 'SENT', array( 'none' => array( 'sent' ) ) ) && 'refused' === $none( 'x', array( 'none' => array() ) ) );
+$check( "PHP's negations are never wider than SQL's: case, trailing spaces and a number's text", false === $none( 'SENT', array( 'not' => array( 'sent' ) ) ) && false === $none( 'sent ', array( 'op' => '!=', 'value' => 'sent' ) ) && false === $none( 'abc', array( 'op' => '!=', 'value' => 0 ) ) && false === $none( null, array( 'not' => array( 'a' ) ) ) && true === $none( 'x', array( 'not' => array( 'sent' ) ) ) && true === $none( 'x', array( 'op' => '!=', 'value' => 'sent' ) ) );
+$two = 0;
+foreach ( array( array( 'none' => array( 'q' ), 'starts' => 'y' ), array( 'any' => array( 1 ), 'none' => array( 2 ) ), array( 'none' => null ), array( 'any' => 'x' ), array( 'op' => '=', 'value' => 1, 'x' => 2 ) ) as $bad_rule ) {
+	try {
+		Minn_Admin_Kernel_SQL::where( array( 'error' => $bad_rule ) );
+	} catch ( InvalidArgumentException $e ) {
+		$two++;
+	}
+	try {
+		Minn_Admin_Kernel_SQL::matches( array( 'error' => 'y' ), array( 'error' => $bad_rule ) );
+	} catch ( InvalidArgumentException $e ) {
+		$two++;
+	}
+}
+$check( 'a rule of two kinds, or an any or none over no list, is refused in SQL and in PHP', 10 === $two, (string) $two );
+try {
+	list( $none_sql ) = Minn_Admin_Kernel_SQL::where( array( 'error' => array( 'none' => array() ) ) );
+	list( $any_sql )  = Minn_Admin_Kernel_SQL::where( array( 'error' => array( 'any' => array() ) ) );
+} catch ( InvalidArgumentException $e ) {
+	$none_sql = $any_sql = 'refused';
+}
+$check( "an empty 'none' matches every row and an empty 'any' none", array( '1 = 1' ) === $none_sql && array( '1 = 0' ) === $any_sql && false === $none( 'x', array( 'any' => array() ) ), wp_json_encode( array( $none_sql, $any_sql ) ) );
+$refused = 0;
+$kept    = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$ml}" ); // phpcs:ignore
+foreach ( array( array(), 0, -1, array( 0 ), 'abc', array( 2, -3 ) ) as $bad_ids ) {
+	try {
+		Minn_Admin_Kernel_SQL::delete( 'minn_conf_mail', 'id', $bad_ids, array( 'id' => array( 'not' => array() ) ) );
+	} catch ( \Throwable $e ) {
+		$refused++;
+	}
+}
+$check( 'a delete names its rows by key, each id above zero, or is refused and empties nothing', 6 === $refused && $kept === (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$ml}" ), $refused . ' refused' ); // phpcs:ignore
+$ml_del = function ( ...$a ) {
+	try {
+		return Minn_Admin_Kernel_SQL::delete( ...$a );
+	} catch ( \Throwable $e ) {
+		return 'threw';
+	}
+};
+$check( "a delete's further conditions only narrow it", 0 === $ml_del( 'minn_conf_mail', 'id', 5, array( 'owner' => 10 ) ) && in_array( '5', $wpdb->get_col( "SELECT id FROM {$ml}" ), true ) ); // phpcs:ignore
+list( $st, $d ) = $call( 'DELETE', '/minn-admin/v1/minn-conformance/mail/6' );
+$left           = $wpdb->get_col( "SELECT id FROM {$ml} ORDER BY id" ); // phpcs:ignore
+list( $again )  = $call( 'DELETE', '/minn-admin/v1/minn-conformance/mail/6' );
+$check( 'a delete removes the row its conditions name and nothing else, and is then not found', 200 === $st && ! in_array( '6', $left, true ) && in_array( '7', $left, true ) && 6 === count( $left ) && 404 === $again, $st . ' ' . $again . ' ' . wp_json_encode( $left ) );
+$check( 'a delete from a table that is not there removes nothing', 0 === $ml_del( 'minn_conf_no_table', 'id', 1 ) );
+$ml_sent = function ( $answer, $fire = false ) use ( $call, &$ml_answer, &$ml_fire ) {
+	$ml_answer      = $answer;
+	$ml_fire        = $fire;
+	list( $st, $d ) = $call( 'POST', '/minn-admin/v1/minn-conformance/mail/1/send' );
+	$ml_fire        = false;
+	return 200 === $st ? 200 : $st . ':' . ( $d['code'] ?? '' );
+};
+$held = array( $ml_sent( true ), $ml_sent( 'a@x.test' ), $ml_sent( array( 'sent' => true, 'logged' => false ) ) );
+$fell = array_unique( array( $ml_sent( false ), $ml_sent( null ), $ml_sent( '' ), $ml_sent( '0' ), $ml_sent( ' ' ), $ml_sent( array() ), $ml_sent( 1 ), $ml_sent( array( 'a@x.test' ) ), $ml_sent( array( false ) ), $ml_sent( array( 'sent' => false ) ) ) );
+$check( "a send ('ran') holds on true, whom it sent to or a list saying sent, and nothing else", array( 200, 200, 200 ) === $held && array( '500:not_sent' ) === $fell, wp_json_encode( array( $held, $fell ) ) );
+$check( 'a send during which WordPress reports a mail failure did not happen, whatever it answers', '500:not_sent' === $ml_sent( true, true ) && '500:not_sent' === $ml_sent( 'a@x.test', true ) && 200 === $ml_sent( true ) );
+$today = current_time( 'Y-m-d' );
+$rule  = Minn_Admin_Kernel::days( 'minn-conformance/mail', array( 'column' => 'created', 'clock' => 'local', 'split' => 'error', 'secondary' => array( 'none' => $ml_ok ) ) );
+$vals  = Minn_Admin_Kernel::days( 'minn-conformance/mail', array( 'column' => 'created', 'clock' => 'local', 'split' => 'error', 'secondary' => array( 'SMTP timeout' ) ) );
+$check( "a chart's secondary may be a rule: any failure text, never another owner's", 2 === ( $rule[ $today ]['value'] ?? -1 ) && 3 === ( $rule[ $today ]['secondary'] ?? -1 ), wp_json_encode( $rule[ $today ] ?? null ) );
+$check( "a chart's secondary as values still counts only those values", 4 === ( $vals[ $today ]['value'] ?? -1 ) && 1 === ( $vals[ $today ]['secondary'] ?? -1 ), wp_json_encode( $vals[ $today ] ?? null ) );
+// Three hundred texts in one day are still two chart rows, counted as the card counts.
+for ( $i = 1; $i <= 300; $i++ ) {
+	$wpdb->insert( $ml, array( 'id' => 1000 + $i, 'owner' => 10, 'error' => 'e' . $i, 'created' => $ml_now ) );
+}
+$wpdb->insert( $ml, array( 'id' => 2000, 'owner' => 10, 'error' => ' ', 'created' => $ml_now ) );
+$many  = Minn_Admin_Kernel::days( 'minn-conformance/mail', array( 'column' => 'created', 'clock' => 'local', 'split' => 'error', 'secondary' => array( 'none' => $ml_ok ) ) );
+$grown = $wpdb->num_rows;
+$fails = Minn_Admin_Kernel::count( 'minn-conformance/mail', array( 'error' => array( 'none' => $ml_ok ) ) );
+$check( "a chart split by a rule is two rows a day however many texts, and agrees with the card's count", $grown <= 28 && $fails === ( $many[ $today ]['secondary'] ?? -1 ) && $fails >= 303, $grown . ' rows, ' . $fails . ' counted, ' . wp_json_encode( $many[ $today ] ?? null ) );
+$lab  = Minn_Admin_Kernel::days( 'minn-conformance/mail', array( 'column' => 'created', 'clock' => 'local', 'label' => 'M j' ) );
+$none = Minn_Admin_Kernel::days( 'minn-conformance/no-such', array( 'column' => 'created', 'clock' => 'local', 'label' => 'M j' ) );
+$want = gmdate( 'M j', strtotime( $today . ' 00:00:00 UTC' ) );
+$check( "a chart's labels take a date format and its days keep their keys, an empty chart too", $want === ( $lab[ $today ]['label'] ?? '' ) && $want === ( $none[ $today ]['label'] ?? '' ) && 14 === count( $none ), wp_json_encode( array( $lab[ $today ] ?? null, $none[ $today ] ?? null ) ) );
+$sql = array( 'type' => 'datetime', 'wire' => 'sql' );
+$check( "a datetime's sql wire is the stored shape with a space, on the stored clock, '' for none", '2026-01-02 03:04:05' === Minn_Admin_Kernel_Fields::encode( $sql + array( 'stored' => 'site' ), '2026-01-02 03:04:05' ) && '2026-01-02 03:04:05' === Minn_Admin_Kernel_Fields::encode( $sql + array( 'stored' => 'utc' ), '2026-01-02T03:04:05' ) && gmdate( 'Y-m-d H:i:s', 1767323045 ) === Minn_Admin_Kernel_Fields::encode( $sql + array( 'stored' => 'local-epoch' ), 1767323045 ) && '' === Minn_Admin_Kernel_Fields::encode( $sql + array( 'stored' => 'site' ), '' ) );
+$noticed = array();
+set_error_handler( function ( $no, $str ) use ( &$noticed ) {
+	$noticed[] = $str;
+	return true;
+} );
+$rr = new WP_REST_Request( 'GET', '/x' );
+$rr->set_query_params( array( 'after' => array( 'x' ), 'before' => '2026-01-02 00:00:00' ) );
+$range = minn_admin_chart_range_clause( $rr, 'created', 'local' );
+restore_error_handler();
+$check( 'a date bound that is not text is no bound, and no notice', ! $noticed && array( 'created <= %s' ) === $range[0], wp_json_encode( array( $noticed, $range ) ) );
+$bounds = function_exists( 'minn_admin_chart_bound' ) ? array_map( 'minn_admin_chart_bound', array( "1' OR 1=1", 'yesterday', '2026-02-30', '2026-01-02T25:00:00', '2026-01-02', '2026-01-02T03:04:05', ' 2026-01-02 03:04:05 ' ) ) : array();
+$rr->set_query_params( array( 'after' => "1' OR 1=1", 'before' => 'yesterday' ) );
+$junk = minn_admin_chart_range_clause( $rr, 'created', 'utc' );
+$check( "a date bound is the chart's own shape or none: words, impossible dates and quotes are never guessed", array( '', '', '', '', '2026-01-02 00:00:00', '2026-01-02 03:04:05', '2026-01-02 03:04:05' ) === $bounds && array() === $junk[0], wp_json_encode( array( $bounds, $junk ) ) );
+
 // --- 2. Every real declaration ----------------------------------------------
 $real = array_filter( Minn_Admin_Kernel::resources(), function ( $r ) {
 	return 0 !== strpos( $r['id'], 'minn-conformance/' );
@@ -929,6 +1111,9 @@ foreach ( $real as $id => $res ) {
 		$gate = (string) ( $a['gate'] ?? '' );
 		$check( "{$id} {$slug}: names a declared gate", '' !== $gate && is_callable( $res['gates'][ $gate ] ?? null ), $gate );
 		$check( "{$id} {$slug}: declares what must hold after it runs", ! empty( $a['expect'] ) );
+	}
+	foreach ( (array) ( $res['reads'] ?? array() ) as $slug => $read ) {
+		$check( "{$id} read {$slug}: declares the fields it sends", ! empty( $read['fields'] ) );
 	}
 }
 $kernel_actions = array();

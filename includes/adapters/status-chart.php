@@ -112,7 +112,7 @@ function minn_admin_chart_utc_day( $mysql_utc ) {
  * @return int|null Null when the bound does not parse.
  */
 function minn_admin_chart_bound_epoch( $bound, $clock = 'epoch' ) {
-	$bound = trim( (string) $bound );
+	$bound = minn_admin_chart_bound( $bound );
 	if ( '' === $bound ) {
 		return null;
 	}
@@ -159,6 +159,26 @@ function minn_admin_chart_epoch_bucket_day( $bucket ) {
 }
 
 /**
+ * A date bound as the chart mints it ("Y-m-d H:i:s", or a bare day as its
+ * midnight), or '' for anything else: words ("yesterday"), a zone, a date
+ * that is no date, an array. A window that cannot be read is no window,
+ * never a guess.
+ *
+ * @param mixed $raw Request value.
+ * @return string
+ */
+function minn_admin_chart_bound( $raw ) {
+	$raw = is_scalar( $raw ) ? trim( (string) $raw ) : '';
+	if ( ! preg_match( '/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2}):(\d{2}))?$/', $raw, $m ) || ! checkdate( (int) $m[2], (int) $m[3], (int) $m[1] ) ) {
+		return '';
+	}
+	if ( isset( $m[4] ) && ( (int) $m[4] > 23 || (int) $m[5] > 59 || (int) $m[6] > 59 ) ) {
+		return '';
+	}
+	return "{$m[1]}-{$m[2]}-{$m[3]} " . ( isset( $m[4] ) ? "{$m[4]}:{$m[5]}:{$m[6]}" : '00:00:00' );
+}
+
+/**
  * The WHERE fragments for a clicked chart bar's day, converted onto the
  * clock the adapter's own column is stored in.
  *
@@ -188,7 +208,7 @@ function minn_admin_chart_range_clause( $request, $column, $clock = 'local' ) {
 	$sql  = array();
 	$args = array();
 	foreach ( array( 'after' => '>=', 'before' => '<=' ) as $param => $op ) {
-		$bound = (string) $request->get_param( $param );
+		$bound = minn_admin_chart_bound( $request->get_param( $param ) );
 		if ( '' === $bound ) {
 			continue;
 		}

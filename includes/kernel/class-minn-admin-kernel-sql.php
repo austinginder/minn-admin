@@ -11,10 +11,12 @@
  *   'source' => array( 'starts' => 'rest|' )    LIKE, the value escaped: 'starts',
  *                                               'contains' or 'ends'
  *   'source' => array( 'any' => array( '', null, array( 'starts' => 'app:' ) ) )
- *                                               any of these rules (OR)
+ *                                               any of these rules (OR); 'none' => array( … ) is
+ *                                               NOT any of them, in SQL only (matches() refuses it:
+ *                                               negating PHP's narrower tests would widen them)
  *   'blog_id' => null                           column IS NULL
- * A list (integer keys) is always an IN list and a keyed array always a rule,
- * one this layer does not know being refused.
+ * A list (integer keys) is always an IN list and a keyed array always a rule
+ * of exactly one kind ('op' with its 'value'), anything else being refused.
  * An empty IN list matches nothing, and an empty NOT IN list everything, so a
  * scope that resolved to no ids can never widen into all of them; an empty
  * 'any' matches nothing too.
@@ -220,6 +222,23 @@ class Minn_Admin_Kernel_SQL {
 	}
 
 	/**
+	 * The one kind a keyed rule is, or a refusal: a rule naming two kinds
+	 * (array( 'none' => …, 'starts' => … )) would read one way in SQL and
+	 * another in PHP, and an 'any' or 'none' must hold a list of rules.
+	 *
+	 * @param array $rule Keyed rule.
+	 * @return string
+	 */
+	private static function kind( array $rule ) {
+		$kinds = array_values( array_intersect( array_keys( $rule ), array( 'starts', 'contains', 'ends', 'any', 'none', 'op', 'not' ) ) );
+		$rest  = array_diff( array_keys( $rule ), $kinds, array( 'op' ) === $kinds ? array( 'value' ) : array() );
+		if ( 1 !== count( $kinds ) || $rest || ( in_array( $kinds[0], array( 'any', 'none' ), true ) && ! is_array( $rule[ $kinds[0] ] ) ) ) {
+			throw new InvalidArgumentException( 'minn_kernel_rule=' . implode( ',', array_keys( $rule ) ) );
+		}
+		return $kinds[0];
+	}
+
+	/**
 	 * One column's rule to [ sql, args ].
 	 *
 	 * @param string $c    Qualified column.
@@ -239,34 +258,37 @@ class Minn_Admin_Kernel_SQL {
 			$vals = array_values( $rule );
 			return $vals ? array( "{$c} IN (" . implode( ',', array_map( array( __CLASS__, 'ph' ), $vals ) ) . ')', $vals ) : array( '1 = 0', array() );
 		}
+		$kind = self::kind( $rule );
 		foreach ( array( 'starts' => array( '', '%' ), 'contains' => array( '%', '%' ), 'ends' => array( '%', '' ) ) as $how => $wild ) {
-			if ( array_key_exists( $how, $rule ) ) {
+			if ( $how === $kind ) {
 				return array( "{$c} LIKE %s", array( $wild[0] . $wpdb->esc_like( (string) $rule[ $how ] ) . $wild[1] ) );
 			}
 		}
-		if ( array_key_exists( 'any', $rule ) ) {
+		if ( 'any' === $kind || 'none' === $kind ) {
+			$none  = 'none' === $kind;
 			$parts = array();
 			$args  = array();
-			foreach ( (array) $rule['any'] as $one ) {
+			foreach ( $rule[ $kind ] as $one ) {
 				list( $s, $a ) = self::rule( $c, $one );
 				$parts[]       = $s;
 				$args          = array_merge( $args, $a );
 			}
-			return array( $parts ? '( ' . implode( ' OR ', $parts ) . ' )' : '1 = 0', $args );
+			if ( ! $parts ) {
+				return array( $none ? '1 = 1' : '1 = 0', $args );
+			}
+			// NOT ( … ) over a group that holds an IS NULL arm is NULL-safe: a
+			// NULL value meets that arm, so the group is true and NOT false.
+			return array( ( $none ? 'NOT ' : '' ) . '( ' . implode( ' OR ', $parts ) . ' )', $args );
 		}
-		if ( array_key_exists( 'op', $rule ) ) {
+		if ( 'op' === $kind ) {
 			$op = (string) $rule['op'];
 			if ( ! in_array( $op, array( '=', '!=', '<', '<=', '>', '>=' ), true ) ) {
 				throw new InvalidArgumentException( 'minn_kernel_operator=' . $op );
 			}
 			return array( "{$c} {$op} " . self::ph( $rule['value'] ), array( $rule['value'] ) );
 		}
-		if ( array_key_exists( 'not', $rule ) ) {
-			$vals = array_values( (array) $rule['not'] );
-			return $vals ? array( "{$c} NOT IN (" . implode( ',', array_map( array( __CLASS__, 'ph' ), $vals ) ) . ')', $vals ) : array( '1 = 1', array() );
-		}
-		// A keyed array that is no rule this layer knows is a mistake, not a list.
-		throw new InvalidArgumentException( 'minn_kernel_rule=' . implode( ',', array_keys( $rule ) ) );
+		$vals = array_values( (array) $rule['not'] );
+		return $vals ? array( "{$c} NOT IN (" . implode( ',', array_map( array( __CLASS__, 'ph' ), $vals ) ) . ')', $vals ) : array( '1 = 1', array() );
 	}
 
 	/** Whether an array is a list of values (integer keys only), not a keyed rule. */
@@ -306,15 +328,21 @@ class Minn_Admin_Kernel_SQL {
 	 * text to a number; this matches nothing instead).
 	 */
 	private static function holds( $v, $rule ) {
-		if ( is_array( $rule ) && ! self::is_list( $rule ) && array_key_exists( 'any', $rule ) ) {
-			foreach ( (array) $rule['any'] as $one ) {
+		$kind = is_array( $rule ) && ! self::is_list( $rule ) ? self::kind( $rule ) : '';
+		// Each test here is the narrower of PHP's and MySQL's (case, trailing
+		// spaces, NULL), so NOT of one would be the wider: 'none' is SQL only.
+		if ( 'none' === $kind ) {
+			throw new InvalidArgumentException( 'minn_kernel_rule=none (SQL only)' );
+		}
+		if ( 'any' === $kind ) {
+			foreach ( $rule['any'] as $one ) {
 				if ( self::holds( $v, $one ) ) {
 					return true;
 				}
 			}
 			return false;
 		}
-		if ( is_array( $rule ) && ! self::is_list( $rule ) && array_key_exists( 'not', $rule ) && ! $rule['not'] ) {
+		if ( 'not' === $kind && ! $rule['not'] ) {
 			return true; // where() writes 1 = 1.
 		}
 		if ( null === $rule ) {
@@ -329,6 +357,14 @@ class Minn_Admin_Kernel_SQL {
 			}
 			return is_scalar( $v ) && ! is_bool( $v ) && (string) $v === (string) $want;
 		};
+		// A negation held to MySQL's wider equality (no case, no trailing
+		// spaces, text cast to a number), so it is never wider than SQL's.
+		$differs = function ( $v, $want ) {
+			if ( ! is_string( $want ) ) {
+				return is_numeric( $v ) && (float) $v !== (float) $want;
+			}
+			return is_scalar( $v ) && ! is_bool( $v ) && strtolower( rtrim( (string) $v ) ) !== strtolower( rtrim( $want ) );
+		};
 		if ( ! is_array( $rule ) ) {
 			return $same( $v, $rule );
 		}
@@ -341,21 +377,24 @@ class Minn_Admin_Kernel_SQL {
 			return false;
 		}
 		$text = is_scalar( $v ) ? strtolower( (string) $v ) : '';
-		if ( array_key_exists( 'starts', $rule ) ) {
+		if ( 'starts' === $kind ) {
 			return 0 === strpos( $text, strtolower( (string) $rule['starts'] ) );
 		}
-		if ( array_key_exists( 'contains', $rule ) ) {
+		if ( 'contains' === $kind ) {
 			return false !== strpos( $text, strtolower( (string) $rule['contains'] ) );
 		}
-		if ( array_key_exists( 'ends', $rule ) ) {
+		if ( 'ends' === $kind ) {
 			$end = strtolower( (string) $rule['ends'] );
 			return '' === $end || substr( $text, -strlen( $end ) ) === $end;
 		}
-		if ( array_key_exists( 'op', $rule ) ) {
+		if ( 'op' === $kind ) {
 			$want = $rule['value'];
 			$op   = (string) $rule['op'];
-			if ( '=' === $op || '!=' === $op ) {
-				return ( '=' === $op ) === $same( $v, $want );
+			if ( '=' === $op ) {
+				return $same( $v, $want );
+			}
+			if ( '!=' === $op ) {
+				return $differs( $v, $want );
 			}
 			if ( ! is_numeric( $v ) || ! is_numeric( $want ) ) {
 				if ( in_array( $op, array( '<', '<=', '>', '>=' ), true ) ) {
@@ -376,9 +415,9 @@ class Minn_Admin_Kernel_SQL {
 			}
 			throw new InvalidArgumentException( 'minn_kernel_operator=' . $op );
 		}
-		if ( array_key_exists( 'not', $rule ) ) {
+		if ( 'not' === $kind ) {
 			foreach ( (array) $rule['not'] as $one ) {
-				if ( $same( $v, $one ) ) {
+				if ( ! $differs( $v, $one ) ) {
 					return false;
 				}
 			}
@@ -461,6 +500,31 @@ class Minn_Admin_Kernel_SQL {
 			. ( $limit > 0 ? ' LIMIT ' . (int) $limit : '' );
 		$rows = $wpdb->get_results( self::prepare( $q, $args ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		return is_array( $rows ) ? $rows : array();
+	}
+
+	/**
+	 * DELETE rows of a table by their key: only the ids named, each above
+	 * zero, and further conditions only narrow them, so no declaration can
+	 * empty a table, whatever a rule compiles to. A vendor's own delete is
+	 * used where it has one; this is for a log table it gives no API for.
+	 *
+	 * @param string|array $table Table spec (joins are not read).
+	 * @param string       $key   Key column.
+	 * @param int|int[]    $ids   Ids.
+	 * @param array        $where Further conditions (a source's fixed ones).
+	 * @return int Rows deleted.
+	 */
+	public static function delete( $table, $key, $ids, array $where = array() ) {
+		global $wpdb;
+		$ids = array_values( array_unique( array_map( 'intval', (array) $ids ) ) );
+		if ( ! $ids || min( $ids ) < 1 ) {
+			throw new InvalidArgumentException( 'minn_kernel_delete_ids' );
+		}
+		if ( ! self::exists( $table ) ) {
+			return 0;
+		}
+		list( $sql, $args ) = self::where( array_merge( $where, array( $key . "\0delete" => $ids ) ), '' );
+		return (int) $wpdb->query( self::prepare( 'DELETE FROM ' . self::table( $table ) . ' WHERE ' . implode( ' AND ', $sql ), $args ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 	}
 
 	/**
@@ -552,14 +616,21 @@ class Minn_Admin_Kernel_SQL {
 	 * @param bool $ahead From today on.
 	 * @return array
 	 */
-	public static function empty_days( $ahead = false ) {
+	public static function empty_days( $ahead = false, $label = '' ) {
 		if ( ! $ahead ) {
-			return minn_admin_chart_days();
+			$days = minn_admin_chart_days();
+		} else {
+			$days = array();
+			for ( $i = 0; $i < 14; $i++ ) {
+				$d          = minn_admin_chart_day( $i );
+				$days[ $d ] = array( 'label' => $d, 'value' => 0, 'secondary' => 0 );
+			}
 		}
-		$days = array();
-		for ( $i = 0; $i < 14; $i++ ) {
-			$d          = minn_admin_chart_day( $i );
-			$days[ $d ] = array( 'label' => $d, 'value' => 0, 'secondary' => 0 );
+		// A label in a date format of the adapter's ('M j'), the day's key unchanged.
+		if ( '' !== (string) $label ) {
+			foreach ( $days as $d => $day ) {
+				$days[ $d ]['label'] = gmdate( (string) $label, (int) strtotime( $d . ' 00:00:00 UTC' ) );
+			}
 		}
 		return $days;
 	}
@@ -569,10 +640,14 @@ class Minn_Admin_Kernel_SQL {
 	 * 'ahead' the fourteen from today on. A row whose split value is one of
 	 * 'secondary' counts there, every other row in the primary series, so a
 	 * day's two counts never overlap; with no split there is one series.
+	 * 'secondary' may be a rule instead of values (array( 'none' => array(
+	 * null, '' ) ): a failure is any text), decided in SQL as a condition
+	 * is, so a day is still two rows however many texts it holds.
 	 *
 	 * @param array $c table, column (the date), clock (utc|local|date|epoch|
 	 *                 local-epoch), where (conditions for every counted row),
-	 *                 split (column, optional), secondary (its values), ahead.
+	 *                 split (column, optional), secondary (its values), ahead,
+	 *                 label (a date format for each day's label).
 	 * @return array Days keyed Y-m-d: label, value, secondary (and from / to
 	 *               looking back, the bounds a clicked bar sends).
 	 */
@@ -581,7 +656,7 @@ class Minn_Admin_Kernel_SQL {
 		$ahead = ! empty( $c['ahead'] );
 		$col   = self::col( $c['column'] );
 		$clock = (string) ( $c['clock'] ?? 'utc' );
-		$days  = self::empty_days( $ahead );
+		$days  = self::empty_days( $ahead, (string) ( $c['label'] ?? '' ) );
 		if ( 'utc' === $clock ) {
 			$day = minn_admin_chart_utc_day_sql( $col );
 		} elseif ( 'epoch' === $clock || 'local-epoch' === $clock ) {
@@ -597,7 +672,14 @@ class Minn_Admin_Kernel_SQL {
 			$bound[ $c['column'] . "\0until" ] = array( 'op' => '<', 'value' => Minn_Admin_Kernel::at( $clock, 14 ) );
 		}
 		list( $sql, $args ) = self::where( array_merge( (array) ( $c['where'] ?? array() ), $bound ), 'e' );
+		$second             = (array) ( $c['secondary'] ?? array() );
+		$by_rule            = ! empty( $c['split'] ) && $second && ! self::is_list( $second );
 		$split              = empty( $c['split'] ) ? "''" : self::col( $c['split'] );
+		if ( $by_rule ) {
+			list( $rs, $ra ) = self::rule( $split, $second );
+			$split           = "CASE WHEN {$rs} THEN 1 ELSE 0 END";
+			$args            = array_merge( $ra, $args );
+		}
 		$q                  = "SELECT {$day} AS _minn_d, {$split} AS _minn_s, COUNT(*) AS _minn_n FROM " . self::from( $c['table'] ) . ' WHERE ' . implode( ' AND ', $sql ) . ' GROUP BY _minn_d, _minn_s';
 		foreach ( (array) $wpdb->get_results( self::prepare( $q, $args ) ) as $r ) { // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 			$r = (object) array( 'd' => $r->_minn_d, 's' => $r->_minn_s, 'n' => $r->_minn_n );
@@ -605,8 +687,10 @@ class Minn_Admin_Kernel_SQL {
 			if ( 'epoch' === $clock || 'local-epoch' === $clock ) {
 				$d = minn_admin_chart_epoch_bucket_day( $d );
 			}
-			minn_admin_chart_bump( $days, substr( $d, 0, 10 ), ! empty( $c['split'] ) && in_array( (string) $r->s, array_map( 'strval', (array) ( $c['secondary'] ?? array() ) ), true ), (int) $r->n );
+			$is_second = $by_rule ? '1' === (string) $r->s : in_array( (string) $r->s, array_map( 'strval', $second ), true );
+			minn_admin_chart_bump( $days, substr( $d, 0, 10 ), ! empty( $c['split'] ) && $is_second, (int) $r->n );
 		}
 		return $days;
 	}
+
 }

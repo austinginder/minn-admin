@@ -284,6 +284,16 @@ date, an epoch or the site's wall clock read as one); and a status card reads th
 resource with `count()`, `first()` and `days()`, looking back or fourteen days ahead, with a
 row counted in one series only.
 
+The email-log port (seven adapters) added further reads of one item (`reads`: a log's
+rendered message at `/<id>/view`, each read answering to its gate, the item's when it
+names none, and sending only its declared fields), `none` (NOT any, decided in SQL only,
+since negating PHP's narrower tests would widen them; a rule has exactly one kind), a
+delete for a log table its vendor gives no delete for (`Minn_Admin_Kernel_SQL::delete()`,
+by key and ids only), a send's post-condition (`'expect' => 'ran'`: the vendor's own
+answer, and a `wp_mail_failed` during the run fails it), a chart split by a rule decided
+in SQL with its day labels in a date format, the `sql` datetime wire for vendors whose
+rows have always gone out as `Y-m-d H:i:s`, and date bounds held to the chart's own shape.
+
 What the kernel does not have yet: the save path for edit forms (changed fields only,
 a base stamp and a 409 on a stale copy), which the entry-edit adapters will need when
 they port (the post type and taxonomy definitions use the same stamp and partial save
