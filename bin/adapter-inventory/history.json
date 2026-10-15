@@ -430,5 +430,32 @@
   "collection_lines": 47170,
   "collection_code_lines": 36266,
   "collection_routes": 216
+ },
+ {
+  "at": "2026-10-15T06:57:43.021Z",
+  "ref": "working tree",
+  "commit": "6ba7d6ce",
+  "version": "0.45.0",
+  "label": "snippets on the kernel",
+  "adapters": 144,
+  "lines": 83260,
+  "code_lines": 62429,
+  "routes": 281,
+  "permission_callbacks": 342,
+  "cap_checks": 432,
+  "sql_reads": 175,
+  "sql_writes": 33,
+  "routes_declarable": 160,
+  "routes_handler": 117,
+  "resources": 42,
+  "endpoints": 98,
+  "kernel_adapters": 43,
+  "partial_adapters": 0,
+  "kernel_core_lines": 2731,
+  "kernel_code_lines": 1750,
+  "collection_adapters": 71,
+  "collection_lines": 46754,
+  "collection_code_lines": 35798,
+  "collection_routes": 197
  }
 ]
