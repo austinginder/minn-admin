@@ -367,14 +367,12 @@ function minn_admin_gfb_enums( $form_id ) {
  * @return string
  */
 function minn_admin_gfb_stamp( $form_id ) {
-	global $wpdb;
 	// Gravity Forms names its tables (gf_form, or rg_form on a site it never
-	// migrated); the SQL layer takes them without the prefix.
-	$bare = function ( $table ) use ( $wpdb ) {
-		return 0 === strpos( $table, $wpdb->prefix ) ? substr( $table, strlen( $wpdb->prefix ) ) : $table;
-	};
-	$row = Minn_Admin_Kernel_SQL::row(
-		array( 'table' => $bare( GFFormsModel::get_form_table_name() ), 'joins' => array( 'm' => array( 'table' => $bare( GFFormsModel::get_meta_table_name() ), 'on' => array( 'form_id' => 'e.id' ) ) ) ),
+	// migrated); the SQL layer reads them by the names it gives.
+	$forms = Minn_Admin_Kernel_SQL::named( GFFormsModel::get_form_table_name() );
+	$meta  = Minn_Admin_Kernel_SQL::named( GFFormsModel::get_meta_table_name() );
+	$row   = Minn_Admin_Kernel_SQL::row(
+		array( 'table' => $forms, 'joins' => array( 'm' => array( 'table' => $meta, 'on' => array( 'form_id' => 'e.id' ) ) ) ),
 		'id',
 		(int) $form_id,
 		array( 'is_active', 'title', 'm.display_meta' )

@@ -1769,11 +1769,9 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 
 /** Bricks' submissions table as the kernel's SQL layer names it (no prefix). */
 function minn_admin_bricks_forms_table() {
-	global $wpdb;
-	$table = class_exists( '\Bricks\Integrations\Form\Submission_Database' )
-		? (string) \Bricks\Integrations\Form\Submission_Database::get_table_name()
-		: $wpdb->prefix . 'bricks_form_submissions';
-	return 0 === strpos( $table, $wpdb->prefix ) ? substr( $table, strlen( $wpdb->prefix ) ) : $table;
+	return class_exists( '\Bricks\Integrations\Form\Submission_Database' )
+		? Minn_Admin_Kernel_SQL::named( \Bricks\Integrations\Form\Submission_Database::get_table_name() )
+		: 'bricks_form_submissions';
 }
 
 /** Removal is theirs to grant: their delete_data gate is manage_options. */
