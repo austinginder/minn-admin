@@ -243,37 +243,120 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	return $surfaces;
 } );
 
-add_action( 'rest_api_init', function () {
-	if ( ! minn_admin_fluent_snippets_active() ) {
-		return;
-	}
-	if ( ! class_exists( 'FluentSnippets\App\Helpers\Helper' ) || ! class_exists( 'FluentSnippets\App\Model\Snippet' ) ) {
-		return;
-	}
+/**
+ * Whether their snippet store is loaded: the routes need its helper and model.
+ *
+ * @return bool
+ */
+function minn_admin_fluent_ready() {
+	return minn_admin_fluent_snippets_active()
+		&& class_exists( 'FluentSnippets\App\Helpers\Helper' )
+		&& class_exists( 'FluentSnippets\App\Model\Snippet' );
+}
 
-	$can_read = function () {
-		return current_user_can( 'install_plugins' );
-	};
+function minn_admin_fluent_can_read() {
+	return current_user_can( 'install_plugins' );
+}
 
-	// Status card: counts from their own indexed snippet list (file-based
-	// store; the index rebuild mirrors what the list route does).
-	register_rest_route( 'minn-admin/v1', '/fluent-snippets/status', array(
-		'methods'             => 'GET',
-		'permission_callback' => $can_read,
-		'callback'            => function () {
-			\FluentSnippets\App\Helpers\Helper::cacheSnippetIndex( '', true );
-			$model = new \FluentSnippets\App\Model\Snippet();
-			$all   = $model->getIndexedSnippets();
-			if ( isset( $all['data'] ) && is_array( $all['data'] ) ) {
-				$all = $all['data'];
-			}
-			$all      = is_array( $all ) ? $all : array();
-			$items    = array_map( 'minn_admin_fluent_item', $all );
-			$active   = count( array_filter( $items, function ( $i ) {
-				return ! empty( $i['active'] );
-			} ) );
-			$inactive = count( $items ) - $active;
-			$rows = array(
+function minn_admin_fluent_can_write() {
+	// These snippets are PHP executed from files. DISALLOW_FILE_MODS happens
+	// to close this because core maps install_plugins to do_not_allow under
+	// it, but DISALLOW_FILE_EDIT alone does not.
+	if ( class_exists( 'Minn_Admin' ) && ! Minn_Admin::code_edits_allowed() ) {
+		return false;
+	}
+	return current_user_can( 'install_plugins' ) && current_user_can( 'unfiltered_html' );
+}
+
+/**
+ * Every snippet in their index, rebuilt first as their own list does. Their
+ * paginated read counts its total AFTER the slice, so it is read whole.
+ *
+ * @return array[]
+ */
+function minn_admin_fluent_all() {
+	\FluentSnippets\App\Helpers\Helper::cacheSnippetIndex( '', true );
+	$model = new \FluentSnippets\App\Model\Snippet();
+	$all   = $model->getIndexedSnippets();
+	// Defensive: some code paths return a pack object.
+	if ( isset( $all['data'] ) && is_array( $all['data'] ) ) {
+		$all = $all['data'];
+	}
+	return is_array( $all ) ? $all : array();
+}
+
+/**
+ * One snippet by file name, as their store reads it, with its code (the
+ * leading "<?php" they prepend to PHP files taken off).
+ *
+ * @param string $file File name.
+ * @return array|WP_Error array( full, meta, code )
+ */
+function minn_admin_fluent_load( $file ) {
+	$model = new \FluentSnippets\App\Model\Snippet();
+	$full  = $model->findByFileName( $file );
+	// Their missing-file error carries no status, which would answer 500.
+	if ( is_wp_error( $full ) ) {
+		return new WP_Error( 'not_found', __( 'Snippet not found.', 'minn-admin' ), array( 'status' => 404 ) );
+	}
+	$full['file_name'] = $file;
+	$meta              = isset( $full['meta'] ) && is_array( $full['meta'] ) ? $full['meta'] : array();
+	$code              = isset( $full['code'] ) ? (string) $full['code'] : '';
+	if ( isset( $meta['type'] ) && 'PHP' === $meta['type'] ) {
+		$code = preg_replace( '/^<\?php\s*/', '', $code );
+	}
+	return array( $full, $meta, $code );
+}
+
+/**
+ * Save a snippet through their own updater, then read it back.
+ *
+ * @param string $file File name.
+ * @param array  $meta Its meta.
+ * @param string $code Its code.
+ * @return array|WP_Error The item as it now reads.
+ */
+function minn_admin_fluent_save( $file, array $meta, $code ) {
+	if ( empty( $meta['condition'] ) || ! is_array( $meta['condition'] ) ) {
+		$meta['condition'] = array( 'status' => 'no' );
+	}
+	$result = \FluentSnippets\App\Helpers\Helper::updateSnippet(
+		array(
+			'meta'       => $meta,
+			'code'       => $code,
+			'file_name'  => $file,
+			'reactivate' => false,
+		)
+	);
+	if ( is_wp_error( $result ) ) {
+		return $result;
+	}
+	// Done only when the file reads back as written: whether it runs.
+	$now = minn_admin_fluent_load( $file );
+	if ( ! is_wp_error( $now ) && (string) ( $now[1]['status'] ?? 'draft' ) !== (string) $meta['status'] ) {
+		return new WP_Error( 'not_applied', __( 'The plugin reported success, but the change is not there.', 'minn-admin' ), array( 'status' => 500 ) );
+	}
+	return is_wp_error( $now ) ? $now : minn_admin_fluent_item( $now[0] );
+}
+
+/** The file name in the URL, as their store names files ("1-name.php"). */
+function minn_admin_fluent_file( WP_REST_Request $request ) {
+	return sanitize_file_name( (string) Minn_Admin::path_param( $request, 'file' ) );
+}
+
+// Status card: counts from their own indexed snippet list (a file-based
+// store). Declared before the item route, which would also match "status".
+minn_admin_endpoint( 'fluent-snippets/status', array(
+	'active' => 'minn_admin_fluent_ready',
+	'gate'   => 'minn_admin_fluent_can_read',
+	'run'    => function () {
+		$items    = array_map( 'minn_admin_fluent_item', minn_admin_fluent_all() );
+		$active   = count( array_filter( $items, function ( $i ) {
+			return ! empty( $i['active'] );
+		} ) );
+		$inactive = count( $items ) - $active;
+		return array(
+			'rows' => array(
 				array(
 					'label' => __( 'Active snippets', 'minn-admin' ),
 					'value' => (string) $active,
@@ -284,256 +367,168 @@ add_action( 'rest_api_init', function () {
 					'value' => __( 'Standalone files', 'minn-admin' ),
 					'hint'  => __( 'FluentSnippets runs snippets from files, not the database', 'minn-admin' ),
 				),
-			);
-			return rest_ensure_response( array( 'rows' => $rows ) );
-		},
-	) );
-	$can_write = function () {
-		// These snippets are PHP executed from files. DISALLOW_FILE_MODS
-		// happens to close this because core maps install_plugins to
-		// do_not_allow under it, but DISALLOW_FILE_EDIT alone does not.
-		if ( class_exists( 'Minn_Admin' ) && ! Minn_Admin::code_edits_allowed() ) {
-			return false;
+			),
+		);
+	},
+) );
+
+minn_admin_endpoint( 'fluent-snippets', array(
+	'active' => 'minn_admin_fluent_ready',
+	'gate'   => 'minn_admin_fluent_can_read',
+	'run'    => function ( WP_REST_Request $request ) {
+		$per_page = min( 100, max( 1, (int) ( $request['per_page'] ?? 25 ) ) );
+		$page     = min( 100000, max( 1, (int) ( $request['page'] ?? 1 ) ) );
+		$all      = minn_admin_fluent_all();
+		$active   = sanitize_key( (string) ( $request['active'] ?? 'all' ) );
+		if ( 'active' === $active || 'inactive' === $active ) {
+			$want = ( 'active' === $active );
+			$all  = array_values( array_filter( $all, function ( $row ) use ( $want ) {
+				$item = minn_admin_fluent_item( $row );
+				return ! empty( $item['active'] ) === $want;
+			} ) );
 		}
-		return current_user_can( 'install_plugins' ) && current_user_can( 'unfiltered_html' );
-	};
+		return array(
+			'items' => array_map( 'minn_admin_fluent_item', array_slice( $all, ( $page - 1 ) * $per_page, $per_page ) ),
+			'total' => count( $all ),
+		);
+	},
+) );
 
-	register_rest_route(
-		'minn-admin/v1',
-		'/fluent-snippets',
-		array(
+minn_admin_endpoint( 'fluent-snippets', array(
+	'methods' => 'POST',
+	'active'  => 'minn_admin_fluent_ready',
+	'gate'    => 'minn_admin_fluent_can_write',
+	'run'     => function ( WP_REST_Request $request ) {
+		$tags = $request['tags'];
+		if ( is_array( $tags ) ) {
+			$tags = implode( ', ', array_map( 'sanitize_text_field', $tags ) );
+		}
+		$meta   = array(
+			'name'         => sanitize_text_field( (string) $request['name'] ),
+			'status'       => ! empty( $request['active'] ) ? 'published' : 'draft',
+			'type'         => sanitize_text_field( (string) ( $request['type'] ?? 'PHP' ) ),
+			'run_at'       => sanitize_text_field( (string) ( $request['run_at'] ?? 'all' ) ),
+			'description'  => sanitize_textarea_field( (string) ( $request['desc'] ?? '' ) ),
+			'tags'         => (string) $tags,
+			'group'        => '',
+			'priority'     => (int) ( $request['priority'] ?? 10 ),
+			'shortcode'    => 'no',
+			'load_as_file' => 'no',
+			'condition'    => array( 'status' => 'no' ),
+		);
+		$result = \FluentSnippets\App\Helpers\Helper::createSnippet(
 			array(
-				'methods'             => 'GET',
-				'permission_callback' => $can_read,
-				'callback'            => function ( WP_REST_Request $request ) {
-					\FluentSnippets\App\Helpers\Helper::cacheSnippetIndex( '', true );
-					$per_page = min( 100, max( 1, (int) ( $request['per_page'] ?? 25 ) ) );
-					$page     = max( 1, (int) ( $request['page'] ?? 1 ) );
-					$model    = new \FluentSnippets\App\Model\Snippet();
-					// Call without pagination — their paginated total is counted
-					// AFTER array_slice, so it always equals the page size.
-					$all = $model->getIndexedSnippets();
-					if ( ! is_array( $all ) ) {
-						$all = array();
-					}
-					// Defensive: some code paths return a pack object.
-					if ( isset( $all['data'] ) && is_array( $all['data'] ) ) {
-						$all = $all['data'];
-					}
-					$active = sanitize_key( (string) ( $request['active'] ?? 'all' ) );
-					if ( 'active' === $active || 'inactive' === $active ) {
-						$want = ( 'active' === $active );
-						$all  = array_values( array_filter( $all, function ( $row ) use ( $want ) {
-							$item = minn_admin_fluent_item( $row );
-							return ! empty( $item['active'] ) === $want;
-						} ) );
-					}
-					$total = count( $all );
-					$slice = array_slice( $all, ( $page - 1 ) * $per_page, $per_page );
-					$items = array_map( 'minn_admin_fluent_item', $slice );
-					return rest_ensure_response(
-						array(
-							'items' => $items,
-							'total' => $total,
-						)
-					);
-				},
-			),
-			array(
-				'methods'             => 'POST',
-				'permission_callback' => $can_write,
-				'callback'            => function ( WP_REST_Request $request ) {
-					$tags = $request['tags'];
-					if ( is_array( $tags ) ) {
-						$tags = implode( ', ', array_map( 'sanitize_text_field', $tags ) );
-					}
-					$meta = array(
-						'name'        => sanitize_text_field( (string) $request['name'] ),
-						'status'      => ! empty( $request['active'] ) ? 'published' : 'draft',
-						'type'        => sanitize_text_field( (string) ( $request['type'] ?? 'PHP' ) ),
-						'run_at'      => sanitize_text_field( (string) ( $request['run_at'] ?? 'all' ) ),
-						'description' => sanitize_textarea_field( (string) ( $request['desc'] ?? '' ) ),
-						'tags'        => (string) $tags,
-						'group'       => '',
-						'priority'    => (int) ( $request['priority'] ?? 10 ),
-						'shortcode'   => 'no',
-						'load_as_file'=> 'no',
-						'condition'   => array( 'status' => 'no' ),
-					);
-					$result = \FluentSnippets\App\Helpers\Helper::createSnippet(
-						array(
-							'meta' => $meta,
-							'code' => (string) ( $request['code'] ?? '' ),
-						)
-					);
-					if ( is_wp_error( $result ) ) {
-						return $result;
-					}
-					// createSnippet returns the file name string on success.
-					$file  = is_string( $result ) ? $result : ( isset( $result['file_name'] ) ? $result['file_name'] : '' );
-					$model = new \FluentSnippets\App\Model\Snippet();
-					$full  = $model->findByFileName( $file );
-					if ( is_wp_error( $full ) ) {
-						return rest_ensure_response( array( 'id' => $file, 'name' => $meta['name'] ) );
-					}
-					$full['file_name'] = $file;
-					return rest_ensure_response( minn_admin_fluent_item( $full ) );
-				},
-			),
-		)
-	);
+				'meta' => $meta,
+				'code' => (string) ( $request['code'] ?? '' ),
+			)
+		);
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		// createSnippet answers the file name on success.
+		$file = is_string( $result ) ? $result : ( isset( $result['file_name'] ) ? $result['file_name'] : '' );
+		$now  = minn_admin_fluent_load( $file );
+		return is_wp_error( $now ) ? array( 'id' => $file, 'name' => $meta['name'] ) : minn_admin_fluent_item( $now[0] );
+	},
+) );
 
-	// file names look like "1-name.php" — allow dots and hyphens.
-	register_rest_route(
-		'minn-admin/v1',
-		'/fluent-snippets/(?P<file>[^/]+)',
-		array(
-			array(
-				'methods'             => 'GET',
-				'permission_callback' => $can_read,
-				'callback'            => function ( WP_REST_Request $request ) {
-					$file  = sanitize_file_name( Minn_Admin::path_param( $request, 'file' ) );
-					$model = new \FluentSnippets\App\Model\Snippet();
-					$full  = $model->findByFileName( $file );
-					if ( is_wp_error( $full ) ) {
-						return $full;
-					}
-					$full['file_name'] = $file;
-					return rest_ensure_response( minn_admin_fluent_item( $full ) );
-				},
-			),
-			array(
-				'methods'             => 'PUT',
-				'permission_callback' => $can_write,
-				'callback'            => function ( WP_REST_Request $request ) {
-					$file  = sanitize_file_name( Minn_Admin::path_param( $request, 'file' ) );
-					$model = new \FluentSnippets\App\Model\Snippet();
-					$full  = $model->findByFileName( $file );
-					if ( is_wp_error( $full ) ) {
-						return $full;
-					}
-					$meta = isset( $full['meta'] ) && is_array( $full['meta'] ) ? $full['meta'] : array();
-					$code = isset( $full['code'] ) ? (string) $full['code'] : '';
-					if ( isset( $meta['type'] ) && 'PHP' === $meta['type'] ) {
-						$code = preg_replace( '/^<\?php\s*/', '', $code );
-					}
+// File names look like "1-name.php": dots and hyphens.
+minn_admin_endpoint( 'fluent-snippets/(?P<file>[^/]+)', array(
+	'active' => 'minn_admin_fluent_ready',
+	'gate'   => 'minn_admin_fluent_can_read',
+	'run'    => function ( WP_REST_Request $request ) {
+		$now = minn_admin_fluent_load( minn_admin_fluent_file( $request ) );
+		return is_wp_error( $now ) ? $now : minn_admin_fluent_item( $now[0] );
+	},
+) );
 
-					if ( null !== $request['name'] ) {
-						$meta['name'] = sanitize_text_field( (string) $request['name'] );
-					}
-					if ( null !== $request['desc'] ) {
-						$meta['description'] = sanitize_textarea_field( (string) $request['desc'] );
-					}
-					if ( null !== $request['code'] ) {
-						$code = (string) $request['code'];
-					}
-					if ( null !== $request['type'] && '' !== (string) $request['type'] ) {
-						$meta['type'] = sanitize_text_field( (string) $request['type'] );
-					}
-					if ( null !== $request['run_at'] && '' !== (string) $request['run_at'] ) {
-						$meta['run_at'] = sanitize_text_field( (string) $request['run_at'] );
-					}
-					if ( null !== $request['priority'] ) {
-						$meta['priority'] = (int) $request['priority'];
-					}
-					if ( null !== $request['tags'] ) {
-						$tags = $request['tags'];
-						$meta['tags'] = is_array( $tags )
-							? implode( ', ', array_map( 'sanitize_text_field', $tags ) )
-							: sanitize_text_field( (string) $tags );
-					}
-					if ( null !== $request['active'] ) {
-						$meta['status'] = ! empty( $request['active'] ) ? 'published' : 'draft';
-					}
-					if ( empty( $meta['condition'] ) || ! is_array( $meta['condition'] ) ) {
-						$meta['condition'] = array( 'status' => 'no' );
-					}
+minn_admin_endpoint( 'fluent-snippets/(?P<file>[^/]+)', array(
+	'methods' => 'PUT',
+	'active'  => 'minn_admin_fluent_ready',
+	'gate'    => 'minn_admin_fluent_can_write',
+	'run'     => function ( WP_REST_Request $request ) {
+		$file = minn_admin_fluent_file( $request );
+		$now  = minn_admin_fluent_load( $file );
+		if ( is_wp_error( $now ) ) {
+			return $now;
+		}
+		list( , $meta, $code ) = $now;
+		if ( null !== $request['name'] ) {
+			$meta['name'] = sanitize_text_field( (string) $request['name'] );
+		}
+		if ( null !== $request['desc'] ) {
+			$meta['description'] = sanitize_textarea_field( (string) $request['desc'] );
+		}
+		if ( null !== $request['code'] ) {
+			$code = (string) $request['code'];
+		}
+		if ( null !== $request['type'] && '' !== (string) $request['type'] ) {
+			$meta['type'] = sanitize_text_field( (string) $request['type'] );
+		}
+		if ( null !== $request['run_at'] && '' !== (string) $request['run_at'] ) {
+			$meta['run_at'] = sanitize_text_field( (string) $request['run_at'] );
+		}
+		if ( null !== $request['priority'] ) {
+			$meta['priority'] = (int) $request['priority'];
+		}
+		if ( null !== $request['tags'] ) {
+			$tags         = $request['tags'];
+			$meta['tags'] = is_array( $tags )
+				? implode( ', ', array_map( 'sanitize_text_field', $tags ) )
+				: sanitize_text_field( (string) $tags );
+		}
+		if ( null !== $request['active'] ) {
+			$meta['status'] = ! empty( $request['active'] ) ? 'published' : 'draft';
+		}
+		// A snippet file with no @type runs nothing, one with no @run_at runs
+		// or not depending on its type, and FluentSnippets saves neither
+		// empty: the person picks them.
+		if ( '' === (string) ( $meta['type'] ?? '' ) ) {
+			return new WP_Error( 'minn_fluent_no_type', __( 'This snippet has no type, so FluentSnippets does not run it. Pick a type to save it.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		if ( '' === (string) ( $meta['run_at'] ?? '' ) ) {
+			return new WP_Error( 'minn_fluent_no_run_at', __( 'This snippet has no Run at setting. Pick one to save it.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		return minn_admin_fluent_save( $file, $meta, $code );
+	},
+) );
 
-					// A snippet file with no @type runs nothing, one with no
-					// @run_at runs or not depending on its type, and FluentSnippets
-					// saves neither empty: the person picks them.
-					if ( '' === (string) ( $meta['type'] ?? '' ) ) {
-						return new WP_Error( 'minn_fluent_no_type', __( 'This snippet has no type, so FluentSnippets does not run it. Pick a type to save it.', 'minn-admin' ), array( 'status' => 400 ) );
-					}
-					if ( '' === (string) ( $meta['run_at'] ?? '' ) ) {
-						return new WP_Error( 'minn_fluent_no_run_at', __( 'This snippet has no Run at setting. Pick one to save it.', 'minn-admin' ), array( 'status' => 400 ) );
-					}
-					$result = \FluentSnippets\App\Helpers\Helper::updateSnippet(
-						array(
-							'meta'       => $meta,
-							'code'       => $code,
-							'file_name'  => $file,
-							'reactivate' => false,
-						)
-					);
-					if ( is_wp_error( $result ) ) {
-						return $result;
-					}
-					$full = $model->findByFileName( $file );
-					if ( is_wp_error( $full ) ) {
-						return $full;
-					}
-					$full['file_name'] = $file;
-					return rest_ensure_response( minn_admin_fluent_item( $full ) );
-				},
-			),
-			array(
-				'methods'             => 'DELETE',
-				'permission_callback' => $can_write,
-				'callback'            => function ( WP_REST_Request $request ) {
-					$file  = sanitize_file_name( Minn_Admin::path_param( $request, 'file' ) );
-					$model = new \FluentSnippets\App\Model\Snippet();
-					$full  = $model->findByFileName( $file );
-					if ( is_wp_error( $full ) ) {
-						return $full;
-					}
-					$model->deleteSnippet( $file );
-					return new WP_REST_Response( null, 204 );
-				},
-			),
-		)
-	);
+minn_admin_endpoint( 'fluent-snippets/(?P<file>[^/]+)', array(
+	'methods' => 'DELETE',
+	'active'  => 'minn_admin_fluent_ready',
+	'gate'    => 'minn_admin_fluent_can_write',
+	'run'     => function ( WP_REST_Request $request ) {
+		$file = minn_admin_fluent_file( $request );
+		$now  = minn_admin_fluent_load( $file );
+		if ( is_wp_error( $now ) ) {
+			return $now;
+		}
+		$model = new \FluentSnippets\App\Model\Snippet();
+		$model->deleteSnippet( $file );
+		// Done only once their store no longer finds it.
+		if ( ! is_wp_error( minn_admin_fluent_load( $file ) ) ) {
+			return new WP_Error( 'not_applied', __( 'The plugin reported success, but the change is not there.', 'minn-admin' ), array( 'status' => 500 ) );
+		}
+		// A body, not a 204: the app reads every answer as JSON.
+		return array( 'ok' => true );
+	},
+) );
 
-	register_rest_route(
-		'minn-admin/v1',
-		'/fluent-snippets/(?P<file>[^/]+)/active',
-		array(
-			'methods'             => 'POST',
-			'permission_callback' => $can_write,
-			'callback'            => function ( WP_REST_Request $request ) {
-				$file  = sanitize_file_name( Minn_Admin::path_param( $request, 'file' ) );
-				$model = new \FluentSnippets\App\Model\Snippet();
-				$full  = $model->findByFileName( $file );
-				if ( is_wp_error( $full ) ) {
-					return $full;
-				}
-				$meta = isset( $full['meta'] ) && is_array( $full['meta'] ) ? $full['meta'] : array();
-				$code = isset( $full['code'] ) ? (string) $full['code'] : '';
-				if ( isset( $meta['type'] ) && 'PHP' === $meta['type'] ) {
-					$code = preg_replace( '/^<\?php\s*/', '', $code );
-				}
-				$meta['status'] = ! empty( $request['active'] ) ? 'published' : 'draft';
-				if ( empty( $meta['condition'] ) || ! is_array( $meta['condition'] ) ) {
-					$meta['condition'] = array( 'status' => 'no' );
-				}
-				$result = \FluentSnippets\App\Helpers\Helper::updateSnippet(
-					array(
-						'meta'       => $meta,
-						'code'       => $code,
-						'file_name'  => $file,
-						'reactivate' => false,
-					)
-				);
-				if ( is_wp_error( $result ) ) {
-					return $result;
-				}
-				$full = $model->findByFileName( $file );
-				$full['file_name'] = $file;
-				return rest_ensure_response( minn_admin_fluent_item( $full ) );
-			},
-			'args'                => array(
-				'active' => array( 'type' => 'boolean', 'required' => true ),
-			),
-		)
-	);
-} );
+minn_admin_endpoint( 'fluent-snippets/(?P<file>[^/]+)/active', array(
+	'methods' => 'POST',
+	'active'  => 'minn_admin_fluent_ready',
+	'gate'    => 'minn_admin_fluent_can_write',
+	'args'    => array(
+		'active' => array( 'type' => 'boolean', 'required' => true ),
+	),
+	'run'     => function ( WP_REST_Request $request ) {
+		$file = minn_admin_fluent_file( $request );
+		$now  = minn_admin_fluent_load( $file );
+		if ( is_wp_error( $now ) ) {
+			return $now;
+		}
+		list( , $meta, $code ) = $now;
+		$meta['status']        = ! empty( $request['active'] ) ? 'published' : 'draft';
+		return minn_admin_fluent_save( $file, $meta, $code );
+	},
+) );

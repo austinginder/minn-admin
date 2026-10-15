@@ -778,95 +778,77 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	return $surfaces;
 } );
 
-add_action( 'rest_api_init', function () {
-	if ( ! minn_admin_ccj_active() ) {
-		return;
+/**
+ * The list through their own reader (minn_admin_ccj_rows()): WordPress's
+ * search over title and code, and a row whose code this caller is not
+ * served never matches on that code.
+ *
+ * @param array $q The kernel's list query.
+ * @return array array( rows, total )
+ */
+function minn_admin_ccj_list( array $q ) {
+	$args = '' !== $q['search'] ? array( 's' => sanitize_text_field( $q['search'] ) ) : array();
+	if ( isset( $q['facets']['active'] ) ) {
+		$args['active'] = $q['facets']['active'];
 	}
-	$perm = function () {
-		return minn_admin_ccj_can();
+	$all = minn_admin_ccj_rows( $args );
+	return array( array_slice( $all, ( $q['page'] - 1 ) * $q['per_page'], $q['per_page'] ), count( $all ) );
+}
+
+minn_admin_resource( 'ccj/snippets', function () {
+	$fields = array(
+		'id'       => 'int',
+		'name'     => 'text',
+		'code'     => 'text',
+		'language' => 'text',
+		'type'     => 'text',
+		'side'     => 'text',
+		'linking'  => 'text',
+		'priority' => 'int',
+		'scope'    => 'text',
+		'active'   => 'bool',
+		'modified' => 'text',
+	);
+	$item   = function ( $id, $fresh ) {
+		return $fresh;
 	};
-
-	// Status card: counts over their CPT. Active = published without the
-	// '_active' = no meta (their own convention; absent meta means active).
-	// Languages are regex-peeked from the serialized `options` meta — never
-	// unserialized.
-	register_rest_route( 'minn-admin/v1', '/custom-css-js/status', array(
-		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function () {
-			global $wpdb;
-			$rowsdb = $wpdb->get_results(
-				"SELECT p.ID, pm.meta_value AS off, po.meta_value AS opts
-				 FROM {$wpdb->posts} p
-				 LEFT JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID AND pm.meta_key = '_active'
-				 LEFT JOIN {$wpdb->postmeta} po ON po.post_id = p.ID AND po.meta_key = 'options'
-				 WHERE p.post_type = 'custom-css-js' AND p.post_status = 'publish'"
-			);
-			$active   = 0;
-			$inactive = 0;
-			$langs    = array();
-			foreach ( (array) $rowsdb as $r ) {
-				if ( 'no' === (string) $r->off ) {
-					$inactive++;
-					continue;
-				}
-				$active++;
-				if ( preg_match( '/"language";s:\d+:"([a-z]+)"/', (string) $r->opts, $m ) ) {
-					$langs[ $m[1] ] = ( $langs[ $m[1] ] ?? 0 ) + 1;
-				}
-			}
-			$rows = array(
-				array(
-					'label' => __( 'Active codes', 'minn-admin' ),
-					'value' => (string) $active,
-					'hint'  => $inactive
-						? sprintf(
-							/* translators: %d: number of inactive codes. */
-							__( '%d inactive', 'minn-admin' ),
-							$inactive
-						)
-						: __( 'nothing inactive', 'minn-admin' ),
-				),
-			);
-			if ( $langs ) {
-				arsort( $langs );
-				$rows[] = array(
-					'label' => __( 'Running languages', 'minn-admin' ),
-					'value' => implode( ' · ', array_map( function ( $c, $l ) {
-						return $c . ' ' . $l;
-					}, $langs, array_keys( $langs ) ) ),
-				);
-			}
-			return rest_ensure_response( array( 'rows' => $rows ) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/ccj/snippets', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) {
-				$per_page = min( 100, max( 1, (int) $request->get_param( 'per_page' ) ?: 25 ) );
-				$page     = max( 1, (int) $request->get_param( 'page' ) ?: 1 );
-				$args     = array();
-				if ( $request->get_param( 'search' ) ) {
-					$args['s'] = sanitize_text_field( $request->get_param( 'search' ) );
-				}
-				$active = $request->get_param( 'active' );
-				if ( null !== $active && '' !== $active && 'all' !== $active ) {
-					$args['active'] = $active;
-				}
-				$all = minn_admin_ccj_rows( $args );
-				return rest_ensure_response( array(
-					'items' => array_slice( $all, ( $page - 1 ) * $per_page, $per_page ),
-					'total' => count( $all ),
-				) );
+	// Done when the stored snippet runs, or not, as asked.
+	$runs   = function ( $id, $fresh, $want ) {
+		return is_array( $fresh ) && ( null === $want || $want === $fresh['active'] );
+	};
+	return array(
+		'active'  => 'minn_admin_ccj_active',
+		'gates'   => array( 'view' => 'minn_admin_ccj_can' ),
+		'labels'  => array( 'not_found' => __( 'Code not found.', 'minn-admin' ) ),
+		'source'  => array(
+			'list'   => 'minn_admin_ccj_list',
+			'get'    => 'minn_admin_ccj_item',
+			'exists' => function ( $id ) {
+				$post = get_post( $id );
+				return $post && 'custom-css-js' === $post->post_type;
 			},
 		),
-		array(
-			'methods'             => 'POST',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) {
+		'list'    => array(
+			'facets' => array(
+				array(
+					'param'  => 'active',
+					'values' => function ( $v ) {
+						return in_array( $v, array( '1', 'true', '0', 'false' ), true ) ? array( 'active' => $v ) : null;
+					},
+				),
+			),
+			'search' => array( 'columns' => array( 'name' ) ),
+			'fields' => $fields,
+		),
+		'item'    => array(
+			'view'   => function ( array $row ) {
+				return $row;
+			},
+			'fields' => $fields,
+		),
+		'create'  => array(
+			'gate'   => 'view',
+			'run'    => function ( WP_REST_Request $request ) {
 				$body = $request->get_json_params();
 				if ( ! is_array( $body ) ) {
 					$body = array();
@@ -903,190 +885,212 @@ add_action( 'rest_api_init', function () {
 				update_post_meta( $id, '_active', ! empty( $body['active'] ) ? 'yes' : 'no' );
 				minn_admin_ccj_write_file( $id, $code );
 				minn_admin_ccj_rebuild_tree();
-				$item = minn_admin_ccj_item( $id );
-				return rest_ensure_response( $item ? $item : array( 'id' => $id ) );
+				return $id;
 			},
-		),
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/ccj/snippets/(?P<id>\d+)', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) {
-				$item = minn_admin_ccj_item( (int) Minn_Admin::path_param( $request ) );
-				if ( ! $item ) {
-					return new WP_Error( 'not_found', __( 'Code not found.', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				return rest_ensure_response( $item );
+			'expect' => function ( $id, $fresh ) {
+				return is_array( $fresh ) && $id === $fresh['id'];
 			},
+			'reply'  => $item,
 		),
-		array(
-			'methods'             => 'PUT',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) {
-				$id   = (int) Minn_Admin::path_param( $request );
-				$post = get_post( $id );
-				if ( ! $post || 'custom-css-js' !== $post->post_type ) {
-					return new WP_Error( 'not_found', __( 'Code not found.', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				if ( ! minn_admin_ccj_obj_can( 'edit', $id ) ) {
-					return minn_admin_ccj_obj_error();
-				}
-				$body = $request->get_json_params();
-				if ( ! is_array( $body ) ) {
-					$body = array();
-				}
-				if ( ! empty( $body['active'] ) && 'publish' !== $post->post_status && ! minn_admin_ccj_obj_can( 'publish' ) ) {
-					return minn_admin_ccj_obj_error();
-				}
-				$stored = minn_admin_ccj_get_options( $id );
-				$opts   = minn_admin_ccj_normalize_options( $body, $stored );
-				// Check the RESULTING snippet, not just the incoming code. Retyping
-				// an existing css/frontend snippet to js, or moving it onto the admin
-				// or login screen, makes its stored bytes execute in a context this
-				// caller may not write to, so an options-only edit is the same
-				// escalation as a code write. Linking counts for the same reason:
-				// external is the one shape minn_admin_ccj_can_write_code() lets a
-				// caller without unfiltered_html store raw, because it loads through
-				// wp_enqueue_style and cannot break out. Moving it to internal/both
-				// hands those same stored bytes to write_file()'s inlined
-				// <style>/<script> sink, so the promotion is a code write.
-				$retargets = ( $opts['language'] !== ( isset( $stored['language'] ) ? (string) $stored['language'] : 'css' ) )
-					|| ( $opts['side'] !== ( isset( $stored['side'] ) ? (string) $stored['side'] : 'frontend' ) )
-					|| ( $opts['linking'] !== ( isset( $stored['linking'] ) ? (string) $stored['linking'] : 'internal' ) );
-				if ( ( array_key_exists( 'code', $body ) || $retargets ) && ! minn_admin_ccj_can_write_code( $opts ) ) {
-					return minn_admin_ccj_code_error( $opts );
-				}
-				// The edit form sends code and active on every save, renames
-				// included, so judge what actually changed against the stored
-				// snippet before writing anything.
-				// Line endings normalised: CCJ's own editor stores CRLF and Minn's
-				// form sends LF back, which read as a change on every save.
-				$eol            = function ( $v ) {
-					return str_replace( "\r\n", "\n", (string) $v );
-				};
-				$code_changed   = array_key_exists( 'code', $body ) && $eol( $body['code'] ) !== $eol( $post->post_content );
-				$active_changed = array_key_exists( 'active', $body ) && ! empty( $body['active'] ) !== minn_admin_ccj_is_active( $id );
-				$update = array( 'ID' => $id );
-				if ( isset( $body['name'] ) ) {
-					$update['post_title'] = sanitize_text_field( $body['name'] );
-				}
-				// Only a code change touches the body: an unchanged one would go
-				// back through kses for a designer and lose what CCJ stored.
-				if ( $code_changed ) {
-					$update['post_content'] = (string) $body['code'];
-				}
-				if ( array_key_exists( 'active', $body ) ) {
-					if ( ! empty( $body['active'] ) && ! minn_admin_ccj_can_write_code( $opts ) ) {
+		'actions' => array(
+			'edit'   => array(
+				'method' => 'PUT',
+				'gate'   => 'view',
+				'run'    => function ( $id, array $row, WP_REST_Request $request ) {
+					$post = get_post( $id );
+					if ( ! minn_admin_ccj_obj_can( 'edit', $id ) ) {
+						return minn_admin_ccj_obj_error();
+					}
+					$body = $request->get_json_params();
+					if ( ! is_array( $body ) ) {
+						$body = array();
+					}
+					if ( ! empty( $body['active'] ) && 'publish' !== $post->post_status && ! minn_admin_ccj_obj_can( 'publish' ) ) {
+						return minn_admin_ccj_obj_error();
+					}
+					$stored = minn_admin_ccj_get_options( $id );
+					$opts   = minn_admin_ccj_normalize_options( $body, $stored );
+					// Check the RESULTING snippet, not just the incoming code. Retyping
+					// an existing css/frontend snippet to js, or moving it onto the admin
+					// or login screen, makes its stored bytes execute in a context this
+					// caller may not write to, so an options-only edit is the same
+					// escalation as a code write. Linking counts for the same reason:
+					// external is the one shape minn_admin_ccj_can_write_code() lets a
+					// caller without unfiltered_html store raw, because it loads through
+					// wp_enqueue_style and cannot break out. Moving it to internal/both
+					// hands those same stored bytes to write_file()'s inlined
+					// <style>/<script> sink, so the promotion is a code write.
+					$retargets = ( $opts['language'] !== ( isset( $stored['language'] ) ? (string) $stored['language'] : 'css' ) )
+						|| ( $opts['side'] !== ( isset( $stored['side'] ) ? (string) $stored['side'] : 'frontend' ) )
+						|| ( $opts['linking'] !== ( isset( $stored['linking'] ) ? (string) $stored['linking'] : 'internal' ) );
+					if ( ( array_key_exists( 'code', $body ) || $retargets ) && ! minn_admin_ccj_can_write_code( $opts ) ) {
 						return minn_admin_ccj_code_error( $opts );
 					}
-					$update['post_status'] = $body['active'] ? 'publish' : 'draft';
-					update_post_meta( $id, '_active', $body['active'] ? 'yes' : 'no' );
-				}
-				if ( array_key_exists( 'post_content', $update ) ) {
-					wp_update_post( wp_slash( $update ) );
-				} else {
-					minn_admin_ccj_update_post_meta_only( $update );
-				}
-				// The permalink copy under the STORED language is this snippet's;
-				// after a language change the name under the new one may be
-				// another snippet's (slugs are not unique), so it is read now.
-				$language_changed = $opts['language'] !== ( isset( $stored['language'] ) ? (string) $stored['language'] : 'css' );
-				$slug_before      = minn_admin_ccj_slug_paths( $id );
-				update_post_meta( $id, 'options', $opts );
-				// The file changes only when what it holds does: the code, the
-				// language, linking or sides, or whether it runs. A rename
-				// leaves it alone (it can hold raw bytes CCJ wrote that differ
-				// from post_content). Changing the language writes it under a
-				// new name, so clear all three first and write the one that
-				// now applies; the file under the old name would otherwise
-				// stay reachable at its own address.
-				// Switching it off or on alone keeps CCJ's bytes (park/restore).
-				if ( $code_changed || $retargets ) {
-					foreach ( $slug_before as $slug_path ) {
-						if ( is_file( $slug_path ) ) {
-							wp_delete_file( $slug_path );
+					// The edit form sends code and active on every save, renames
+					// included, so judge what actually changed against the stored
+					// snippet before writing anything.
+					// Line endings normalised: CCJ's own editor stores CRLF and Minn's
+					// form sends LF back, which read as a change on every save.
+					$eol            = function ( $v ) {
+						return str_replace( "\r\n", "\n", (string) $v );
+					};
+					$code_changed   = array_key_exists( 'code', $body ) && $eol( $body['code'] ) !== $eol( $post->post_content );
+					$active_changed = array_key_exists( 'active', $body ) && ! empty( $body['active'] ) !== minn_admin_ccj_is_active( $id );
+					$update = array( 'ID' => $id );
+					if ( isset( $body['name'] ) ) {
+						$update['post_title'] = sanitize_text_field( $body['name'] );
+					}
+					// Only a code change touches the body: an unchanged one would go
+					// back through kses for a designer and lose what CCJ stored.
+					if ( $code_changed ) {
+						$update['post_content'] = (string) $body['code'];
+					}
+					if ( array_key_exists( 'active', $body ) ) {
+						if ( ! empty( $body['active'] ) && ! minn_admin_ccj_can_write_code( $opts ) ) {
+							return minn_admin_ccj_code_error( $opts );
+						}
+						$update['post_status'] = $body['active'] ? 'publish' : 'draft';
+						update_post_meta( $id, '_active', $body['active'] ? 'yes' : 'no' );
+					}
+					$saved = array_key_exists( 'post_content', $update )
+						? wp_update_post( wp_slash( $update ), true )
+						: minn_admin_ccj_update_post_meta_only( $update );
+					if ( is_wp_error( $saved ) || ! $saved ) {
+						return is_wp_error( $saved ) ? $saved : new WP_Error( 'not_applied', __( 'The plugin reported success, but the change is not there.', 'minn-admin' ), array( 'status' => 500 ) );
+					}
+					// The permalink copy under the STORED language is this snippet's;
+					// after a language change the name under the new one may be
+					// another snippet's (slugs are not unique), so it is read now.
+					$language_changed = $opts['language'] !== ( isset( $stored['language'] ) ? (string) $stored['language'] : 'css' );
+					$slug_before      = minn_admin_ccj_slug_paths( $id );
+					update_post_meta( $id, 'options', $opts );
+					// The file changes only when what it holds does: the code, the
+					// language, linking or sides, or whether it runs. A rename
+					// leaves it alone (it can hold raw bytes CCJ wrote that differ
+					// from post_content). Changing the language writes it under a
+					// new name, so clear all three first and write the one that
+					// now applies; the file under the old name would otherwise
+					// stay reachable at its own address.
+					// Switching it off or on alone keeps CCJ's bytes (park/restore).
+					if ( $code_changed || $retargets ) {
+						foreach ( $slug_before as $slug_path ) {
+							if ( is_file( $slug_path ) ) {
+								wp_delete_file( $slug_path );
+							}
+						}
+						minn_admin_ccj_drop_files( $id, ! $language_changed );
+						delete_post_meta( $id, '_minn_ccj_parked' );
+						minn_admin_ccj_write_file( $id, $code_changed ? (string) $body['code'] : null, ! $language_changed );
+					} elseif ( $active_changed ) {
+						if ( minn_admin_ccj_is_active( $id ) ) {
+							minn_admin_ccj_restore_file( $id );
+						} else {
+							minn_admin_ccj_park_file( $id );
 						}
 					}
-					minn_admin_ccj_drop_files( $id, ! $language_changed );
-					delete_post_meta( $id, '_minn_ccj_parked' );
-					minn_admin_ccj_write_file( $id, $code_changed ? (string) $body['code'] : null, ! $language_changed );
-				} elseif ( $active_changed ) {
-					if ( minn_admin_ccj_is_active( $id ) ) {
-						minn_admin_ccj_restore_file( $id );
-					} else {
-						minn_admin_ccj_park_file( $id );
+					minn_admin_ccj_rebuild_tree();
+					return array_key_exists( 'active', $body ) ? (bool) $body['active'] : null;
+				},
+				'expect' => $runs,
+				'reply'  => $item,
+			),
+			'delete' => array(
+				'method' => 'DELETE',
+				'gate'   => 'view',
+				'run'    => function ( $id ) {
+					if ( ! minn_admin_ccj_obj_can( 'delete', $id ) ) {
+						return minn_admin_ccj_obj_error();
 					}
-				}
-				minn_admin_ccj_rebuild_tree();
-				return rest_ensure_response( minn_admin_ccj_item( $id ) );
-			},
+					// Deleting is a write to the same store.
+					if ( ! minn_admin_ccj_can_activate( $id ) ) {
+						return minn_admin_ccj_code_error( minn_admin_ccj_get_options( $id ) );
+					}
+					// Take the bytes before the post goes, because their own
+					// cleanup cannot run here. A snippet that puts markup on the
+					// page is a live script, and a delete that leaves it running
+					// is worse than no delete at all.
+					minn_admin_ccj_drop_files( $id );
+					wp_delete_post( $id, true );
+					minn_admin_ccj_rebuild_tree();
+					return true;
+				},
+				'expect' => 'gone',
+				'reply'  => function () {
+					return array( 'deleted' => true );
+				},
+			),
+			'active' => array(
+				'gate'   => 'view',
+				'run'    => function ( $id, array $row, WP_REST_Request $request ) {
+					$post = get_post( $id );
+					if ( ! minn_admin_ccj_obj_can( 'edit', $id ) ) {
+						return minn_admin_ccj_obj_error();
+					}
+					$body   = $request->get_json_params();
+					$active = is_array( $body ) ? ! empty( $body['active'] ) : true;
+					if ( $active && 'publish' !== $post->post_status && ! minn_admin_ccj_obj_can( 'publish' ) ) {
+						return minn_admin_ccj_obj_error();
+					}
+					// Turning a snippet ON runs it. Turning it OFF is always allowed.
+					if ( $active && ! minn_admin_ccj_can_activate( $id ) ) {
+						return minn_admin_ccj_code_error( minn_admin_ccj_get_options( $id ) );
+					}
+					minn_admin_ccj_update_post_meta_only( array(
+						'ID'          => $id,
+						'post_status' => $active ? 'publish' : 'draft',
+					) );
+					update_post_meta( $id, '_active', $active ? 'yes' : 'no' );
+					// Switching a snippet off stops the page loading it, but the file
+					// stays fetchable at the address it already had, so the bytes go
+					// too. Turning it back on puts CCJ's bytes back.
+					if ( ! $active ) {
+						minn_admin_ccj_park_file( $id );
+					} else {
+						minn_admin_ccj_restore_file( $id );
+					}
+					minn_admin_ccj_rebuild_tree();
+					return $active;
+				},
+				'expect' => $runs,
+				'reply'  => $item,
+			),
 		),
-		array(
-			'methods'             => 'DELETE',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) {
-				$id   = (int) Minn_Admin::path_param( $request );
-				$post = get_post( $id );
-				if ( ! $post || 'custom-css-js' !== $post->post_type ) {
-					return new WP_Error( 'not_found', __( 'Code not found.', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				if ( ! minn_admin_ccj_obj_can( 'delete', $id ) ) {
-					return minn_admin_ccj_obj_error();
-				}
-				// Deleting is a write to the same store.
-				if ( ! minn_admin_ccj_can_activate( $id ) ) {
-					return minn_admin_ccj_code_error( minn_admin_ccj_get_options( $id ) );
-				}
-				// Take the bytes before the post goes, because their own
-				// cleanup cannot run here. A snippet that puts markup on the
-				// page is a live script, and a delete that leaves it running
-				// is worse than no delete at all.
-				minn_admin_ccj_drop_files( $id );
-				wp_delete_post( $id, true );
-				minn_admin_ccj_rebuild_tree();
-				return rest_ensure_response( array( 'deleted' => true ) );
-			},
-		),
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/ccj/snippets/(?P<id>\d+)/active', array(
-		'methods'             => 'POST',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) {
-			$id   = (int) Minn_Admin::path_param( $request );
-			$post = get_post( $id );
-			if ( ! $post || 'custom-css-js' !== $post->post_type ) {
-				return new WP_Error( 'not_found', __( 'Code not found.', 'minn-admin' ), array( 'status' => 404 ) );
-			}
-			if ( ! minn_admin_ccj_obj_can( 'edit', $id ) ) {
-				return minn_admin_ccj_obj_error();
-			}
-			$body   = $request->get_json_params();
-			$active = is_array( $body ) ? ! empty( $body['active'] ) : true;
-			if ( $active && 'publish' !== $post->post_status && ! minn_admin_ccj_obj_can( 'publish' ) ) {
-				return minn_admin_ccj_obj_error();
-			}
-			// Turning a snippet ON runs it. Turning it OFF is always allowed.
-			if ( $active && ! minn_admin_ccj_can_activate( $id ) ) {
-				return minn_admin_ccj_code_error( minn_admin_ccj_get_options( $id ) );
-			}
-			minn_admin_ccj_update_post_meta_only( array(
-				'ID'          => $id,
-				'post_status' => $active ? 'publish' : 'draft',
-			) );
-			update_post_meta( $id, '_active', $active ? 'yes' : 'no' );
-			// Switching a snippet off stops the page loading it, but the file
-			// stays fetchable at the address it already had, so the bytes go
-			// too. Turning it back on puts CCJ's bytes back.
-			if ( ! $active ) {
-				minn_admin_ccj_park_file( $id );
-			} else {
-				minn_admin_ccj_restore_file( $id );
-			}
-			minn_admin_ccj_rebuild_tree();
-			return rest_ensure_response( minn_admin_ccj_item( $id ) );
-		},
-	) );
+	);
 } );
+
+// Status card: counts over their CPT. Active = published without the
+// '_active' = no meta (their own convention: absent meta means active); the
+// running languages through the list's own reader.
+minn_admin_endpoint( 'custom-css-js/status', array(
+	'active' => 'minn_admin_ccj_active',
+	'gate'   => 'minn_admin_ccj_can',
+	'run'    => function () {
+		$live     = array( 'e.post_type' => 'custom-css-js', 'e.post_status' => 'publish' );
+		$inactive = Minn_Admin_Kernel_SQL::count( array( 'core' => 'posts', 'joins' => array( 'pm' => array( 'core' => 'postmeta', 'on' => array( 'post_id' => 'e.ID' ) ) ) ), $live + array( 'pm.meta_key' => '_active', 'pm.meta_value' => 'no' ) );
+		$active   = Minn_Admin_Kernel_SQL::count( array( 'core' => 'posts' ), $live ) - $inactive;
+		$langs    = array();
+		foreach ( minn_admin_ccj_rows( array( 'active' => true ) ) as $item ) {
+			$langs[ $item['language'] ] = ( $langs[ $item['language'] ] ?? 0 ) + 1;
+		}
+		$rows = array(
+			array(
+				'label' => __( 'Active codes', 'minn-admin' ),
+				'value' => (string) $active,
+				'hint'  => $inactive
+					/* translators: %d: number of inactive codes. */
+					? sprintf( __( '%d inactive', 'minn-admin' ), $inactive )
+					: __( 'nothing inactive', 'minn-admin' ),
+			),
+		);
+		if ( $langs ) {
+			arsort( $langs );
+			$rows[] = array(
+				'label' => __( 'Running languages', 'minn-admin' ),
+				'value' => implode( ' · ', array_map( function ( $c, $l ) {
+					return $c . ' ' . $l;
+				}, $langs, array_keys( $langs ) ) ),
+			);
+		}
+		return array( 'rows' => $rows );
+	},
+) );

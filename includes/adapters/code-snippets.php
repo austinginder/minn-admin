@@ -268,93 +268,95 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	return $surfaces;
 } );
 
+function minn_admin_code_snippets_active() {
+	return defined( 'CODE_SNIPPETS_VERSION' );
+}
+
+/**
+ * Their own capability: one resolver for the surface and the routes, so the
+ * sidebar can never offer an entry a route then refuses.
+ *
+ * @return bool
+ */
+function minn_admin_code_snippets_can() {
+	return current_user_can( minn_admin_code_snippets_cap() );
+}
+
+// Status card: counts from their own table ({prefix}snippets; active 1 =
+// active, 0 = inactive, -1 = trashed per their class-db docblock), the latest
+// change, and a safe-mode warning row when the constant is armed (safe mode
+// means NOTHING executes, worth saying out loud).
+minn_admin_endpoint( 'code-snippets/status', array(
+	'active' => 'minn_admin_code_snippets_active',
+	'gate'   => 'minn_admin_code_snippets_can',
+	'run'    => function () {
+		if ( ! Minn_Admin_Kernel_SQL::exists( 'snippets' ) ) {
+			return array( 'rows' => array() );
+		}
+		$active   = 0;
+		$inactive = 0;
+		$trashed  = 0;
+		foreach ( Minn_Admin_Kernel_SQL::counts( 'snippets', 'active', array() ) as $c ) {
+			if ( 1 === (int) $c['value'] ) {
+				$active = $c['count'];
+			} elseif ( -1 === (int) $c['value'] ) {
+				$trashed = $c['count'];
+			} else {
+				$inactive += $c['count'];
+			}
+		}
+		$hint = array();
+		if ( $inactive ) {
+			/* translators: %d: number of inactive snippets. */
+			$hint[] = sprintf( __( '%d inactive', 'minn-admin' ), $inactive );
+		}
+		if ( $trashed ) {
+			/* translators: %d: number of trashed snippets. */
+			$hint[] = sprintf( __( '%d trashed', 'minn-admin' ), $trashed );
+		}
+		$rows   = array(
+			array(
+				'label' => __( 'Active snippets', 'minn-admin' ),
+				'value' => (string) $active,
+				'hint'  => $hint ? implode( ' · ', $hint ) : __( 'nothing inactive', 'minn-admin' ),
+			),
+		);
+		$scopes = Minn_Admin_Kernel_SQL::counts( 'snippets', 'scope', array( 'active' => 1 ), 3 );
+		if ( $scopes ) {
+			$rows[] = array(
+				'label' => __( 'Running scopes', 'minn-admin' ),
+				'value' => implode( ' · ', array_map( function ( $s ) {
+					return $s['count'] . ' ' . $s['value'];
+				}, $scopes ) ),
+			);
+		}
+		$last = Minn_Admin_Kernel_SQL::select( 'snippets', array( 'name', 'modified' ), array( 'active' => array( 'op' => '>=', 'value' => 0 ) ), array( 'modified' => 'DESC' ), 1 );
+		$last = $last ? $last[0] : null;
+		// modified is stamped with gmdate(), so the day is the site's, not
+		// the UTC one a substr() of the stamp would give.
+		$last_ts = $last && $last['modified'] && '0000-00-00 00:00:00' !== $last['modified'] ? strtotime( $last['modified'] . ' UTC' ) : false;
+		if ( $last_ts ) {
+			$rows[] = array(
+				'label' => __( 'Last change', 'minn-admin' ),
+				'value' => (string) $last['name'],
+				'hint'  => wp_date( get_option( 'date_format' ), $last_ts ),
+			);
+		}
+		if ( defined( 'CODE_SNIPPETS_SAFE_MODE' ) && CODE_SNIPPETS_SAFE_MODE ) {
+			$rows[] = array(
+				'label' => __( 'Safe mode', 'minn-admin' ),
+				'value' => __( 'On', 'minn-admin' ),
+				'hint'  => __( 'No snippets are executing while safe mode is armed', 'minn-admin' ),
+			);
+		}
+		return array( 'rows' => $rows );
+	},
+) );
+
 add_action( 'rest_api_init', function () {
-	if ( ! defined( 'CODE_SNIPPETS_VERSION' ) ) {
+	if ( ! minn_admin_code_snippets_active() ) {
 		return;
 	}
-	// Status card: counts from their own table ({prefix}snippets; active
-	// 1=active, 0=inactive, -1=trashed per their class-db docblock), the
-	// latest change, and a safe-mode warning row when the constant is armed
-	// (safe mode means NOTHING executes — worth saying out loud).
-	register_rest_route( 'minn-admin/v1', '/code-snippets/status', array(
-		'methods'             => 'GET',
-		'permission_callback' => function () {
-			// One resolver for the surface and the route, so the sidebar can
-			// never offer an entry this route then refuses.
-			return current_user_can( minn_admin_code_snippets_cap() );
-		},
-		'callback'            => function () {
-			global $wpdb;
-			$table = $wpdb->prefix . 'snippets';
-			if ( ! $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) ) {
-				return rest_ensure_response( array( 'rows' => array() ) );
-			}
-			$counts = $wpdb->get_results( "SELECT active, COUNT(*) AS c FROM {$table} GROUP BY active" ); // phpcs:ignore
-			$active   = 0;
-			$inactive = 0;
-			$trashed  = 0;
-			foreach ( (array) $counts as $r ) {
-				if ( 1 === (int) $r->active ) {
-					$active = (int) $r->c;
-				} elseif ( -1 === (int) $r->active ) {
-					$trashed = (int) $r->c;
-				} else {
-					$inactive = (int) $r->c;
-				}
-			}
-			$hint = array();
-			if ( $inactive ) {
-				$hint[] = sprintf(
-					/* translators: %d: number of inactive snippets. */
-					__( '%d inactive', 'minn-admin' ),
-					$inactive
-				);
-			}
-			if ( $trashed ) {
-				$hint[] = sprintf(
-					/* translators: %d: number of trashed snippets. */
-					__( '%d trashed', 'minn-admin' ),
-					$trashed
-				);
-			}
-			$rows = array(
-				array(
-					'label' => __( 'Active snippets', 'minn-admin' ),
-					'value' => (string) $active,
-					'hint'  => $hint ? implode( ' · ', $hint ) : __( 'nothing inactive', 'minn-admin' ),
-				),
-			);
-			$scopes = $wpdb->get_results( "SELECT scope, COUNT(*) AS c FROM {$table} WHERE active = 1 GROUP BY scope ORDER BY c DESC LIMIT 3" ); // phpcs:ignore
-			if ( $scopes ) {
-				$rows[] = array(
-					'label' => __( 'Running scopes', 'minn-admin' ),
-					'value' => implode( ' · ', array_map( function ( $s ) {
-						return $s->c . ' ' . $s->scope;
-					}, $scopes ) ),
-				);
-			}
-			$last = $wpdb->get_row( "SELECT name, modified FROM {$table} WHERE active >= 0 ORDER BY modified DESC LIMIT 1" ); // phpcs:ignore
-			// modified is stamped with gmdate(), so the day is the site's,
-			// not the UTC one a substr() of the stamp would give.
-			$last_ts = $last && $last->modified && '0000-00-00 00:00:00' !== $last->modified ? strtotime( $last->modified . ' UTC' ) : false;
-			if ( $last_ts ) {
-				$rows[] = array(
-					'label' => __( 'Last change', 'minn-admin' ),
-					'value' => (string) $last->name,
-					'hint'  => wp_date( get_option( 'date_format' ), $last_ts ),
-				);
-			}
-			if ( defined( 'CODE_SNIPPETS_SAFE_MODE' ) && CODE_SNIPPETS_SAFE_MODE ) {
-				$rows[] = array(
-					'label' => __( 'Safe mode', 'minn-admin' ),
-					'value' => __( 'On', 'minn-admin' ),
-					'hint'  => __( 'No snippets are executing while safe mode is armed', 'minn-admin' ),
-				);
-			}
-			return rest_ensure_response( array( 'rows' => $rows ) );
-		},
-	) );
-
 	// On a network a site's list carries the network's shared snippets under
 	// their network-table ids, which can equal a site snippet's, and every
 	// route that takes the id alone reads the site table: opening a shared
@@ -395,72 +397,69 @@ add_action( 'rest_api_init', function () {
 		$response->set_data( $single ? $items[0] : $items );
 		return $response;
 	}, 10, 3 );
-
-	// One snippet, read-only: the snippet page on a site that disallows code
-	// edits. It reads through their own route, so their capability and
-	// network rules decide what it returns, and it registers GET alone.
-	register_rest_route( 'minn-admin/v1', '/code-snippets/(?P<id>(?:network:)?\d+)', array(
-		'methods'             => 'GET',
-		'permission_callback' => function () {
-			return current_user_can( minn_admin_code_snippets_cap() );
-		},
-		'callback'            => function ( WP_REST_Request $request ) {
-			list( $id, $network ) = minn_admin_code_snippets_row_id( Minn_Admin::path_param( $request ) );
-			$inner                = new WP_REST_Request( 'GET', '/code-snippets/v1/snippets/' . $id );
-			if ( $network ) {
-				$inner->set_param( 'network', true );
-			}
-			$res = rest_do_request( $inner );
-			if ( $res->is_error() ) {
-				return $res->as_error();
-			}
-			$snippet = (array) $res->get_data();
-			if ( empty( $snippet['id'] ) ) {
-				return new WP_Error( 'not_found', __( 'Snippet not found.', 'minn-admin' ), array( 'status' => 404 ) );
-			}
-			$tags     = is_array( $snippet['tags'] ?? null ) ? implode( ', ', array_map( 'strval', $snippet['tags'] ) ) : (string) ( $snippet['tags'] ?? '' );
-			$modified = ! empty( $snippet['modified'] ) ? strtotime( (string) $snippet['modified'] ) : false;
-			$rows     = array_values( array_filter( array(
-				array( 'label' => __( 'Name', 'minn-admin' ), 'value' => Minn_Admin::plain_text( $snippet['name'] ?? '' ) ),
-				array( 'label' => __( 'Description', 'minn-admin' ), 'value' => Minn_Admin::plain_text( $snippet['desc'] ?? '' ) ),
-				array( 'label' => __( 'Scope', 'minn-admin' ), 'value' => (string) ( $snippet['scope'] ?? '' ) ),
-				array( 'label' => __( 'Priority', 'minn-admin' ), 'value' => isset( $snippet['priority'] ) ? (string) (int) $snippet['priority'] : '' ),
-				array( 'label' => __( 'Tags', 'minn-admin' ), 'value' => Minn_Admin::plain_text( $tags ) ),
-				array( 'label' => __( 'Modified', 'minn-admin' ), 'value' => $modified ? wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $modified ) : '' ),
-				array( 'label' => __( 'Editing', 'minn-admin' ), 'value' => Minn_Admin::code_edits_allowed() ? '' : __( 'Off: this site disallows editing code from the dashboard', 'minn-admin' ) ),
-				array( 'label' => __( 'Code', 'minn-admin' ), 'value' => (string) ( $snippet['code'] ?? '' ), 'type' => 'code' ),
-			), function ( $r ) {
-				return '' !== $r['value'];
-			} ) );
-			return rest_ensure_response( array( 'sections' => array( array( 'title' => __( 'Snippet', 'minn-admin' ), 'rows' => $rows ) ) ) );
-		},
-	) );
-
-	// Deactivate, for a site row or a shared network row. It only ever
-	// switches a snippet off, through their own routes and their gates:
-	// the PUT the action always sent for a site snippet, and for a shared
-	// one their deactivate route in the network scope, which clears this
-	// site's own switch (active_shared_network_snippets).
-	register_rest_route( 'minn-admin/v1', '/code-snippets/(?P<id>(?:network:)?\d+)/deactivate', array(
-		'methods'             => 'POST',
-		'permission_callback' => function () {
-			return current_user_can( minn_admin_code_snippets_cap() );
-		},
-		'callback'            => function ( WP_REST_Request $request ) {
-			list( $id, $network ) = minn_admin_code_snippets_row_id( Minn_Admin::path_param( $request ) );
-			if ( $network ) {
-				$inner = new WP_REST_Request( 'POST', '/code-snippets/v1/snippets/' . $id . '/deactivate' );
-				$inner->set_param( 'network', true );
-			} else {
-				$inner = new WP_REST_Request( 'PUT', '/code-snippets/v1/snippets/' . $id );
-				$inner->set_header( 'content-type', 'application/json' );
-				$inner->set_body( wp_json_encode( array( 'active' => false ) ) );
-			}
-			$res = rest_do_request( $inner );
-			if ( $res->is_error() ) {
-				return $res->as_error();
-			}
-			return rest_ensure_response( array( 'message' => __( 'Snippet deactivated.', 'minn-admin' ) ) );
-		},
-	) );
 } );
+
+// One snippet, read-only: the snippet page on a site that disallows code
+// edits. It reads through their own route, so their capability and network
+// rules decide what it returns, and it registers GET alone.
+minn_admin_endpoint( 'code-snippets/(?P<id>(?:network:)?\d+)', array(
+	'active' => 'minn_admin_code_snippets_active',
+	'gate'   => 'minn_admin_code_snippets_can',
+	'run'    => function ( WP_REST_Request $request, array $ctx ) {
+		list( $id, $network ) = minn_admin_code_snippets_row_id( $ctx['id'] );
+		$inner                = new WP_REST_Request( 'GET', '/code-snippets/v1/snippets/' . $id );
+		if ( $network ) {
+			$inner->set_param( 'network', true );
+		}
+		$res = rest_do_request( $inner );
+		if ( $res->is_error() ) {
+			return $res->as_error();
+		}
+		$snippet = (array) $res->get_data();
+		if ( empty( $snippet['id'] ) ) {
+			return new WP_Error( 'not_found', __( 'Snippet not found.', 'minn-admin' ), array( 'status' => 404 ) );
+		}
+		$tags     = is_array( $snippet['tags'] ?? null ) ? implode( ', ', array_map( 'strval', $snippet['tags'] ) ) : (string) ( $snippet['tags'] ?? '' );
+		$modified = ! empty( $snippet['modified'] ) ? strtotime( (string) $snippet['modified'] ) : false;
+		$rows     = array_values( array_filter( array(
+			array( 'label' => __( 'Name', 'minn-admin' ), 'value' => Minn_Admin::plain_text( $snippet['name'] ?? '' ) ),
+			array( 'label' => __( 'Description', 'minn-admin' ), 'value' => Minn_Admin::plain_text( $snippet['desc'] ?? '' ) ),
+			array( 'label' => __( 'Scope', 'minn-admin' ), 'value' => (string) ( $snippet['scope'] ?? '' ) ),
+			array( 'label' => __( 'Priority', 'minn-admin' ), 'value' => isset( $snippet['priority'] ) ? (string) (int) $snippet['priority'] : '' ),
+			array( 'label' => __( 'Tags', 'minn-admin' ), 'value' => Minn_Admin::plain_text( $tags ) ),
+			array( 'label' => __( 'Modified', 'minn-admin' ), 'value' => $modified ? wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $modified ) : '' ),
+			array( 'label' => __( 'Editing', 'minn-admin' ), 'value' => Minn_Admin::code_edits_allowed() ? '' : __( 'Off: this site disallows editing code from the dashboard', 'minn-admin' ) ),
+			array( 'label' => __( 'Code', 'minn-admin' ), 'value' => (string) ( $snippet['code'] ?? '' ), 'type' => 'code' ),
+		), function ( $r ) {
+			return '' !== $r['value'];
+		} ) );
+		return array( 'sections' => array( array( 'title' => __( 'Snippet', 'minn-admin' ), 'rows' => $rows ) ) );
+	},
+) );
+
+// Deactivate, for a site row or a shared network row. It only ever switches
+// a snippet off, through their own routes and their gates: the PUT the action
+// always sent for a site snippet, and for a shared one their deactivate route
+// in the network scope, which clears this site's own switch
+// (active_shared_network_snippets).
+minn_admin_endpoint( 'code-snippets/(?P<id>(?:network:)?\d+)/deactivate', array(
+	'methods' => 'POST',
+	'active'  => 'minn_admin_code_snippets_active',
+	'gate'    => 'minn_admin_code_snippets_can',
+	'run'     => function ( WP_REST_Request $request, array $ctx ) {
+		list( $id, $network ) = minn_admin_code_snippets_row_id( $ctx['id'] );
+		if ( $network ) {
+			$inner = new WP_REST_Request( 'POST', '/code-snippets/v1/snippets/' . $id . '/deactivate' );
+			$inner->set_param( 'network', true );
+		} else {
+			$inner = new WP_REST_Request( 'PUT', '/code-snippets/v1/snippets/' . $id );
+			$inner->set_header( 'content-type', 'application/json' );
+			$inner->set_body( wp_json_encode( array( 'active' => false ) ) );
+		}
+		$res = rest_do_request( $inner );
+		if ( $res->is_error() ) {
+			return $res->as_error();
+		}
+		return array( 'message' => __( 'Snippet deactivated.', 'minn-admin' ) );
+	},
+) );

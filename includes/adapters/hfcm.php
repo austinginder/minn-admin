@@ -2,8 +2,8 @@
 /**
  * Bundled adapter: Header Footer Code Manager (HFCM).
  *
- * Snippets live in {prefix}hfcm_scripts. No REST — shim over $wpdb using the
- * same column set their admin form writes. Display targeting beyond "All"
+ * Snippets live in {prefix}hfcm_scripts. No REST: a table resource on the
+ * kernel, writing the same column set their admin form writes. Display targeting beyond "All"
  * stays on HFCM's screen (pages/posts/categories pickers are a canvas).
  *
  * Cap: manage_options (their menu gate). Delete / activate / deactivate
@@ -14,22 +14,9 @@
 
 defined( 'ABSPATH' ) || exit;
 
+/** Their table is the durable signal: the class loads with the plugin, the table outlives a switch-off. */
 function minn_admin_hfcm_active() {
-	global $wpdb;
-	if ( ! class_exists( 'NNR_HFCM' ) && ! defined( 'HFCM_PLUGIN_FILE' ) ) {
-		// Class loads with the plugin; table presence is the durable signal.
-		if ( ! function_exists( 'get_plugins' ) ) {
-			// still check table
-		}
-	}
-	$table = $wpdb->prefix . 'hfcm_scripts';
-	$found = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
-	return $found && 0 === strcasecmp( (string) $found, $table );
-}
-
-function minn_admin_hfcm_table() {
-	global $wpdb;
-	return $wpdb->prefix . 'hfcm_scripts';
+	return Minn_Admin_Kernel_SQL::exists( 'hfcm_scripts' );
 }
 
 function minn_admin_hfcm_can() {
@@ -64,49 +51,9 @@ function minn_admin_hfcm_item( $row ) {
 	);
 }
 
-function minn_admin_hfcm_rows( $args = array() ) {
-	global $wpdb;
-	if ( ! minn_admin_hfcm_active() ) {
-		return array();
-	}
-	$table = minn_admin_hfcm_table();
-	$sql   = "SELECT * FROM `{$table}` WHERE 1=1";
-	$params = array();
-	if ( isset( $args['active'] ) ) {
-		$want = ( '1' === (string) $args['active'] || 'true' === $args['active'] || true === $args['active'] || 'active' === $args['active'] );
-		$sql     .= ' AND status = %s';
-		$params[] = $want ? 'active' : 'inactive';
-	}
-	if ( ! empty( $args['s'] ) ) {
-		$sql     .= ' AND name LIKE %s';
-		$params[] = '%' . $wpdb->esc_like( $args['s'] ) . '%';
-	}
-	$sql .= ' ORDER BY script_id DESC';
-	if ( $params ) {
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$rows = $wpdb->get_results( $wpdb->prepare( $sql, $params ), ARRAY_A );
-	} else {
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		$rows = $wpdb->get_results( $sql, ARRAY_A );
-	}
-	$items = array();
-	foreach ( (array) $rows as $row ) {
-		$item = minn_admin_hfcm_item( $row );
-		if ( $item ) {
-			$items[] = $item;
-		}
-	}
-	return $items;
-}
-
+/** One snippet as the list reads it, or null (kept for callers by name). */
 function minn_admin_hfcm_get( $id ) {
-	global $wpdb;
-	$id = (int) $id;
-	if ( $id < 1 ) {
-		return null;
-	}
-	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-	$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM `' . minn_admin_hfcm_table() . '` WHERE script_id = %d', $id ), ARRAY_A );
+	$row = (int) $id > 0 ? Minn_Admin_Kernel_SQL::row( 'hfcm_scripts', 'script_id', (int) $id ) : null;
 	return $row ? minn_admin_hfcm_item( $row ) : null;
 }
 
@@ -295,269 +242,229 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	return $surfaces;
 } );
 
-add_action( 'rest_api_init', function () {
-	if ( ! minn_admin_hfcm_active() ) {
-		return;
+/** Who wrote it, as their form stamps it. */
+function minn_admin_hfcm_who() {
+	$user = wp_get_current_user();
+	return $user && $user->user_login ? $user->user_login : 'admin';
+}
+
+const MINN_ADMIN_HFCM_TYPES     = array( 'html', 'css', 'js' );
+const MINN_ADMIN_HFCM_LOCATIONS = array( 'header', 'footer', 'before_content', 'after_content' );
+const MINN_ADMIN_HFCM_DEVICES   = array( 'both', 'desktop', 'mobile' );
+
+/**
+ * An edit's columns from the request, the code gate asked first: changing
+ * what a snippet IS, or where it runs, decides the context its stored bytes
+ * execute in (retyping css to js, moving one into the header), so it is a
+ * code write even with no code in the request, the rule the custom-css-js
+ * peer applies to the same pair of fields.
+ *
+ * @return array|WP_Error Columns to write.
+ */
+function minn_admin_hfcm_edit( array $item, WP_REST_Request $request ) {
+	$body = $request->get_json_params();
+	$body = is_array( $body ) ? $body : array();
+	$data = array( 'last_revision_date' => current_time( 'mysql' ), 'last_modified_by' => minn_admin_hfcm_who() );
+	if ( isset( $body['name'] ) ) {
+		$data['name'] = sanitize_text_field( $body['name'] );
 	}
-	$perm = function () {
-		return minn_admin_hfcm_can();
-	};
+	$retargets = ( isset( $body['snippet_type'] ) && in_array( $body['snippet_type'], MINN_ADMIN_HFCM_TYPES, true ) && (string) $body['snippet_type'] !== (string) $item['snippet_type'] )
+		|| ( isset( $body['location'] ) && in_array( $body['location'], MINN_ADMIN_HFCM_LOCATIONS, true ) && (string) $body['location'] !== (string) $item['location'] );
+	if ( ( array_key_exists( 'code', $body ) || $retargets || ! empty( $body['active'] ) ) && ! minn_admin_hfcm_can_write_code() ) {
+		return minn_admin_hfcm_code_error();
+	}
+	if ( array_key_exists( 'code', $body ) ) {
+		$data['snippet'] = (string) $body['code'];
+	}
+	foreach ( array( 'snippet_type' => MINN_ADMIN_HFCM_TYPES, 'location' => MINN_ADMIN_HFCM_LOCATIONS, 'device_type' => MINN_ADMIN_HFCM_DEVICES ) as $key => $allowed ) {
+		if ( isset( $body[ $key ] ) && in_array( $body[ $key ], $allowed, true ) ) {
+			$data[ $key ] = $body[ $key ];
+		}
+	}
+	if ( array_key_exists( 'active', $body ) ) {
+		$data['status'] = $body['active'] ? 'active' : 'inactive';
+	}
+	return $data;
+}
 
-	// Status card: counts from their own table (status active/inactive,
-	// snippet_type html/css/js/php, last_revision_date).
-	register_rest_route( 'minn-admin/v1', '/hfcm/status', array(
-		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function () {
-			global $wpdb;
-			$table = minn_admin_hfcm_table();
-			if ( ! $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) ) {
-				return rest_ensure_response( array( 'rows' => array() ) );
-			}
-			$active   = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE status = 'active'" ); // phpcs:ignore
-			$inactive = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE status <> 'active'" ); // phpcs:ignore
-			$rows     = array(
-				array(
-					'label' => __( 'Active snippets', 'minn-admin' ),
-					'value' => (string) $active,
-					'hint'  => $inactive ? sprintf( /* translators: %d: number of inactive snippets. */ __( '%d inactive', 'minn-admin' ), $inactive ) : __( 'nothing inactive', 'minn-admin' ),
-				),
-			);
-			$types = $wpdb->get_results( "SELECT snippet_type AS t, COUNT(*) AS c FROM {$table} WHERE status = 'active' GROUP BY snippet_type ORDER BY c DESC LIMIT 3" ); // phpcs:ignore
-			if ( $types ) {
-				$rows[] = array(
-					'label' => __( 'Running types', 'minn-admin' ),
-					'value' => implode( ' · ', array_map( function ( $t ) {
-						return $t->c . ' ' . strtolower( (string) $t->t );
-					}, $types ) ),
-				);
-			}
-			$last = $wpdb->get_row( "SELECT name, last_revision_date FROM {$table} ORDER BY last_revision_date DESC LIMIT 1" ); // phpcs:ignore
-			if ( $last && $last->last_revision_date ) {
-				$rows[] = array(
-					'label' => __( 'Last change', 'minn-admin' ),
-					'value' => (string) $last->name,
-					'hint'  => substr( (string) $last->last_revision_date, 0, 10 ),
-				);
-			}
-			return rest_ensure_response( array( 'rows' => $rows ) );
-		},
-	) );
+/** Whether the stored row reads as written (the timestamps aside). */
+function minn_admin_hfcm_saved( $fresh, $data ) {
+	if ( ! is_array( $fresh ) || ! is_array( $data ) ) {
+		return false;
+	}
+	$read = array( 'name' => 'name', 'snippet' => 'code', 'snippet_type' => 'snippet_type', 'location' => 'location', 'device_type' => 'device_type' );
+	foreach ( $read as $col => $key ) {
+		if ( array_key_exists( $col, $data ) && (string) $data[ $col ] !== (string) $fresh[ $key ] ) {
+			return false;
+		}
+	}
+	return ! array_key_exists( 'status', $data ) || ( 'active' === $data['status'] ) === $fresh['active'];
+}
 
-	register_rest_route( 'minn-admin/v1', '/hfcm/snippets', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) {
-				$per_page = min( 100, max( 1, (int) $request->get_param( 'per_page' ) ?: 25 ) );
-				$page     = max( 1, (int) $request->get_param( 'page' ) ?: 1 );
-				$args     = array();
-				if ( $request->get_param( 'search' ) ) {
-					$args['s'] = sanitize_text_field( $request->get_param( 'search' ) );
-				}
-				$active = $request->get_param( 'active' );
-				if ( null !== $active && '' !== $active && 'all' !== $active ) {
-					$args['active'] = $active;
-				}
-				$all = minn_admin_hfcm_rows( $args );
-				return rest_ensure_response( array(
-					'items' => array_slice( $all, ( $page - 1 ) * $per_page, $per_page ),
-					'total' => count( $all ),
-				) );
-			},
+minn_admin_resource( 'hfcm/snippets', function () {
+	$fields = array(
+		'id'           => 'int',
+		'name'         => 'text',
+		'code'         => 'text',
+		'snippet_type' => 'text',
+		'location'     => 'text',
+		'device_type'  => 'text',
+		'display_on'   => 'text',
+		'scope'        => 'text',
+		'active'       => 'bool',
+		'modified'     => 'text',
+	);
+	return array(
+		'active'  => 'minn_admin_hfcm_active',
+		'gates'   => array( 'view' => 'minn_admin_hfcm_can' ),
+		'labels'  => array( 'not_found' => __( 'Snippet not found.', 'minn-admin' ) ),
+		'source'  => array( 'table' => 'hfcm_scripts', 'key' => 'script_id', 'columns' => array( '*' ) ),
+		'list'    => array(
+			'facets' => array( array( 'param' => 'active', 'values' => function ( $v ) {
+				return 'all' === $v ? null : array( 'status' => in_array( $v, array( '1', 'true', 'active' ), true ) ? 'active' : 'inactive' );
+			} ) ),
+			'search' => array( 'columns' => array( 'name' ) ),
+			'order'  => array( 'column' => 'script_id' ),
+			'row'    => 'minn_admin_hfcm_item',
+			'fields' => $fields,
 		),
-		array(
-			'methods'             => 'POST',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) {
-				global $wpdb;
+		'item'    => array( 'view' => 'minn_admin_hfcm_item', 'fields' => $fields ),
+		// The columns their admin form writes; display targeting beyond "All"
+		// stays on their screen.
+		'create'  => array(
+			'gate'  => 'view',
+			'run'   => function ( WP_REST_Request $request ) {
 				$body = $request->get_json_params();
-				if ( ! is_array( $body ) ) {
-					$body = array();
-				}
+				$body = is_array( $body ) ? $body : array();
 				$name = isset( $body['name'] ) ? sanitize_text_field( $body['name'] ) : '';
 				if ( ! $name ) {
 					return new WP_Error( 'missing_name', __( 'Name is required.', 'minn-admin' ), array( 'status' => 400 ) );
 				}
-				$code = isset( $body['code'] ) ? (string) $body['code'] : '';
 				if ( ! minn_admin_hfcm_can_write_code() ) {
 					return minn_admin_hfcm_code_error();
 				}
-				$type     = isset( $body['snippet_type'] ) && in_array( $body['snippet_type'], array( 'html', 'css', 'js' ), true )
-					? $body['snippet_type'] : 'html';
-				$location = isset( $body['location'] ) && in_array( $body['location'], array( 'header', 'footer', 'before_content', 'after_content' ), true )
-					? $body['location'] : 'header';
-				$device   = isset( $body['device_type'] ) && in_array( $body['device_type'], array( 'both', 'desktop', 'mobile' ), true )
-					? $body['device_type'] : 'both';
-				$status   = ! empty( $body['active'] ) ? 'active' : 'inactive';
-				$now      = current_time( 'mysql' );
-				$user     = wp_get_current_user();
-				$who      = $user && $user->user_login ? $user->user_login : 'admin';
-				$ok       = $wpdb->insert(
-					minn_admin_hfcm_table(),
-					array(
-						'name'               => $name,
-						'snippet'            => $code,
-						'snippet_type'       => $type,
-						'device_type'        => $device,
-						'location'           => $location,
-						'display_on'         => 'All',
-						'status'             => $status,
-						'created_by'         => $who,
-						'last_modified_by'   => $who,
-						'created'            => $now,
-						'last_revision_date' => $now,
-					),
-					array( '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s' )
-				);
-				if ( ! $ok ) {
-					return new WP_Error( 'insert_failed', __( 'Could not create the snippet.', 'minn-admin' ), array( 'status' => 500 ) );
-				}
-				return rest_ensure_response( minn_admin_hfcm_get( (int) $wpdb->insert_id ) );
+				$now = current_time( 'mysql' );
+				$who = minn_admin_hfcm_who();
+				return Minn_Admin_Kernel_SQL::insert( 'hfcm_scripts', array(
+					'name'               => $name,
+					'snippet'            => isset( $body['code'] ) ? (string) $body['code'] : '',
+					'snippet_type'       => isset( $body['snippet_type'] ) && in_array( $body['snippet_type'], MINN_ADMIN_HFCM_TYPES, true ) ? $body['snippet_type'] : 'html',
+					'device_type'        => isset( $body['device_type'] ) && in_array( $body['device_type'], MINN_ADMIN_HFCM_DEVICES, true ) ? $body['device_type'] : 'both',
+					'location'           => isset( $body['location'] ) && in_array( $body['location'], MINN_ADMIN_HFCM_LOCATIONS, true ) ? $body['location'] : 'header',
+					'display_on'         => 'All',
+					'status'             => ! empty( $body['active'] ) ? 'active' : 'inactive',
+					'created_by'         => $who,
+					'last_modified_by'   => $who,
+					'created'            => $now,
+					'last_revision_date' => $now,
+				) );
+			},
+			'fail'  => __( 'Could not create the snippet.', 'minn-admin' ),
+			'reply' => function ( $id, $fresh ) {
+				return minn_admin_hfcm_item( $fresh );
 			},
 		),
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/hfcm/snippets/(?P<id>\d+)', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) {
-				$item = minn_admin_hfcm_get( (int) Minn_Admin::path_param( $request ) );
-				if ( ! $item ) {
-					return new WP_Error( 'not_found', __( 'Snippet not found.', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				return rest_ensure_response( $item );
-			},
-		),
-		array(
-			'methods'             => 'PUT',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) {
-				global $wpdb;
-				$id   = (int) Minn_Admin::path_param( $request );
-				$item = minn_admin_hfcm_get( $id );
-				if ( ! $item ) {
-					return new WP_Error( 'not_found', __( 'Snippet not found.', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				$body = $request->get_json_params();
-				if ( ! is_array( $body ) ) {
-					$body = array();
-				}
-				$data = array( 'last_revision_date' => current_time( 'mysql' ) );
-				$fmt  = array( '%s' );
-				$user = wp_get_current_user();
-				if ( $user && $user->user_login ) {
-					$data['last_modified_by'] = $user->user_login;
-					$fmt[]                    = '%s';
-				}
-				if ( isset( $body['name'] ) ) {
-					$data['name'] = sanitize_text_field( $body['name'] );
-					$fmt[]        = '%s';
-				}
-				if ( array_key_exists( 'code', $body ) ) {
-					$code = (string) $body['code'];
+		'actions' => array(
+			'edit'   => array(
+				'method' => 'PUT',
+				'gate'   => 'view',
+				'run'    => function ( $id, array $row, WP_REST_Request $request ) {
+					$data = minn_admin_hfcm_edit( minn_admin_hfcm_item( $row ), $request );
+					if ( ! is_wp_error( $data ) ) {
+						Minn_Admin_Kernel_SQL::update( 'hfcm_scripts', 'script_id', $id, $data );
+					}
+					return $data;
+				},
+				'expect' => function ( $id, $fresh, $data ) {
+					return minn_admin_hfcm_saved( minn_admin_hfcm_item( (array) $fresh ), $data );
+				},
+				'reply'  => function ( $id, $fresh ) {
+					return minn_admin_hfcm_item( $fresh );
+				},
+			),
+			// Destroying a snippet is a write to the same raw-markup store.
+			'delete' => array(
+				'method' => 'DELETE',
+				'gate'   => 'view',
+				'run'    => function ( $id ) {
 					if ( ! minn_admin_hfcm_can_write_code() ) {
 						return minn_admin_hfcm_code_error();
 					}
-					$data['snippet'] = $code;
-					$fmt[]           = '%s';
-				}
-				// Changing what a snippet IS, or where it runs, decides the
-				// context its already-stored bytes execute in: retyping a css
-				// snippet to js, or moving one into the header, runs those
-				// same bytes somewhere the caller was refused permission to
-				// write them. That is a code write even though no code is in
-				// the request, which is the rule the custom-css-js peer
-				// applies to exactly this pair of fields.
-				$retargets = ( isset( $body['snippet_type'] )
-						&& in_array( $body['snippet_type'], array( 'html', 'css', 'js' ), true )
-						&& (string) $body['snippet_type'] !== (string) $item['snippet_type'] )
-					|| ( isset( $body['location'] )
-						&& in_array( $body['location'], array( 'header', 'footer', 'before_content', 'after_content' ), true )
-						&& (string) $body['location'] !== (string) $item['location'] );
-				if ( $retargets && ! minn_admin_hfcm_can_write_code() ) {
-					return minn_admin_hfcm_code_error();
-				}
-				if ( isset( $body['snippet_type'] ) && in_array( $body['snippet_type'], array( 'html', 'css', 'js' ), true ) ) {
-					$data['snippet_type'] = $body['snippet_type'];
-					$fmt[]                = '%s';
-				}
-				if ( isset( $body['location'] ) && in_array( $body['location'], array( 'header', 'footer', 'before_content', 'after_content' ), true ) ) {
-					$data['location'] = $body['location'];
-					$fmt[]            = '%s';
-				}
-				if ( isset( $body['device_type'] ) && in_array( $body['device_type'], array( 'both', 'desktop', 'mobile' ), true ) ) {
-					$data['device_type'] = $body['device_type'];
-					$fmt[]               = '%s';
-				}
-				if ( array_key_exists( 'active', $body ) && ! empty( $body['active'] ) && ! minn_admin_hfcm_can_write_code() ) {
-					return minn_admin_hfcm_code_error();
-				}
-				if ( array_key_exists( 'active', $body ) ) {
-					$data['status'] = $body['active'] ? 'active' : 'inactive';
-					$fmt[]          = '%s';
-				}
-				$wpdb->update( minn_admin_hfcm_table(), $data, array( 'script_id' => $id ), $fmt, array( '%d' ) );
-				return rest_ensure_response( minn_admin_hfcm_get( $id ) );
-			},
-		),
-		array(
-			'methods'             => 'DELETE',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) {
-				$id = (int) Minn_Admin::path_param( $request );
-				if ( ! minn_admin_hfcm_get( $id ) ) {
-					return new WP_Error( 'not_found', __( 'Snippet not found.', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				// Destroying a snippet is a write to the same raw-markup store.
-				if ( ! minn_admin_hfcm_can_write_code() ) {
-					return minn_admin_hfcm_code_error();
-				}
-				if ( class_exists( 'Hfcm_Snippets_List' ) && method_exists( 'Hfcm_Snippets_List', 'delete_snippet' ) ) {
-					Hfcm_Snippets_List::delete_snippet( $id );
-				} else {
-					global $wpdb;
-					$wpdb->delete( minn_admin_hfcm_table(), array( 'script_id' => $id ), array( '%d' ) );
-				}
-				return rest_ensure_response( array( 'deleted' => true ) );
-			},
-		),
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/hfcm/snippets/(?P<id>\d+)/active', array(
-		'methods'             => 'POST',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) {
-			$id   = (int) Minn_Admin::path_param( $request );
-			$item = minn_admin_hfcm_get( $id );
-			if ( ! $item ) {
-				return new WP_Error( 'not_found', __( 'Snippet not found.', 'minn-admin' ), array( 'status' => 404 ) );
-			}
-			$body   = $request->get_json_params();
-			$active = is_array( $body ) ? ! empty( $body['active'] ) : true;
+					if ( class_exists( 'Hfcm_Snippets_List' ) && method_exists( 'Hfcm_Snippets_List', 'delete_snippet' ) ) {
+						Hfcm_Snippets_List::delete_snippet( $id );
+						return true;
+					}
+					return Minn_Admin_Kernel_SQL::delete( 'hfcm_scripts', 'script_id', $id );
+				},
+				'expect' => 'gone',
+				'reply'  => function () {
+					return array( 'deleted' => true );
+				},
+			),
 			// Publishing a snippet is the same privilege as writing one: HFCM
 			// html_entity_decode()s the stored markup into wp_head for every
-			// visitor, so flipping an existing row to active runs it. Turning a
-			// snippet OFF is always allowed.
-			if ( $active && ! minn_admin_hfcm_can_write_code() ) {
-				return minn_admin_hfcm_code_error();
-			}
-			if ( $active && class_exists( 'Hfcm_Snippets_List' ) && method_exists( 'Hfcm_Snippets_List', 'activate_snippet' ) ) {
-				Hfcm_Snippets_List::activate_snippet( $id );
-			} elseif ( ! $active && class_exists( 'Hfcm_Snippets_List' ) && method_exists( 'Hfcm_Snippets_List', 'deactivate_snippet' ) ) {
-				Hfcm_Snippets_List::deactivate_snippet( $id );
-			} else {
-				global $wpdb;
-				$wpdb->update(
-					minn_admin_hfcm_table(),
-					array( 'status' => $active ? 'active' : 'inactive' ),
-					array( 'script_id' => $id ),
-					array( '%s' ),
-					array( '%d' )
-				);
-			}
-			return rest_ensure_response( minn_admin_hfcm_get( $id ) );
-		},
-	) );
+			// visitor, so switching a row on runs it. Off is always allowed.
+			'active' => array(
+				'gate'   => 'view',
+				'run'    => function ( $id, array $row, WP_REST_Request $request ) {
+					$body   = $request->get_json_params();
+					$active = is_array( $body ) ? ! empty( $body['active'] ) : true;
+					if ( $active && ! minn_admin_hfcm_can_write_code() ) {
+						return minn_admin_hfcm_code_error();
+					}
+					if ( $active && class_exists( 'Hfcm_Snippets_List' ) && method_exists( 'Hfcm_Snippets_List', 'activate_snippet' ) ) {
+						Hfcm_Snippets_List::activate_snippet( $id );
+					} elseif ( ! $active && class_exists( 'Hfcm_Snippets_List' ) && method_exists( 'Hfcm_Snippets_List', 'deactivate_snippet' ) ) {
+						Hfcm_Snippets_List::deactivate_snippet( $id );
+					} else {
+						Minn_Admin_Kernel_SQL::update( 'hfcm_scripts', 'script_id', $id, array( 'status' => $active ? 'active' : 'inactive' ) );
+					}
+					return $active ? 'on' : 'off';
+				},
+				'expect' => function ( $id, $fresh, $want ) {
+					return is_array( $fresh ) && ( 'on' === $want ) === ( 'active' === (string) $fresh['status'] );
+				},
+				'reply'  => function ( $id, $fresh ) {
+					return minn_admin_hfcm_item( $fresh );
+				},
+			),
+		),
+	);
 } );
+
+// Status card: counts from their own table (status active/inactive,
+// snippet_type html/css/js/php, last_revision_date).
+minn_admin_endpoint( 'hfcm/status', array(
+	'active' => 'minn_admin_hfcm_active',
+	'gate'   => 'minn_admin_hfcm_can',
+	'run'    => function () {
+		$id       = 'hfcm/snippets';
+		$on       = array( 'status' => 'active' );
+		$inactive = Minn_Admin_Kernel::count( $id, array( 'status' => array( 'not' => array( 'active' ) ) ) );
+		$rows     = array(
+			array(
+				'label' => __( 'Active snippets', 'minn-admin' ),
+				'value' => (string) Minn_Admin_Kernel::count( $id, $on ),
+				'hint'  => $inactive ? sprintf( /* translators: %d: number of inactive snippets. */ __( '%d inactive', 'minn-admin' ), $inactive ) : __( 'nothing inactive', 'minn-admin' ),
+			),
+		);
+		$types = Minn_Admin_Kernel_SQL::counts( 'hfcm_scripts', 'snippet_type', $on, 3 );
+		if ( $types ) {
+			$rows[] = array(
+				'label' => __( 'Running types', 'minn-admin' ),
+				'value' => implode( ' · ', array_map( function ( $t ) {
+					return $t['count'] . ' ' . strtolower( $t['value'] );
+				}, $types ) ),
+			);
+		}
+		$last = Minn_Admin_Kernel_SQL::select( 'hfcm_scripts', array( 'name', 'last_revision_date' ), array(), array( 'last_revision_date' => 'DESC' ), 1 );
+		if ( $last && $last[0]['last_revision_date'] ) {
+			$rows[] = array(
+				'label' => __( 'Last change', 'minn-admin' ),
+				'value' => (string) $last[0]['name'],
+				'hint'  => substr( (string) $last[0]['last_revision_date'], 0, 10 ),
+			);
+		}
+		return array( 'rows' => $rows );
+	},
+) );

@@ -642,158 +642,190 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	return $surfaces;
 } );
 
-add_action( 'rest_api_init', function () {
-	if ( ! minn_admin_wpcode_active() || ! class_exists( 'WPCode_Snippet' ) ) {
-		return;
+/**
+ * A snippet by id, or null: WPCode_Snippet answers no id for a post that is
+ * not one of theirs.
+ *
+ * @param int $id Post ID.
+ * @return WPCode_Snippet|null
+ */
+function minn_admin_wpcode_snippet( $id ) {
+	$snippet = new WPCode_Snippet( (int) $id );
+	return $snippet->get_id() ? $snippet : null;
+}
+
+/**
+ * The list through WordPress's own query over their CPT: publish is active,
+ * draft and private inactive (their model).
+ *
+ * @param array $q The kernel's list query.
+ * @return array array( rows, total )
+ */
+function minn_admin_wpcode_list( array $q ) {
+	$status = array( 'publish', 'draft', 'private' );
+	$want   = $q['facets']['active'] ?? '';
+	if ( 'active' === $want ) {
+		$status = array( 'publish' );
+	} elseif ( 'inactive' === $want ) {
+		$status = array( 'draft', 'private' );
 	}
-
-	$can_edit = function () {
-		return current_user_can( 'wpcode_edit_snippets' );
-	};
-	$can_act = function () {
-		return current_user_can( 'wpcode_activate_snippets' );
-	};
-
-	register_rest_route(
-		'minn-admin/v1',
-		'/wpcode/snippets',
+	$query = new WP_Query(
 		array(
-			array(
-				'methods'             => 'GET',
-				'permission_callback' => $can_edit,
-				'callback'            => function ( WP_REST_Request $request ) {
-					$per_page = min( 100, max( 1, (int) ( $request['per_page'] ?? 25 ) ) );
-					$page     = max( 1, (int) ( $request['page'] ?? 1 ) );
-					// Active filter: WPCode stores active as post status
-					// publish=active, draft/private=inactive (their model).
-					$active = sanitize_key( (string) ( $request['active'] ?? 'all' ) );
-					$status = array( 'publish', 'draft', 'private' );
-					if ( 'active' === $active ) {
-						$status = array( 'publish' );
-					} elseif ( 'inactive' === $active ) {
-						$status = array( 'draft', 'private' );
-					}
-					$q = new WP_Query(
-						array(
-							'post_type'      => 'wpcode',
-							'post_status'    => $status,
-							'posts_per_page' => $per_page,
-							'paged'          => $page,
-							'orderby'        => 'modified',
-							'order'          => 'DESC',
-						)
-					);
-					$items = array();
-					foreach ( $q->posts as $post ) {
-						$snippet = new WPCode_Snippet( $post );
-						$item    = minn_admin_wpcode_item( $snippet );
-						// Same rule as the single-snippet read: the source of a
-						// snippet whose type this caller cannot author is not
-						// theirs to see. The list does not render `code`
-						// anyway, so blanking it costs the view nothing.
-						if ( is_wp_error( minn_admin_wpcode_guard_type( (string) $snippet->get_code_type(), (int) $snippet->get_id(), false, (string) $snippet->get_location() ) ) ) {
-							$item['code'] = '';
-						}
-						$items[] = $item;
-					}
-					return rest_ensure_response(
-						array(
-							'items' => $items,
-							'total' => (int) $q->found_posts,
-						)
-					);
-				},
-			),
-			array(
-				'methods'             => 'POST',
-				'permission_callback' => $can_edit,
-				'callback'            => function ( WP_REST_Request $request ) {
-					$create_type     = sanitize_key( (string) ( $request['code_type'] ?? 'php' ) );
-					$create_location = minn_admin_wpcode_location_in( $request, $create_type );
-					if ( is_wp_error( $create_location ) ) {
-						return $create_location;
-					}
-					$guard = minn_admin_wpcode_guard_type( $create_type, 0, true, $create_location );
-					if ( is_wp_error( $guard ) ) {
-						return $guard;
-					}
-					$guard_code = minn_admin_wpcode_guard_code( (string) ( $request['code'] ?? '' ) );
-					if ( is_wp_error( $guard_code ) ) {
-						return $guard_code;
-					}
-					// load_from_array (via the array constructor) can set private
-					// fields like priority/note that are not assignable from outside.
-					// Title and code go in SLASHED: WPCode_Snippet::save() hands them
-					// to wp_insert_post(), which unslashes, and WPCode's own form
-					// feeds it slashed $_POST (its activation check unslashes the
-					// code to match). Unslashed, every backslash in code was lost.
-					$snippet = new WPCode_Snippet(
-						array(
-							'title'       => wp_slash( sanitize_text_field( (string) $request['name'] ) ),
-							'code'        => wp_slash( minn_admin_wpcode_clean_code( $create_type, (string) ( $request['code'] ?? '' ) ) ),
-							'code_type'   => $create_type,
-							'location'    => $create_location,
-							'priority'    => (int) ( $request['priority'] ?? 10 ),
-							'tags'        => array_map( 'sanitize_text_field', (array) ( $request['tags'] ?? array() ) ),
-							'note'        => sanitize_textarea_field( (string) ( $request['desc'] ?? '' ) ),
-							// Carry the requested insert method rather than forcing it on:
-							// auto_insert=1 is what makes WPCode write the location term,
-							// so hardcoding it published every created snippet at its
-							// location whatever the form's own switch said.
-							'auto_insert' => (int) rest_sanitize_boolean( $request['auto_insert'] ?? true ),
-							'active'      => ! empty( $request['active'] ),
-						)
-					);
-					$id = minn_admin_wpcode_save_slashed( $snippet );
-					if ( ! $id ) {
-						return new WP_Error( 'wpcode_save_failed', __( 'Could not create the snippet.', 'minn-admin' ), array( 'status' => 500 ) );
-					}
-					return rest_ensure_response( minn_admin_wpcode_item( new WPCode_Snippet( (int) $id ) ) );
-				},
-			),
+			'post_type'      => 'wpcode',
+			'post_status'    => $status,
+			'posts_per_page' => $q['per_page'],
+			'paged'          => $q['page'],
+			'orderby'        => 'modified',
+			'order'          => 'DESC',
 		)
 	);
+	$items = array();
+	foreach ( $query->posts as $post ) {
+		$snippet = new WPCode_Snippet( $post );
+		$item    = minn_admin_wpcode_item( $snippet );
+		// Same rule as the single-snippet read: the source of a snippet
+		// whose type this caller cannot author is not theirs to see. The
+		// list does not render `code` anyway, so blanking it costs the view
+		// nothing.
+		if ( is_wp_error( minn_admin_wpcode_guard_type( (string) $snippet->get_code_type(), (int) $snippet->get_id(), false, (string) $snippet->get_location() ) ) ) {
+			$item['code'] = '';
+		}
+		$items[] = $item;
+	}
+	return array( $items, (int) $query->found_posts );
+}
 
-	register_rest_route(
-		'minn-admin/v1',
-		'/wpcode/snippets/(?P<id>\d+)',
-		array(
-			array(
-				'methods'             => 'GET',
-				'permission_callback' => $can_edit,
-				'callback'            => function ( WP_REST_Request $request ) {
-					$snippet = new WPCode_Snippet( (int) Minn_Admin::path_param( $request ) );
-					if ( ! $snippet->get_id() ) {
-						return new WP_Error( 'not_found', __( 'Snippet not found.', 'minn-admin' ), array( 'status' => 404 ) );
-					}
-					// Reading a snippet's source is the same bar as editing it.
-					// Deleting one already asks this, on the reasoning that
-					// destroying a snippet needs the same standing as editing
-					// it; reading the PHP a colleague wrote is no smaller a
-					// thing, and snippets are where API keys and webhook
-					// secrets end up. On WPCode Lite every tier collapses to
-					// one capability, so this only bites where Access Control
-					// deliberately drew tiers.
-					$guard = minn_admin_wpcode_guard_type(
-						(string) $snippet->get_code_type(),
-						(int) Minn_Admin::path_param( $request ),
-						false,
-						(string) $snippet->get_location()
-					);
-					if ( is_wp_error( $guard ) ) {
-						return $guard;
-					}
-					return rest_ensure_response( minn_admin_wpcode_item( $snippet ) );
-				},
+minn_admin_resource( 'wpcode/snippets', function () {
+	$fields = array(
+		'id'          => 'int',
+		'name'        => 'text',
+		'desc'        => 'text',
+		'code'        => 'text',
+		'tags'        => 'raw',
+		'scope'       => 'text',
+		'code_type'   => 'text',
+		'location'    => 'text',
+		'active'      => 'bool',
+		'auto_insert' => 'bool',
+		'priority'    => 'int',
+		'modified'    => 'text',
+	);
+	$item    = function ( $id, $fresh ) {
+		return $fresh;
+	};
+	// Done when the stored snippet runs, or not, as asked. WPCode runs a PHP
+	// snippet once before switching it on and leaves it off when that
+	// errors, saving the rest of an edit.
+	$runs    = function ( $id, $fresh, $want ) {
+		return is_array( $fresh ) && ( null === $want || $want === $fresh['active'] );
+	};
+	$refused = __( 'WPCode left the snippet off: its code raised an error when WPCode tried it.', 'minn-admin' );
+	return array(
+		'active'  => function () {
+			return minn_admin_wpcode_active() && class_exists( 'WPCode_Snippet' );
+		},
+		'gates'   => array(
+			'view'     => function () {
+				return current_user_can( 'wpcode_edit_snippets' );
+			},
+			'activate' => function () {
+				return current_user_can( 'wpcode_activate_snippets' );
+			},
+		),
+		'labels'  => array( 'not_found' => __( 'Snippet not found.', 'minn-admin' ) ),
+		'source'  => array(
+			'list'   => 'minn_admin_wpcode_list',
+			'get'    => function ( $id ) {
+				$snippet = minn_admin_wpcode_snippet( $id );
+				return $snippet ? minn_admin_wpcode_item( $snippet ) : null;
+			},
+			'exists' => function ( $id ) {
+				$post = get_post( $id );
+				return $post && 'wpcode' === $post->post_type;
+			},
+		),
+		'list'    => array(
+			'facets' => array(
+				array(
+					'param'  => 'active',
+					'values' => array(
+						'active'   => array( 'post_status' => array( 'publish' ) ),
+						'inactive' => array( 'post_status' => array( 'draft', 'private' ) ),
+					),
+				),
 			),
-			array(
-				'methods'             => 'PUT',
-				'permission_callback' => $can_edit,
-				'callback'            => function ( WP_REST_Request $request ) {
-					$snippet = new WPCode_Snippet( (int) Minn_Admin::path_param( $request ) );
-					if ( ! $snippet->get_id() ) {
-						return new WP_Error( 'not_found', __( 'Snippet not found.', 'minn-admin' ), array( 'status' => 404 ) );
-					}
+			'fields' => $fields,
+		),
+		// Reading a snippet's source is the same bar as editing it. Deleting
+		// one already asks this, on the reasoning that destroying a snippet
+		// needs the same standing as editing it; reading the PHP a colleague
+		// wrote is no smaller a thing, and snippets are where API keys and
+		// webhook secrets end up. On WPCode Lite every tier collapses to one
+		// capability, so this only bites where Access Control deliberately
+		// drew tiers.
+		'item'    => array(
+			'view'   => function ( array $row ) {
+				$guard = minn_admin_wpcode_guard_type( (string) $row['code_type'], (int) $row['id'], false, (string) $row['location'] );
+				return is_wp_error( $guard ) ? $guard : $row;
+			},
+			'fields' => $fields,
+		),
+		'create'  => array(
+			'gate'   => 'view',
+			'run'    => function ( WP_REST_Request $request ) {
+				$create_type     = sanitize_key( (string) ( $request['code_type'] ?? 'php' ) );
+				$create_location = minn_admin_wpcode_location_in( $request, $create_type );
+				if ( is_wp_error( $create_location ) ) {
+					return $create_location;
+				}
+				$guard = minn_admin_wpcode_guard_type( $create_type, 0, true, $create_location );
+				if ( is_wp_error( $guard ) ) {
+					return $guard;
+				}
+				$guard_code = minn_admin_wpcode_guard_code( (string) ( $request['code'] ?? '' ) );
+				if ( is_wp_error( $guard_code ) ) {
+					return $guard_code;
+				}
+				// load_from_array (via the array constructor) can set private
+				// fields like priority/note that are not assignable from outside.
+				// Title and code go in SLASHED: WPCode_Snippet::save() hands them
+				// to wp_insert_post(), which unslashes, and WPCode's own form
+				// feeds it slashed $_POST (its activation check unslashes the
+				// code to match). Unslashed, every backslash in code was lost.
+				$snippet = new WPCode_Snippet(
+					array(
+						'title'       => wp_slash( sanitize_text_field( (string) $request['name'] ) ),
+						'code'        => wp_slash( minn_admin_wpcode_clean_code( $create_type, (string) ( $request['code'] ?? '' ) ) ),
+						'code_type'   => $create_type,
+						'location'    => $create_location,
+						'priority'    => (int) ( $request['priority'] ?? 10 ),
+						'tags'        => array_map( 'sanitize_text_field', (array) ( $request['tags'] ?? array() ) ),
+						'note'        => sanitize_textarea_field( (string) ( $request['desc'] ?? '' ) ),
+						// Carry the requested insert method rather than forcing it on:
+						// auto_insert=1 is what makes WPCode write the location term,
+						// so hardcoding it published every created snippet at its
+						// location whatever the form's own switch said.
+						'auto_insert' => (int) rest_sanitize_boolean( $request['auto_insert'] ?? true ),
+						'active'      => ! empty( $request['active'] ),
+					)
+				);
+				$id = minn_admin_wpcode_save_slashed( $snippet );
+				if ( ! $id ) {
+					return new WP_Error( 'wpcode_save_failed', __( 'Could not create the snippet.', 'minn-admin' ), array( 'status' => 500 ) );
+				}
+				return (int) $id;
+			},
+			'expect' => function ( $id, $fresh ) {
+				return is_array( $fresh ) && $id === $fresh['id'];
+			},
+			'reply'  => $item,
+		),
+		'actions' => array(
+			'edit'   => array(
+				'method' => 'PUT',
+				'gate'   => 'view',
+				'run'    => function ( $id, array $row, WP_REST_Request $request ) {
+					$snippet = minn_admin_wpcode_snippet( $id );
 					// The STORED type gates the edit, and when the payload
 					// carries a new code_type that type must be allowed too —
 					// otherwise a markup-only user retypes an HTML snippet to
@@ -840,7 +872,7 @@ add_action( 'rest_api_init', function () {
 
 					$guard = minn_admin_wpcode_guard_type(
 						(string) $snippet->get_code_type(),
-						(int) Minn_Admin::path_param( $request ),
+						$id,
 						null !== $request['code'] || $activating || $promoting || $retargeting,
 						$stored_loc
 					);
@@ -861,7 +893,7 @@ add_action( 'rest_api_init', function () {
 					}
 					if ( null !== $new_type ) {
 						$new_type  = sanitize_key( (string) $new_type );
-						$guard_new = minn_admin_wpcode_guard_type( $new_type, (int) Minn_Admin::path_param( $request ), true, $want_loc );
+						$guard_new = minn_admin_wpcode_guard_type( $new_type, $id, true, $want_loc );
 						if ( is_wp_error( $guard_new ) ) {
 							return $guard_new;
 						}
@@ -967,24 +999,22 @@ add_action( 'rest_api_init', function () {
 					if ( ! minn_admin_wpcode_save_slashed( $snippet ) ) {
 						return new WP_Error( 'wpcode_save_failed', __( 'Could not save the snippet.', 'minn-admin' ), array( 'status' => 500 ) );
 					}
-					return rest_ensure_response( minn_admin_wpcode_item( new WPCode_Snippet( (int) Minn_Admin::path_param( $request ) ) ) );
+					return isset( $patch['active'] ) ? $patch['active'] : null;
 				},
+				'expect' => $runs,
+				'fail'   => $refused . ' ' . __( 'Anything else in the edit was saved.', 'minn-admin' ),
+				'reply'  => $item,
 			),
-			array(
-				'methods'             => 'DELETE',
-				'permission_callback' => $can_edit,
-				'callback'            => function ( WP_REST_Request $request ) {
-					$id = (int) Minn_Admin::path_param( $request );
-					$post = get_post( $id );
-					if ( ! $post || 'wpcode' !== $post->post_type ) {
-						return new WP_Error( 'not_found', __( 'Snippet not found.', 'minn-admin' ), array( 'status' => 404 ) );
-					}
+			'delete' => array(
+				'method' => 'DELETE',
+				'gate'   => 'view',
+				'run'    => function ( $id ) {
+					$snippet = minn_admin_wpcode_snippet( $id );
 					// Destroying a snippet needs the same bar as editing it: the
 					// stored code type's tier AND edit_post on this snippet.
 					// Without it a text/markup-tier user could permanently delete
 					// production PHP snippets they were never allowed to author.
-					$doomed = new WPCode_Snippet( $id );
-					$guard  = minn_admin_wpcode_guard_type( (string) $doomed->get_code_type(), $id, false, (string) $doomed->get_location() );
+					$guard = minn_admin_wpcode_guard_type( (string) $snippet->get_code_type(), $id, false, (string) $snippet->get_location() );
 					if ( is_wp_error( $guard ) ) {
 						return $guard;
 					}
@@ -995,116 +1025,102 @@ add_action( 'rest_api_init', function () {
 					if ( ! $ok ) {
 						return new WP_Error( 'wpcode_delete_failed', __( 'Could not delete the snippet.', 'minn-admin' ), array( 'status' => 500 ) );
 					}
-					return new WP_REST_Response( null, 204 );
+					return true;
 				},
+				'expect' => 'gone',
 			),
-		)
-	);
-
-	register_rest_route(
-		'minn-admin/v1',
-		'/wpcode/snippets/(?P<id>\d+)/active',
-		array(
-			'methods'             => 'POST',
-			'permission_callback' => $can_act,
-			'callback'            => function ( WP_REST_Request $request ) {
-				$snippet = new WPCode_Snippet( (int) Minn_Admin::path_param( $request ) );
-				if ( ! $snippet->get_id() ) {
-					return new WP_Error( 'not_found', __( 'Snippet not found.', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				// Publishing a snippet runs its code, so the stored type's tier
-				// gates this too — a text-tier user must not be able to activate
-				// or deactivate someone else's PHP snippet.
-				//
-				// The LOCATION has to travel with the type. WPCode's own form
-				// filters the location list in JavaScript only, so a snippet can
-				// sit at an executing location while still typed text or html,
-				// and judging it by code_type alone reads it as the lowest tier:
-				// activating it would then skip both unfiltered_html and the
-				// site's own no-code-editing directive, and hand the bytes
-				// straight to the runner.
-				$guard = minn_admin_wpcode_guard_type(
-					(string) $snippet->get_code_type(),
-					(int) Minn_Admin::path_param( $request ),
-					! empty( $request['active'] ),
-					(string) $snippet->get_location()
-				);
-				if ( is_wp_error( $guard ) ) {
-					return $guard;
-				}
-				// activate()/deactivate() save the model, and save() drops the
-				// compress-output flag unless the property is set.
-				if ( get_post_meta( $snippet->get_id(), '_wpcode_compress_output', true ) ) {
-					$snippet->compress_output = true;
-				}
-				if ( ! empty( $request['active'] ) ) {
-					$snippet->activate();
-				} else {
-					$snippet->deactivate();
-				}
-				return rest_ensure_response( minn_admin_wpcode_item( new WPCode_Snippet( (int) Minn_Admin::path_param( $request ) ) ) );
-			},
-			'args'                => array(
-				'active' => array( 'type' => 'boolean', 'required' => true ),
-			),
-		)
-	);
-} );
-
-add_action( 'rest_api_init', function () {
-	if ( ! minn_admin_wpcode_active() ) {
-		return;
-	}
-	// Status card: WPCode snippets are a CPT — publish = active, everything
-	// else inactive (their model, same rule the list filter uses). Code types
-	// ride the _wpcode_code_type meta on active snippets.
-	register_rest_route( 'minn-admin/v1', '/wpcode/status', array(
-		'methods'             => 'GET',
-		'permission_callback' => function () {
-			return current_user_can( 'wpcode_edit_snippets' );
-		},
-		'callback'            => function () {
-			global $wpdb;
-			$counts   = wp_count_posts( 'wpcode' );
-			$active   = isset( $counts->publish ) ? (int) $counts->publish : 0;
-			$inactive = 0;
-			foreach ( array( 'draft', 'private', 'pending' ) as $st ) {
-				$inactive += isset( $counts->$st ) ? (int) $counts->$st : 0;
-			}
-			$rows = array(
-				array(
-					'label' => __( 'Active snippets', 'minn-admin' ),
-					'value' => (string) $active,
-					'hint'  => $inactive ? $inactive . ' inactive' : __( 'nothing inactive', 'minn-admin' ),
+			'active' => array(
+				'gate'   => 'activate',
+				'args'   => array(
+					'active' => array( 'type' => 'boolean', 'required' => true ),
 				),
-			);
-			$types = $wpdb->get_results(
-				"SELECT pm.meta_value AS t, COUNT(*) AS c FROM {$wpdb->posts} p
-				 JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID AND pm.meta_key = '_wpcode_code_type'
-				 WHERE p.post_type = 'wpcode' AND p.post_status = 'publish'
-				 GROUP BY pm.meta_value ORDER BY c DESC LIMIT 3"
-			);
-			if ( $types ) {
-				$rows[] = array(
-					'label' => __( 'Running types', 'minn-admin' ),
-					'value' => implode( ' · ', array_map( function ( $t ) {
-						return $t->c . ' ' . $t->t;
-					}, $types ) ),
-				);
-			}
-			$last = $wpdb->get_row(
-				"SELECT post_title, post_modified FROM {$wpdb->posts}
-				 WHERE post_type = 'wpcode' AND post_status IN ( 'publish', 'draft', 'private' )
-				 ORDER BY post_modified DESC LIMIT 1"
-			);
-			if ( $last ) {
-				$rows[] = array(
-					'label' => __( 'Last change', 'minn-admin' ),
-					'value' => (string) $last->post_title,
-					'hint'  => substr( (string) $last->post_modified, 0, 10 ),
-				);
-			}
-			return rest_ensure_response( array( 'rows' => $rows ) );
-		},
-	) );
+				'run'    => function ( $id, array $row, WP_REST_Request $request ) {
+					$snippet = minn_admin_wpcode_snippet( $id );
+					// Publishing a snippet runs its code, so the stored type's tier
+					// gates this too — a text-tier user must not be able to activate
+					// or deactivate someone else's PHP snippet.
+					//
+					// The LOCATION has to travel with the type. WPCode's own form
+					// filters the location list in JavaScript only, so a snippet can
+					// sit at an executing location while still typed text or html,
+					// and judging it by code_type alone reads it as the lowest tier:
+					// activating it would then skip both unfiltered_html and the
+					// site's own no-code-editing directive, and hand the bytes
+					// straight to the runner.
+					$guard = minn_admin_wpcode_guard_type(
+						(string) $snippet->get_code_type(),
+						$id,
+						! empty( $request['active'] ),
+						(string) $snippet->get_location()
+					);
+					if ( is_wp_error( $guard ) ) {
+						return $guard;
+					}
+					// activate()/deactivate() save the model, and save() drops the
+					// compress-output flag unless the property is set.
+					if ( get_post_meta( $snippet->get_id(), '_wpcode_compress_output', true ) ) {
+						$snippet->compress_output = true;
+					}
+					if ( ! empty( $request['active'] ) ) {
+						$snippet->activate();
+					} else {
+						$snippet->deactivate();
+					}
+					return ! empty( $request['active'] );
+				},
+				'expect' => $runs,
+				'fail'   => $refused,
+				'reply'  => $item,
+			),
+		),
+	);
 } );
+
+// Status card: WPCode snippets are a CPT, publish = active and everything
+// else inactive (their model, the list filter's rule). Code types ride the
+// _wpcode_code_type meta on active snippets.
+minn_admin_endpoint( 'wpcode/status', array(
+	'active' => 'minn_admin_wpcode_active',
+	'gate'   => function () {
+		return current_user_can( 'wpcode_edit_snippets' );
+	},
+	'run'    => function () {
+		$counts   = wp_count_posts( 'wpcode' );
+		$active   = isset( $counts->publish ) ? (int) $counts->publish : 0;
+		$inactive = 0;
+		foreach ( array( 'draft', 'private', 'pending' ) as $st ) {
+			$inactive += isset( $counts->$st ) ? (int) $counts->$st : 0;
+		}
+		$rows  = array(
+			array(
+				'label' => __( 'Active snippets', 'minn-admin' ),
+				'value' => (string) $active,
+				'hint'  => $inactive ? $inactive . ' inactive' : __( 'nothing inactive', 'minn-admin' ),
+			),
+		);
+		$posts = array( 'core' => 'posts' );
+		$types = Minn_Admin_Kernel_SQL::counts(
+			$posts + array( 'joins' => array( 'pm' => array( 'core' => 'postmeta', 'on' => array( 'post_id' => 'e.ID' ) ) ) ),
+			'pm.meta_value',
+			array( 'pm.meta_key' => '_wpcode_code_type', 'e.post_type' => 'wpcode', 'e.post_status' => 'publish' ),
+			3
+		);
+		if ( $types ) {
+			$rows[] = array(
+				'label' => __( 'Running types', 'minn-admin' ),
+				'value' => implode( ' · ', array_map( function ( $t ) {
+					return $t['count'] . ' ' . $t['value'];
+				}, $types ) ),
+			);
+		}
+		$last = Minn_Admin_Kernel_SQL::select( $posts, array( 'post_title', 'post_modified' ), array( 'post_type' => 'wpcode', 'post_status' => array( 'publish', 'draft', 'private' ) ), array( 'post_modified' => 'DESC' ), 1 );
+		if ( $last ) {
+			$rows[] = array(
+				'label' => __( 'Last change', 'minn-admin' ),
+				'value' => (string) $last[0]['post_title'],
+				'hint'  => substr( (string) $last[0]['post_modified'], 0, 10 ),
+			);
+		}
+		return array( 'rows' => $rows );
+	},
+) );
