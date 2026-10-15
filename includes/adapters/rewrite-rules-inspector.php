@@ -336,35 +336,35 @@ add_action( 'rest_api_init', function () {
 
 	$perm = 'minn_admin_rri_can';
 
-	register_rest_route( 'minn-admin/v1', '/rewrite-rules', array(
+	minn_admin_endpoint( '/rewrite-rules', array(
 		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) {
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) {
 			return rest_ensure_response( minn_admin_rri_list( $request ) );
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/rewrite-rules/(?P<id>[a-f0-9]{16})', array(
+	minn_admin_endpoint( '/rewrite-rules/(?P<id>[a-f0-9]{16})', array(
 		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) {
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) {
 			$out = minn_admin_rri_detail( (string) Minn_Admin::path_param( $request ) );
 			return is_wp_error( $out ) ? $out : rest_ensure_response( $out );
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/rewrite-rules/status', array(
+	minn_admin_endpoint( '/rewrite-rules/status', array(
 		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function () {
+		'gate'                => $perm,
+		'run'                 => function () {
 			return rest_ensure_response( minn_admin_rri_status_model() );
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/rewrite-rules/flush', array(
+	minn_admin_endpoint( '/rewrite-rules/flush', array(
 		'methods'             => 'POST',
-		'permission_callback' => $perm,
-		'callback'            => function () {
+		'gate'                => $perm,
+		'run'                 => function () {
 			// Honor their flushing_enabled flag. The vendor applies its
 			// rri_flushing_enabled filter only inside is_admin(), so under REST
 			// the property still holds its default; apply the filter here the
@@ -385,10 +385,10 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/rewrite-rules/test', array(
+	minn_admin_endpoint( '/rewrite-rules/test', array(
 		'methods'             => 'POST',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) {
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) {
 			$body = $request->get_json_params();
 			$url  = isset( $body['url'] ) ? sanitize_text_field( (string) $body['url'] ) : '';
 			if ( '' === $url ) {

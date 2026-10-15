@@ -179,10 +179,30 @@ function minn_admin_tm_timeout( $option_name ) {
 }
 
 /**
+ * Transient data rows, never their timeout siblings: the options a
+ * transient's value lives in, as Transients Manager lists them. Anchored,
+ * so the list agrees with the by-id routes: an option that merely contains
+ * the words is not a transient.
+ *
+ * @return array Conditions on the options table.
+ */
+function minn_admin_tm_data_rows() {
+	return array(
+		'option_name'      => array( 'any' => array( array( 'starts' => '_transient_' ), array( 'starts' => '_site_transient_' ) ) ),
+		"option_name\0to" => array( 'none' => array( array( 'starts' => '_transient_timeout_' ), array( 'starts' => '_site_transient_timeout_' ) ) ),
+	);
+}
+
+/** One options row by id, as an object, or null. */
+function minn_admin_tm_option( $id, array $columns ) {
+	$row = Minn_Admin_Kernel_SQL::row( array( 'core' => 'options' ), 'option_id', (int) $id, $columns );
+	return $row ? (object) $row : null;
+}
+
+/**
  * @return array{items: array, total: int}
  */
 function minn_admin_tm_list( WP_REST_Request $request ) {
-	global $wpdb;
 
 	$per_page = min( 100, max( 1, (int) $request->get_param( 'per_page' ) ?: 25 ) );
 	$page     = max( 1, (int) $request->get_param( 'page' ) ?: 1 );
@@ -190,38 +210,22 @@ function minn_admin_tm_list( WP_REST_Request $request ) {
 	$kind     = (string) $request->get_param( 'kind' );
 	$offset   = ( $page - 1 ) * $per_page;
 
-	// Anchored, so the list agrees with the by-id routes: an option that
-	// merely contains the words is not a transient.
-	$esc_name = $wpdb->esc_like( '_transient_' ) . '%';
-	$esc_site = $wpdb->esc_like( '_site_transient_' ) . '%';
-	$esc_time = $wpdb->esc_like( '_transient_timeout_' ) . '%';
-	$esc_stim = $wpdb->esc_like( '_site_transient_timeout_' ) . '%';
-
-	// Base: data rows only (exclude timeout siblings), same as Transients Manager.
-	$where = '( option_name LIKE %s OR option_name LIKE %s ) AND option_name NOT LIKE %s AND option_name NOT LIKE %s';
-	$args  = array( $esc_name, $esc_site, $esc_time, $esc_stim );
-
+	$options = array( 'core' => 'options' );
+	$columns = array( 'option_id', 'option_name', 'option_value' );
+	$where   = minn_admin_tm_data_rows();
 	if ( $search ) {
-		$where .= ' AND option_name LIKE %s';
-		$args[] = '%' . $wpdb->esc_like( $search ) . '%';
+		$where[ "option_name\0q" ] = array( 'contains' => $search );
 	}
-
-	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- placeholders built above.
-	$total = (int) $wpdb->get_var( $wpdb->prepare(
-		"SELECT COUNT(*) FROM {$wpdb->options} WHERE {$where}",
-		$args
-	) );
 
 	// Expired filter: pull more rows and filter in PHP (timeout is a sibling option).
 	// Cap scan at 500 for the expired tab so a huge options table stays safe.
 	if ( 'expired' === $kind || 'persistent' === $kind || 'site' === $kind ) {
-		$scan = $wpdb->get_results( $wpdb->prepare(
-			"SELECT option_id, option_name, option_value FROM {$wpdb->options} WHERE {$where} ORDER BY option_id DESC LIMIT %d",
-			array_merge( $args, array( 500 ) )
-		) );
+		$scan  = Minn_Admin_Kernel_SQL::select( $options, $columns, $where, array( 'option_id' => 'DESC' ), 500 );
 		$now   = time();
 		$items = array();
-		foreach ( (array) $scan as $row ) {
+		foreach ( array_map( function ( $r ) {
+			return (object) $r;
+		}, $scan ) as $row ) {
 			$timeout = minn_admin_tm_timeout( $row->option_name );
 			$is_site = minn_admin_tm_is_site( $row->option_name );
 			if ( 'site' === $kind && ! $is_site ) {
@@ -240,15 +244,24 @@ function minn_admin_tm_list( WP_REST_Request $request ) {
 		return array( 'items' => $items, 'total' => $total );
 	}
 
-	$rows = $wpdb->get_results( $wpdb->prepare(
-		"SELECT option_id, option_name, option_value FROM {$wpdb->options} WHERE {$where} ORDER BY option_id DESC LIMIT %d OFFSET %d",
-		array_merge( $args, array( $per_page, $offset ) )
+	list( $sql, $args )   = Minn_Admin_Kernel_SQL::where( $where, 'e' );
+	list( $rows, $total ) = Minn_Admin_Kernel_SQL::page( array(
+		'table'   => $options,
+		'key'     => 'option_id',
+		'columns' => $columns,
+		'sql'     => $sql,
+		'args'    => $args,
+		'order'   => 'option_id',
+		'dir'     => 'DESC',
+		'limit'   => $per_page,
+		'offset'  => $offset,
 	) );
-	// phpcs:enable
 
 	$now   = time();
 	$items = array();
-	foreach ( (array) $rows as $row ) {
+	foreach ( array_map( function ( $r ) {
+		return (object) $r;
+	}, $rows ) as $row ) {
 		$items[] = minn_admin_tm_row( $row, minn_admin_tm_timeout( $row->option_name ), $now );
 	}
 
@@ -299,11 +312,7 @@ function minn_admin_tm_row( $row, $timeout, $now ) {
  * @return array|WP_Error
  */
 function minn_admin_tm_detail( $id ) {
-	global $wpdb;
-	$row = $wpdb->get_row( $wpdb->prepare(
-		"SELECT option_id, option_name, option_value FROM {$wpdb->options} WHERE option_id = %d",
-		(int) $id
-	) );
+	$row = minn_admin_tm_option( $id, array( 'option_id', 'option_name', 'option_value' ) );
 	if ( ! $row || ! minn_admin_tm_is_data( $row->option_name ) ) {
 		return new WP_Error( 'not_found', __( 'Transient not found.', 'minn-admin' ), array( 'status' => 404 ) );
 	}
@@ -345,27 +354,14 @@ function minn_admin_tm_detail( $id ) {
 }
 
 function minn_admin_tm_status_model() {
-	global $wpdb;
+	$total = Minn_Admin_Kernel_SQL::count( array( 'core' => 'options' ), minn_admin_tm_data_rows() );
 
-	$esc_name = $wpdb->esc_like( '_transient_' ) . '%';
-	$esc_site = $wpdb->esc_like( '_site_transient_' ) . '%';
-	$esc_time = $wpdb->esc_like( '_transient_timeout_' ) . '%';
-	$esc_stim = $wpdb->esc_like( '_site_transient_timeout_' ) . '%';
-	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-	$total = (int) $wpdb->get_var( $wpdb->prepare(
-		"SELECT COUNT(*) FROM {$wpdb->options} WHERE ( option_name LIKE %s OR option_name LIKE %s ) AND option_name NOT LIKE %s AND option_name NOT LIKE %s",
-		$esc_name,
-		$esc_site,
-		$esc_time,
-		$esc_stim
-	) );
-
-	// Expired: timeout rows past now (same shape System uses, scoped to timeout keys).
-	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-	$expired = (int) $wpdb->get_var( $wpdb->prepare(
-		"SELECT COUNT(*) FROM {$wpdb->options} WHERE option_name LIKE %s AND option_value+0 < %d AND option_value != ''",
-		'%' . $wpdb->esc_like( '_transient_timeout_' ) . '%',
-		time()
+	// Expired: timeout rows past now (same shape System uses, scoped to timeout
+	// keys), the stored value compared as the number it holds.
+	$expired = Minn_Admin_Kernel_SQL::count( array( 'core' => 'options' ), array(
+		'option_name'       => array( 'contains' => '_transient_timeout_' ),
+		'option_value'      => array( 'op' => '<', 'value' => time() ),
+		"option_value\0set" => array( 'not' => array( '' ) ),
 	) );
 
 	$suspended = (bool) get_option( 'pw_tm_suspend' );
@@ -490,76 +486,70 @@ add_action( 'rest_api_init', function () {
 
 	$perm = 'minn_admin_tm_can';
 
-	register_rest_route( 'minn-admin/v1', '/transients', array(
+	minn_admin_endpoint( '/transients', array(
 		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) {
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) {
 			return rest_ensure_response( minn_admin_tm_list( $request ) );
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/transients/(?P<id>\d+)', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) {
-				$out = minn_admin_tm_detail( (int) Minn_Admin::path_param( $request ) );
-				return is_wp_error( $out ) ? $out : rest_ensure_response( $out );
-			},
-		),
-		array(
-			'methods'             => 'DELETE',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) {
-				global $wpdb;
-				$id  = (int) Minn_Admin::path_param( $request );
-				$row = $wpdb->get_row( $wpdb->prepare(
-					"SELECT option_id, option_name FROM {$wpdb->options} WHERE option_id = %d",
-					$id
-				) );
-				if ( ! $row || ! minn_admin_tm_is_data( $row->option_name ) ) {
-					return new WP_Error( 'not_found', __( 'Transient not found.', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				$name    = minn_admin_tm_name( $row->option_name );
-				$is_site = minn_admin_tm_is_site( $row->option_name );
-				// A site transient is network-shared state: on multisite
-				// delete_site_transient() writes sitemeta and flushes a cache
-				// group every tenant reads, which is more than a single site's
-				// manage_options should reach. The main site of a network that
-				// grew out of a single-site install still carries rows like
-				// _site_transient_update_core in its own options table, so this
-				// is ordinary rather than contrived.
-				if ( $is_site && class_exists( 'Minn_Admin' ) && ! Minn_Admin::network_owner() ) {
-					return new WP_Error(
-						'forbidden',
-						__( 'Network-wide transients are cleared by a network administrator.', 'minn-admin' ),
-						array( 'status' => 403 )
-					);
-				}
-				$ok = $is_site
-					? delete_site_transient( $name )
-					: delete_transient( $name );
-				// delete_* returns false when the key was already gone — still treat as done.
-				return rest_ensure_response( array(
-					'ok'      => true,
-					'message' => $ok ? __( 'Transient deleted.', 'minn-admin' ) : __( 'Transient removed (or was already gone).', 'minn-admin' ),
-				) );
-			},
-		),
+	minn_admin_endpoint( '/transients/(?P<id>\d+)', array(
+		'methods'             => 'GET',
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) {
+			$out = minn_admin_tm_detail( (int) Minn_Admin::path_param( $request ) );
+			return is_wp_error( $out ) ? $out : rest_ensure_response( $out );
+		},
+	) );
+	minn_admin_endpoint( '/transients/(?P<id>\d+)', array(
+		'methods'             => 'DELETE',
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) {
+			$id  = (int) Minn_Admin::path_param( $request );
+			$row = minn_admin_tm_option( $id, array( 'option_id', 'option_name' ) );
+			if ( ! $row || ! minn_admin_tm_is_data( $row->option_name ) ) {
+				return new WP_Error( 'not_found', __( 'Transient not found.', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			$name    = minn_admin_tm_name( $row->option_name );
+			$is_site = minn_admin_tm_is_site( $row->option_name );
+			// A site transient is network-shared state: on multisite
+			// delete_site_transient() writes sitemeta and flushes a cache
+			// group every tenant reads, which is more than a single site's
+			// manage_options should reach. The main site of a network that
+			// grew out of a single-site install still carries rows like
+			// _site_transient_update_core in its own options table, so this
+			// is ordinary rather than contrived.
+			if ( $is_site && class_exists( 'Minn_Admin' ) && ! Minn_Admin::network_owner() ) {
+				return new WP_Error(
+					'forbidden',
+					__( 'Network-wide transients are cleared by a network administrator.', 'minn-admin' ),
+					array( 'status' => 403 )
+				);
+			}
+			$ok = $is_site
+				? delete_site_transient( $name )
+				: delete_transient( $name );
+			// delete_* returns false when the key was already gone — still treat as done.
+			return rest_ensure_response( array(
+				'ok'      => true,
+				'message' => $ok ? __( 'Transient deleted.', 'minn-admin' ) : __( 'Transient removed (or was already gone).', 'minn-admin' ),
+			) );
+		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/transients/status', array(
+	minn_admin_endpoint( '/transients/status', array(
 		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function () {
+		'gate'                => $perm,
+		'run'                 => function () {
 			return rest_ensure_response( minn_admin_tm_status_model() );
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/transients/delete-expired', array(
+	minn_admin_endpoint( '/transients/delete-expired', array(
 		'methods'             => 'POST',
-		'permission_callback' => 'minn_admin_tm_can_network',
-		'callback'            => function () {
+		'gate'                => 'minn_admin_tm_can_network',
+		'run'                 => function () {
 			// Prefer their public method (same SQL + delete_transient path).
 			$tm = \AM\TransientsManager\TransientsManager::getInstance();
 			// time_now is set on admin_init; ensure it for REST.

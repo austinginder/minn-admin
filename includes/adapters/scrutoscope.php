@@ -43,6 +43,11 @@ function minn_admin_scrutoscope_table() {
 	return \Scrutoscope\Profiler\Storage::table_name();
 }
 
+/** Their profiles table as the kernel's SQL layer names it. */
+function minn_admin_scrutoscope_spec() {
+	return Minn_Admin_Kernel_SQL::named( minn_admin_scrutoscope_table() );
+}
+
 /**
  * Whether Scrutoscope 1.5+ serves the per-capture list over REST.
  *
@@ -180,56 +185,41 @@ function minn_admin_scrutoscope_list( WP_REST_Request $request ) {
  * @return array{items: array, total: int}
  */
 function minn_admin_scrutoscope_list_legacy( WP_REST_Request $request ) {
-	global $wpdb;
-
-	$table = minn_admin_scrutoscope_table();
-	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-	$found = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
-	if ( ! $found || 0 !== strcasecmp( (string) $found, $table ) ) {
+	$table = minn_admin_scrutoscope_spec();
+	if ( ! Minn_Admin_Kernel_SQL::exists( $table ) ) {
 		return array( 'items' => array(), 'total' => 0 );
 	}
 
-	$where = array( '1=1' );
-	$args  = array();
-
-	$kind = (string) $request->get_param( 'kind' );
+	$where = array();
+	$kind  = (string) $request->get_param( 'kind' );
 	if ( 'pinned' === $kind ) {
-		$where[] = 'is_pinned = 1';
+		$where['is_pinned'] = 1;
 	} elseif ( in_array( $kind, array( 'session', 'background', 'on_demand' ), true ) ) {
-		$where[] = 'profile_type = %s';
-		$args[]  = $kind;
+		$where['profile_type'] = $kind;
 	}
-
 	$search = (string) $request->get_param( 'search' );
 	if ( $search ) {
-		$like    = '%' . $wpdb->esc_like( $search ) . '%';
-		$where[] = '(route_key LIKE %s OR request_url LIKE %s OR note LIKE %s OR tags LIKE %s)';
-		array_push( $args, $like, $like, $like, $like );
+		$any = array();
+		foreach ( array( 'route_key', 'request_url', 'note', 'tags' ) as $col ) {
+			$any[] = array( $col => array( 'contains' => $search ) );
+		}
+		$where['#any'] = $any;
 	}
 
-	$where_sql = implode( ' AND ', $where );
-	$per_page  = min( 100, max( 1, (int) $request->get_param( 'per_page' ) ?: 25 ) );
-	$page      = max( 1, (int) $request->get_param( 'page' ) ?: 1 );
-	$offset    = ( $page - 1 ) * $per_page;
-
-	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table from Storage; WHERE placeholder-built.
-	if ( $args ) {
-		$total = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE {$where_sql}", $args ) );
-		$rows  = $wpdb->get_results( $wpdb->prepare(
-			"SELECT id, route_key, route_class, request_method, request_url, profile_type, duration_ns, user_role, captured_at, is_pinned, note, tags, response_status
-			 FROM {$table} WHERE {$where_sql} ORDER BY captured_at DESC, id DESC LIMIT %d OFFSET %d",
-			array_merge( $args, array( $per_page, $offset ) )
-		), ARRAY_A );
-	} else {
-		$total = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE {$where_sql}" );
-		$rows  = $wpdb->get_results( $wpdb->prepare(
-			"SELECT id, route_key, route_class, request_method, request_url, profile_type, duration_ns, user_role, captured_at, is_pinned, note, tags, response_status
-			 FROM {$table} WHERE {$where_sql} ORDER BY captured_at DESC, id DESC LIMIT %d OFFSET %d",
-			$per_page,
-			$offset
-		), ARRAY_A );
-	}
-	// phpcs:enable
+	$per_page             = min( 100, max( 1, (int) $request->get_param( 'per_page' ) ?: 25 ) );
+	$page                 = max( 1, (int) $request->get_param( 'page' ) ?: 1 );
+	list( $sql, $args )   = Minn_Admin_Kernel_SQL::where( $where, 'e' );
+	list( $rows, $total ) = Minn_Admin_Kernel_SQL::page( array(
+		'table'   => $table,
+		'key'     => 'id',
+		'columns' => array( 'id', 'route_key', 'route_class', 'request_method', 'request_url', 'profile_type', 'duration_ns', 'user_role', 'captured_at', 'is_pinned', 'note', 'tags', 'response_status' ),
+		'sql'     => $sql,
+		'args'    => $args,
+		'order'   => 'captured_at',
+		'dir'     => 'DESC',
+		'limit'   => $per_page,
+		'offset'  => ( $page - 1 ) * $per_page,
+	) );
 
 	$items = array();
 	foreach ( (array) $rows as $r ) {
@@ -427,15 +417,10 @@ function minn_admin_scrutoscope_storage_stats() {
 		return $out;
 	}
 
-	global $wpdb;
-	$table = minn_admin_scrutoscope_table();
-	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-	$found = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
-	if ( $found && 0 === strcasecmp( (string) $found, $table ) ) {
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		$out['total'] = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		$out['last'] = (string) $wpdb->get_var( "SELECT captured_at FROM {$table} ORDER BY captured_at DESC, id DESC LIMIT 1" );
+	$table = minn_admin_scrutoscope_spec();
+	if ( Minn_Admin_Kernel_SQL::exists( $table ) ) {
+		$out['total'] = Minn_Admin_Kernel_SQL::count( $table );
+		$out['last']  = (string) Minn_Admin_Kernel_SQL::latest( $table, 'captured_at', array(), 'captured_at' );
 	}
 	return $out;
 }
@@ -989,63 +974,61 @@ add_action( 'rest_api_init', function () {
 
 	$perm = 'minn_admin_scrutoscope_can';
 
-	register_rest_route( 'minn-admin/v1', '/scrutoscope/profiles', array(
+	minn_admin_endpoint( '/scrutoscope/profiles', array(
 		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) {
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) {
 			return rest_ensure_response( minn_admin_scrutoscope_list( $request ) );
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/scrutoscope/profiles/(?P<id>\d+)', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) {
-				$out = minn_admin_scrutoscope_profile_sections( (int) Minn_Admin::path_param( $request ) );
-				if ( is_wp_error( $out ) ) {
-					return $out;
-				}
-				return rest_ensure_response( $out );
-			},
-		),
-		array(
-			'methods'             => 'DELETE',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) {
-				$id = (int) Minn_Admin::path_param( $request );
-				$row = \Scrutoscope\Profiler\Storage::get_profile( $id );
-				if ( null === $row ) {
-					return new WP_Error( 'not_found', __( 'Profile not found.', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				\Scrutoscope\Profiler\Storage::delete_profile( $id );
-				return rest_ensure_response( array( 'ok' => true, 'message' => __( 'Profile deleted.', 'minn-admin' ) ) );
-			},
-		),
+	minn_admin_endpoint( '/scrutoscope/profiles/(?P<id>\d+)', array(
+		'methods'             => 'GET',
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) {
+			$out = minn_admin_scrutoscope_profile_sections( (int) Minn_Admin::path_param( $request ) );
+			if ( is_wp_error( $out ) ) {
+				return $out;
+			}
+			return rest_ensure_response( $out );
+		},
+	) );
+	minn_admin_endpoint( '/scrutoscope/profiles/(?P<id>\d+)', array(
+		'methods'             => 'DELETE',
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) {
+			$id = (int) Minn_Admin::path_param( $request );
+			$row = \Scrutoscope\Profiler\Storage::get_profile( $id );
+			if ( null === $row ) {
+				return new WP_Error( 'not_found', __( 'Profile not found.', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			\Scrutoscope\Profiler\Storage::delete_profile( $id );
+			return rest_ensure_response( array( 'ok' => true, 'message' => __( 'Profile deleted.', 'minn-admin' ) ) );
+		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/scrutoscope/status', array(
+	minn_admin_endpoint( '/scrutoscope/status', array(
 		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function () {
+		'gate'                => $perm,
+		'run'                 => function () {
 			return rest_ensure_response( minn_admin_scrutoscope_status_model() );
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/scrutoscope/cron', array(
+	minn_admin_endpoint( '/scrutoscope/cron', array(
 		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) {
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) {
 			return rest_ensure_response( minn_admin_scrutoscope_cron_list( $request ) );
 		},
 	) );
 
 	// On-demand cron profiling (Scrutoscope 1.4+). Id is the inventory row
 	// md5; the handler re-resolves hook + scheduled args from live cron.
-	register_rest_route( 'minn-admin/v1', '/scrutoscope/cron/(?P<id>[a-f0-9]{32})/profile', array(
+	minn_admin_endpoint( '/scrutoscope/cron/(?P<id>[a-f0-9]{32})/profile', array(
 		'methods'             => 'POST',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) {
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) {
 			$out = minn_admin_scrutoscope_profile_cron( (string) Minn_Admin::path_param( $request ) );
 			return is_wp_error( $out ) ? $out : rest_ensure_response( $out );
 		},

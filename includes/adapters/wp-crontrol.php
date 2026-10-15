@@ -456,56 +456,54 @@ add_action( 'rest_api_init', function () {
 
 	$perm = 'minn_admin_crontrol_can';
 
-	register_rest_route( 'minn-admin/v1', '/crontrol/events', array(
+	minn_admin_endpoint( '/crontrol/events', array(
 		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) {
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) {
 			return rest_ensure_response( minn_admin_crontrol_list( $request ) );
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/crontrol/events/(?P<id>[A-Za-z0-9_-]+)', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) {
-				$out = minn_admin_crontrol_detail( (string) Minn_Admin::path_param( $request ) );
-				return is_wp_error( $out ) ? $out : rest_ensure_response( $out );
-			},
-		),
-		array(
-			'methods'             => 'DELETE',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) {
-				$parts = minn_admin_crontrol_parse_id( (string) Minn_Admin::path_param( $request ) );
-				if ( ! $parts ) {
-					return new WP_Error( 'bad_id', __( 'Invalid event id.', 'minn-admin' ), array( 'status' => 400 ) );
-				}
-				$ev = \Crontrol\Event\find( $parts['h'], $parts['t'], $parts['s'] );
-				if ( ! $ev ) {
-					return new WP_Error( 'not_found', __( 'Cron event not found.', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				$user     = minn_admin_crontrol_user_ctx();
-				$features = minn_admin_crontrol_feature_ctx();
-				if ( ! $ev->deletable( $user, $features ) || $ev->persistent() ) {
-					return new WP_Error( 'forbidden', __( 'This event cannot be deleted.', 'minn-admin' ), array( 'status' => 403 ) );
-				}
-				$result = \Crontrol\Event\delete( $parts['h'], $parts['s'], (string) $parts['t'] );
-				if ( is_wp_error( $result ) ) {
-					return $result;
-				}
-				return rest_ensure_response( array(
-					'ok'      => true,
-					'message' => __( 'Event deleted.', 'minn-admin' ),
-				) );
-			},
-		),
+	minn_admin_endpoint( '/crontrol/events/(?P<id>[A-Za-z0-9_-]+)', array(
+		'methods'             => 'GET',
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) {
+			$out = minn_admin_crontrol_detail( (string) Minn_Admin::path_param( $request ) );
+			return is_wp_error( $out ) ? $out : rest_ensure_response( $out );
+		},
+	) );
+	minn_admin_endpoint( '/crontrol/events/(?P<id>[A-Za-z0-9_-]+)', array(
+		'methods'             => 'DELETE',
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) {
+			$parts = minn_admin_crontrol_parse_id( (string) Minn_Admin::path_param( $request ) );
+			if ( ! $parts ) {
+				return new WP_Error( 'bad_id', __( 'Invalid event id.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
+			$ev = \Crontrol\Event\find( $parts['h'], $parts['t'], $parts['s'] );
+			if ( ! $ev ) {
+				return new WP_Error( 'not_found', __( 'Cron event not found.', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			$user     = minn_admin_crontrol_user_ctx();
+			$features = minn_admin_crontrol_feature_ctx();
+			if ( ! $ev->deletable( $user, $features ) || $ev->persistent() ) {
+				return new WP_Error( 'forbidden', __( 'This event cannot be deleted.', 'minn-admin' ), array( 'status' => 403 ) );
+			}
+			$result = \Crontrol\Event\delete( $parts['h'], $parts['s'], (string) $parts['t'] );
+			if ( is_wp_error( $result ) ) {
+				return $result;
+			}
+			return rest_ensure_response( array(
+				'ok'      => true,
+				'message' => __( 'Event deleted.', 'minn-admin' ),
+			) );
+		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/crontrol/events/(?P<id>[A-Za-z0-9_-]+)/run', array(
+	minn_admin_endpoint( '/crontrol/events/(?P<id>[A-Za-z0-9_-]+)/run', array(
 		'methods'             => 'POST',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) {
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) {
 			$parts = minn_admin_crontrol_parse_id( (string) Minn_Admin::path_param( $request ) );
 			if ( ! $parts ) {
 				return new WP_Error( 'bad_id', __( 'Invalid event id.', 'minn-admin' ), array( 'status' => 400 ) );
@@ -539,10 +537,10 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/crontrol/events/(?P<id>[A-Za-z0-9_-]+)/pause', array(
+	minn_admin_endpoint( '/crontrol/events/(?P<id>[A-Za-z0-9_-]+)/pause', array(
 		'methods'             => 'POST',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) {
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) {
 			$parts = minn_admin_crontrol_parse_id( (string) Minn_Admin::path_param( $request ) );
 			if ( ! $parts ) {
 				return new WP_Error( 'bad_id', __( 'Invalid event id.', 'minn-admin' ), array( 'status' => 400 ) );
@@ -565,10 +563,10 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/crontrol/events/(?P<id>[A-Za-z0-9_-]+)/resume', array(
+	minn_admin_endpoint( '/crontrol/events/(?P<id>[A-Za-z0-9_-]+)/resume', array(
 		'methods'             => 'POST',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) {
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) {
 			$parts = minn_admin_crontrol_parse_id( (string) Minn_Admin::path_param( $request ) );
 			if ( ! $parts ) {
 				return new WP_Error( 'bad_id', __( 'Invalid event id.', 'minn-admin' ), array( 'status' => 400 ) );
@@ -595,10 +593,10 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/crontrol/status', array(
+	minn_admin_endpoint( '/crontrol/status', array(
 		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function () {
+		'gate'                => $perm,
+		'run'                 => function () {
 			return rest_ensure_response( minn_admin_crontrol_status_model() );
 		},
 	) );
