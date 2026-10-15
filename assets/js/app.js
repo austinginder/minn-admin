@@ -13,6 +13,10 @@
 	const ENGINE = !! ( B && B.engine );
 	// The engine's own version ("Minn Engine/0.1.0" names it); '' on WordPress.
 	const ENGINE_VERSION = ENGINE ? String( B.engine ).split( '/' ).pop() : '';
+	// The wp-admin pages the engine does open: those whose action a plugin
+	// answers itself (a page builder's editor, post.php?action=elementor),
+	// which it lists while the Minn Legacy Pack is active.
+	const ENGINE_ADMIN_ACTIONS = new Set( ENGINE && Array.isArray( B.adminActions ) ? B.adminActions.map( String ) : [] );
 
 	// Classic wp-admin screens. The engine has no /wp-admin/, and its
 	// adminUrl is /minn-admin/, so a deep link there is swallowed by the
@@ -44,6 +48,7 @@
 			const pth = u.pathname;
 			const file = ( pth.split( '/' ).pop() || '' ).toLowerCase();
 			if ( file === 'admin-ajax.php' ) return false;
+			if ( ENGINE_ADMIN_ACTIONS.size && /\/wp-admin\/[a-z0-9-]+\.php$/i.test( pth ) && ENGINE_ADMIN_ACTIONS.has( u.searchParams.get( 'action' ) || '' ) ) return false;
 			if ( /\/wp-admin(?:\/|$)/i.test( pth ) ) return true;
 			if ( file === 'index.php' ) {
 				return /\/wp-admin\//i.test( pth ) || /\/minn-admin\//i.test( pth );
@@ -6829,7 +6834,7 @@
 				<div></div><div>${ contentSortHead( 'title' ) }</div><div>${ esc( __( 'Status' ) ) }</div><div>${ esc( __( 'Author' ) ) }</div><div>${ contentSortHead( 'date' ) }</div><div></div>
 			</div>
 			${ filtered.length ? filtered.map( ( p ) => `
-				<div class="minn-table-row minn-content-cols${ state.contentTrash ? ' trash' : '' }${ sel.has( p.id ) ? ' sel' : '' }" data-id="${ p.id }" data-type="${ esc( p.type ) }" data-status="${ esc( p.status ) }" data-link="${ esc( p.link || '' ) }">
+				<div class="minn-table-row minn-content-cols${ state.contentTrash ? ' trash' : '' }${ sel.has( p.id ) ? ' sel' : '' }" data-id="${ p.id }" data-type="${ esc( p.type ) }" data-status="${ esc( p.status ) }" data-link="${ esc( p.link || '' ) }"${ p.builder && p.builder.active !== false && p.builder.edit_url ? ` data-builder="${ esc( p.builder.name ) }" data-builder-edit="${ esc( p.builder.edit_url ) }"` : '' }>
 					<div class="minn-cbcell"><input type="checkbox" class="minn-cb minn-row-cb" data-cbid="${ p.id }" aria-label="${ esc( sprintf( /* translators: %s: the title or name of the row being selected. */ __( 'Select %s' ), p.title ) ) }"${ sel.has( p.id ) ? ' checked' : '' }></div>
 					<div class="minn-row-icon${ p.thumb ? ' has-thumb' : '' }">${ rowIcon( p ) }</div>
 					<div class="minn-cell-clip">
@@ -6993,11 +6998,14 @@
 			// Patterns (wp_block) carry a link field but are not publicly
 			// queryable — a front-end view/preview would just 404.
 			const viewUrl = p.link && state.filter !== 'blocks' ? ( p.status === 'publish' ? p.link : p.link + ( p.link.includes( '?' ) ? '&' : '?' ) + 'preview=true' ) : '';
+			// A builder that is on and willing to open this post offers its own editor.
+			const builderEdit = p.builder && p.builder.active !== false && p.builder.edit_url ? safeHref( p.builder.edit_url ) : '';
 			rowMenu = document.createElement( 'div' );
 			rowMenu.className = 'minn-new-menu minn-row-menu';
 			rowMenu.innerHTML = `
 				<button type="button" data-ract="open">${ esc( __( 'Open in Minn' ) ) }</button>
 				${ viewUrl ? `<a href="${ esc( viewUrl ) }" target="wp-preview-${ p.id }">${ p.status === 'publish' ? __( 'View on site' ) : __( 'Preview draft' ) } ↗</a>` : '' }
+				${ builderEdit ? `<a href="${ esc( builderEdit ) }" target="_blank" rel="noopener">${ esc( sprintf( /* translators: %s: the page builder's name. */ __( 'Edit in %s' ), p.builder.name ) ) } ↗</a>` : '' }
 				${ ENGINE ? '' : `<a href="${ esc( B.site.adminUrl ) }post.php?post=${ p.id }&action=edit" target="_blank" rel="noopener">${ esc( __( 'Edit in block editor ↗' ) ) }</a>` }
 				${ B.ppp && p.status !== 'publish' && p.status !== 'private' && p.status !== 'trash' ? `<button type="button" data-ract="ppp">${ esc( __( 'Copy public preview link' ) ) }</button>` : '' }
 				<button type="button" data-ract="duplicate">${ esc( __( 'Duplicate' ) ) }</button>
@@ -7042,6 +7050,7 @@
 			type: el.dataset.type,
 			status: el.dataset.status,
 			link: el.dataset.link,
+			builder: el.dataset.builderEdit ? { name: el.dataset.builder || '', edit_url: el.dataset.builderEdit } : null,
 		} );
 		if ( ! state.contentTrash ) {
 			$$( '.minn-table-row[data-id]', view ).forEach( ( row ) => {

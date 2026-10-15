@@ -120,6 +120,43 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		t.check( 'no Add plugin for this user', true );
 	}
 
+	/* ===== A page builder's own editor: its content row menu offers
+	   "Edit in <builder>", and the editor's banner links there. On the
+	   engine a wp-admin link stays only when the engine opens that page
+	   (MINN.adminActions, while the Minn Legacy Pack is active). ===== */
+	await page.goto( BASE + '/minn-admin/content', { waitUntil: 'domcontentloaded' } );
+	await page.waitForSelector( '.minn-table-row[data-id]', { timeout: 20000 } );
+	const built = await page.evaluate( () => {
+		const row = document.querySelector( '.minn-table-row[data-builder-edit]' );
+		return row ? { id: row.dataset.id, type: row.dataset.type, name: row.dataset.builder, href: row.dataset.builderEdit } : null;
+	} );
+	if ( built ) {
+		const action = new URL( built.href, BASE ).searchParams.get( 'action' ) || '';
+		const opens = ! boot.engine || ( await page.evaluate( ( a ) => ( window.MINN.adminActions || [] ).includes( a ), action ) );
+		const more = await page.$( `.minn-row-more[data-more="${ built.id }"]` );
+		await more.click( { force: true } );
+		await page.waitForSelector( '.minn-row-menu', { timeout: 10000 } );
+		const offered = await page.evaluate( ( name ) => [ ...document.querySelectorAll( '.minn-row-menu a' ) ]
+			.filter( ( a ) => a.textContent.includes( 'Edit in ' + name ) ).map( ( a ) => a.getAttribute( 'href' ) ), built.name );
+		await page.keyboard.press( 'Escape' );
+		if ( opens ) {
+			t.check( `the row menu offers Edit in ${ built.name }`, offered.length === 1 && offered[ 0 ] === built.href, JSON.stringify( offered ) );
+		} else {
+			t.check( `the engine drops Edit in ${ built.name }, which it cannot open`, offered.length === 0, JSON.stringify( offered ) );
+		}
+		await page.goto( BASE + '/minn-admin/editor/' + built.type + '/' + built.id, { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( '#minn-view', { timeout: 20000 } );
+		await page.waitForTimeout( 2500 );
+		const banner = await page.evaluate( () => {
+			const note = document.querySelector( '.minn-builder-note' );
+			return note ? note.getAttribute( 'href' ) : null;
+		} );
+		t.check( opens ? `the editor's banner links to ${ built.name }` : `the editor's banner on the engine has no link it cannot open`,
+			opens ? banner === built.href : ! banner, String( banner ) );
+	} else {
+		t.check( 'no builder-managed post on this site', true );
+	}
+
 	/* ===== Activity Log: Open Stream is Stream-adapter copy. Hidden on
 	   the engine; on WordPress it only appears when Stream is the active
 	   family member, so the WordPress side of this check is optional. ===== */
