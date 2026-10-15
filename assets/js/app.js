@@ -26,6 +26,10 @@
 	const LEGACY_PACK = ENGINE && B.legacyPack && typeof B.legacyPack === 'object' ? B.legacyPack : null;
 	const LEGACY_PACK_ALL = LEGACY_PACK && Array.isArray( LEGACY_PACK.editors ) ? LEGACY_PACK.editors : [];
 	const LEGACY_PACK_EDITORS = new Map( LEGACY_PACK && ! LEGACY_PACK.active ? LEGACY_PACK_ALL.map( ( e ) => [ String( e.action || e.query || '' ), e ] ) : [] );
+	// The plugins and theme whose scripts the engine saw needing the pack on
+	// the site's public pages (WooCommerce's variation form, its block cart):
+	// those parts fail for visitors until it is installed.
+	const LEGACY_PACK_WANTED = LEGACY_PACK && ! LEGACY_PACK.active && Array.isArray( LEGACY_PACK.wanted ) ? LEGACY_PACK.wanted : [];
 
 	// Classic wp-admin screens. The engine has no /wp-admin/, and its
 	// adminUrl is /minn-admin/, so a deep link there is swallowed by the
@@ -1657,16 +1661,26 @@
 		}
 	}
 
-	// Offers the Minn Legacy Pack for an editor that needs it: installed from
-	// the Minn update service and turned on (the engine checks the package),
-	// then on to the editor when there is one to open.
-	async function offerLegacyPack( editor, href ) {
+	// Offers the Minn Legacy Pack for an editor that needs it, or for the
+	// plugins whose pages need it (pages: their names): installed from the
+	// Minn update service and turned on (the engine checks the package), then
+	// on to the editor when there is one to open.
+	async function offerLegacyPack( editor, href, pages ) {
 		const name = editor && editor.name ? String( editor.name ) : __( 'This editor' );
 		if ( ! B.caps.install ) {
 			toast( sprintf( /* translators: %s: the page builder's name. */ __( '%s’s editor needs the Minn Legacy Pack. Ask an administrator to install it.' ), name ), true );
 			return false;
 		}
-		const ok = await minnConfirm( {
+		const ok = await minnConfirm( ! editor && pages && pages.length ? {
+			title: __( 'Install the Minn Legacy Pack?' ),
+			body: sprintf( /* translators: %s: plugin or theme names, joined with commas. */ _n( '%s uses WordPress’s own scripts on your site’s pages, which Minn doesn’t include, so parts of those pages don’t work for visitors. The Minn Legacy Pack brings them back.', '%s use WordPress’s own scripts on your site’s pages, which Minn doesn’t include, so parts of those pages don’t work for visitors. The Minn Legacy Pack brings them back.', pages.length ), pages.join( ', ' ) ),
+			changes: [
+				__( 'Installs and turns on the Minn Legacy Pack, from the Minn update service' ),
+				__( 'Its updates arrive with your other plugin updates' ),
+			],
+			keeps: [ __( 'Your content and the rest of your plugins' ) ],
+			confirmLabel: __( 'Install' ),
+		} : {
 			title: sprintf( /* translators: %s: the page builder's name. */ __( 'Install the Minn Legacy Pack to edit with %s?' ), name ),
 			body: sprintf( /* translators: %s: the page builder's name. */ __( '%s’s editor is built on WordPress’s own editor scripts, which Minn doesn’t include. The Minn Legacy Pack brings them back.' ), name ),
 			changes: [
@@ -1689,24 +1703,40 @@
 		return true;
 	}
 
-	// On Minn, the editors on the site that need the Minn Legacy Pack while it
-	// is not active: offered on the Plugins tab too, not only at their links.
-	function legacyPackBannerHtml() {
-		if ( ! LEGACY_PACK_EDITORS.size || ! B.caps.install ) return '';
-		const names = [ ...new Set( [ ...LEGACY_PACK_EDITORS.values() ].map( ( e ) => String( e.name ) ) ) ];
+	// On Minn, while the Minn Legacy Pack is not active: the plugins whose
+	// public pages need it, and the editors on the site that need it, offered
+	// on the Plugins tab (and, when visitors are affected, on the Overview),
+	// not only at an editor's links.
+	function legacyPackBannerHtml( visitorsOnly ) {
+		const pages = legacyPackPageNames();
+		if ( ! B.caps.install || ( ! pages.length && ( visitorsOnly || ! LEGACY_PACK_EDITORS.size ) ) ) return '';
+		const names = [ ...new Set( [ ...pages, ...( visitorsOnly ? [] : [ ...LEGACY_PACK_EDITORS.values() ].map( ( e ) => String( e.name ) ) ) ] ) ];
+		const page = pages.length ? String( LEGACY_PACK_WANTED[ 0 ].page || '' ) : '';
+		const desc = pages.length
+			? ( page
+				? sprintf( /* translators: %s: the address of one of the site's pages, such as /product/hoodie/. */ __( 'Some of your site’s pages, such as %s, use WordPress’s own scripts, which Minn doesn’t include, so parts of them don’t work for visitors. The Minn Legacy Pack brings them back, and Minn keeps it updated.' ), page )
+				: __( 'Some of your site’s pages use WordPress’s own scripts, which Minn doesn’t include, so parts of them don’t work for visitors. The Minn Legacy Pack brings them back, and Minn keeps it updated.' ) )
+			: _n( 'Its editor is built on WordPress’s own editor scripts, which Minn doesn’t include. The Minn Legacy Pack brings them back, and Minn keeps it updated.', 'Their editors are built on WordPress’s own editor scripts, which Minn doesn’t include. The Minn Legacy Pack brings them back, and Minn keeps it updated.', names.length );
 		return `
 		<div class="minn-card minn-core-banner minn-legacy-pack-banner">
 			<div class="minn-core-info">
-				<div class="minn-panel-title">${ esc( sprintf( /* translators: %s: page builder names, joined with commas. */ _n( '%s needs the Minn Legacy Pack', '%s need the Minn Legacy Pack', names.length ), names.join( ', ' ) ) ) }</div>
-				<div class="minn-toggle-desc">${ esc( _n( 'Its editor is built on WordPress’s own editor scripts, which Minn doesn’t include. The Minn Legacy Pack brings them back, and Minn keeps it updated.', 'Their editors are built on WordPress’s own editor scripts, which Minn doesn’t include. The Minn Legacy Pack brings them back, and Minn keeps it updated.', names.length ) ) }</div>
+				<div class="minn-panel-title">${ pages.length ? icon( 'warn' ) + ' ' : '' }${ esc( sprintf( /* translators: %s: plugin, theme or page builder names, joined with commas. */ _n( '%s needs the Minn Legacy Pack', '%s need the Minn Legacy Pack', names.length ), names.join( ', ' ) ) ) }</div>
+				<div class="minn-toggle-desc">${ esc( desc ) }</div>
 			</div>
 			<button class="minn-btn-primary" id="minn-legacy-pack-install">${ icon( 'plus' ) } ${ esc( __( 'Install' ) ) }</button>
 		</div>`;
 	}
 
+	// The names of the plugins and theme whose pages need the pack, each once.
+	function legacyPackPageNames() {
+		return [ ...new Set( LEGACY_PACK_WANTED.map( ( w ) => String( w.name || w.plugin || w.theme || '' ) ).filter( Boolean ) ) ];
+	}
+
 	function bindLegacyPackBanner( view ) {
 		const btn = $( '#minn-legacy-pack-install', view );
-		if ( btn ) btn.addEventListener( 'click', () => offerLegacyPack( [ ...LEGACY_PACK_EDITORS.values() ][ 0 ], '' ) );
+		if ( ! btn ) return;
+		const pages = legacyPackPageNames();
+		btn.addEventListener( 'click', () => pages.length ? offerLegacyPack( null, '', pages ) : offerLegacyPack( [ ...LEGACY_PACK_EDITORS.values() ][ 0 ], '' ) );
 	}
 
 	function runPendingToastUndo() {
@@ -5940,6 +5970,7 @@
 		</div>
 		${ visibilityBannerHtml() }
 		${ coreBannerHtml() }
+		${ legacyPackBannerHtml( true ) }
 		<div class="minn-stats">
 			${ overviewShownMetrics( o ).map( ( s, i ) => {
 				// Each stat is a door to its view, not just a number.
@@ -6016,6 +6047,7 @@
 			} )
 		);
 		bindCoreBanner( view );
+		bindLegacyPackBanner( view );
 		const visBanner = $( '.minn-vis-banner', view );
 		if ( visBanner ) {
 			const controls = visibilityFixControls();

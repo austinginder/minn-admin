@@ -179,6 +179,21 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		t.check( 'no builder-managed post on this site', true );
 	}
 
+	/* ===== The Minn Legacy Pack, when the engine saw the site's public
+	   pages needing it (MINN.legacyPack.wanted, while the pack is not
+	   active): the Overview says so to someone who may install it, naming
+	   each plugin. Without that, and on WordPress, it says nothing. ===== */
+	const packState = await page.evaluate( () => ( { pack: ( window.MINN && window.MINN.legacyPack ) || null, install: !! ( window.MINN && window.MINN.caps && window.MINN.caps.install ) } ) );
+	const packPages = boot.engine && packState.pack && ! packState.pack.active ? ( packState.pack.wanted || [] ).map( ( w ) => String( w.name ) ) : [];
+	await page.goto( BASE + '/minn-admin/overview', { waitUntil: 'domcontentloaded' } );
+	await page.waitForSelector( '.minn-stats', { timeout: 30000 } );
+	const packNote = await page.evaluate( () => { const b = document.querySelector( '.minn-legacy-pack-banner' ); return b ? b.textContent.replace( /\s+/g, ' ' ).trim() : null; } );
+	if ( packPages.length && packState.install ) {
+		t.check( 'the Overview says which plugins\' pages need the Minn Legacy Pack', !! packNote && packPages.every( ( n ) => packNote.includes( n ) ), String( packNote ) );
+	} else {
+		t.check( 'no Minn Legacy Pack message on the Overview when no page needs it', ! packNote, String( packNote ) );
+	}
+
 	/* ===== Activity Log: Open Stream is Stream-adapter copy. Hidden on
 	   the engine; on WordPress it only appears when Stream is the active
 	   family member, so the WordPress side of this check is optional. ===== */
