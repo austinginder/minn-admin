@@ -587,7 +587,7 @@ function minn_admin_gfn_neutral_tags( $text ) {
 function minn_admin_gfn_guarded( $entry, $render ) {
 	global $wpdb, $wp_filter;
 	$uid  = (int) rgar( $entry, 'created_by' );
-	$keep = array( 'first_name', 'last_name', 'nickname', $wpdb->get_blog_prefix() . 'capabilities', $wpdb->get_blog_prefix() . 'user_level' );
+	$keep = array( 'first_name', 'last_name', 'nickname', $wpdb->prefix . 'capabilities', $wpdb->prefix . 'user_level' );
 	$deny = function ( $value, $object_id, $meta_key, $single ) use ( $uid, $keep ) {
 		if ( ! $uid || (int) $object_id !== $uid || in_array( (string) $meta_key, $keep, true ) ) {
 			return $value;
@@ -700,61 +700,59 @@ add_action( 'rest_api_init', function () {
 	};
 	$id_re = '(?P<form>\d+):(?P<nid>[a-zA-Z0-9_.-]+)';
 
-	register_rest_route( 'minn-admin/v1', '/gf/notifications/' . $id_re . '/full', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) use ( $resolve ) {
-				$r = $resolve( $request );
-				if ( is_wp_error( $r ) ) {
-					return $r;
+	minn_admin_endpoint( '/gf/notifications/' . $id_re . '/full', array(
+		'methods'             => 'GET',
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) use ( $resolve ) {
+			$r = $resolve( $request );
+			if ( is_wp_error( $r ) ) {
+				return $r;
+			}
+			list( $form, $stored, $is_new ) = $r;
+			return rest_ensure_response( minn_admin_gfn_payload( $form, $is_new ? minn_admin_gfn_defaults() : $stored, $is_new ) );
+		},
+	) );
+	minn_admin_endpoint( '/gf/notifications/' . $id_re . '/full', array(
+		'methods'             => 'POST',
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) use ( $resolve ) {
+			$r = $resolve( $request );
+			if ( is_wp_error( $r ) ) {
+				return $r;
+			}
+			list( $form, $stored, $is_new ) = $r;
+			$body = (array) $request->get_json_params();
+			// The page sends what it changed; anything it leaves out keeps
+			// its stored value (as the page itself reads it), so a page left
+			// open does not put back routing, conditions or a BCC changed
+			// elsewhere since, and a partial body resets nothing.
+			if ( ! $is_new ) {
+				$body = array_merge( minn_admin_gfn_payload( $form, $stored, false )['notification'], $body );
+			}
+			$n = minn_admin_gfn_build( $form, $stored, $body, $is_new );
+			if ( is_wp_error( $n ) ) {
+				return $n;
+			}
+			$nid = minn_admin_gfn_store( $form, $n, $is_new );
+			// The Active switch through their own toggle (its hooks fire).
+			if ( array_key_exists( 'isActive', $body ) ) {
+				$was = $is_new ? true : ( ! isset( $stored['isActive'] ) || false !== $stored['isActive'] );
+				if ( (bool) $body['isActive'] !== $was ) {
+					GFFormsModel::update_notification_active( $form['id'], $nid, (bool) $body['isActive'] );
+					GFFormsModel::flush_current_forms();
 				}
-				list( $form, $stored, $is_new ) = $r;
-				return rest_ensure_response( minn_admin_gfn_payload( $form, $is_new ? minn_admin_gfn_defaults() : $stored, $is_new ) );
-			},
-		),
-		array(
-			'methods'             => 'POST',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) use ( $resolve ) {
-				$r = $resolve( $request );
-				if ( is_wp_error( $r ) ) {
-					return $r;
-				}
-				list( $form, $stored, $is_new ) = $r;
-				$body = (array) $request->get_json_params();
-				// The page sends what it changed; anything it leaves out keeps
-				// its stored value (as the page itself reads it), so a page left
-				// open does not put back routing, conditions or a BCC changed
-				// elsewhere since, and a partial body resets nothing.
-				if ( ! $is_new ) {
-					$body = array_merge( minn_admin_gfn_payload( $form, $stored, false )['notification'], $body );
-				}
-				$n = minn_admin_gfn_build( $form, $stored, $body, $is_new );
-				if ( is_wp_error( $n ) ) {
-					return $n;
-				}
-				$nid = minn_admin_gfn_store( $form, $n, $is_new );
-				// The Active switch through their own toggle (its hooks fire).
-				if ( array_key_exists( 'isActive', $body ) ) {
-					$was = $is_new ? true : ( ! isset( $stored['isActive'] ) || false !== $stored['isActive'] );
-					if ( (bool) $body['isActive'] !== $was ) {
-						GFFormsModel::update_notification_active( $form['id'], $nid, (bool) $body['isActive'] );
-						GFFormsModel::flush_current_forms();
-					}
-				}
-				$fresh = minn_admin_gfn_form( $form['id'], $nid );
-				return rest_ensure_response( minn_admin_gfn_payload( $fresh, $fresh['notifications'][ $nid ], false ) );
-			},
-		),
+			}
+			$fresh = minn_admin_gfn_form( $form['id'], $nid );
+			return rest_ensure_response( minn_admin_gfn_payload( $fresh, $fresh['notifications'][ $nid ], false ) );
+		},
 	) );
 
 	// Start a new notification for a form (the list's New notification): it
 	// exists only once its page is saved, so this just names the page.
-	register_rest_route( 'minn-admin/v1', '/gf/notifications/new', array(
+	minn_admin_endpoint( '/gf/notifications/new', array(
 		'methods'             => 'POST',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) {
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) {
 			$form_id = (int) $request->get_param( 'form' );
 			if ( ! $form_id || ! GFAPI::form_id_exists( $form_id ) ) {
 				return new WP_Error( 'not_found', __( 'Choose a form for the notification.', 'minn-admin' ), array( 'status' => 400 ) );
@@ -766,10 +764,10 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/gf/notifications/' . $id_re . '/duplicate', array(
+	minn_admin_endpoint( '/gf/notifications/' . $id_re . '/duplicate', array(
 		'methods'             => 'POST',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) use ( $resolve ) {
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) use ( $resolve ) {
 			$r = $resolve( $request );
 			if ( is_wp_error( $r ) ) {
 				return $r;
@@ -790,10 +788,10 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/gf/notifications/' . $id_re, array(
+	minn_admin_endpoint( '/gf/notifications/' . $id_re, array(
 		'methods'             => 'DELETE',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) use ( $resolve ) {
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) use ( $resolve ) {
 			$r = $resolve( $request );
 			if ( is_wp_error( $r ) ) {
 				return $r;
@@ -812,10 +810,10 @@ add_action( 'rest_api_init', function () {
 	// entry, the way their send renders them (merge tags replaced,
 	// auto-formatting applied unless it is off). Shortcodes are left as
 	// typed; running them here could act on the site.
-	register_rest_route( 'minn-admin/v1', '/gf/notifications/' . $id_re . '/preview', array(
+	minn_admin_endpoint( '/gf/notifications/' . $id_re . '/preview', array(
 		'methods'             => 'POST',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) use ( $resolve ) {
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) use ( $resolve ) {
 			$r = $resolve( $request );
 			if ( is_wp_error( $r ) ) {
 				return $r;
@@ -846,10 +844,10 @@ add_action( 'rest_api_init', function () {
 	// Send test: the page's current subject, sender and message, built from
 	// the form's latest entry, sent ONLY to the person editing (recipients,
 	// CC, BCC and routing are replaced), through their own send.
-	register_rest_route( 'minn-admin/v1', '/gf/notifications/' . $id_re . '/test', array(
+	minn_admin_endpoint( '/gf/notifications/' . $id_re . '/test', array(
 		'methods'             => 'POST',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) use ( $resolve ) {
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) use ( $resolve ) {
 			$r = $resolve( $request );
 			if ( is_wp_error( $r ) ) {
 				return $r;

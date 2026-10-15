@@ -236,59 +236,57 @@ add_action( 'rest_api_init', function () {
 		return $form ? $form : new WP_Error( 'not_found', __( 'Form not found.', 'minn-admin' ), array( 'status' => 404 ) );
 	};
 
-	register_rest_route( 'minn-admin/v1', '/cf7/forms/(?P<id>\d+)/mail', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) use ( $load ) {
-				$form = $load( $request );
-				return is_wp_error( $form ) ? $form : rest_ensure_response( minn_admin_cf7_mail_payload( $form ) );
-			},
-		),
-		array(
-			'methods'             => 'POST',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) use ( $load ) {
-				$form = $load( $request );
-				if ( is_wp_error( $form ) ) {
-					return $form;
+	minn_admin_endpoint( '/cf7/forms/(?P<id>\d+)/mail', array(
+		'methods'             => 'GET',
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) use ( $load ) {
+			$form = $load( $request );
+			return is_wp_error( $form ) ? $form : rest_ensure_response( minn_admin_cf7_mail_payload( $form ) );
+		},
+	) );
+	minn_admin_endpoint( '/cf7/forms/(?P<id>\d+)/mail', array(
+		'methods'             => 'POST',
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) use ( $load ) {
+			$form = $load( $request );
+			if ( is_wp_error( $form ) ) {
+				return $form;
+			}
+			$body     = (array) $request->get_json_params();
+			$messages = (array) $form->prop( 'messages' );
+			foreach ( wpcf7_messages() as $key => $m ) {
+				if ( isset( $body['messages'][ $key ] ) && is_scalar( $body['messages'][ $key ] ) ) {
+					$messages[ $key ] = (string) $body['messages'][ $key ];
+				} elseif ( ! isset( $messages[ $key ] ) ) {
+					$messages[ $key ] = (string) $m['default'];
 				}
-				$body     = (array) $request->get_json_params();
-				$messages = (array) $form->prop( 'messages' );
-				foreach ( wpcf7_messages() as $key => $m ) {
-					if ( isset( $body['messages'][ $key ] ) && is_scalar( $body['messages'][ $key ] ) ) {
-						$messages[ $key ] = (string) $body['messages'][ $key ];
-					} elseif ( ! isset( $messages[ $key ] ) ) {
-						$messages[ $key ] = (string) $m['default'];
-					}
-				}
-				// What wpcf7_save_contact_form() does for these three, minus its
-				// wpcf7_save_contact_form action: the panels listening there
-				// (Brevo, AnalyticsWP) rebuild their settings from the editor's
-				// $_POST, which a JSON save doesn't have, so firing it switched
-				// them off. Their save() still fires wpcf7_after_save.
-				$mail           = wpcf7_sanitize_mail( minn_admin_cf7_mail_in( $body['mail'] ?? array(), $form->prop( 'mail' ) ) );
-				$mail['active'] = true;
-				$form->set_properties( array(
-					'mail'     => $mail,
-					'mail_2'   => wpcf7_sanitize_mail( minn_admin_cf7_mail_in( $body['mail_2'] ?? array(), $form->prop( 'mail_2' ) ) ),
-					'messages' => wpcf7_sanitize_messages( $messages ),
-				) );
-				if ( ! $form->save() ) {
-					return new WP_Error( 'minn_cf7_failed', __( 'Contact Form 7 did not save the form.', 'minn-admin' ), array( 'status' => 500 ) );
-				}
-				$saved = wpcf7_contact_form( (int) $form->id() );
-				// Their editor validates the configuration on every save.
-				minn_admin_cf7_config_errors( $saved, true );
-				return rest_ensure_response( minn_admin_cf7_mail_payload( wpcf7_contact_form( (int) $form->id() ) ) );
-			},
-		),
+			}
+			// What wpcf7_save_contact_form() does for these three, minus its
+			// wpcf7_save_contact_form action: the panels listening there
+			// (Brevo, AnalyticsWP) rebuild their settings from the editor's
+			// $_POST, which a JSON save doesn't have, so firing it switched
+			// them off. Their save() still fires wpcf7_after_save.
+			$mail           = wpcf7_sanitize_mail( minn_admin_cf7_mail_in( $body['mail'] ?? array(), $form->prop( 'mail' ) ) );
+			$mail['active'] = true;
+			$form->set_properties( array(
+				'mail'     => $mail,
+				'mail_2'   => wpcf7_sanitize_mail( minn_admin_cf7_mail_in( $body['mail_2'] ?? array(), $form->prop( 'mail_2' ) ) ),
+				'messages' => wpcf7_sanitize_messages( $messages ),
+			) );
+			if ( ! $form->save() ) {
+				return new WP_Error( 'minn_cf7_failed', __( 'Contact Form 7 did not save the form.', 'minn-admin' ), array( 'status' => 500 ) );
+			}
+			$saved = wpcf7_contact_form( (int) $form->id() );
+			// Their editor validates the configuration on every save.
+			minn_admin_cf7_config_errors( $saved, true );
+			return rest_ensure_response( minn_admin_cf7_mail_payload( wpcf7_contact_form( (int) $form->id() ) ) );
+		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/cf7/forms/(?P<id>\d+)/mail/preview', array(
+	minn_admin_endpoint( '/cf7/forms/(?P<id>\d+)/mail/preview', array(
 		'methods'             => 'POST',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) use ( $load ) {
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) use ( $load ) {
 			$form = $load( $request );
 			if ( is_wp_error( $form ) ) {
 				return $form;

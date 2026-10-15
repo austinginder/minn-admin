@@ -233,127 +233,125 @@ add_action( 'rest_api_init', function () {
 		return $form ? $form : new WP_Error( 'not_found', __( 'Form not found.', 'minn-admin' ), array( 'status' => 404 ) );
 	};
 
-	register_rest_route( 'minn-admin/v1', '/fluent-forms/forms/(?P<id>\d+)/emails', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) use ( $load ) {
-				$form = $load( $request );
-				return is_wp_error( $form ) ? $form : rest_ensure_response( minn_admin_fluent_emails_payload( $form ) );
-			},
-		),
-		array(
-			'methods'             => 'POST',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) use ( $load ) {
-				$form = $load( $request );
-				if ( is_wp_error( $form ) ) {
-					return $form;
-				}
-				$body    = (array) $request->get_json_params();
-				$service = new \FluentForm\App\Services\Settings\SettingsService();
-				$stored  = minn_admin_fluent_notifications( $form->id );
+	minn_admin_endpoint( '/fluent-forms/forms/(?P<id>\d+)/emails', array(
+		'methods'             => 'GET',
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) use ( $load ) {
+			$form = $load( $request );
+			return is_wp_error( $form ) ? $form : rest_ensure_response( minn_admin_fluent_emails_payload( $form ) );
+		},
+	) );
+	minn_admin_endpoint( '/fluent-forms/forms/(?P<id>\d+)/emails', array(
+		'methods'             => 'POST',
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) use ( $load ) {
+			$form = $load( $request );
+			if ( is_wp_error( $form ) ) {
+				return $form;
+			}
+			$body    = (array) $request->get_json_params();
+			$service = new \FluentForm\App\Services\Settings\SettingsService();
+			$stored  = minn_admin_fluent_notifications( $form->id );
 
-				// Notifications: each existing one through their store().
-				foreach ( (array) ( $body['notifications'] ?? array() ) as $in ) {
-					$id = (int) ( $in['metaId'] ?? 0 );
-					if ( ! isset( $stored[ $id ] ) ) {
-						return new WP_Error( 'minn_ffe_unknown', __( 'That notification is not on this form.', 'minn-admin' ), array( 'status' => 400 ) );
-					}
-					$n    = $stored[ $id ];
-					$text = function ( $k ) use ( $in ) {
-						return isset( $in[ $k ] ) && is_scalar( $in[ $k ] ) ? (string) $in[ $k ] : '';
-					};
-					// The page sends the keys it changed; one it leaves out
-					// keeps its stored value.
-					$has = function ( $k ) use ( $in ) {
-						return array_key_exists( $k, $in );
-					};
-					// A routing list is Pro's and is edited in Fluent Forms, with
-					// or without Pro here: the page offers no routing editor, so
-					// a stored list is kept as it is on any save.
-					$type = $has( 'toType' ) ? $text( 'toType' ) : (string) ( $n['sendTo']['type'] ?? 'email' );
-					if ( 'routing' === ( $n['sendTo']['type'] ?? '' ) ) {
-						$type = 'routing';
-					} elseif ( ! in_array( $type, array( 'email', 'field' ), true ) ) {
-						$type = 'email';
-					}
-					if ( $has( 'name' ) ) {
-						$n['name'] = sanitize_text_field( $text( 'name' ) );
-					}
-					// The switch only when sent: the page sends it only when it
-					// was flipped there, so one turned off elsewhere stays off.
-					if ( array_key_exists( 'enabled', $in ) ) {
-						$n['enabled'] = ! empty( $in['enabled'] );
-					}
-					$n['sendTo']['type']   = $type;
-					if ( 'email' === $type && $has( 'toEmail' ) ) {
-						$n['sendTo']['email'] = trim( $text( 'toEmail' ) );
-					} elseif ( 'field' === $type && $has( 'toField' ) ) {
-						$n['sendTo']['field'] = $text( 'toField' );
-					}
-					foreach ( array( 'fromName', 'fromEmail', 'replyTo', 'bcc', 'subject', 'message' ) as $k ) {
-						if ( $has( $k ) ) {
-							$n[ $k ] = $text( $k );
-						}
-					}
-					try {
-						$service->store( array(
-							'form_id'  => (int) $form->id,
-							'meta_key' => 'notifications',
-							'meta_id'  => $id,
-							'value'    => wp_json_encode( $n ),
-						) );
-					} catch ( \Throwable $e ) {
-						return minn_admin_fluent_validation_error( $e, 'n' . $id . '.' );
+			// Notifications: each existing one through their store().
+			foreach ( (array) ( $body['notifications'] ?? array() ) as $in ) {
+				$id = (int) ( $in['metaId'] ?? 0 );
+				if ( ! isset( $stored[ $id ] ) ) {
+					return new WP_Error( 'minn_ffe_unknown', __( 'That notification is not on this form.', 'minn-admin' ), array( 'status' => 400 ) );
+				}
+				$n    = $stored[ $id ];
+				$text = function ( $k ) use ( $in ) {
+					return isset( $in[ $k ] ) && is_scalar( $in[ $k ] ) ? (string) $in[ $k ] : '';
+				};
+				// The page sends the keys it changed; one it leaves out
+				// keeps its stored value.
+				$has = function ( $k ) use ( $in ) {
+					return array_key_exists( $k, $in );
+				};
+				// A routing list is Pro's and is edited in Fluent Forms, with
+				// or without Pro here: the page offers no routing editor, so
+				// a stored list is kept as it is on any save.
+				$type = $has( 'toType' ) ? $text( 'toType' ) : (string) ( $n['sendTo']['type'] ?? 'email' );
+				if ( 'routing' === ( $n['sendTo']['type'] ?? '' ) ) {
+					$type = 'routing';
+				} elseif ( ! in_array( $type, array( 'email', 'field' ), true ) ) {
+					$type = 'email';
+				}
+				if ( $has( 'name' ) ) {
+					$n['name'] = sanitize_text_field( $text( 'name' ) );
+				}
+				// The switch only when sent: the page sends it only when it
+				// was flipped there, so one turned off elsewhere stays off.
+				if ( array_key_exists( 'enabled', $in ) ) {
+					$n['enabled'] = ! empty( $in['enabled'] );
+				}
+				$n['sendTo']['type']   = $type;
+				if ( 'email' === $type && $has( 'toEmail' ) ) {
+					$n['sendTo']['email'] = trim( $text( 'toEmail' ) );
+				} elseif ( 'field' === $type && $has( 'toField' ) ) {
+					$n['sendTo']['field'] = $text( 'toField' );
+				}
+				foreach ( array( 'fromName', 'fromEmail', 'replyTo', 'bcc', 'subject', 'message' ) as $k ) {
+					if ( $has( $k ) ) {
+						$n[ $k ] = $text( $k );
 					}
 				}
+				try {
+					$service->store( array(
+						'form_id'  => (int) $form->id,
+						'meta_key' => 'notifications',
+						'meta_id'  => $id,
+						'value'    => wp_json_encode( $n ),
+					) );
+				} catch ( \Throwable $e ) {
+					return minn_admin_fluent_validation_error( $e, 'n' . $id . '.' );
+				}
+			}
 
-				// The confirmation: their saveGeneral() with both settings whole.
-				if ( isset( $body['confirmation'] ) && is_array( $body['confirmation'] ) ) {
-					$settings = minn_admin_fluent_meta( $form->id, 'formSettings' );
-					$c        = (array) ( $settings['confirmation'] ?? array() );
-					// Keys the page leaves out keep their stored values.
-					$in = array_merge(
-						array(
-							'redirectTo'           => $c['redirectTo'] ?? 'samePage',
-							'messageToShow'        => $c['messageToShow'] ?? '',
-							'samePageFormBehavior' => $c['samePageFormBehavior'] ?? 'hide_form',
-							'customPage'           => $c['customPage'] ?? 0,
-							'customUrl'            => $c['customUrl'] ?? '',
-						),
-						$body['confirmation']
-					);
-					$to       = (string) ( $in['redirectTo'] ?? 'samePage' );
-					$c['redirectTo']           = in_array( $to, array( 'samePage', 'customPage', 'customUrl' ), true ) ? $to : 'samePage';
-					$c['messageToShow']        = is_scalar( $in['messageToShow'] ?? '' ) ? (string) ( $in['messageToShow'] ?? '' ) : '';
-					$c['samePageFormBehavior'] = 'reset_form' === ( $in['samePageFormBehavior'] ?? '' ) ? 'reset_form' : 'hide_form';
-					$c['customPage']           = absint( $in['customPage'] ?? 0 ) ? (string) absint( $in['customPage'] ) : null;
-					$c['customUrl']            = trim( is_scalar( $in['customUrl'] ?? '' ) ? (string) ( $in['customUrl'] ?? '' ) : '' );
-					$c['customUrl']            = '' !== $c['customUrl'] ? $c['customUrl'] : null;
-					if ( 'customPage' === $c['redirectTo'] && $c['customPage'] && ( ! get_post( (int) $c['customPage'] ) || ! current_user_can( 'read_post', (int) $c['customPage'] ) ) ) {
-						return new WP_Error( 'minn_ffe_invalid', __( 'Choose a published page.', 'minn-admin' ), array( 'status' => 400, 'field' => 'confirmation.customPage' ) );
-					}
-					$settings['confirmation'] = $c;
-					try {
-						$service->saveGeneral( array(
-							'form_id'                    => (int) $form->id,
-							'formSettings'               => wp_json_encode( $settings ),
-							'advancedValidationSettings' => wp_json_encode( minn_admin_fluent_meta( $form->id, 'advancedValidationSettings' ) ),
-						) );
-					} catch ( \Throwable $e ) {
-						return minn_admin_fluent_validation_error( $e, 'confirmation.' );
-					}
+			// The confirmation: their saveGeneral() with both settings whole.
+			if ( isset( $body['confirmation'] ) && is_array( $body['confirmation'] ) ) {
+				$settings = minn_admin_fluent_meta( $form->id, 'formSettings' );
+				$c        = (array) ( $settings['confirmation'] ?? array() );
+				// Keys the page leaves out keep their stored values.
+				$in = array_merge(
+					array(
+						'redirectTo'           => $c['redirectTo'] ?? 'samePage',
+						'messageToShow'        => $c['messageToShow'] ?? '',
+						'samePageFormBehavior' => $c['samePageFormBehavior'] ?? 'hide_form',
+						'customPage'           => $c['customPage'] ?? 0,
+						'customUrl'            => $c['customUrl'] ?? '',
+					),
+					$body['confirmation']
+				);
+				$to       = (string) ( $in['redirectTo'] ?? 'samePage' );
+				$c['redirectTo']           = in_array( $to, array( 'samePage', 'customPage', 'customUrl' ), true ) ? $to : 'samePage';
+				$c['messageToShow']        = is_scalar( $in['messageToShow'] ?? '' ) ? (string) ( $in['messageToShow'] ?? '' ) : '';
+				$c['samePageFormBehavior'] = 'reset_form' === ( $in['samePageFormBehavior'] ?? '' ) ? 'reset_form' : 'hide_form';
+				$c['customPage']           = absint( $in['customPage'] ?? 0 ) ? (string) absint( $in['customPage'] ) : null;
+				$c['customUrl']            = trim( is_scalar( $in['customUrl'] ?? '' ) ? (string) ( $in['customUrl'] ?? '' ) : '' );
+				$c['customUrl']            = '' !== $c['customUrl'] ? $c['customUrl'] : null;
+				if ( 'customPage' === $c['redirectTo'] && $c['customPage'] && ( ! get_post( (int) $c['customPage'] ) || ! current_user_can( 'read_post', (int) $c['customPage'] ) ) ) {
+					return new WP_Error( 'minn_ffe_invalid', __( 'Choose a published page.', 'minn-admin' ), array( 'status' => 400, 'field' => 'confirmation.customPage' ) );
 				}
-				return rest_ensure_response( minn_admin_fluent_emails_payload( minn_admin_fluent_form( $form->id ) ) );
-			},
-		),
+				$settings['confirmation'] = $c;
+				try {
+					$service->saveGeneral( array(
+						'form_id'                    => (int) $form->id,
+						'formSettings'               => wp_json_encode( $settings ),
+						'advancedValidationSettings' => wp_json_encode( minn_admin_fluent_meta( $form->id, 'advancedValidationSettings' ) ),
+					) );
+				} catch ( \Throwable $e ) {
+					return minn_admin_fluent_validation_error( $e, 'confirmation.' );
+				}
+			}
+			return rest_ensure_response( minn_admin_fluent_emails_payload( minn_admin_fluent_form( $form->id ) ) );
+		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/fluent-forms/forms/(?P<id>\d+)/emails/preview', array(
+	minn_admin_endpoint( '/fluent-forms/forms/(?P<id>\d+)/emails/preview', array(
 		'methods'             => 'POST',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) use ( $load ) {
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) use ( $load ) {
 			$form = $load( $request );
 			if ( is_wp_error( $form ) ) {
 				return $form;

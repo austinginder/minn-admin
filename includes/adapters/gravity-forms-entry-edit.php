@@ -262,12 +262,12 @@ add_action( 'rest_api_init', function () {
 	if ( ! class_exists( 'GFAPI' ) || ! method_exists( 'GFAPI', 'update_entry_field' ) ) {
 		return;
 	}
-	register_rest_route( 'minn-admin/v1', '/gf/entries/(?P<id>\d+)/answers', array(
+	minn_admin_endpoint( '/gf/entries/(?P<id>\d+)/answers', array(
 		'methods'             => 'POST',
-		'permission_callback' => function () {
+		'gate'                => function () {
 			return GFCommon::current_user_can_any( array( 'gravityforms_edit_entries', 'gform_full_access' ) );
 		},
-		'callback'            => function ( WP_REST_Request $request ) {
+		'run'                 => function ( WP_REST_Request $request ) {
 			$entry = GFAPI::get_entry( (int) Minn_Admin::path_param( $request ) );
 			if ( is_wp_error( $entry ) ) {
 				return new WP_Error( 'not_found', __( 'Entry not found.', 'minn-admin' ), array( 'status' => 404 ) );

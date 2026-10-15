@@ -368,10 +368,17 @@ function minn_admin_gfb_enums( $form_id ) {
  */
 function minn_admin_gfb_stamp( $form_id ) {
 	global $wpdb;
-	$forms = GFFormsModel::get_form_table_name();
-	$meta  = GFFormsModel::get_meta_table_name();
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table names come from Gravity Forms.
-	$row = $wpdb->get_row( $wpdb->prepare( "SELECT f.is_active, f.title, m.display_meta FROM {$forms} f LEFT JOIN {$meta} m ON m.form_id = f.id WHERE f.id = %d", $form_id ), ARRAY_A );
+	// Gravity Forms names its tables (gf_form, or rg_form on a site it never
+	// migrated); the SQL layer takes them without the prefix.
+	$bare = function ( $table ) use ( $wpdb ) {
+		return 0 === strpos( $table, $wpdb->prefix ) ? substr( $table, strlen( $wpdb->prefix ) ) : $table;
+	};
+	$row = Minn_Admin_Kernel_SQL::row(
+		array( 'table' => $bare( GFFormsModel::get_form_table_name() ), 'joins' => array( 'm' => array( 'table' => $bare( GFFormsModel::get_meta_table_name() ), 'on' => array( 'form_id' => 'e.id' ) ) ) ),
+		'id',
+		(int) $form_id,
+		array( 'is_active', 'title', 'm.display_meta' )
+	);
 	return $row ? md5( (string) $row['is_active'] . "\0" . (string) $row['title'] . "\0" . (string) $row['display_meta'] ) : '';
 }
 
@@ -1089,37 +1096,35 @@ add_action( 'rest_api_init', function () {
 	$perm = function () {
 		return GFCommon::current_user_can_any( array( 'gravityforms_edit_forms', 'gform_full_access' ) );
 	};
-	register_rest_route( 'minn-admin/v1', '/gf/forms/(?P<id>\d+)/builder', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) {
-				$id = (int) Minn_Admin::path_param( $request );
-				if ( ! GFAPI::form_id_exists( $id ) ) {
-					return new WP_Error( 'not_found', __( 'Form not found.', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				return rest_ensure_response( minn_admin_gfb_payload( $id ) );
-			},
-		),
-		array(
-			'methods'             => 'POST',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) {
-				$id = (int) Minn_Admin::path_param( $request );
-				if ( ! GFAPI::form_id_exists( $id ) ) {
-					return new WP_Error( 'not_found', __( 'Form not found.', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				return rest_ensure_response( minn_admin_gfb_save( $id, (array) $request->get_json_params() ) );
-			},
-		),
+	minn_admin_endpoint( '/gf/forms/(?P<id>\d+)/builder', array(
+		'methods'             => 'GET',
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) {
+			$id = (int) Minn_Admin::path_param( $request );
+			if ( ! GFAPI::form_id_exists( $id ) ) {
+				return new WP_Error( 'not_found', __( 'Form not found.', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			return rest_ensure_response( minn_admin_gfb_payload( $id ) );
+		},
+	) );
+	minn_admin_endpoint( '/gf/forms/(?P<id>\d+)/builder', array(
+		'methods'             => 'POST',
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) {
+			$id = (int) Minn_Admin::path_param( $request );
+			if ( ! GFAPI::form_id_exists( $id ) ) {
+				return new WP_Error( 'not_found', __( 'Form not found.', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			return rest_ensure_response( minn_admin_gfb_save( $id, (array) $request->get_json_params() ) );
+		},
 	) );
 	// Creating shares the list route's path (GET there lists the forms).
-	register_rest_route( 'minn-admin/v1', '/gf/forms', array(
+	minn_admin_endpoint( '/gf/forms', array(
 		'methods'             => 'POST',
-		'permission_callback' => function () {
+		'gate'                => function () {
 			return GFCommon::current_user_can_any( array( 'gravityforms_create_form', 'gform_full_access' ) );
 		},
-		'callback'            => function ( WP_REST_Request $request ) {
+		'run'                 => function ( WP_REST_Request $request ) {
 			return rest_ensure_response( minn_admin_gfb_create( (array) $request->get_json_params() ) );
 		},
 	) );

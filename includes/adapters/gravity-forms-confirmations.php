@@ -341,8 +341,8 @@ add_action( 'rest_api_init', function () {
 		}
 		return rest_ensure_response( array( 'items' => array_slice( $rows, ( $page - 1 ) * $per_page, $per_page ), 'total' => count( $rows ) ) );
 	};
-	register_rest_route( 'minn-admin/v1', '/gf/confirmations', array( 'methods' => 'GET', 'permission_callback' => $perm, 'callback' => $list ) );
-	register_rest_route( 'minn-admin/v1', '/gf/forms/(?P<form>\d+)/confirmations', array( 'methods' => 'GET', 'permission_callback' => $perm, 'callback' => $list ) );
+	minn_admin_endpoint( '/gf/confirmations', array( 'methods' => 'GET', 'gate' => $perm, 'run' => $list ) );
+	minn_admin_endpoint( '/gf/forms/(?P<form>\d+)/confirmations', array( 'methods' => 'GET', 'gate' => $perm, 'run' => $list ) );
 
 	$resolve = function ( WP_REST_Request $request ) {
 		if ( ! minn_admin_gfn_load() ) {
@@ -361,61 +361,59 @@ add_action( 'rest_api_init', function () {
 	};
 	$id_re = '(?P<form>\d+):(?P<cid>[a-zA-Z0-9_.-]+)';
 
-	register_rest_route( 'minn-admin/v1', '/gf/confirmations/' . $id_re . '/full', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) use ( $resolve ) {
-				$r = $resolve( $request );
-				if ( is_wp_error( $r ) ) {
-					return $r;
+	minn_admin_endpoint( '/gf/confirmations/' . $id_re . '/full', array(
+		'methods'             => 'GET',
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) use ( $resolve ) {
+			$r = $resolve( $request );
+			if ( is_wp_error( $r ) ) {
+				return $r;
+			}
+			list( $form, $stored, $is_new ) = $r;
+			$seed = $is_new ? array(
+				'name'    => __( 'New confirmation', 'minn-admin' ),
+				'type'    => 'message',
+				'message' => __( 'Thanks for contacting us! We will get in touch with you shortly.', 'minn-admin' ),
+			) : $stored;
+			return rest_ensure_response( minn_admin_gfc_payload( $form, $seed, $is_new ) );
+		},
+	) );
+	minn_admin_endpoint( '/gf/confirmations/' . $id_re . '/full', array(
+		'methods'             => 'POST',
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) use ( $resolve ) {
+			$r = $resolve( $request );
+			if ( is_wp_error( $r ) ) {
+				return $r;
+			}
+			list( $form, $stored, $is_new ) = $r;
+			$body = (array) $request->get_json_params();
+			// What the page leaves out keeps its stored value, as on the
+			// notification page.
+			if ( ! $is_new ) {
+				$body = array_merge( minn_admin_gfc_payload( $form, $stored, false )['confirmation'], $body );
+			}
+			$c = minn_admin_gfc_build( $form, $stored, $body, $is_new );
+			if ( is_wp_error( $c ) ) {
+				return $c;
+			}
+			$cid = minn_admin_gfc_store( $form, $c, $is_new );
+			if ( array_key_exists( 'isActive', $body ) && empty( $c['isDefault'] ) ) {
+				$was = $is_new ? true : ( ! isset( $stored['isActive'] ) || false !== $stored['isActive'] );
+				if ( (bool) $body['isActive'] !== $was ) {
+					GFFormsModel::update_confirmation_active( $form['id'], $cid, (bool) $body['isActive'] );
+					GFFormsModel::flush_current_forms();
 				}
-				list( $form, $stored, $is_new ) = $r;
-				$seed = $is_new ? array(
-					'name'    => __( 'New confirmation', 'minn-admin' ),
-					'type'    => 'message',
-					'message' => __( 'Thanks for contacting us! We will get in touch with you shortly.', 'minn-admin' ),
-				) : $stored;
-				return rest_ensure_response( minn_admin_gfc_payload( $form, $seed, $is_new ) );
-			},
-		),
-		array(
-			'methods'             => 'POST',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) use ( $resolve ) {
-				$r = $resolve( $request );
-				if ( is_wp_error( $r ) ) {
-					return $r;
-				}
-				list( $form, $stored, $is_new ) = $r;
-				$body = (array) $request->get_json_params();
-				// What the page leaves out keeps its stored value, as on the
-				// notification page.
-				if ( ! $is_new ) {
-					$body = array_merge( minn_admin_gfc_payload( $form, $stored, false )['confirmation'], $body );
-				}
-				$c = minn_admin_gfc_build( $form, $stored, $body, $is_new );
-				if ( is_wp_error( $c ) ) {
-					return $c;
-				}
-				$cid = minn_admin_gfc_store( $form, $c, $is_new );
-				if ( array_key_exists( 'isActive', $body ) && empty( $c['isDefault'] ) ) {
-					$was = $is_new ? true : ( ! isset( $stored['isActive'] ) || false !== $stored['isActive'] );
-					if ( (bool) $body['isActive'] !== $was ) {
-						GFFormsModel::update_confirmation_active( $form['id'], $cid, (bool) $body['isActive'] );
-						GFFormsModel::flush_current_forms();
-					}
-				}
-				$fresh = minn_admin_gfc_form( $form['id'] );
-				return rest_ensure_response( minn_admin_gfc_payload( $fresh, $fresh['confirmations'][ $cid ], false ) );
-			},
-		),
+			}
+			$fresh = minn_admin_gfc_form( $form['id'] );
+			return rest_ensure_response( minn_admin_gfc_payload( $fresh, $fresh['confirmations'][ $cid ], false ) );
+		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/gf/confirmations/' . $id_re . '/preview', array(
+	minn_admin_endpoint( '/gf/confirmations/' . $id_re . '/preview', array(
 		'methods'             => 'POST',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) use ( $resolve ) {
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) use ( $resolve ) {
 			$r = $resolve( $request );
 			if ( is_wp_error( $r ) ) {
 				return $r;
@@ -427,10 +425,10 @@ add_action( 'rest_api_init', function () {
 
 	// Start a new confirmation (the list's New confirmation): it exists only
 	// once its page is saved.
-	register_rest_route( 'minn-admin/v1', '/gf/confirmations/new', array(
+	minn_admin_endpoint( '/gf/confirmations/new', array(
 		'methods'             => 'POST',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) {
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) {
 			$form_id = (int) $request->get_param( 'form' );
 			if ( ! $form_id || ! GFAPI::form_id_exists( $form_id ) ) {
 				return new WP_Error( 'not_found', __( 'Choose a form for the confirmation.', 'minn-admin' ), array( 'status' => 400 ) );
@@ -439,11 +437,11 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/gf/confirmations/' . $id_re . '/active', array(
+	minn_admin_endpoint( '/gf/confirmations/' . $id_re . '/active', array(
 		'methods'             => 'POST',
-		'permission_callback' => $perm,
+		'gate'                => $perm,
 		'args'                => array( 'active' => array( 'type' => 'boolean', 'required' => true ) ),
-		'callback'            => function ( WP_REST_Request $request ) use ( $resolve ) {
+		'run'                 => function ( WP_REST_Request $request ) use ( $resolve ) {
 			$r = $resolve( $request );
 			if ( is_wp_error( $r ) ) {
 				return $r;
@@ -458,10 +456,10 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/gf/confirmations/' . $id_re . '/duplicate', array(
+	minn_admin_endpoint( '/gf/confirmations/' . $id_re . '/duplicate', array(
 		'methods'             => 'POST',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) use ( $resolve ) {
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) use ( $resolve ) {
 			$r = $resolve( $request );
 			if ( is_wp_error( $r ) ) {
 				return $r;
@@ -489,10 +487,10 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/gf/confirmations/' . $id_re, array(
+	minn_admin_endpoint( '/gf/confirmations/' . $id_re, array(
 		'methods'             => 'DELETE',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) use ( $resolve ) {
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) use ( $resolve ) {
 			$r = $resolve( $request );
 			if ( is_wp_error( $r ) ) {
 				return $r;

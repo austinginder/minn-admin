@@ -132,12 +132,12 @@ add_action( 'rest_api_init', function () {
 	if ( ! function_exists( 'minn_admin_ninja_forms_active' ) || ! minn_admin_ninja_forms_active() ) {
 		return;
 	}
-	register_rest_route( 'minn-admin/v1', '/ninja-forms/entries/(?P<id>\d+)/answers', array(
+	minn_admin_endpoint( '/ninja-forms/entries/(?P<id>\d+)/answers', array(
 		'methods'             => 'POST',
-		'permission_callback' => function () {
+		'gate'                => function () {
 			return minn_admin_ninja_forms_can() && minn_admin_ninja_forms_can_edit();
 		},
-		'callback'            => function ( WP_REST_Request $request ) {
+		'run'                 => function ( WP_REST_Request $request ) {
 			$post = get_post( (int) Minn_Admin::path_param( $request ) );
 			if ( ! $post || 'nf_sub' !== $post->post_type ) {
 				return new WP_Error( 'not_found', __( 'Entry not found', 'minn-admin' ), array( 'status' => 404 ) );

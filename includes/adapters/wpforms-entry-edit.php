@@ -250,21 +250,19 @@ add_action( 'rest_api_init', function () {
 	if ( ! function_exists( 'minn_admin_wpforms_active' ) || ! minn_admin_wpforms_active() || ! minn_admin_wpforms_edit_supported() ) {
 		return;
 	}
-	register_rest_route( 'minn-admin/v1', '/wpforms/entries/(?P<id>\d+)/answers', array(
+	minn_admin_endpoint( '/wpforms/entries/(?P<id>\d+)/answers', array(
 		'methods'             => 'POST',
-		'permission_callback' => function ( WP_REST_Request $request ) {
+		'gate'                => function ( WP_REST_Request $request ) {
 			return wpforms_current_user_can( 'edit_entry_single', (int) Minn_Admin::path_param( $request ) );
 		},
-		'callback'            => function ( WP_REST_Request $request ) {
-			global $wpdb;
+		'run'                 => function ( WP_REST_Request $request ) {
 			$id    = (int) Minn_Admin::path_param( $request );
 			$guard = minn_admin_wpforms_guard_entry( $id, 'edit_entries_form_single' );
 			if ( is_wp_error( $guard ) ) {
 				return $guard;
 			}
-			$table = minn_admin_wpforms_table();
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			$row   = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE entry_id = %d", $id ) );
+			$found = Minn_Admin_Kernel_SQL::row( 'wpforms_entries', 'entry_id', $id );
+			$row   = $found ? (object) $found : null;
 			$block = $row ? minn_admin_wpforms_edit_block( $row ) : null;
 			if ( ! $block ) {
 				return new WP_Error( 'minn_wpe_none', __( 'This entry has no answers that can be edited here.', 'minn-admin' ), array( 'status' => 400 ) );

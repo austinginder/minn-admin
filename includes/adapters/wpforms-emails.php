@@ -106,9 +106,7 @@ function minn_admin_wpforms_emails_payload( $data ) {
 	foreach ( get_pages( array( 'post_status' => 'publish', 'sort_column' => 'post_title', 'number' => 500 ) ) as $p ) {
 		$pages[] = array( (string) $p->ID, get_the_title( $p ) ? get_the_title( $p ) : '#' . $p->ID );
 	}
-	global $wpdb;
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery
-	$latest = wpforms_current_user_can( 'view_entries_form_single', (int) $data['id'] ) ? (int) $wpdb->get_var( $wpdb->prepare( "SELECT MAX(entry_id) FROM {$wpdb->prefix}wpforms_entries WHERE form_id = %d", (int) $data['id'] ) ) : 0;
+	$latest = wpforms_current_user_can( 'view_entries_form_single', (int) $data['id'] ) ? (int) Minn_Admin_Kernel_SQL::latest( 'wpforms_entries', 'entry_id', array( 'form_id' => (int) $data['id'] ), 'entry_id' ) : 0;
 	return array(
 		'id'             => (int) $data['id'],
 		'title'          => (string) ( $settings['form_title'] ?? get_the_title( (int) $data['id'] ) ),
@@ -137,95 +135,93 @@ add_action( 'rest_api_init', function () {
 		return $data ? $data : new WP_Error( 'not_found', __( 'Form not found.', 'minn-admin' ), array( 'status' => 404 ) );
 	};
 
-	register_rest_route( 'minn-admin/v1', '/wpforms/forms/(?P<id>\d+)/emails', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) use ( $load ) {
-				$data = $load( $request );
-				return is_wp_error( $data ) ? $data : rest_ensure_response( minn_admin_wpforms_emails_payload( $data ) );
-			},
-		),
-		array(
-			'methods'             => 'POST',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) use ( $load ) {
-				$data = $load( $request );
-				if ( is_wp_error( $data ) ) {
-					return $data;
+	minn_admin_endpoint( '/wpforms/forms/(?P<id>\d+)/emails', array(
+		'methods'             => 'GET',
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) use ( $load ) {
+			$data = $load( $request );
+			return is_wp_error( $data ) ? $data : rest_ensure_response( minn_admin_wpforms_emails_payload( $data ) );
+		},
+	) );
+	minn_admin_endpoint( '/wpforms/forms/(?P<id>\d+)/emails', array(
+		'methods'             => 'POST',
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) use ( $load ) {
+			$data = $load( $request );
+			if ( is_wp_error( $data ) ) {
+				return $data;
+			}
+			$body = (array) $request->get_json_params();
+			$s    = &$data['settings'];
+			$text = function ( $a, $k ) {
+				return isset( $a[ $k ] ) && is_scalar( $a[ $k ] ) ? (string) $a[ $k ] : '';
+			};
+			if ( array_key_exists( 'enabled', $body ) ) {
+				$s['notification_enable'] = ! empty( $body['enabled'] ) ? '1' : '0';
+			}
+			foreach ( (array) ( $body['notifications'] ?? array() ) as $in ) {
+				$key = $text( $in, 'key' );
+				if ( ! isset( $s['notifications'][ $key ] ) ) {
+					return new WP_Error( 'minn_wpfe_unknown', __( 'That notification is not on this form.', 'minn-admin' ), array( 'status' => 400 ) );
 				}
-				$body = (array) $request->get_json_params();
-				$s    = &$data['settings'];
-				$text = function ( $a, $k ) {
-					return isset( $a[ $k ] ) && is_scalar( $a[ $k ] ) ? (string) $a[ $k ] : '';
-				};
-				if ( array_key_exists( 'enabled', $body ) ) {
-					$s['notification_enable'] = ! empty( $body['enabled'] ) ? '1' : '0';
-				}
-				foreach ( (array) ( $body['notifications'] ?? array() ) as $in ) {
-					$key = $text( $in, 'key' );
-					if ( ! isset( $s['notifications'][ $key ] ) ) {
-						return new WP_Error( 'minn_wpfe_unknown', __( 'That notification is not on this form.', 'minn-admin' ), array( 'status' => 400 ) );
-					}
-					foreach ( array( 'notification_name' => 'name', 'email' => 'email', 'carboncopy' => 'carboncopy', 'subject' => 'subject', 'sender_name' => 'sender_name', 'sender_address' => 'sender_address', 'replyto' => 'replyto', 'message' => 'message' ) as $stored => $field ) {
-						if ( array_key_exists( $field, $in ) ) {
-							$s['notifications'][ $key ][ $stored ] = $text( $in, $field );
-						}
-					}
-					$addr = trim( $s['notifications'][ $key ]['sender_address'] ?? '' );
-					if ( '' !== $addr && false === strpos( $addr, '{' ) && ! is_email( $addr ) ) {
-						return new WP_Error( 'minn_wpfe_invalid', __( 'Enter a valid email address or a smart tag.', 'minn-admin' ), array( 'status' => 400, 'field' => 'n' . $key . '.sender_address' ) );
+				foreach ( array( 'notification_name' => 'name', 'email' => 'email', 'carboncopy' => 'carboncopy', 'subject' => 'subject', 'sender_name' => 'sender_name', 'sender_address' => 'sender_address', 'replyto' => 'replyto', 'message' => 'message' ) as $stored => $field ) {
+					if ( array_key_exists( $field, $in ) ) {
+						$s['notifications'][ $key ][ $stored ] = $text( $in, $field );
 					}
 				}
-				foreach ( (array) ( $body['confirmations'] ?? array() ) as $in ) {
-					$key = $text( $in, 'key' );
-					if ( ! isset( $s['confirmations'][ $key ] ) ) {
-						return new WP_Error( 'minn_wpfe_unknown', __( 'That confirmation is not on this form.', 'minn-admin' ), array( 'status' => 400 ) );
-					}
-					// Keys the page leaves out keep their stored values.
-					$was = $s['confirmations'][ $key ];
-					$in  = array_merge(
-						array(
-							'name'     => $was['name'] ?? '',
-							'type'     => $was['type'] ?? 'message',
-							'message'  => $was['message'] ?? '',
-							'page'     => $was['page'] ?? '',
-							'redirect' => $was['redirect'] ?? '',
-						),
-						$in
-					);
-					$type = in_array( $text( $in, 'type' ), array( 'message', 'page', 'redirect' ), true ) ? $text( $in, 'type' ) : 'message';
-					$page = absint( $in['page'] ?? 0 );
-					$url  = trim( $text( $in, 'redirect' ) );
-					if ( 'page' === $type && ( ! $page || ! get_post( $page ) || ! current_user_can( 'read_post', $page ) ) ) {
-						return new WP_Error( 'minn_wpfe_invalid', __( 'Choose the page visitors go to.', 'minn-admin' ), array( 'status' => 400, 'field' => 'c' . $key . '.page' ) );
-					}
-					if ( 'redirect' === $type && ( '' === $url || ! wp_http_validate_url( $url ) ) ) {
-						return new WP_Error( 'minn_wpfe_invalid', __( 'Enter a full address (https://…).', 'minn-admin' ), array( 'status' => 400, 'field' => 'c' . $key . '.redirect' ) );
-					}
-					$s['confirmations'][ $key ]['name']     = sanitize_text_field( $text( $in, 'name' ) );
-					$s['confirmations'][ $key ]['type']     = $type;
-					$s['confirmations'][ $key ]['message']  = $text( $in, 'message' );
-					$s['confirmations'][ $key ]['page']     = $page ? (string) $page : '';
-					$s['confirmations'][ $key ]['redirect'] = $url;
+				$addr = trim( $s['notifications'][ $key ]['sender_address'] ?? '' );
+				if ( '' !== $addr && false === strpos( $addr, '{' ) && ! is_email( $addr ) ) {
+					return new WP_Error( 'minn_wpfe_invalid', __( 'Enter a valid email address or a smart tag.', 'minn-admin' ), array( 'status' => 400, 'field' => 'n' . $key . '.sender_address' ) );
 				}
-				unset( $s );
-				// Not a builder save (see the file comment). Their update unslashes
-				// its input unless their form-data slashing is on.
-				$payload = function_exists( 'wpforms_is_form_data_slashing_enabled' ) && wpforms_is_form_data_slashing_enabled() ? $data : wp_slash( $data );
-				$saved   = wpforms()->obj( 'form' )->update( (int) $data['id'], $payload );
-				if ( ! $saved ) {
-					return new WP_Error( 'minn_wpfe_failed', __( 'WPForms did not save the form.', 'minn-admin' ), array( 'status' => 500 ) );
+			}
+			foreach ( (array) ( $body['confirmations'] ?? array() ) as $in ) {
+				$key = $text( $in, 'key' );
+				if ( ! isset( $s['confirmations'][ $key ] ) ) {
+					return new WP_Error( 'minn_wpfe_unknown', __( 'That confirmation is not on this form.', 'minn-admin' ), array( 'status' => 400 ) );
 				}
-				return rest_ensure_response( minn_admin_wpforms_emails_payload( minn_admin_wpforms_form_data( (int) $data['id'] ) ) );
-			},
-		),
+				// Keys the page leaves out keep their stored values.
+				$was = $s['confirmations'][ $key ];
+				$in  = array_merge(
+					array(
+						'name'     => $was['name'] ?? '',
+						'type'     => $was['type'] ?? 'message',
+						'message'  => $was['message'] ?? '',
+						'page'     => $was['page'] ?? '',
+						'redirect' => $was['redirect'] ?? '',
+					),
+					$in
+				);
+				$type = in_array( $text( $in, 'type' ), array( 'message', 'page', 'redirect' ), true ) ? $text( $in, 'type' ) : 'message';
+				$page = absint( $in['page'] ?? 0 );
+				$url  = trim( $text( $in, 'redirect' ) );
+				if ( 'page' === $type && ( ! $page || ! get_post( $page ) || ! current_user_can( 'read_post', $page ) ) ) {
+					return new WP_Error( 'minn_wpfe_invalid', __( 'Choose the page visitors go to.', 'minn-admin' ), array( 'status' => 400, 'field' => 'c' . $key . '.page' ) );
+				}
+				if ( 'redirect' === $type && ( '' === $url || ! wp_http_validate_url( $url ) ) ) {
+					return new WP_Error( 'minn_wpfe_invalid', __( 'Enter a full address (https://…).', 'minn-admin' ), array( 'status' => 400, 'field' => 'c' . $key . '.redirect' ) );
+				}
+				$s['confirmations'][ $key ]['name']     = sanitize_text_field( $text( $in, 'name' ) );
+				$s['confirmations'][ $key ]['type']     = $type;
+				$s['confirmations'][ $key ]['message']  = $text( $in, 'message' );
+				$s['confirmations'][ $key ]['page']     = $page ? (string) $page : '';
+				$s['confirmations'][ $key ]['redirect'] = $url;
+			}
+			unset( $s );
+			// Not a builder save (see the file comment). Their update unslashes
+			// its input unless their form-data slashing is on.
+			$payload = function_exists( 'wpforms_is_form_data_slashing_enabled' ) && wpforms_is_form_data_slashing_enabled() ? $data : wp_slash( $data );
+			$saved   = wpforms()->obj( 'form' )->update( (int) $data['id'], $payload );
+			if ( ! $saved ) {
+				return new WP_Error( 'minn_wpfe_failed', __( 'WPForms did not save the form.', 'minn-admin' ), array( 'status' => 500 ) );
+			}
+			return rest_ensure_response( minn_admin_wpforms_emails_payload( minn_admin_wpforms_form_data( (int) $data['id'] ) ) );
+		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/wpforms/forms/(?P<id>\d+)/emails/preview', array(
+	minn_admin_endpoint( '/wpforms/forms/(?P<id>\d+)/emails/preview', array(
 		'methods'             => 'POST',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) use ( $load ) {
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) use ( $load ) {
 			$data = $load( $request );
 			if ( is_wp_error( $data ) ) {
 				return $data;
@@ -246,11 +242,10 @@ add_action( 'rest_api_init', function () {
 			// placeholder before WPForms reads the text. A real send is unchanged.
 			$subject = Minn_Admin_Preview::restrict( $subject, 'wpforms', minn_admin_wpforms_preview_tags() );
 			$message = Minn_Admin_Preview::restrict( $message, 'wpforms', minn_admin_wpforms_preview_tags() );
-			global $wpdb;
 			// Editing a form doesn't include reading its entries; WPForms'
 			// own preview renders placeholder content for the same reason.
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery
-			$entry = ! wpforms_current_user_can( 'view_entries_form_single', (int) $data['id'] ) ? null : $wpdb->get_row( $wpdb->prepare( "SELECT entry_id, fields FROM {$wpdb->prefix}wpforms_entries WHERE form_id = %d ORDER BY entry_id DESC LIMIT 1", (int) $data['id'] ) );
+			$newest = ! wpforms_current_user_can( 'view_entries_form_single', (int) $data['id'] ) ? array() : Minn_Admin_Kernel_SQL::select( 'wpforms_entries', array( 'entry_id', 'fields' ), array( 'form_id' => (int) $data['id'] ), array( 'entry_id' => 'DESC' ), 1 );
+			$entry  = $newest ? (object) $newest[0] : null;
 			if ( ! $entry || ! class_exists( '\WPForms\Emails\Notifications' ) ) {
 				return rest_ensure_response( array( 'entry' => 0, 'subject' => $subject, 'html' => wpautop( $message ) ) );
 			}

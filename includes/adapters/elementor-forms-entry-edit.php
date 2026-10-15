@@ -125,12 +125,12 @@ add_action( 'rest_api_init', function () {
 	if ( ! function_exists( 'minn_admin_elementor_forms_ready' ) || ! minn_admin_elementor_forms_ready() ) {
 		return;
 	}
-	register_rest_route( 'minn-admin/v1', '/elementor/submissions/(?P<id>\d+)/answers', array(
+	minn_admin_endpoint( '/elementor/submissions/(?P<id>\d+)/answers', array(
 		'methods'             => 'POST',
-		'permission_callback' => function () {
+		'gate'                => function () {
 			return current_user_can( 'manage_options' );
 		},
-		'callback'            => function ( WP_REST_Request $request ) {
+		'run'                 => function ( WP_REST_Request $request ) {
 			$query = \ElementorPro\Modules\Forms\Submissions\Database\Query::get_instance();
 			$id    = (int) Minn_Admin::path_param( $request );
 			$raw   = $query->get_submission( $id );
