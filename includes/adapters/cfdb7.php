@@ -199,10 +199,7 @@ function minn_admin_cfdb7_form_title( $id ) {
 
 /** CF7 form titles keyed by post id, for every form that has entries (the tabs). */
 function minn_admin_cfdb7_form_titles() {
-	global $wpdb;
-	$table = $wpdb->prefix . 'db7_forms';
-	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- prefix-derived table.
-	$ids = array_map( 'intval', (array) $wpdb->get_col( "SELECT DISTINCT form_post_id FROM `{$table}`" ) );
+	$ids = array_map( 'intval', Minn_Admin_Kernel_SQL::distinct( 'db7_forms', 'form_post_id', array() ) );
 	$out = array();
 	foreach ( $ids as $id ) {
 		$out[ $id ] = minn_admin_cfdb7_form_title( $id );
@@ -344,7 +341,6 @@ function minn_admin_cfdb7_row( array $row ) {
 
 /** An entry's detail; opening it marks it read, CFDB7's own view semantics. */
 function minn_admin_cfdb7_view( array $row ) {
-	global $wpdb;
 	$id      = (int) $row['form_id'];
 	$form_id = (int) $row['form_post_id'];
 	$values  = minn_admin_cfdb7_values( (string) $row['form_value'] );
@@ -354,8 +350,7 @@ function minn_admin_cfdb7_view( array $row ) {
 	if ( 'unread' === $status ) {
 		$patched = minn_admin_cfdb7_set_status( $row['form_value'], 'read' );
 		if ( null !== $patched ) {
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
-			if ( $wpdb->update( $wpdb->prefix . 'db7_forms', array( 'form_value' => $patched ), array( 'form_id' => $id ), array( '%s' ), array( '%d' ) ) ) {
+			if ( Minn_Admin_Kernel_SQL::update( 'db7_forms', 'form_id', (int) $id, array( 'form_value' => $patched ) ) ) {
 				$status = 'read';
 			}
 		}
@@ -436,7 +431,6 @@ function minn_admin_cfdb7_view( array $row ) {
  * @return true
  */
 function minn_admin_cfdb7_delete( $id, array $row ) {
-	global $wpdb;
 	$dir  = wp_upload_dir()['basedir'] . '/cfdb7_uploads';
 	$root = realpath( $dir );
 	foreach ( minn_admin_cfdb7_values( (string) $row['form_value'], true ) as $key => $value ) {
@@ -457,14 +451,12 @@ function minn_admin_cfdb7_delete( $id, array $row ) {
 		}
 		wp_delete_file( $file );
 	}
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
-	$wpdb->delete( $wpdb->prefix . 'db7_forms', array( 'form_id' => (int) $id ), array( '%d' ) );
+	Minn_Admin_Kernel_SQL::delete( 'db7_forms', 'form_id', (int) $id );
 	return true;
 }
 
 /** Server-built model for the surface status card. */
 function minn_admin_cfdb7_status_model() {
-	global $wpdb;
 	// form_date is site-local current_time, so the chart groups on the site's
 	// days. CFDB7 keeps no spam: every row counts into the one series.
 	$n = Minn_Admin_Kernel::inbox_counts( array(
@@ -475,11 +467,7 @@ function minn_admin_cfdb7_status_model() {
 	// Read/unread is a fixed token inside the serialized blob, which no column
 	// condition reaches; a row without the token is unread on their screen too
 	// (the list's rule).
-	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- prefix-derived table.
-	$unread = (int) $wpdb->get_var( $wpdb->prepare(
-		"SELECT COUNT(*) FROM `{$wpdb->prefix}db7_forms` WHERE form_value NOT LIKE %s",
-		'%' . $wpdb->esc_like( 's:12:"cfdb7_status";s:4:"read"' ) . '%'
-	) );
+	$unread = Minn_Admin_Kernel_SQL::count( 'db7_forms', array( 'form_value' => array( 'none' => array( array( 'contains' => 's:12:"cfdb7_status";s:4:"read"' ) ) ) ) );
 	return array(
 		'rows'    => array(
 			array(
@@ -554,11 +542,9 @@ minn_admin_resource( 'cfdb7/entries', function () use ( $minn_admin_cfdb7_column
 			'unread' => array(
 				'gate'   => 'manage',
 				'run'    => function ( $id, $row ) {
-					global $wpdb;
 					$patched = minn_admin_cfdb7_set_status( $row['form_value'], 'unread' );
 					if ( null !== $patched ) {
-						// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
-						$wpdb->update( $wpdb->prefix . 'db7_forms', array( 'form_value' => $patched ), array( 'form_id' => (int) $id ), array( '%s' ), array( '%d' ) );
+						Minn_Admin_Kernel_SQL::update( 'db7_forms', 'form_id', (int) $id, array( 'form_value' => $patched ) );
 					}
 					return true;
 				},

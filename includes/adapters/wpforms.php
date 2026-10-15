@@ -66,14 +66,14 @@ function minn_admin_wpforms_allowed_form_ids() {
 	// "allowed matches the sample" as unrestricted, dropped the constraint
 	// entirely on a site with more forms than the cap or with entries on an
 	// unpublished form — exactly the rows the sample could not evaluate.
-	global $wpdb;
-	$table = $wpdb->prefix . 'wpforms_entries';
-	$ids   = array();
-	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) === $table ) {
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- prefix-derived table.
-		$ids = $wpdb->get_col( "SELECT DISTINCT form_id FROM {$table}" );
-	}
-	$ids = array_map( 'intval', (array) $ids );
+	// Every form the entries table points at, counted in one grouped read. A
+	// read that fills its cap may have missed some, so it is never taken for
+	// the whole universe: the caller is then held to the forms it was seen to
+	// pass, never left unrestricted.
+	$cap    = 5000;
+	$counts = Minn_Admin_Kernel_SQL::totals( 'wpforms_entries', array( 'form_id' ), array( 'n' => array( 'count' => '*' ) ), array(), array(), $cap );
+	$capped = count( $counts ) >= $cap;
+	$ids    = array_map( 'intval', array_column( $counts, 'form_id' ) );
 	foreach ( array_keys( minn_admin_wpforms_form_titles() ) as $fid ) {
 		$ids[] = (int) $fid;
 	}
@@ -89,17 +89,14 @@ function minn_admin_wpforms_allowed_form_ids() {
 	}
 	// Unrestricted only when the caller passes for every form that exists,
 	// which is a statement about the real universe rather than a sample.
-	return count( $allowed ) === count( $ids ) ? null : $allowed;
+	return ! $capped && count( $allowed ) === count( $ids ) ? null : $allowed;
 }
 
 /**
  * The form an entry belongs to (0 when the row is gone).
  */
 function minn_admin_wpforms_entry_form_id( $entry_id ) {
-	global $wpdb;
-	$table = minn_admin_wpforms_table();
-	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-	return (int) $wpdb->get_var( $wpdb->prepare( "SELECT form_id FROM {$table} WHERE entry_id = %d", (int) $entry_id ) );
+	return (int) Minn_Admin_Kernel_SQL::latest( 'wpforms_entries', 'form_id', array( 'entry_id' => (int) $entry_id ), 'entry_id' );
 }
 
 /**
@@ -567,14 +564,12 @@ minn_admin_endpoint( 'wpforms/forms', array(
 		return minn_admin_wpforms_can( 'view_entries' );
 	},
 	'run'    => function ( WP_REST_Request $request ) {
-		global $wpdb;
 		$out = array();
 		if ( $request->get_param( 'manage' ) ) {
 			// The Forms view: entry counts and when each form last changed.
 			$counts = array();
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery
-			foreach ( (array) $wpdb->get_results( 'SELECT form_id, COUNT(*) AS n FROM ' . minn_admin_wpforms_table() . ' GROUP BY form_id' ) as $r ) {
-				$counts[ (int) $r->form_id ] = (int) $r->n;
+			foreach ( Minn_Admin_Kernel_SQL::totals( 'wpforms_entries', array( 'form_id' ), array( 'n' => array( 'count' => '*' ) ), array(), array(), 5000 ) as $r ) {
+				$counts[ (int) $r['form_id'] ] = (int) $r['n'];
 			}
 			foreach ( minn_admin_wpforms_visible_form_titles() as $id => $title ) {
 				$out[] = array(

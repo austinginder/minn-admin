@@ -287,16 +287,8 @@ function minn_admin_elementor_forms_status_model() {
 	$total  = isset( $arr['all'] ) ? (int) $arr['all'] : 0;
 	$trash  = isset( $arr['trash'] ) ? (int) $arr['trash'] : 0;
 
-	global $wpdb;
-	$table  = $wpdb->prefix . 'e_submissions';
-	$nforms = 0;
-	$has    = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) ) );
-	if ( $has ) {
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- prefix-derived table, no user input.
-		$nforms = (int) $wpdb->get_var(
-			"SELECT COUNT(DISTINCT CONCAT(post_id, '_', element_id)) FROM `{$table}` WHERE status != 'trash'"
-		);
-	}
+	// A form is a widget on a post: each distinct pair outside the trash.
+	$nforms = count( Minn_Admin_Kernel_SQL::totals( 'e_submissions', array( 'post_id', 'element_id' ), array( 'n' => array( 'count' => '*' ) ), array( 'status' => array( 'not' => array( 'trash' ) ) ), array(), 5000 ) );
 
 	$hint = number_format_i18n( $total ) . ' total';
 	if ( $trash ) {
@@ -447,17 +439,11 @@ minn_admin_endpoint( 'elementor/forms', array(
 	'active' => 'minn_admin_elementor_forms_ready',
 	'gate'   => 'minn_admin_elementor_forms_can_view',
 	'run'    => function () {
-		global $wpdb;
-		$table = $wpdb->prefix . 'e_submissions';
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- prefix-derived table.
-		$rows = $wpdb->get_results(
-			"SELECT DISTINCT post_id, element_id, form_name
-			 FROM `{$table}`
-			 WHERE status != 'trash'
-			 ORDER BY form_name ASC"
-		);
+		$rows = Minn_Admin_Kernel_SQL::totals( 'e_submissions', array( 'post_id', 'element_id', 'form_name' ), array( 'n' => array( 'count' => '*' ) ), array( 'status' => array( 'not' => array( 'trash' ) ) ), array( 'form_name' => 'ASC' ), 5000 );
 		$out  = array();
-		foreach ( (array) $rows as $r ) {
+		foreach ( array_map( function ( $r ) {
+			return (object) $r;
+		}, $rows ) as $r ) {
 			$key   = (int) $r->post_id . '_' . $r->element_id;
 			$out[] = array(
 				'id'    => $key,

@@ -26,13 +26,10 @@
 defined( 'ABSPATH' ) || exit;
 
 function minn_admin_everest_active() {
-	global $wpdb;
 	if ( ! function_exists( 'evf' ) && ! defined( 'EVF_VERSION' ) ) {
 		return false;
 	}
-	$table = $wpdb->prefix . 'evf_entries';
-	$found = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
-	return $found && 0 === strcasecmp( (string) $found, $table );
+	return Minn_Admin_Kernel_SQL::exists( 'evf_entries' );
 }
 
 /** Their permission model: view-entries caps or the master manage cap. */
@@ -229,14 +226,11 @@ function minn_admin_everest_flat_value( $v ) {
  * @return array<string,string>
  */
 function minn_admin_everest_answers( $entry_id ) {
-	global $wpdb;
 	$out  = array();
-	$rows = $wpdb->get_results( $wpdb->prepare(
-		"SELECT meta_key, meta_value FROM {$wpdb->prefix}evf_entrymeta WHERE entry_id = %d AND meta_key NOT LIKE %s", // phpcs:ignore
-		(int) $entry_id,
-		$wpdb->esc_like( '_evf_' ) . '%'
-	) );
-	foreach ( (array) $rows as $row ) {
+	$rows = Minn_Admin_Kernel_SQL::select( 'evf_entrymeta', array( 'meta_key', 'meta_value' ), array( 'entry_id' => (int) $entry_id, 'meta_key' => array( 'none' => array( array( 'starts' => '_evf_' ) ) ) ), array( 'meta_id' => 'ASC' ) );
+	foreach ( array_map( function ( $r ) {
+		return (object) $r;
+	}, $rows ) as $row ) {
 		$key = (string) $row->meta_key;
 		if ( '' === $key || 0 === strpos( $key, '_' ) ) {
 			continue;
@@ -265,10 +259,9 @@ function minn_admin_everest_set_status( $entry_id, $op, $form_id = 0 ) {
 			$ok = EVF_Admin_Entries::remove_entry( (int) $entry_id, (int) $form_id );
 			return $ok ? true : new WP_Error( 'delete_failed', __( 'Everest Forms could not delete the entry.', 'minn-admin' ), array( 'status' => 500 ) );
 		}
-		global $wpdb;
 		do_action( 'everest_forms_before_delete_entries', $entry_id );
-		$del = $wpdb->delete( $wpdb->prefix . 'evf_entries', array( 'entry_id' => (int) $entry_id ), array( '%d' ) );
-		$wpdb->delete( $wpdb->prefix . 'evf_entrymeta', array( 'entry_id' => (int) $entry_id ), array( '%d' ) );
+		$del = Minn_Admin_Kernel_SQL::delete( 'evf_entries', 'entry_id', (int) $entry_id );
+		Minn_Admin_Kernel_SQL::delete( 'evf_entrymeta', 'entry_id', (int) $entry_id );
 		do_action( 'everest_forms_after_delete_entries', $form_id, $entry_id );
 		return $del ? true : new WP_Error( 'delete_failed', __( 'Could not delete the entry.', 'minn-admin' ), array( 'status' => 500 ) );
 	}
@@ -285,14 +278,7 @@ function minn_admin_everest_set_status( $entry_id, $op, $form_id = 0 ) {
 		return true;
 	}
 	// Minimal fallback (no prior-status meta).
-	global $wpdb;
-	$wpdb->update(
-		$wpdb->prefix . 'evf_entries',
-		array( 'status' => $status ),
-		array( 'entry_id' => (int) $entry_id ),
-		array( '%s' ),
-		array( '%d' )
-	);
+	Minn_Admin_Kernel_SQL::update( 'evf_entries', 'entry_id', (int) $entry_id, array( 'status' => $status ) );
 	return true;
 }
 
@@ -436,7 +422,6 @@ function minn_admin_everest_row( array $row ) {
 
 /** An entry's detail: every answer, then the submission's own facts. */
 function minn_admin_everest_view( array $row ) {
-	global $wpdb;
 	$id      = (int) $row['entry_id'];
 	$form_id = (int) $row['form_id'];
 	$fields  = minn_admin_everest_fields( $form_id );
@@ -468,7 +453,7 @@ function minn_admin_everest_view( array $row ) {
 	}
 	// Opening a detail marks the entry viewed (their semantics).
 	if ( empty( $row['viewed'] ) ) {
-		$wpdb->update( $wpdb->prefix . 'evf_entries', array( 'viewed' => 1 ), array( 'entry_id' => $id ), array( '%d' ), array( '%d' ) );
+		Minn_Admin_Kernel_SQL::update( 'evf_entries', 'entry_id', (int) $id, array( 'viewed' => 1 ) );
 	}
 	return array(
 		'kind'     => 'entry',
@@ -562,8 +547,7 @@ minn_admin_resource( 'everest/entries', function () {
 					// read from _evf_trash_entry_status. A trash that wrote none (their
 					// own Abilities API) would restore to an empty status that no
 					// filter lists and no action accepts, so it goes to received.
-					global $wpdb;
-					$prior = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->prefix}evf_entrymeta WHERE entry_id = %d AND meta_key = '_evf_trash_entry_status' LIMIT 1", $id ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					$prior = Minn_Admin_Kernel_SQL::latest( 'evf_entrymeta', 'meta_value', array( 'entry_id' => (int) $id, 'meta_key' => '_evf_trash_entry_status' ), 'meta_id', 'ASC' );
 					$op    = in_array( (string) $prior, array( 'publish', 'spam' ), true ) ? 'publish' : 'unspam';
 					return minn_admin_everest_set_status( $id, $op, (int) $row['form_id'] );
 				},

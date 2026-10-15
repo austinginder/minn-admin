@@ -41,9 +41,7 @@ function minn_admin_sureforms_table() {
 
 /** Whether SureForms has created its entries table yet (asked every time). */
 function minn_admin_sureforms_has_table() {
-	global $wpdb;
-	$t = minn_admin_sureforms_table();
-	return $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $t ) ) === $t;
+	return Minn_Admin_Kernel_SQL::exists( 'srfm_entries' );
 }
 
 /** Map of sureforms_form post id => title, for tabs and entry meta. */
@@ -359,11 +357,9 @@ minn_admin_resource( 'sureforms/entries', function () {
 					if ( ! in_array( $status, array( 'read', 'unread', 'trash' ), true ) ) {
 						return new WP_Error( 'bad_status', __( 'Unknown status', 'minn-admin' ), array( 'status' => 400 ) );
 					}
-					global $wpdb;
-					$updated = $wpdb->update( minn_admin_sureforms_table(), array( 'status' => $status ), array( 'ID' => $id ), array( '%s' ), array( '%d' ) );
-					if ( false === $updated ) {
-						return new WP_Error( 'update_failed', __( 'Could not update the entry.', 'minn-admin' ), array( 'status' => 500 ) );
-					}
+					// Read back by the expectation below: an update that wrote
+					// nothing is not done.
+					Minn_Admin_Kernel_SQL::update( 'srfm_entries', 'ID', (int) $id, array( 'status' => $status ) );
 					return $status;
 				},
 				'expect' => function ( $id, $fresh, $status ) {
@@ -382,12 +378,11 @@ minn_admin_resource( 'sureforms/entries', function () {
 				'method'    => 'DELETE',
 				'gate'      => 'manage',
 				'run'       => function ( $id ) {
-					global $wpdb;
 					if ( class_exists( '\SRFM\Inc\Database\Tables\Entries' ) && method_exists( '\SRFM\Inc\Database\Tables\Entries', 'delete' ) ) {
 						$deleted = \SRFM\Inc\Database\Tables\Entries::delete( $id );
 					} else {
 						do_action( 'srfm_before_delete_entry', $id );
-						$deleted = $wpdb->delete( minn_admin_sureforms_table(), array( 'ID' => $id ), array( '%d' ) );
+						$deleted = Minn_Admin_Kernel_SQL::delete( 'srfm_entries', 'ID', (int) $id );
 					}
 					return $deleted ? true : new WP_Error( 'not_found', __( 'Entry not found', 'minn-admin' ), array( 'status' => 404 ) );
 				},

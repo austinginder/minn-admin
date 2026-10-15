@@ -28,13 +28,7 @@
 defined( 'ABSPATH' ) || exit;
 
 function minn_admin_formidable_active() {
-	global $wpdb;
-	if ( ! class_exists( 'FrmEntry' ) ) {
-		return false;
-	}
-	$table = $wpdb->prefix . 'frm_items';
-	$found = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
-	return $found && 0 === strcasecmp( (string) $found, $table );
+	return class_exists( 'FrmEntry' ) && Minn_Admin_Kernel_SQL::exists( 'frm_items' );
 }
 
 /** Their permission model: granular cap OR administrator. */
@@ -79,11 +73,10 @@ function minn_admin_formidable_fields( $form_id ) {
 function minn_admin_formidable_titles() {
 	static $titles = null;
 	if ( null === $titles ) {
-		global $wpdb;
 		$titles = array();
-		$rows   = $wpdb->get_results( "SELECT id, name FROM {$wpdb->prefix}frm_forms WHERE is_template = 0 AND status = 'published' AND ( parent_form_id = 0 OR parent_form_id IS NULL )" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		foreach ( (array) $rows as $r ) {
-			$titles[ (int) $r->id ] = (string) $r->name;
+		$rows   = Minn_Admin_Kernel_SQL::select( 'frm_forms', array( 'id', 'name' ), array( 'is_template' => 0, 'status' => 'published', 'parent_form_id' => array( 'any' => array( 0, null ) ) ) );
+		foreach ( $rows as $r ) {
+			$titles[ (int) $r['id'] ] = (string) $r['name'];
 		}
 	}
 	return $titles;

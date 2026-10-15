@@ -25,13 +25,7 @@
 defined( 'ABSPATH' ) || exit;
 
 function minn_admin_ninja_forms_active() {
-	global $wpdb;
-	if ( ! class_exists( 'Ninja_Forms' ) ) {
-		return false;
-	}
-	$table = $wpdb->prefix . 'nf3_forms';
-	$found = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
-	return $found && 0 === strcasecmp( (string) $found, $table );
+	return class_exists( 'Ninja_Forms' ) && Minn_Admin_Kernel_SQL::exists( 'nf3_forms' );
 }
 
 function minn_admin_ninja_forms_can() {
@@ -100,11 +94,9 @@ function minn_admin_ninja_forms_fields( $form_id ) {
 function minn_admin_ninja_forms_titles() {
 	static $titles = null;
 	if ( null === $titles ) {
-		global $wpdb;
 		$titles = array();
-		$rows   = $wpdb->get_results( "SELECT id, title FROM {$wpdb->prefix}nf3_forms" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		foreach ( (array) $rows as $r ) {
-			$titles[ (int) $r->id ] = (string) $r->title;
+		foreach ( Minn_Admin_Kernel_SQL::select( 'nf3_forms', array( 'id', 'title' ) ) as $r ) {
+			$titles[ (int) $r['id'] ] = (string) $r['title'];
 		}
 	}
 	return $titles;
@@ -472,11 +464,12 @@ minn_admin_endpoint( 'ninja-forms/forms', array(
 	'active' => 'minn_admin_ninja_forms_active',
 	'gate'   => 'minn_admin_ninja_forms_can',
 	'run'    => function ( WP_REST_Request $request ) {
-		global $wpdb;
-		$rows   = $wpdb->get_results( "SELECT id, title, created_at FROM {$wpdb->prefix}nf3_forms ORDER BY title ASC" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$rows   = Minn_Admin_Kernel_SQL::select( 'nf3_forms', array( 'id', 'title', 'created_at' ), array(), array( 'title' => 'ASC', 'id' => 'ASC' ) );
 		$manage = ! empty( $request['manage'] );
 		$out    = array();
-		foreach ( (array) $rows as $r ) {
+		foreach ( array_map( function ( $r ) {
+			return (object) $r;
+		}, $rows ) as $r ) {
 			$row = array(
 				'id'    => (int) $r->id,
 				'title' => (string) $r->title,
@@ -484,11 +477,10 @@ minn_admin_endpoint( 'ninja-forms/forms', array(
 			if ( $manage ) {
 				// Live count, not the plugin's all-time `subs` counter
 				// (which keeps counting after entries are deleted).
-				$row['entries'] = (int) $wpdb->get_var( $wpdb->prepare(
-					"SELECT COUNT(*) FROM {$wpdb->posts} p INNER JOIN {$wpdb->postmeta} m ON m.post_id = p.ID
-					 WHERE p.post_type = 'nf_sub' AND p.post_status = 'publish' AND m.meta_key = '_form_id' AND m.meta_value = %s",
-					(string) $r->id
-				) );
+				$row['entries'] = Minn_Admin_Kernel_SQL::count(
+					array( 'core' => 'posts', 'joins' => array( 'm' => array( 'core' => 'postmeta', 'on' => array( 'post_id' => 'e.ID' ) ) ) ),
+					array( 'post_type' => 'nf_sub', 'post_status' => 'publish', 'm.meta_key' => '_form_id', 'm.meta_value' => (string) $r->id )
+				);
 				$row['date']    = $r->created_at ? str_replace( ' ', 'T', (string) $r->created_at ) : '';
 			}
 			$out[] = $row;

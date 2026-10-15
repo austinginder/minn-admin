@@ -27,13 +27,7 @@
 defined( 'ABSPATH' ) || exit;
 
 function minn_admin_forminator_active() {
-	global $wpdb;
-	if ( ! class_exists( 'Forminator_API' ) ) {
-		return false;
-	}
-	$table = $wpdb->prefix . 'frmt_form_entry';
-	$found = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
-	return $found && 0 === strcasecmp( (string) $found, $table );
+	return class_exists( 'Forminator_API' ) && Minn_Admin_Kernel_SQL::exists( 'frmt_form_entry' );
 }
 
 function minn_admin_forminator_can() {
@@ -314,12 +308,9 @@ function minn_admin_forminator_view( array $row ) {
  * @return true|WP_Error
  */
 function minn_admin_forminator_move( $id, $form_id, array $from, array $to, $refusal ) {
-	global $wpdb;
-	list( $where, $args ) = Minn_Admin_Kernel_SQL::where( array_merge( array( 'entry_id' => (int) $id ), $from ) );
-	$changed              = $wpdb->query( Minn_Admin_Kernel_SQL::prepare( // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		'UPDATE ' . Minn_Admin_Kernel_SQL::table( 'frmt_form_entry' ) . ' SET is_spam = %d, status = %s WHERE ' . implode( ' AND ', $where ),
-		array_merge( array( (int) $to['is_spam'], (string) $to['status'] ), $args )
-	) );
+	// Only a row still in the state it is moved from: the further conditions
+	// narrow the key-bound update.
+	$changed = Minn_Admin_Kernel_SQL::update( 'frmt_form_entry', 'entry_id', (int) $id, array( 'is_spam' => (int) $to['is_spam'], 'status' => (string) $to['status'] ), $from );
 	if ( ! $changed ) {
 		return new WP_Error( 'bad_status', $refusal, array( 'status' => 400 ) );
 	}

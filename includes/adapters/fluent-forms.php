@@ -90,11 +90,7 @@ function minn_admin_fluent_forms_can_form( $form_id, $permission = 'fluentform_e
  * The form id a submission belongs to (0 when the row is gone).
  */
 function minn_admin_fluent_forms_entry_form_id( $entry_id ) {
-	global $wpdb;
-	return (int) $wpdb->get_var( $wpdb->prepare(
-		"SELECT form_id FROM `{$wpdb->prefix}fluentform_submissions` WHERE id = %d",
-		(int) $entry_id
-	) );
+	return (int) Minn_Admin_Kernel_SQL::latest( 'fluentform_submissions', 'form_id', array( 'id' => (int) $entry_id ), 'id' );
 }
 
 /**
@@ -125,10 +121,7 @@ function minn_admin_fluent_forms_form_title( $form_id ) {
  * @return array<string,string>
  */
 function minn_admin_fluent_forms_labels( $form_id ) {
-	global $wpdb;
-	$table = $wpdb->prefix . 'fluentform_forms';
-	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-	$raw   = $wpdb->get_var( $wpdb->prepare( "SELECT form_fields FROM `{$table}` WHERE id = %d", $form_id ) );
+	$raw = Minn_Admin_Kernel_SQL::latest( 'fluentform_forms', 'form_fields', array( 'id' => (int) $form_id ), 'id' );
 	if ( ! $raw ) {
 		return array();
 	}
@@ -171,9 +164,7 @@ function minn_admin_fluent_forms_mask_passwords( $map, $form_id ) {
 		|| ! apply_filters( 'fluentform/truncate_password_values', true, (int) $form_id ) ) {
 		return $map;
 	}
-	global $wpdb;
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery
-	$raw    = $wpdb->get_var( $wpdb->prepare( "SELECT form_fields FROM {$wpdb->prefix}fluentform_forms WHERE id = %d", (int) $form_id ) );
+	$raw    = Minn_Admin_Kernel_SQL::latest( 'fluentform_forms', 'form_fields', array( 'id' => (int) $form_id ), 'id' );
 	$fields = json_decode( (string) $raw, true );
 	$names  = array();
 	$walk   = function ( $list ) use ( &$walk, &$names ) {
@@ -316,7 +307,6 @@ function minn_admin_fluent_forms_row( array $r, array $q ) {
 
 /** A submission's detail; opening it marks it read, as Fluent's screen does. */
 function minn_admin_fluent_forms_view( array $raw ) {
-	global $wpdb;
 	$row = (object) $raw;
 
 	// Opening a detail marks unread → read (Fluent Forms' own screen
@@ -325,13 +315,7 @@ function minn_admin_fluent_forms_view( array $raw ) {
 	$auto_read = apply_filters_deprecated( 'fluentform_auto_read', array( true, $form_row ), defined( 'FLUENTFORM_FRAMEWORK_UPGRADE' ) ? FLUENTFORM_FRAMEWORK_UPGRADE : '', 'fluentform/auto_read_submission' );
 	$auto_read = apply_filters( 'fluentform/auto_read_submission', $auto_read, $form_row );
 	if ( 'unread' === (string) $row->status && $auto_read ) {
-		$wpdb->update(
-			$wpdb->prefix . 'fluentform_submissions',
-			array( 'status' => 'read' ),
-			array( 'id' => (int) $row->id ),
-			array( '%s' ),
-			array( '%d' )
-		);
+		Minn_Admin_Kernel_SQL::update( 'fluentform_submissions', 'id', (int) $row->id, array( 'status' => 'read' ) );
 		$row->status = 'read';
 	}
 
@@ -412,7 +396,6 @@ function minn_admin_fluent_forms_view( array $raw ) {
  * honouring an erasure request.
  */
 function minn_admin_fluent_forms_delete( $id, $form_id ) {
-	global $wpdb;
 	if ( class_exists( '\FluentForm\App\Services\Submission\SubmissionService' ) ) {
 		try {
 			( new \FluentForm\App\Services\Submission\SubmissionService() )->deleteEntries( array( $id ), $form_id );
@@ -426,14 +409,10 @@ function minn_admin_fluent_forms_delete( $id, $form_id ) {
 	// Last resort when their service is absent: cover the same ground by hand
 	// and still fire their hooks, so add-on cleanup runs even here.
 	do_action( 'fluentform/before_deleting_entries', array( $id ), $form_id );
-	$wpdb->delete( $wpdb->prefix . 'fluentform_submission_meta', array( 'response_id' => $id ), array( '%d' ) );
-	$wpdb->delete(
-		$wpdb->prefix . 'fluentform_logs',
-		array( 'source_id' => $id, 'source_type' => 'submission_item' ),
-		array( '%d', '%s' )
-	);
-	$wpdb->delete( $wpdb->prefix . 'fluentform_entry_details', array( 'submission_id' => $id ), array( '%d' ) );
-	$wpdb->delete( $wpdb->prefix . 'fluentform_submissions', array( 'id' => $id ), array( '%d' ) );
+	Minn_Admin_Kernel_SQL::delete( 'fluentform_submission_meta', 'response_id', (int) $id );
+	Minn_Admin_Kernel_SQL::delete( 'fluentform_logs', 'source_id', (int) $id, array( 'source_type' => 'submission_item' ) );
+	Minn_Admin_Kernel_SQL::delete( 'fluentform_entry_details', 'submission_id', (int) $id );
+	Minn_Admin_Kernel_SQL::delete( 'fluentform_submissions', 'id', (int) $id );
 	do_action( 'fluentform/after_deleting_submissions', array( $id ), $form_id );
 	return true;
 }
@@ -512,7 +491,6 @@ minn_admin_resource( 'fluent-forms/entries', function () {
 			'status' => array(
 				'gate'   => 'manage',
 				'run'    => function ( $id, $row, WP_REST_Request $request ) {
-					global $wpdb;
 					$status = sanitize_key( (string) ( $request['status'] ?? '' ) );
 					if ( ! in_array( $status, array( 'unread', 'read', 'spam', 'trashed' ), true ) ) {
 						return new WP_Error( 'bad_status', __( 'Unknown status.', 'minn-admin' ), array( 'status' => 400 ) );
@@ -524,13 +502,7 @@ minn_admin_resource( 'fluent-forms/entries', function () {
 							return new WP_Error( 'bad_status', __( 'Fluent Forms does not allow that status for this entry.', 'minn-admin' ), array( 'status' => 400 ) );
 						}
 					} else {
-						$wpdb->update(
-							$wpdb->prefix . 'fluentform_submissions',
-							array( 'status' => $status ),
-							array( 'id' => $id ),
-							array( '%s' ),
-							array( '%d' )
-						);
+						Minn_Admin_Kernel_SQL::update( 'fluentform_submissions', 'id', (int) $id, array( 'status' => $status ) );
 					}
 					return $status;
 				},
@@ -585,10 +557,6 @@ minn_admin_endpoint( 'fluent-forms/forms', array(
 	'active' => 'minn_admin_fluent_forms_ready',
 	'gate'   => 'minn_admin_fluent_forms_can_view',
 	'run'    => function ( WP_REST_Request $request ) {
-		global $wpdb;
-		$forms_table = $wpdb->prefix . 'fluentform_forms';
-		$subs_table  = $wpdb->prefix . 'fluentform_submissions';
-		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- prefix-derived tables.
 		// A form's count is what its Received list holds: spam and trash
 		// are their own buckets.
 		// Scope the form estate the same way the entries are scoped. Fluent's
@@ -596,31 +564,19 @@ minn_admin_endpoint( 'fluent-forms/forms', array(
 		// whereIn('id', $allowForms ?: [0]); without it a manager scoped to
 		// one form still enumerates every form's title and traffic volume.
 		$scope = minn_admin_fluent_forms_scope();
-		if ( is_array( $scope ) && ! $scope ) {
-			$rows = array();
-		} elseif ( is_array( $scope ) ) {
-			$in   = implode( ',', array_fill( 0, count( $scope ), '%d' ) );
-			$rows = $wpdb->get_results( $wpdb->prepare(
-				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- prefix-derived tables; ids bound below.
-				"SELECT f.id, f.title, f.status, f.updated_at,
-					(SELECT COUNT(*) FROM `{$subs_table}` s WHERE s.form_id = f.id AND s.status NOT IN ('spam','trashed')) AS entries
-				 FROM `{$forms_table}` f
-				 WHERE f.id IN ({$in})
-				 ORDER BY f.title ASC",
-				$scope
-			) );
-		} else {
-			$rows = $wpdb->get_results(
-				"SELECT f.id, f.title, f.status, f.updated_at,
-					(SELECT COUNT(*) FROM `{$subs_table}` s WHERE s.form_id = f.id AND s.status NOT IN ('spam','trashed')) AS entries
-				 FROM `{$forms_table}` f
-				 ORDER BY f.title ASC"
-			);
+		$rows  = array();
+		if ( ! is_array( $scope ) || $scope ) {
+			$counts = array();
+			foreach ( Minn_Admin_Kernel_SQL::totals( 'fluentform_submissions', array( 'form_id' ), array( 'n' => array( 'count' => '*' ) ), array( 'status' => array( 'not' => array( 'spam', 'trashed' ) ) ), array(), 5000 ) as $c ) {
+				$counts[ (int) $c['form_id'] ] = (int) $c['n'];
+			}
+			foreach ( Minn_Admin_Kernel_SQL::select( 'fluentform_forms', array( 'id', 'title', 'status', 'updated_at' ), is_array( $scope ) ? array( 'id' => array_map( 'intval', $scope ) ) : array(), array( 'title' => 'ASC', 'id' => 'ASC' ) ) as $f ) {
+				$rows[] = (object) ( $f + array( 'entries' => $counts[ (int) $f['id'] ] ?? 0 ) );
+			}
 		}
-		// phpcs:enable
 		$manage = ! empty( $request['manage'] );
 		$out    = array();
-		foreach ( (array) $rows as $r ) {
+		foreach ( $rows as $r ) {
 			$row = array(
 				'id'    => (int) $r->id,
 				'title' => $r->title,
