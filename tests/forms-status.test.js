@@ -5,9 +5,39 @@
  * rendering on one live surface. All are active fixtures on minnadmin;
  * counts are live so checks assert shape, never absolute numbers.
  */
-const { BASE, launch, login, reporter } = require( './helpers' );
+const fs = require( 'fs' );
+const os = require( 'os' );
+const path = require( 'path' );
+const { execSync } = require( 'child_process' );
+const { BASE, WP, onExit, launch, login, reporter } = require( './helpers' );
+
+const wpEval = ( php ) => {
+	const file = path.join( os.tmpdir(), `minn-forms-status-${ process.pid }.php` );
+	fs.writeFileSync( file, '<?php ' + php );
+	try {
+		return execSync( `wp --path=${ JSON.stringify( WP ) } eval-file ${ JSON.stringify( file ) } 2>/dev/null`, { encoding: 'utf8' } ).trim();
+	} finally {
+		fs.unlinkSync( file );
+	}
+};
 
 ( async () => {
+	// One Elementor submission from today, through Elementor's own writer, so
+	// the chart check below has a row to count where the lab's are older:
+	// its card is the one whose chart once lost its data.
+	let sub = 0;
+	try {
+		sub = parseInt( wpEval( `
+			if ( ! class_exists( '\\ElementorPro\\Modules\\Forms\\Submissions\\Database\\Query' ) ) { echo 0; return; }
+			echo (int) \\ElementorPro\\Modules\\Forms\\Submissions\\Database\\Query::get_instance()->add_submission(
+				array( 'post_id' => 0, 'element_id' => 'minnstatus', 'form_name' => 'Forms status suite', 'referer' => home_url( '/' ), 'referer_title' => 'Home' ),
+				array( array( 'id' => 'name', 'type' => 'text', 'value' => 'Status Suite' ) )
+			);
+		` ), 10 ) || 0;
+	} catch ( e ) {}
+	const restore = onExit( () => {
+		if ( sub ) wpEval( `\\ElementorPro\\Modules\\Forms\\Submissions\\Database\\Query::get_instance()->delete_submission( ${ sub } );` );
+	} );
 	const { browser, page, errors } = await launch();
 	const t = reporter( 'forms-status' );
 
@@ -22,17 +52,18 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	}, path );
 
 	const CARDS = [
-		{ slug: 'fluent-forms', first: 'Unread entries', open: /fluent_forms_all_entries/ },
-		{ slug: 'ninja-forms', first: 'Submissions', open: /nf-submissions/ },
-		{ slug: 'forminator', first: 'Entries', open: /forminator-entries/ },
-		{ slug: 'cf7', first: 'Inbox messages', open: /flamingo_inbound/ },
-		{ slug: 'everest', first: 'Unread entries', open: /evf-entries/ },
-		{ slug: 'wpforms', first: 'Unread entries', open: /wpforms-entries/ },
-		{ slug: 'elementor', first: 'Unread entries', open: /e-form-submissions/ },
-		{ slug: 'formidable', first: 'Entries', open: /formidable-entries/ },
-		{ slug: 'cfdb7', first: 'Unread entries', open: /cfdb7-list/ },
+		{ slug: 'fluent-forms', first: 'Unread entries', open: /fluent_forms_all_entries/, list: 'fluent-forms/entries' },
+		{ slug: 'ninja-forms', first: 'Submissions', open: /nf-submissions/, list: 'ninja-forms/entries' },
+		{ slug: 'forminator', first: 'Entries', open: /forminator-entries/, list: 'forminator/entries' },
+		{ slug: 'cf7', first: 'Inbox messages', open: /flamingo_inbound/, list: 'cf7/messages' },
+		{ slug: 'everest', first: 'Unread entries', open: /evf-entries/, list: 'everest/entries' },
+		{ slug: 'wpforms', first: 'Unread entries', open: /wpforms-entries/, list: 'wpforms/entries' },
+		{ slug: 'elementor', first: 'Unread entries', open: /e-form-submissions/, list: 'elementor/submissions' },
+		{ slug: 'formidable', first: 'Entries', open: /formidable-entries/, list: 'formidable/entries' },
+		{ slug: 'cfdb7', first: 'Unread entries', open: /cfdb7-list/, list: 'cfdb7/entries' },
 	];
 
+	let recent = 0;
 	for ( const c of CARDS ) {
 		const r = await api( 'minn-admin/v1/' + c.slug + '/status' );
 		const rows = ( r.body && r.body.rows ) || [];
@@ -50,7 +81,20 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			!! ch && ch.title === 'Last 14 days' && Array.isArray( ch.points ) && ch.points.length === 14
 			&& ch.points.every( ( pt ) => /^\d{4}-\d{2}-\d{2}$/.test( pt.label ) && Number.isInteger( pt.value ) ),
 			JSON.stringify( ch && { title: ch.title, primary: ch.primary, secondary: ch.secondary, n: ( ch.points || [] ).length } ) );
+		// The shape alone holds for a chart that lost its data (fourteen
+		// zero days), as Elementor's did when its table check went undefined:
+		// a list holding entries in the chart's own window means bars.
+		const pts = ( ch && ch.points ) || [];
+		if ( 14 === pts.length && pts[ 0 ].from && pts[ 13 ].to ) {
+			const l = await api( `minn-admin/v1/${ c.list }?per_page=1&after=${ encodeURIComponent( pts[ 0 ].from ) }&before=${ encodeURIComponent( pts[ 13 ].to ) }` );
+			const listed = ( l.body && l.body.total ) || 0;
+			const charted = pts.reduce( ( n, pt ) => n + ( pt.value || 0 ) + ( pt.secondary || 0 ), 0 );
+			if ( listed ) recent++;
+			t.check( c.slug + ' chart counts the entries its list holds in the same 14 days', 200 === l.status && ( 0 === listed || charted > 0 ), JSON.stringify( { status: l.status, listed, charted } ) );
+		}
 	}
+	// Vacuous when no provider has an entry this fortnight: say so.
+	console.log( `      ${ recent } of ${ CARDS.length } providers hold entries in the chart window` );
 
 	// The card renders above one live forms surface.
 	await page.evaluate( () => localStorage.setItem( 'minn-sf-forms', 'fluent-forms' ) );
@@ -90,5 +134,6 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		}
 	}
 
+	restore();
 	await t.done( browser, errors );
 } )();

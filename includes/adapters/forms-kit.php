@@ -281,15 +281,20 @@ function minn_admin_forms_card( array $first, $forms, array $days, array $open, 
  * @param int    $unread Unread entries.
  * @param int    $total  Every entry received.
  * @param int    $more   How many sit in the bucket.
- * @param string $bucket Its name.
+ * @param string $bucket spam or trash.
  * @return array
  */
 function minn_admin_forms_unread( $unread, $total, $more = 0, $bucket = 'spam' ) {
-	$hint = number_format_i18n( $total ) . ' total';
-	if ( $more ) {
-		$hint .= ', ' . number_format_i18n( $more ) . ' ' . $bucket;
+	/* translators: %s: total number of stored entries. */
+	$bits = array( sprintf( __( '%s total', 'minn-admin' ), number_format_i18n( $total ) ) );
+	if ( $more && 'trash' === $bucket ) {
+		/* translators: %s: number of trashed submissions. */
+		$bits[] = sprintf( _n( '%s in trash', '%s in trash', $more, 'minn-admin' ), number_format_i18n( $more ) );
+	} elseif ( $more ) {
+		/* translators: %s: number of spam messages. */
+		$bits[] = sprintf( __( '%s spam', 'minn-admin' ), number_format_i18n( $more ) );
 	}
-	return array( 'label' => __( 'Unread entries', 'minn-admin' ), 'value' => number_format_i18n( $unread ), 'hint' => $hint );
+	return array( 'label' => __( 'Unread entries', 'minn-admin' ), 'value' => number_format_i18n( $unread ), 'hint' => implode( ', ', $bits ) );
 }
 
 /** The card for a caller whose scope holds no form: nothing to count, nothing to chart. */
