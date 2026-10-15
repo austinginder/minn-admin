@@ -224,17 +224,17 @@ add_action( 'rest_api_init', function () {
 		return;
 	}
 
-	register_rest_route( 'minn-admin/v1', '/wpjm/fields', array(
+	minn_admin_endpoint( '/wpjm/fields', array(
 		'methods'             => 'GET',
-		'permission_callback' => function () {
+		'gate'                => function () {
 			return current_user_can( 'edit_posts' );
 		},
 		'args'                => array(
-			'post_id'   => array( 'type' => 'integer', 'default' => 0 ),
-			'post_type' => array( 'type' => 'string', 'default' => 'posts' ),
+			'post_id'   => array( 'type' => 'integer' ),
+			'post_type' => array( 'type' => 'string' ),
 		),
-		'callback'            => function ( WP_REST_Request $request ) {
-			$rest_base = sanitize_key( $request['post_type'] );
+		'run'                 => function ( WP_REST_Request $request ) {
+			$rest_base = sanitize_key( (string) ( $request['post_type'] ?? 'posts' ) );
 			$post_id   = (int) $request['post_id'];
 			$post_type = $post_id && get_post( $post_id ) ? get_post( $post_id )->post_type : '';
 			if ( '' === $post_type ) {

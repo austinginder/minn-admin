@@ -225,25 +225,24 @@ add_action( 'rest_api_init', function () {
 	if ( ! minn_admin_elementor_mcp_active() ) {
 		return;
 	}
-	register_rest_route( 'minn-admin/v1', '/elementor-mcp/status', array(
+	minn_admin_endpoint( '/elementor-mcp/status', array(
 		'methods'             => 'GET',
-		'permission_callback' => 'minn_admin_elementor_mcp_can',
-		'callback'            => function () {
+		'gate'                => 'minn_admin_elementor_mcp_can',
+		'run'                 => function () {
 			return rest_ensure_response( minn_admin_elementor_mcp_status_model() );
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/elementor-mcp/toggle', array(
+	minn_admin_endpoint( '/elementor-mcp/toggle', array(
 		'methods'             => 'POST',
-		'permission_callback' => 'minn_admin_elementor_mcp_can_write',
+		'gate'                => 'minn_admin_elementor_mcp_can_write',
 		'args'                => array(
 			'enabled' => array(
-				'required'          => true,
-				'type'              => 'boolean',
-				'sanitize_callback' => 'rest_sanitize_boolean',
+				'required' => true,
+				'type'     => 'boolean',
 			),
 		),
-		'callback'            => function ( WP_REST_Request $request ) {
+		'run'                 => function ( WP_REST_Request $request ) {
 			$on = (bool) $request->get_param( 'enabled' );
 			if ( ! minn_admin_elementor_mcp_set_enabled( $on ) ) {
 				return new WP_Error( 'minn_emcp_save', __( 'Could not save the Elementor MCP setting.', 'minn-admin' ), array( 'status' => 500 ) );
@@ -255,22 +254,22 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/elementor-mcp/connections', array(
+	minn_admin_endpoint( '/elementor-mcp/connections', array(
 		'methods'             => 'GET',
-		'permission_callback' => 'minn_admin_elementor_mcp_can',
-		'callback'            => function () {
+		'gate'                => 'minn_admin_elementor_mcp_can',
+		'run'                 => function () {
 			$items = minn_admin_elementor_mcp_connections();
 			return rest_ensure_response( array( 'items' => $items, 'total' => count( $items ) ) );
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/elementor-mcp/connections/(?P<uid>\d+):(?P<uuid>[0-9a-fA-F-]{36})/revoke', array(
+	minn_admin_endpoint( '/elementor-mcp/connections/(?P<uid>\d+):(?P<uuid>[0-9a-fA-F-]{36})/revoke', array(
 		'methods'             => 'POST',
-		'permission_callback' => function ( WP_REST_Request $request ) {
+		'gate'                => function ( WP_REST_Request $request ) {
 			// Core's own rule for another account's application passwords.
 			return minn_admin_elementor_mcp_can_write( $request ) && current_user_can( 'edit_user', (int) Minn_Admin::path_param( $request, 'uid' ) );
 		},
-		'callback'            => function ( WP_REST_Request $request ) {
+		'run'                 => function ( WP_REST_Request $request ) {
 			$uid  = (int) Minn_Admin::path_param( $request, 'uid' );
 			$uuid = (string) Minn_Admin::path_param( $request, 'uuid' );
 			$pw   = class_exists( 'WP_Application_Passwords' ) ? WP_Application_Passwords::get_user_application_password( $uid, $uuid ) : null;

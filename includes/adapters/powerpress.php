@@ -223,18 +223,18 @@ add_action( 'rest_api_init', function () {
 		return;
 	}
 
-	register_rest_route( 'minn-admin/v1', '/powerpress/fields', array(
+	minn_admin_endpoint( '/powerpress/fields', array(
 		'methods'             => 'GET',
-		'permission_callback' => function () {
+		'gate'                => function () {
 			return current_user_can( 'edit_posts' ) && minn_admin_powerpress_can_podcast();
 		},
 		'args'                => array(
-			'post_id'   => array( 'type' => 'integer', 'default' => 0 ),
-			'post_type' => array( 'type' => 'string', 'default' => 'posts' ),
+			'post_id'   => array( 'type' => 'integer' ),
+			'post_type' => array( 'type' => 'string' ),
 		),
-		'callback'            => function ( WP_REST_Request $request ) {
+		'run'                 => function ( WP_REST_Request $request ) {
 			$post_id   = (int) $request['post_id'];
-			$rest_base = sanitize_key( $request['post_type'] );
+			$rest_base = sanitize_key( (string) ( $request['post_type'] ?? 'posts' ) );
 			$post_type = $post_id && get_post( $post_id ) ? get_post( $post_id )->post_type : ( 'posts' === $rest_base ? 'post' : $rest_base );
 			// Default-channel podcasting lives on plain posts.
 			if ( 'post' !== $post_type ) {

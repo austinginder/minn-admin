@@ -142,17 +142,17 @@ add_action( 'rest_api_init', function () {
 		return;
 	}
 
-	register_rest_route( 'minn-admin/v1', '/tec/fields', array(
+	minn_admin_endpoint( '/tec/fields', array(
 		'methods'             => 'GET',
-		'permission_callback' => function () {
+		'gate'                => function () {
 			return current_user_can( 'edit_posts' );
 		},
 		'args'                => array(
-			'post_id'   => array( 'type' => 'integer', 'default' => 0 ),
-			'post_type' => array( 'type' => 'string', 'default' => 'posts' ),
+			'post_id'   => array( 'type' => 'integer' ),
+			'post_type' => array( 'type' => 'string' ),
 		),
-		'callback'            => function ( WP_REST_Request $request ) {
-			$rest_base = sanitize_key( $request['post_type'] );
+		'run'                 => function ( WP_REST_Request $request ) {
+			$rest_base = sanitize_key( (string) ( $request['post_type'] ?? 'posts' ) );
 			$post_id   = (int) $request['post_id'];
 			$post_type = $post_id && get_post( $post_id ) ? get_post( $post_id )->post_type : $rest_base;
 			if ( ! in_array( $post_type, array( 'tribe_events' ), true ) ) {
@@ -216,16 +216,16 @@ add_action( 'rest_api_init', function () {
 
 	// Venue / organizer suggestions: published records plus drafts the caller
 	// may edit, alphabetical, with q filtering.
-	register_rest_route( 'minn-admin/v1', '/tec/suggest', array(
+	minn_admin_endpoint( '/tec/suggest', array(
 		'methods'             => 'GET',
-		'permission_callback' => function () {
+		'gate'                => function () {
 			return current_user_can( 'edit_posts' );
 		},
 		'args'                => array(
 			'kind' => array( 'type' => 'string', 'required' => true, 'enum' => array( 'venue', 'organizer' ) ),
-			'q'    => array( 'type' => 'string', 'default' => '' ),
+			'q'    => array( 'type' => 'string' ),
 		),
-		'callback'            => function ( WP_REST_Request $request ) {
+		'run'                 => function ( WP_REST_Request $request ) {
 			$type = 'venue' === $request['kind'] ? 'tribe_venue' : 'tribe_organizer';
 			$base = array(
 				'post_type'      => $type,

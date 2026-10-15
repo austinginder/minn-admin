@@ -2011,15 +2011,15 @@ add_action( 'rest_api_init', function () {
 		return;
 	}
 
-	register_rest_route( 'minn-admin/v1', '/seo/fields', array(
+	minn_admin_endpoint( '/seo/fields', array(
 		'methods'             => 'GET',
-		'permission_callback' => function () {
+		'gate'                => function () {
 			return current_user_can( 'edit_posts' );
 		},
 		'args'                => array(
-			'post' => array( 'type' => 'integer', 'default' => 0 ),
+			'post' => array( 'type' => 'integer' ),
 		),
-		'callback'            => function ( $request ) use ( $plugin ) {
+		'run'                 => function ( $request ) use ( $plugin ) {
 			$post_id = (int) $request->get_param( 'post' );
 			// A post type the vendor withdrew its own metabox from has no SEO
 			// fields on this site, so offer none here either.

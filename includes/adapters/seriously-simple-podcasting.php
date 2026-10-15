@@ -173,18 +173,18 @@ add_action( 'rest_api_init', function () {
 		return;
 	}
 
-	register_rest_route( 'minn-admin/v1', '/ssp/fields', array(
+	minn_admin_endpoint( '/ssp/fields', array(
 		'methods'             => 'GET',
-		'permission_callback' => function () {
+		'gate'                => function () {
 			return current_user_can( 'edit_posts' );
 		},
 		'args'                => array(
-			'post_id'   => array( 'type' => 'integer', 'default' => 0 ),
-			'post_type' => array( 'type' => 'string', 'default' => 'posts' ),
+			'post_id'   => array( 'type' => 'integer' ),
+			'post_type' => array( 'type' => 'string' ),
 		),
-		'callback'            => function ( WP_REST_Request $request ) {
+		'run'                 => function ( WP_REST_Request $request ) {
 			// Resolve the editor's rest_base back to a type name.
-			$rest_base = sanitize_key( $request['post_type'] );
+			$rest_base = sanitize_key( (string) ( $request['post_type'] ?? 'posts' ) );
 			$post_type = 'post';
 			foreach ( get_post_types( array( 'show_in_rest' => true ), 'objects' ) as $obj ) {
 				$base = $obj->rest_base ? $obj->rest_base : $obj->name;

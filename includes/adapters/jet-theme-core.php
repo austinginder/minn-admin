@@ -202,118 +202,114 @@ add_action( 'rest_api_init', function () {
 		return ( $p && 'jet-theme-core' === $p->post_type && 'trash' !== $p->post_status ) ? $p : null;
 	};
 
-	register_rest_route( 'minn-admin/v1', '/jet-theme-core/templates', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) {
-				$per_page = min( 100, max( 1, (int) $request->get_param( 'per_page' ) ?: 25 ) );
-				$page     = max( 1, (int) $request->get_param( 'page' ) ?: 1 );
-				$type     = sanitize_key( (string) $request->get_param( 'type' ) );
-				$search   = sanitize_text_field( (string) $request->get_param( 'search' ) );
-				$args     = array(
-					'post_type'      => 'jet-theme-core',
-					'post_status'    => array( 'publish', 'draft', 'pending', 'private', 'future' ),
-					'posts_per_page' => $per_page,
-					'paged'          => $page,
-					'orderby'        => 'modified',
-					'order'          => 'DESC',
-					's'              => $search,
-				);
-				if ( 'unassigned' === $type ) {
-					$args['meta_query'] = array( 'relation' => 'OR', array( 'key' => '_jet_template_type', 'compare' => 'NOT EXISTS' ), array( 'key' => '_jet_template_type', 'value' => '' ) );
-				} elseif ( '' !== $type ) {
-					$args['meta_query'] = array( array( 'key' => '_jet_template_type', 'value' => $type ) );
-				}
-				$q     = new WP_Query( $args );
-				$items = array();
-				foreach ( $q->posts as $p ) {
-					if ( current_user_can( 'edit_post', $p->ID ) ) {
-						$items[] = minn_admin_jet_tc_item( $p );
-					}
-				}
-				return rest_ensure_response( array( 'items' => $items, 'total' => (int) $q->found_posts ) );
-			},
-		),
-		array(
-			'methods'             => 'POST',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) {
-				$title = sanitize_text_field( (string) $request->get_param( 'title' ) );
-				$type  = sanitize_key( (string) $request->get_param( 'type' ) );
-				$ct    = sanitize_key( (string) $request->get_param( 'contentType' ) );
-				if ( ! isset( minn_admin_jet_tc_types()[ $type ] ) ) {
-					return new WP_Error( 'bad_type', __( 'Pick a template type.', 'minn-admin' ), array( 'status' => 400 ) );
-				}
-				if ( ! isset( minn_admin_jet_tc_content_types()[ $ct ] ) ) {
-					$ct = 'default';
-				}
-				try {
-					// Their own create: seeds the canvas meta per content type.
-					$res = jet_theme_core()->templates->create_template( $type, $ct, $title, array() );
-				} catch ( \Throwable $e ) {
-					return new WP_Error( 'create_failed', __( 'JetThemeCore could not create the template.', 'minn-admin' ), array( 'status' => 500 ) );
-				}
-				if ( ! is_array( $res ) || empty( $res['newTemplateId'] ) ) {
-					return new WP_Error( 'create_failed', is_array( $res ) && ! empty( $res['message'] ) ? wp_strip_all_tags( (string) $res['message'] ) : __( 'JetThemeCore could not create the template.', 'minn-admin' ), array( 'status' => 400 ) );
-				}
-				$post = get_post( (int) $res['newTemplateId'] );
-				return rest_ensure_response( array( 'ok' => true, 'id' => (int) $res['newTemplateId'], 'item' => $post ? minn_admin_jet_tc_item( $post ) : null ) );
-			},
-		),
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/jet-theme-core/templates/(?P<id>\d+)', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) use ( $find ) {
-				$p = $find( Minn_Admin::path_param( $request ) );
-				if ( ! $p || ! current_user_can( 'edit_post', $p->ID ) ) {
-					return new WP_Error( 'not_found', __( 'Template not found', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				return rest_ensure_response( minn_admin_jet_tc_item( $p ) );
-			},
-		),
-		array(
-			'methods'             => 'PUT',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) use ( $find ) {
-				$p = $find( Minn_Admin::path_param( $request ) );
-				if ( ! $p || ! current_user_can( 'edit_post', $p->ID ) ) {
-					return new WP_Error( 'not_found', __( 'Template not found', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				$title = sanitize_text_field( (string) $request->get_param( 'title' ) );
-				if ( '' === $title ) {
-					return new WP_Error( 'missing_title', __( 'A template needs a title.', 'minn-admin' ), array( 'status' => 400 ) );
-				}
-				$r = wp_update_post( wp_slash( array( 'ID' => $p->ID, 'post_title' => $title ) ), true );
-				if ( is_wp_error( $r ) ) {
-					return $r;
-				}
-				return rest_ensure_response( minn_admin_jet_tc_item( get_post( $p->ID ) ) );
-			},
-		),
-		array(
-			'methods'             => 'DELETE',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) use ( $find ) {
-				$p = $find( Minn_Admin::path_param( $request ) );
-				if ( ! $p || ! current_user_can( 'delete_post', $p->ID ) ) {
-					return new WP_Error( 'not_found', __( 'Template not found', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				if ( ! wp_trash_post( $p->ID ) ) {
-					return new WP_Error( 'trash_failed', __( 'Could not trash that template.', 'minn-admin' ), array( 'status' => 500 ) );
-				}
-				return rest_ensure_response( array( 'ok' => true, 'message' => __( 'Template moved to the trash.', 'minn-admin' ) ) );
-			},
-		),
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/jet-theme-core/templates/status', array(
+	minn_admin_endpoint( '/jet-theme-core/templates', array(
 		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function () {
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) {
+			$per_page = min( 100, max( 1, (int) $request->get_param( 'per_page' ) ?: 25 ) );
+			$page     = max( 1, (int) $request->get_param( 'page' ) ?: 1 );
+			$type     = sanitize_key( (string) $request->get_param( 'type' ) );
+			$search   = sanitize_text_field( (string) $request->get_param( 'search' ) );
+			$args     = array(
+				'post_type'      => 'jet-theme-core',
+				'post_status'    => array( 'publish', 'draft', 'pending', 'private', 'future' ),
+				'posts_per_page' => $per_page,
+				'paged'          => $page,
+				'orderby'        => 'modified',
+				'order'          => 'DESC',
+				's'              => $search,
+			);
+			if ( 'unassigned' === $type ) {
+				$args['meta_query'] = array( 'relation' => 'OR', array( 'key' => '_jet_template_type', 'compare' => 'NOT EXISTS' ), array( 'key' => '_jet_template_type', 'value' => '' ) );
+			} elseif ( '' !== $type ) {
+				$args['meta_query'] = array( array( 'key' => '_jet_template_type', 'value' => $type ) );
+			}
+			$q     = new WP_Query( $args );
+			$items = array();
+			foreach ( $q->posts as $p ) {
+				if ( current_user_can( 'edit_post', $p->ID ) ) {
+					$items[] = minn_admin_jet_tc_item( $p );
+				}
+			}
+			return rest_ensure_response( array( 'items' => $items, 'total' => (int) $q->found_posts ) );
+		},
+	) );
+	minn_admin_endpoint( '/jet-theme-core/templates', array(
+		'methods'             => 'POST',
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) {
+			$title = sanitize_text_field( (string) $request->get_param( 'title' ) );
+			$type  = sanitize_key( (string) $request->get_param( 'type' ) );
+			$ct    = sanitize_key( (string) $request->get_param( 'contentType' ) );
+			if ( ! isset( minn_admin_jet_tc_types()[ $type ] ) ) {
+				return new WP_Error( 'bad_type', __( 'Pick a template type.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
+			if ( ! isset( minn_admin_jet_tc_content_types()[ $ct ] ) ) {
+				$ct = 'default';
+			}
+			try {
+				// Their own create: seeds the canvas meta per content type.
+				$res = jet_theme_core()->templates->create_template( $type, $ct, $title, array() );
+			} catch ( \Throwable $e ) {
+				return new WP_Error( 'create_failed', __( 'JetThemeCore could not create the template.', 'minn-admin' ), array( 'status' => 500 ) );
+			}
+			if ( ! is_array( $res ) || empty( $res['newTemplateId'] ) ) {
+				return new WP_Error( 'create_failed', is_array( $res ) && ! empty( $res['message'] ) ? wp_strip_all_tags( (string) $res['message'] ) : __( 'JetThemeCore could not create the template.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
+			$post = get_post( (int) $res['newTemplateId'] );
+			return rest_ensure_response( array( 'ok' => true, 'id' => (int) $res['newTemplateId'], 'item' => $post ? minn_admin_jet_tc_item( $post ) : null ) );
+		},
+	) );
+
+	minn_admin_endpoint( '/jet-theme-core/templates/(?P<id>\d+)', array(
+		'methods'             => 'GET',
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) use ( $find ) {
+			$p = $find( Minn_Admin::path_param( $request ) );
+			if ( ! $p || ! current_user_can( 'edit_post', $p->ID ) ) {
+				return new WP_Error( 'not_found', __( 'Template not found', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			return rest_ensure_response( minn_admin_jet_tc_item( $p ) );
+		},
+	) );
+	minn_admin_endpoint( '/jet-theme-core/templates/(?P<id>\d+)', array(
+		'methods'             => 'PUT',
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) use ( $find ) {
+			$p = $find( Minn_Admin::path_param( $request ) );
+			if ( ! $p || ! current_user_can( 'edit_post', $p->ID ) ) {
+				return new WP_Error( 'not_found', __( 'Template not found', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			$title = sanitize_text_field( (string) $request->get_param( 'title' ) );
+			if ( '' === $title ) {
+				return new WP_Error( 'missing_title', __( 'A template needs a title.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
+			$r = wp_update_post( wp_slash( array( 'ID' => $p->ID, 'post_title' => $title ) ), true );
+			if ( is_wp_error( $r ) ) {
+				return $r;
+			}
+			return rest_ensure_response( minn_admin_jet_tc_item( get_post( $p->ID ) ) );
+		},
+	) );
+	minn_admin_endpoint( '/jet-theme-core/templates/(?P<id>\d+)', array(
+		'methods'             => 'DELETE',
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) use ( $find ) {
+			$p = $find( Minn_Admin::path_param( $request ) );
+			if ( ! $p || ! current_user_can( 'delete_post', $p->ID ) ) {
+				return new WP_Error( 'not_found', __( 'Template not found', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			if ( ! wp_trash_post( $p->ID ) ) {
+				return new WP_Error( 'trash_failed', __( 'Could not trash that template.', 'minn-admin' ), array( 'status' => 500 ) );
+			}
+			return rest_ensure_response( array( 'ok' => true, 'message' => __( 'Template moved to the trash.', 'minn-admin' ) ) );
+		},
+	) );
+
+	minn_admin_endpoint( '/jet-theme-core/templates/status', array(
+		'methods'             => 'GET',
+		'gate'                => $perm,
+		'run'                 => function () {
 			$counts = wp_count_posts( 'jet-theme-core' );
 			$n      = 0;
 			foreach ( array( 'publish', 'draft', 'pending', 'future', 'private' ) as $st ) {
