@@ -754,5 +754,32 @@
   "collection_lines": 44390,
   "collection_code_lines": 33977,
   "collection_routes": 32
+ },
+ {
+  "at": "2026-10-15T18:39:48.734Z",
+  "ref": "working tree",
+  "commit": "c97cee15",
+  "version": "0.45.0",
+  "label": "bookings, forms and activity-log kits on the kernel",
+  "adapters": 149,
+  "lines": 81687,
+  "code_lines": 60448,
+  "routes": 57,
+  "permission_callbacks": 74,
+  "cap_checks": 434,
+  "sql_reads": 26,
+  "sql_writes": 13,
+  "routes_declarable": 27,
+  "routes_handler": 30,
+  "resources": 51,
+  "endpoints": 321,
+  "kernel_adapters": 106,
+  "partial_adapters": 0,
+  "kernel_core_lines": 3168,
+  "kernel_code_lines": 2043,
+  "collection_adapters": 49,
+  "collection_lines": 34127,
+  "collection_code_lines": 26029,
+  "collection_routes": 32
  }
 ]
