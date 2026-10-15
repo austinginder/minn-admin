@@ -52,9 +52,10 @@ add_action( 'rest_api_init', function () {
 		return;
 	}
 
-	register_rest_route( 'minn-admin/v1', '/otl/(?P<id>\d+)', array(
+	minn_admin_endpoint( '/otl/(?P<id>\d+)', array(
 		'methods'             => 'POST',
-		'permission_callback' => function ( WP_REST_Request $request ) {
+		'labels'              => array( 'not_found' => __( 'User not found', 'minn-admin' ) ),
+		'gate'                => function ( WP_REST_Request $request ) {
 			$id = (int) Minn_Admin::path_param( $request );
 			// edit_user alone is not a gate here. Core's map_meta_cap
 			// short-circuits it when the target IS the caller, so every
@@ -68,7 +69,7 @@ add_action( 'rest_api_init', function () {
 				&& current_user_can( 'edit_users' )
 				&& current_user_can( 'edit_user', $id );
 		},
-		'callback'            => function ( WP_REST_Request $request ) {
+		'run'                 => function ( WP_REST_Request $request ) {
 			$user = get_userdata( (int) Minn_Admin::path_param( $request ) );
 			if ( ! $user ) {
 				return new WP_Error( 'not_found', __( 'User not found', 'minn-admin' ), array( 'status' => 404 ) );

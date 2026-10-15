@@ -346,70 +346,64 @@ add_action( 'rest_api_init', function () {
 	$can = function () {
 		return current_user_can( 'manage_options' );
 	};
-	register_rest_route(
-		'minn-admin/v1',
-		'/spam',
-		array(
-			array(
-				'methods'             => 'GET',
-				'permission_callback' => $can,
-				'callback'            => function () {
-					return rest_ensure_response( minn_admin_spam_state() );
-				},
-			),
-			array(
-				'methods'             => 'POST',
-				'permission_callback' => $can,
-				'callback'            => function ( WP_REST_Request $req ) {
-					$toggles = $req->get_param( 'toggles' );
-					if ( is_array( $toggles ) ) {
-						$providers = array();
-						foreach ( minn_admin_spam_providers() as $p ) {
-							if ( is_array( $p ) && ! empty( $p['id'] ) ) {
-								$providers[ $p['id'] ] = $p;
+	minn_admin_endpoint( '/spam', array(
+		'methods'             => 'GET',
+		'gate'                => $can,
+		'run'                 => function () {
+			return rest_ensure_response( minn_admin_spam_state() );
+		},
+	) );
+	minn_admin_endpoint( '/spam', array(
+		'methods'             => 'POST',
+		'gate'                => $can,
+		'run'                 => function ( WP_REST_Request $req ) {
+			$toggles = $req->get_param( 'toggles' );
+			if ( is_array( $toggles ) ) {
+				$providers = array();
+				foreach ( minn_admin_spam_providers() as $p ) {
+					if ( is_array( $p ) && ! empty( $p['id'] ) ) {
+						$providers[ $p['id'] ] = $p;
+					}
+				}
+				foreach ( $toggles as $pid => $set ) {
+					if ( ! isset( $providers[ $pid ] ) || ! is_array( $set ) || ! is_callable( $providers[ $pid ]['set'] ?? null ) ) {
+						continue;
+					}
+					// A provider's set() only ever sees a toggle it
+					// advertised. The provider id is already checked
+					// against the registry; without this the toggle id
+					// rode through verbatim and every provider had to
+					// remember to whitelist it on its own.
+					$declared = array();
+					try {
+						$st = is_callable( $providers[ $pid ]['status'] ?? null )
+							? call_user_func( $providers[ $pid ]['status'] )
+							: array();
+						foreach ( (array) ( $st['toggles'] ?? array() ) as $tg ) {
+							if ( is_array( $tg ) && isset( $tg['id'] ) ) {
+								$declared[] = (string) $tg['id'];
 							}
 						}
-						foreach ( $toggles as $pid => $set ) {
-							if ( ! isset( $providers[ $pid ] ) || ! is_array( $set ) || ! is_callable( $providers[ $pid ]['set'] ?? null ) ) {
-								continue;
-							}
-							// A provider's set() only ever sees a toggle it
-							// advertised. The provider id is already checked
-							// against the registry; without this the toggle id
-							// rode through verbatim and every provider had to
-							// remember to whitelist it on its own.
-							$declared = array();
-							try {
-								$st = is_callable( $providers[ $pid ]['status'] ?? null )
-									? call_user_func( $providers[ $pid ]['status'] )
-									: array();
-								foreach ( (array) ( $st['toggles'] ?? array() ) as $tg ) {
-									if ( is_array( $tg ) && isset( $tg['id'] ) ) {
-										$declared[] = (string) $tg['id'];
-									}
-								}
-							} catch ( \Throwable $e ) {
-								$declared = array();
-							}
-							foreach ( $set as $tid => $on ) {
-								if ( ! in_array( (string) $tid, $declared, true ) ) {
-									continue;
-								}
-								try {
-									call_user_func( $providers[ $pid ]['set'], (string) $tid, (bool) $on );
-								} catch ( \Throwable $e ) { /* skip the broken toggle */ }
-							}
+					} catch ( \Throwable $e ) {
+						$declared = array();
+					}
+					foreach ( $set as $tid => $on ) {
+						if ( ! in_array( (string) $tid, $declared, true ) ) {
+							continue;
 						}
+						try {
+							call_user_func( $providers[ $pid ]['set'], (string) $tid, (bool) $on );
+						} catch ( \Throwable $e ) { /* skip the broken toggle */ }
 					}
-					// Core sanitizes registered options on update_option
-					// (sanitize_option strips tags per line for this one).
-					$keys = $req->get_param( 'disallowed_keys' );
-					if ( null !== $keys && is_string( $keys ) ) {
-						update_option( 'disallowed_keys', $keys );
-					}
-					return rest_ensure_response( minn_admin_spam_state() );
-				},
-			),
-		)
-	);
+				}
+			}
+			// Core sanitizes registered options on update_option
+			// (sanitize_option strips tags per line for this one).
+			$keys = $req->get_param( 'disallowed_keys' );
+			if ( null !== $keys && is_string( $keys ) ) {
+				update_option( 'disallowed_keys', $keys );
+			}
+			return rest_ensure_response( minn_admin_spam_state() );
+		},
+	) );
 } );

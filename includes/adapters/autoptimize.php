@@ -337,30 +337,28 @@ add_action( 'rest_api_init', function () {
 	if ( ! minn_admin_autoptimize_active() ) {
 		return;
 	}
-	register_rest_route( 'minn-admin/v1', '/autoptimize/settings/(?P<tab>[a-z]+)', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => function () {
-				return minn_admin_autoptimize_can();
-			},
-			'callback'            => function ( $req ) {
-				return rest_ensure_response( minn_admin_autoptimize_tab_shape( Minn_Admin::path_param( $req, 'tab' ) ) );
-			},
-		),
-		array(
-			'methods'             => 'POST',
-			'permission_callback' => function () {
-				return minn_admin_autoptimize_can();
-			},
-			'callback'            => function ( $req ) {
-				if ( minn_admin_autoptimize_network_wide() ) {
-					return new WP_Error( 'minn_autoptimize_network', __( 'Autoptimize runs on the network’s settings here, so change them in Network Admin.', 'minn-admin' ), array( 'status' => 409 ) );
-				}
-				$body   = $req->get_json_params();
-				$values = isset( $body['values'] ) && is_array( $body['values'] ) ? $body['values'] : array();
-				minn_admin_autoptimize_save( $values );
-				return rest_ensure_response( minn_admin_autoptimize_tab_shape( Minn_Admin::path_param( $req, 'tab' ) ) );
-			},
-		),
+	minn_admin_endpoint( '/autoptimize/settings/(?P<tab>[a-z]+)', array(
+		'methods'             => 'GET',
+		'gate'                => function () {
+			return minn_admin_autoptimize_can();
+		},
+		'run'                 => function ( $req ) {
+			return rest_ensure_response( minn_admin_autoptimize_tab_shape( Minn_Admin::path_param( $req, 'tab' ) ) );
+		},
+	) );
+	minn_admin_endpoint( '/autoptimize/settings/(?P<tab>[a-z]+)', array(
+		'methods'             => 'POST',
+		'gate'                => function () {
+			return minn_admin_autoptimize_can();
+		},
+		'run'                 => function ( $req ) {
+			if ( minn_admin_autoptimize_network_wide() ) {
+				return new WP_Error( 'minn_autoptimize_network', __( 'Autoptimize runs on the network’s settings here, so change them in Network Admin.', 'minn-admin' ), array( 'status' => 409 ) );
+			}
+			$body   = $req->get_json_params();
+			$values = isset( $body['values'] ) && is_array( $body['values'] ) ? $body['values'] : array();
+			minn_admin_autoptimize_save( $values );
+			return rest_ensure_response( minn_admin_autoptimize_tab_shape( Minn_Admin::path_param( $req, 'tab' ) ) );
+		},
 	) );
 } );

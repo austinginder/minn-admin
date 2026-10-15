@@ -63,12 +63,12 @@ add_action( 'rest_api_init', function () {
 		return;
 	}
 
-	register_rest_route( 'minn-admin/v1', '/kadence/designs', array(
+	minn_admin_endpoint( '/kadence/designs', array(
 		'methods'             => 'GET',
-		'permission_callback' => function () {
+		'gate'                => function () {
 			return current_user_can( 'edit_posts' );
 		},
-		'callback'            => function () {
+		'run'                 => function () {
 			$out = array();
 			foreach ( minn_admin_kadence_library() as $design ) {
 				if ( ! is_array( $design ) || ! empty( $design['pro'] ) || ! empty( $design['locked'] ) || empty( $design['id'] ) ) {
@@ -88,12 +88,13 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/kadence/designs/(?P<id>\d+)', array(
+	minn_admin_endpoint( '/kadence/designs/(?P<id>\d+)', array(
 		'methods'             => 'POST',
-		'permission_callback' => function () {
+		'labels'              => array( 'not_found' => __( 'Design not found.', 'minn-admin' ) ),
+		'gate'                => function () {
 			return current_user_can( 'edit_posts' );
 		},
-		'callback'            => function ( $request ) {
+		'run'                 => function ( $request ) {
 			$req = new WP_REST_Request( 'GET', '/kb-design-library/v1/get_pattern_content' );
 			$req->set_query_params( array(
 				'library'      => 'section',

@@ -49,18 +49,14 @@ add_action( 'rest_api_init', function () {
 	if ( ! function_exists( 'emr' ) ) {
 		return;
 	}
-	register_rest_route(
-		'minn-admin/v1',
-		'/media/(?P<id>\d+)/replace',
-		array(
-			'methods'             => 'POST',
-			'permission_callback' => function ( $req ) {
-				return minn_admin_emr_available()
-					&& emr()->checkImagePermission( get_post( (int) Minn_Admin::path_param( $req ) ) );
-			},
-			'callback'            => 'minn_admin_emr_replace',
-		)
-	);
+	minn_admin_endpoint( '/media/(?P<id>\d+)/replace', array(
+		'methods'             => 'POST',
+		'gate'                => function ( WP_REST_Request $req ) {
+			return minn_admin_emr_available()
+				&& emr()->checkImagePermission( get_post( (int) Minn_Admin::path_param( $req ) ) );
+		},
+		'run'                 => 'minn_admin_emr_replace',
+	) );
 } );
 
 function minn_admin_emr_replace( $req ) {

@@ -440,75 +440,67 @@ add_action(
 		// Always registered (even with no builder active) so the client can
 		// re-poll after a plugin/theme toggle and see a builder appear — the
 		// boot payload is a one-time snapshot.
-		register_rest_route(
-			'minn-admin/v1',
-			'/builders',
-			array(
-				'methods'             => 'GET',
-				'permission_callback' => function () {
-					return current_user_can( 'edit_posts' );
-				},
-				'callback'            => function () {
-					return rest_ensure_response( minn_admin_page_builders_boot() );
-				},
-			)
-		);
+		minn_admin_endpoint( '/builders', array(
+			'methods'             => 'GET',
+			'gate'                => function () {
+				return current_user_can( 'edit_posts' );
+			},
+			'run'                 => function () {
+				return rest_ensure_response( minn_admin_page_builders_boot() );
+			},
+		) );
 		if ( ! minn_admin_page_builders() ) {
 			return; // No builder to detect — the field and per-row cost vanish.
 		}
-		register_rest_route(
-			'minn-admin/v1',
-			'/builders/new',
-			array(
-				'methods'             => 'POST',
-				'permission_callback' => function () {
-					return current_user_can( 'edit_posts' );
-				},
-				'callback'            => function ( WP_REST_Request $request ) {
-					$builders = minn_admin_page_builders();
-					$bid      = sanitize_key( $request['builder'] );
-					if ( ! isset( $builders[ $bid ] )
-						|| ( isset( $builders[ $bid ]['active'] ) && ! $builders[ $bid ]['active'] ) ) {
-						return new WP_Error( 'unknown_builder', __( 'That builder is not active.', 'minn-admin' ), array( 'status' => 404 ) );
-					}
-					$type     = 'posts' === $request['type'] ? 'post' : 'page';
-					$type_obj = get_post_type_object( $type );
-					// Creating, as core's own create paths check it (a site can
-					// grant editing without creating).
-					if ( ! current_user_can( $type_obj->cap->create_posts ) ) {
-						return new WP_Error( 'forbidden', __( 'You are not allowed to create this.', 'minn-admin' ), array( 'status' => 403 ) );
-					}
-					$title = sanitize_text_field( (string) $request['title'] );
-					if ( '' === $title ) {
-						// wp_insert_post refuses an entirely empty post
-						// ("Content, title, and excerpt are empty.").
-						$title = __( 'Untitled' );
-					}
-					$post_id = wp_insert_post(
-						wp_slash( array(
-							'post_type'    => $type,
-							'post_status'  => 'draft',
-							'post_title'   => $title,
-							'post_content' => '',
-						) ),
-						true
-					);
-					if ( is_wp_error( $post_id ) ) {
-						return new WP_Error( 'create_failed', $post_id->get_error_message(), array( 'status' => 500 ) );
-					}
-					$b = $builders[ $bid ];
-					if ( isset( $b['prepare'] ) ) {
-						call_user_func( $b['prepare'], $post_id, $type );
-					}
-					return rest_ensure_response(
-						array(
-							'id'       => $post_id,
-							'edit_url' => (string) call_user_func( $b['edit_url'], get_post( $post_id ) ),
-						)
-					);
-				},
-			)
-		);
+		minn_admin_endpoint( '/builders/new', array(
+			'methods'             => 'POST',
+			'gate'                => function () {
+				return current_user_can( 'edit_posts' );
+			},
+			'run'                 => function ( WP_REST_Request $request ) {
+				$builders = minn_admin_page_builders();
+				$bid      = sanitize_key( $request['builder'] );
+				if ( ! isset( $builders[ $bid ] )
+					|| ( isset( $builders[ $bid ]['active'] ) && ! $builders[ $bid ]['active'] ) ) {
+					return new WP_Error( 'unknown_builder', __( 'That builder is not active.', 'minn-admin' ), array( 'status' => 404 ) );
+				}
+				$type     = 'posts' === $request['type'] ? 'post' : 'page';
+				$type_obj = get_post_type_object( $type );
+				// Creating, as core's own create paths check it (a site can
+				// grant editing without creating).
+				if ( ! current_user_can( $type_obj->cap->create_posts ) ) {
+					return new WP_Error( 'forbidden', __( 'You are not allowed to create this.', 'minn-admin' ), array( 'status' => 403 ) );
+				}
+				$title = sanitize_text_field( (string) $request['title'] );
+				if ( '' === $title ) {
+					// wp_insert_post refuses an entirely empty post
+					// ("Content, title, and excerpt are empty.").
+					$title = __( 'Untitled' );
+				}
+				$post_id = wp_insert_post(
+					wp_slash( array(
+						'post_type'    => $type,
+						'post_status'  => 'draft',
+						'post_title'   => $title,
+						'post_content' => '',
+					) ),
+					true
+				);
+				if ( is_wp_error( $post_id ) ) {
+					return new WP_Error( 'create_failed', $post_id->get_error_message(), array( 'status' => 500 ) );
+				}
+				$b = $builders[ $bid ];
+				if ( isset( $b['prepare'] ) ) {
+					call_user_func( $b['prepare'], $post_id, $type );
+				}
+				return rest_ensure_response(
+					array(
+						'id'       => $post_id,
+						'edit_url' => (string) call_user_func( $b['edit_url'], get_post( $post_id ) ),
+					)
+				);
+			},
+		) );
 		$types = get_post_types( array( 'show_in_rest' => true ) );
 		unset( $types['attachment'] );
 		register_rest_field(

@@ -157,43 +157,41 @@ add_action( 'rest_api_init', function () {
 		return $id > 0 && current_user_can( 'edit_post', $id );
 	};
 
-	register_rest_route( 'minn-admin/v1', '/ppp/(?P<id>\d+)', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => $can,
-			'callback'            => function ( WP_REST_Request $request ) {
-				$post = get_post( (int) Minn_Admin::path_param( $request ) );
-				if ( ! $post ) {
-					return new WP_Error( 'not_found', __( 'Post not found.', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				return rest_ensure_response( minn_admin_ppp_state( $post ) );
-			},
-		),
-		array(
-			'methods'             => 'POST',
-			'permission_callback' => $can,
-			'callback'            => function ( WP_REST_Request $request ) {
-				$post = get_post( (int) Minn_Admin::path_param( $request ) );
-				if ( ! $post ) {
-					return new WP_Error( 'not_found', __( 'Post not found.', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				$eligible = minn_admin_ppp_eligible( $post );
-				if ( is_wp_error( $eligible ) ) {
-					return $eligible;
-				}
-				$body    = $request->get_json_params();
-				if ( ! is_array( $body ) ) {
-					$body = array();
-				}
-				$enabled = ! empty( $body['enabled'] );
-				$set     = minn_admin_ppp_set( (int) $post->ID, $enabled );
-				if ( is_wp_error( $set ) ) {
-					return $set;
-				}
-				// Fresh post object in case status drifted.
-				$post = get_post( (int) $post->ID );
-				return rest_ensure_response( minn_admin_ppp_state( $post ) );
-			},
-		),
+	minn_admin_endpoint( '/ppp/(?P<id>\d+)', array(
+		'methods'             => 'GET',
+		'gate'                => $can,
+		'run'                 => function ( WP_REST_Request $request ) {
+			$post = get_post( (int) Minn_Admin::path_param( $request ) );
+			if ( ! $post ) {
+				return new WP_Error( 'not_found', __( 'Post not found.', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			return rest_ensure_response( minn_admin_ppp_state( $post ) );
+		},
+	) );
+	minn_admin_endpoint( '/ppp/(?P<id>\d+)', array(
+		'methods'             => 'POST',
+		'gate'                => $can,
+		'run'                 => function ( WP_REST_Request $request ) {
+			$post = get_post( (int) Minn_Admin::path_param( $request ) );
+			if ( ! $post ) {
+				return new WP_Error( 'not_found', __( 'Post not found.', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			$eligible = minn_admin_ppp_eligible( $post );
+			if ( is_wp_error( $eligible ) ) {
+				return $eligible;
+			}
+			$body    = $request->get_json_params();
+			if ( ! is_array( $body ) ) {
+				$body = array();
+			}
+			$enabled = ! empty( $body['enabled'] );
+			$set     = minn_admin_ppp_set( (int) $post->ID, $enabled );
+			if ( is_wp_error( $set ) ) {
+				return $set;
+			}
+			// Fresh post object in case status drifted.
+			$post = get_post( (int) $post->ID );
+			return rest_ensure_response( minn_admin_ppp_state( $post ) );
+		},
 	) );
 } );

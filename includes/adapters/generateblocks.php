@@ -93,12 +93,12 @@ add_action( 'rest_api_init', function () {
 		return;
 	}
 
-	register_rest_route( 'minn-admin/v1', '/generateblocks/designs', array(
+	minn_admin_endpoint( '/generateblocks/designs', array(
 		'methods'             => 'GET',
-		'permission_callback' => function () {
+		'gate'                => function () {
 			return current_user_can( 'edit_posts' );
 		},
-		'callback'            => function () {
+		'run'                 => function () {
 			$out = array();
 			foreach ( minn_admin_gb_libraries() as $lib ) {
 				$set  = minn_admin_gb_patterns( $lib );
@@ -129,12 +129,12 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/generateblocks/designs/(?P<id>[^/]+)', array(
+	minn_admin_endpoint( '/generateblocks/designs/(?P<id>[^/]+)', array(
 		'methods'             => 'POST',
-		'permission_callback' => function () {
+		'gate'                => function () {
 			return current_user_can( 'edit_posts' );
 		},
-		'callback'            => function ( $request ) {
+		'run'                 => function ( $request ) {
 			$parts      = explode( '--', (string) Minn_Admin::path_param( $request ), 2 );
 			$library_id = $parts[0];
 			$pattern_id = $parts[1] ?? '';

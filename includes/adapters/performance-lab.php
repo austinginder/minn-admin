@@ -305,26 +305,26 @@ add_action( 'rest_api_init', function () {
 			&& current_user_can( 'activate_plugins' );
 	};
 
-	register_rest_route( 'minn-admin/v1', '/performance-lab/status', array(
+	minn_admin_endpoint( '/performance-lab/status', array(
 		'methods'             => 'GET',
-		'permission_callback' => $can,
-		'callback'            => function () {
+		'gate'                => $can,
+		'run'                 => function () {
 			return rest_ensure_response( minn_admin_performance_lab_status() );
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/performance-lab/features', array(
+	minn_admin_endpoint( '/performance-lab/features', array(
 		'methods'             => 'GET',
-		'permission_callback' => $can,
-		'callback'            => function () {
+		'gate'                => $can,
+		'run'                 => function () {
 			return rest_ensure_response( minn_admin_performance_lab_list() );
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/performance-lab/features/(?P<id>[a-z0-9_-]+)/activate', array(
+	minn_admin_endpoint( '/performance-lab/features/(?P<id>[a-z0-9_-]+)/activate', array(
 		'methods'             => 'POST',
-		'permission_callback' => $can_install,
-		'callback'            => function ( $req ) {
+		'gate'                => $can_install,
+		'run'                 => function ( $req ) {
 			$r = minn_admin_performance_lab_activate( Minn_Admin::path_param( $req ) );
 			if ( is_wp_error( $r ) ) {
 				return $r;
@@ -333,10 +333,10 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/performance-lab/features/(?P<id>[a-z0-9_-]+)/deactivate', array(
+	minn_admin_endpoint( '/performance-lab/features/(?P<id>[a-z0-9_-]+)/deactivate', array(
 		'methods'             => 'POST',
-		'permission_callback' => $can,
-		'callback'            => function ( $req ) {
+		'gate'                => $can,
+		'run'                 => function ( $req ) {
 			$r = minn_admin_performance_lab_deactivate( Minn_Admin::path_param( $req ) );
 			if ( is_wp_error( $r ) ) {
 				return $r;

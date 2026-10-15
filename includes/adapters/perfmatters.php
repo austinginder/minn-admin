@@ -386,23 +386,21 @@ add_action( 'rest_api_init', function () {
 	if ( ! function_exists( 'perfmatters_settings' ) ) {
 		return;
 	}
-	register_rest_route( 'minn-admin/v1', '/perfmatters/settings/(?P<tab>[a-z]+)', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => 'minn_admin_perfmatters_can',
-			'callback'            => function ( $req ) {
-				return rest_ensure_response( minn_admin_perfmatters_tab_shape( Minn_Admin::path_param( $req, 'tab' ) ) );
-			},
-		),
-		array(
-			'methods'             => 'POST',
-			'permission_callback' => 'minn_admin_perfmatters_can',
-			'callback'            => function ( $req ) {
-				$body   = $req->get_json_params();
-				$values = isset( $body['values'] ) && is_array( $body['values'] ) ? $body['values'] : array();
-				minn_admin_perfmatters_save( $values );
-				return rest_ensure_response( minn_admin_perfmatters_tab_shape( Minn_Admin::path_param( $req, 'tab' ) ) );
-			},
-		),
+	minn_admin_endpoint( '/perfmatters/settings/(?P<tab>[a-z]+)', array(
+		'methods'             => 'GET',
+		'gate'                => 'minn_admin_perfmatters_can',
+		'run'                 => function ( $req ) {
+			return rest_ensure_response( minn_admin_perfmatters_tab_shape( Minn_Admin::path_param( $req, 'tab' ) ) );
+		},
+	) );
+	minn_admin_endpoint( '/perfmatters/settings/(?P<tab>[a-z]+)', array(
+		'methods'             => 'POST',
+		'gate'                => 'minn_admin_perfmatters_can',
+		'run'                 => function ( $req ) {
+			$body   = $req->get_json_params();
+			$values = isset( $body['values'] ) && is_array( $body['values'] ) ? $body['values'] : array();
+			minn_admin_perfmatters_save( $values );
+			return rest_ensure_response( minn_admin_perfmatters_tab_shape( Minn_Admin::path_param( $req, 'tab' ) ) );
+		},
 	) );
 } );

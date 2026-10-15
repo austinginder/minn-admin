@@ -46,46 +46,42 @@ add_action( 'rest_api_init', function () {
 	if ( ! function_exists( 'RegenerateThumbnails' ) ) {
 		return;
 	}
-	register_rest_route(
-		'minn-admin/v1',
-		'/media/(?P<id>\d+)/regenerate',
-		array(
-			'methods'             => 'POST',
-			// The plugin's own capability says who may use the tool; it does
-			// not say which attachment. Regenerating rewrites every derived
-			// file for one, so it answers to edit_post on that attachment the
-			// way the media-replace route next door does. It matters wherever
-			// a site has lowered the plugin's capability to delegate its Tools
-			// screen, which is what that property is for.
-			'permission_callback' => function ( $req ) {
-				$id = (int) Minn_Admin::path_param( $req );
-				return minn_admin_regen_thumbs_available()
-					&& 'attachment' === get_post_type( $id )
-					&& current_user_can( 'edit_post', $id );
-			},
-			'callback'            => function ( $req ) {
-				$regenerator = RegenerateThumbnails_Regenerator::get_instance( (int) Minn_Admin::path_param( $req ) );
-				if ( is_wp_error( $regenerator ) ) {
-					$regenerator->add_data( array( 'status' => 400 ) );
-					return $regenerator;
-				}
-				// Full regenerate, not missing-only: the button exists for
-				// "the theme's registered sizes changed" where thumbnail
-				// files already exist at the old dimensions.
-				try {
-					$metadata = $regenerator->regenerate( array( 'only_regenerate_missing_thumbnails' => false ) );
-				} catch ( \Throwable $e ) {
-					return new WP_Error( 'minn_regen_failed', $e->getMessage(), array( 'status' => 500 ) );
-				}
-				if ( is_wp_error( $metadata ) ) {
-					$metadata->add_data( array( 'status' => 400 ) );
-					return $metadata;
-				}
-				return rest_ensure_response( array(
-					'ok'    => true,
-					'sizes' => isset( $metadata['sizes'] ) ? count( (array) $metadata['sizes'] ) : 0,
-				) );
-			},
-		)
-	);
+	minn_admin_endpoint( '/media/(?P<id>\d+)/regenerate', array(
+		'methods'             => 'POST',
+		// The plugin's own capability says who may use the tool; it does
+		// not say which attachment. Regenerating rewrites every derived
+		// file for one, so it answers to edit_post on that attachment the
+		// way the media-replace route next door does. It matters wherever
+		// a site has lowered the plugin's capability to delegate its Tools
+		// screen, which is what that property is for.
+		'gate'                => function ( WP_REST_Request $req ) {
+			$id = (int) Minn_Admin::path_param( $req );
+			return minn_admin_regen_thumbs_available()
+				&& 'attachment' === get_post_type( $id )
+				&& current_user_can( 'edit_post', $id );
+		},
+		'run'                 => function ( $req ) {
+			$regenerator = RegenerateThumbnails_Regenerator::get_instance( (int) Minn_Admin::path_param( $req ) );
+			if ( is_wp_error( $regenerator ) ) {
+				$regenerator->add_data( array( 'status' => 400 ) );
+				return $regenerator;
+			}
+			// Full regenerate, not missing-only: the button exists for
+			// "the theme's registered sizes changed" where thumbnail
+			// files already exist at the old dimensions.
+			try {
+				$metadata = $regenerator->regenerate( array( 'only_regenerate_missing_thumbnails' => false ) );
+			} catch ( \Throwable $e ) {
+				return new WP_Error( 'minn_regen_failed', $e->getMessage(), array( 'status' => 500 ) );
+			}
+			if ( is_wp_error( $metadata ) ) {
+				$metadata->add_data( array( 'status' => 400 ) );
+				return $metadata;
+			}
+			return rest_ensure_response( array(
+				'ok'    => true,
+				'sizes' => isset( $metadata['sizes'] ) ? count( (array) $metadata['sizes'] ) : 0,
+			) );
+		},
+	) );
 } );

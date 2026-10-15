@@ -100,12 +100,12 @@ add_action( 'rest_api_init', function () {
 		return;
 	}
 
-	register_rest_route( 'minn-admin/v1', '/stackable/designs', array(
+	minn_admin_endpoint( '/stackable/designs', array(
 		'methods'             => 'GET',
-		'permission_callback' => function () {
+		'gate'                => function () {
 			return current_user_can( 'edit_posts' );
 		},
-		'callback'            => function () {
+		'run'                 => function () {
 			$out = array();
 			foreach ( minn_admin_stackable_library() as $id => $design ) {
 				if ( ! is_array( $design ) || 'free' !== ( $design['plan'] ?? '' ) || empty( $design['template'] ) ) {
@@ -124,12 +124,12 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/stackable/designs/(?P<id>[\w-]+)', array(
+	minn_admin_endpoint( '/stackable/designs/(?P<id>[\w-]+)', array(
 		'methods'             => 'POST',
-		'permission_callback' => function () {
+		'gate'                => function () {
 			return current_user_can( 'edit_posts' );
 		},
-		'callback'            => function ( $request ) {
+		'run'                 => function ( $request ) {
 			$library = minn_admin_stackable_library();
 			$id      = Minn_Admin::path_param( $request );
 			$design  = isset( $library[ $id ] ) && is_array( $library[ $id ] ) ? $library[ $id ] : null;
