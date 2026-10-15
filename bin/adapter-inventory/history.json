@@ -646,5 +646,32 @@
   "collection_lines": 44475,
   "collection_code_lines": 34074,
   "collection_routes": 85
+ },
+ {
+  "at": "2026-10-15T14:04:48.500Z",
+  "ref": "working tree",
+  "commit": "64eeb947",
+  "version": "0.45.0",
+  "label": "small adapters and field panels on the kernel",
+  "adapters": 146,
+  "lines": 82803,
+  "code_lines": 61865,
+  "routes": 105,
+  "permission_callbacks": 139,
+  "cap_checks": 434,
+  "sql_reads": 68,
+  "sql_writes": 17,
+  "routes_declarable": 61,
+  "routes_handler": 41,
+  "resources": 48,
+  "endpoints": 268,
+  "kernel_adapters": 91,
+  "partial_adapters": 0,
+  "kernel_core_lines": 3032,
+  "kernel_code_lines": 1945,
+  "collection_adapters": 69,
+  "collection_lines": 44466,
+  "collection_code_lines": 34065,
+  "collection_routes": 69
  }
 ]
