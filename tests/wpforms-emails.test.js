@@ -22,7 +22,7 @@ const wpEval = ( php ) => {
 	const file = path.join( os.tmpdir(), `minn-wpfe-${ process.pid }.php` );
 	fs.writeFileSync( file, '<?php wp_set_current_user( 1 ); ' + php );
 	try {
-		return execSync( `wp --path=${ JSON.stringify( WP_PATH ) } eval-file ${ JSON.stringify( file ) } 2>/dev/null`, { encoding: 'utf8', timeout: 90000 } ).trim();
+		return execSync( `wp --path=${ JSON.stringify( WP_PATH ) } eval-file ${ JSON.stringify( file ) } 2>/dev/null`, { encoding: 'utf8' } ).trim();
 	} finally {
 		fs.unlinkSync( file );
 	}

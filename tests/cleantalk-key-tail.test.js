@@ -18,7 +18,7 @@ const { execFileSync } = require( 'child_process' );
 const fs = require( 'fs' );
 const os = require( 'os' );
 const path = require( 'path' );
-const { WP } = require( './helpers' );
+const { WP, onExit } = require( './helpers' );
 
 const wp = ( ...args ) => execFileSync( 'wp', [ `--path=${ WP }`, ...args ], { encoding: 'utf8', stdio: [ 'ignore', 'pipe', 'ignore' ] } ).trim();
 const results = [];
@@ -67,6 +67,29 @@ const fake = 'minnFAKEcleantalk' + String( Date.now() ).slice( -6 ) + 'TAIL';
 const login = 'minn-ct-settings-' + process.pid;
 let wasActive = false;
 let settingsWas = null;
+let activated = false;
+// The key, the role and the plugin go back however the run ends: a run killed
+// by a timeout once left CleanTalk active with the fake key.
+const restore = onExit( () => {
+	try {
+		wp( 'user', 'delete', login, '--yes' );
+	} catch ( e ) {}
+	try {
+		wp( 'eval', "remove_role( 'minn_ct_settings' );" );
+	} catch ( e ) {}
+	if ( null !== settingsWas ) {
+		wp( 'option', 'update', 'cleantalk_settings', settingsWas, '--format=json' );
+	}
+	// Only a plugin this run turned on: one whose status could not be read is left as it is.
+	if ( activated ) {
+		try {
+			wp( 'plugin', 'deactivate', 'cleantalk-spam-protect' );
+		} catch ( e ) {}
+	}
+	try {
+		fs.unlinkSync( probe );
+	} catch ( e ) {}
+} );
 ( async () => {
 	try {
 		const status = wp( 'plugin', 'list', '--name=cleantalk-spam-protect', '--field=status' );
@@ -77,6 +100,7 @@ let settingsWas = null;
 		wasActive = 'active' === status;
 		if ( ! wasActive ) {
 			wp( 'plugin', 'activate', 'cleantalk-spam-protect' );
+			activated = true;
 		}
 		settingsWas = wp( 'option', 'get', 'cleantalk_settings', '--format=json' );
 		const settings = JSON.parse( settingsWas || '{}' );
@@ -92,21 +116,7 @@ let settingsWas = null;
 		t.check( 'someone who may manage plugins still sees the last four on the card', admin.tail === 'TAIL', admin.tail === null ? 'no card' : ( admin.tail ? 'shown' : 'empty' ) );
 		t.check( 'a settings-only role sees none of it', settingsOnly.tail === '', settingsOnly.tail === null ? 'no card' : ( settingsOnly.tail ? 'shown' : 'empty' ) );
 	} finally {
-		try {
-			wp( 'user', 'delete', login, '--yes' );
-		} catch ( e ) {}
-		try {
-			wp( 'eval', "remove_role( 'minn_ct_settings' );" );
-		} catch ( e ) {}
-		if ( null !== settingsWas ) {
-			wp( 'option', 'update', 'cleantalk_settings', settingsWas, '--format=json' );
-		}
-		if ( ! wasActive ) {
-			try {
-				wp( 'plugin', 'deactivate', 'cleantalk-spam-protect' );
-			} catch ( e ) {}
-		}
-		fs.unlinkSync( probe );
+		restore();
 		const failed = results.filter( ( r ) => ! r ).length;
 		console.log( `\ncleantalk-key-tail: ${ results.length - failed }/${ results.length } passed` );
 		process.exitCode = failed || ! results.length ? 1 : 0;

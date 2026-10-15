@@ -15,7 +15,7 @@
  * Helper::update_modules(). Everything is restored to what the run found.
  */
 const { execSync } = require( 'child_process' );
-const { BASE, WP, launch, login, reporter } = require( './helpers' );
+const { BASE, WP, onExit, launch, login, reporter } = require( './helpers' );
 
 // PHP rides stdin (eval-file -) so the shell never expands its $vars.
 const wpPhp = ( php, user = 'admin' ) => execSync( `wp --path=${ JSON.stringify( WP ) } eval-file - --user=${ user } 2>/dev/null`, { input: '<?php ' + php } )
@@ -45,6 +45,21 @@ const wpPhp = ( php, user = 'admin' ) => execSync( `wp --path=${ JSON.stringify(
 		$wpdb->query( "DELETE FROM {$wpdb->prefix}rank_math_404_logs WHERE uri LIKE '%minn-rm-suite%'" );
 		echo 'ok';
 	` );
+
+	// Put back what the run found, however it ends: armed before launch(),
+	// which sits outside the try below.
+	const restore = onExit( () => {
+		try { cleanup(); } catch ( e ) {}
+		wpPhp( `
+			$b = json_decode( base64_decode( '${ Buffer.from( JSON.stringify( before ) ).toString( 'base64' ) }' ), true );
+			if ( null === $b['skip'] ) { delete_option( 'rank_math_registration_skip' ); } else { update_option( 'rank_math_registration_skip', $b['skip'] ); }
+			if ( null === $b['modules'] ) { delete_option( 'rank_math_modules' ); } else { update_option( 'rank_math_modules', $b['modules'] ); }
+			echo 'ok';
+		` );
+		if ( ! before.active ) {
+			try { execSync( `wp --path=${ JSON.stringify( WP ) } plugin deactivate seo-by-rank-math 2>/dev/null` ); } catch ( e ) {}
+		}
+	} );
 
 	// Arm: plugin on, their registration skip, both modules.
 	if ( ! before.active ) execSync( `wp --path=${ JSON.stringify( WP ) } plugin activate seo-by-rank-math 2>/dev/null` );
@@ -164,18 +179,7 @@ const wpPhp = ( php, user = 'admin' ) => execSync( `wp --path=${ JSON.stringify(
 		const editor = JSON.parse( wpPhp( `$r = rest_do_request( new WP_REST_Request( 'GET', '/minn-admin/v1/rankmath/redirects' ) ); echo wp_json_encode( array( 's' => $r->get_status() ) );`, 'minn-editor' ) );
 		t.check( 'an Editor gets 403', 403 === editor.s, JSON.stringify( editor ) );
 	} finally {
-		try { cleanup(); } catch ( e ) {}
-		try {
-			wpPhp( `
-				$b = json_decode( base64_decode( '${ Buffer.from( JSON.stringify( before ) ).toString( 'base64' ) }' ), true );
-				if ( null === $b['skip'] ) { delete_option( 'rank_math_registration_skip' ); } else { update_option( 'rank_math_registration_skip', $b['skip'] ); }
-				if ( null === $b['modules'] ) { delete_option( 'rank_math_modules' ); } else { update_option( 'rank_math_modules', $b['modules'] ); }
-				echo 'ok';
-			` );
-		} catch ( e ) {}
-		if ( ! before.active ) {
-			try { execSync( `wp --path=${ JSON.stringify( WP ) } plugin deactivate seo-by-rank-math 2>/dev/null` ); } catch ( e ) {}
-		}
+		restore();
 	}
 
 	await t.done( browser, errors );

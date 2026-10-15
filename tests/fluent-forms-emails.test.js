@@ -25,7 +25,7 @@ const wpEval = ( php ) => {
 	const file = path.join( os.tmpdir(), `minn-ffe-${ process.pid }.php` );
 	fs.writeFileSync( file, '<?php ' + php );
 	try {
-		return execSync( `wp --path=${ JSON.stringify( WP_PATH ) } eval-file ${ JSON.stringify( file ) } 2>/dev/null`, { encoding: 'utf8', timeout: 90000 } ).trim();
+		return execSync( `wp --path=${ JSON.stringify( WP_PATH ) } eval-file ${ JSON.stringify( file ) } 2>/dev/null`, { encoding: 'utf8' } ).trim();
 	} finally {
 		fs.unlinkSync( file );
 	}

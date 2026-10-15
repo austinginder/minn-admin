@@ -301,6 +301,13 @@ Environment (all optional except the password):
   are the pattern; `comment-postlink.test.js` does the same for deactivating a resident).
   This is not hypothetical: the family conventions keep one provider per family active, and
   plugins get toggled by hand while chasing bugs.
+- **Restore on any exit, not only in `finally`.** `finally` never runs for a killed run
+  (Ctrl-C, a harness timeout) or a crash before the `try` opens, and both have left a plugin
+  armed or a fixture behind. Register the restore with `onExit()` from `helpers.js` before
+  arming anything, and call what it returns from `finally`: it runs once, then or when the
+  process ends. It must be synchronous (WP-CLI through `execSync`), since an exit handler
+  cannot wait for a promise. `rank-math-redirections.test.js`, `cleantalk-key-tail.test.js`
+  and `woocommerce-memberships.test.js` are the pattern.
 - **Expect flakes, retry loads.** Editor loads intermittently fail right after server
   churn (a wp-cli run, a PHP edit). `openEditor()` retries; if a whole run fails at load,
   run it again before debugging.

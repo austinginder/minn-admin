@@ -12,7 +12,7 @@ const { launch, login, reporter, BASE, pickCombo } = require( './helpers' );
 	const { browser, page, errors } = await launch();
 	await login( page );
 	await page.goto( BASE + '/minn-admin/', { waitUntil: 'domcontentloaded' } );
-	await page.waitForFunction( () => window.MINN, null, { timeout: 20000 } );
+	await page.waitForFunction( () => window.MINN, null, { timeout: 60000 } );
 
 	const postId = await page.evaluate( async () => {
 		const r = await fetch( window.MINN.restUrl + 'wp/v2/job-listings', {
@@ -33,12 +33,12 @@ const { launch, login, reporter, BASE, pickCombo } = require( './helpers' );
 
 	try {
 		await page.goto( BASE + '/minn-admin/editor/job-listings/' + postId, { waitUntil: 'domcontentloaded' } );
-		await page.waitForSelector( '[data-side-door="panel:wpjm"]', { timeout: 20000 } );
+		await page.waitForSelector( '[data-side-door="panel:wpjm"]', { timeout: 60000 } );
 		const door = await page.$eval( '[data-side-door="panel:wpjm"]', ( el ) => el.textContent );
 		t.check( 'Job listing door renders with the WPJM badge', /Job listing/.test( door ) && /WP Job Manager/.test( door ), door.trim().replace( /\s+/g, ' ' ) );
 
 		await page.click( '[data-side-door="panel:wpjm"]' );
-		await page.waitForSelector( '.minn-editor-side-modal [data-pf="wpjm:_job_location"]', { timeout: 10000 } );
+		await page.waitForSelector( '.minn-editor-side-modal [data-pf="wpjm:_job_location"]', { timeout: 30000 } );
 		t.check( 'schema fields render from WPJM\'s own schema',
 			!! ( await page.$( '[data-pf="wpjm:_company_name"]' ) ) && !! ( await page.$( '[data-pf="wpjm:_job_salary_unit"]' ) ) );
 

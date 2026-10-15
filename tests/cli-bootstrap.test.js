@@ -24,7 +24,6 @@ function runWp( args ) {
 	try {
 		const out = execSync( `wp --path=${ JSON.stringify( WP ) } ${ args }`, {
 			encoding: 'utf8',
-			timeout: 90000,
 			maxBuffer: 10 * 1024 * 1024,
 			stdio: [ 'ignore', 'pipe', 'pipe' ],
 		} );

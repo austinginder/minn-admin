@@ -276,6 +276,44 @@ async function closeBrowser( browser ) {
 	await Promise.race( [ browser.close().catch( () => {} ), new Promise( ( r ) => setTimeout( r, 5000 ) ) ] );
 }
 
+// A restore that runs however the suite ends. finally covers a throw inside
+// its try, but not a kill (Ctrl-C, a harness's timeout), a process.exit() on
+// the way, or a crash before the try opened (launch() failing after the
+// suite armed a plugin): each of those once left a plugin armed or a fixture
+// behind. The hook runs once, on whichever comes first: the suite calling it
+// (from finally), or the process ending. It must be synchronous (execSync),
+// since an exit handler cannot wait for a promise. A SIGKILL still skips it.
+const exitHooks = new Set();
+let exitWired = false;
+function onExit( fn ) {
+	if ( ! exitWired ) {
+		exitWired = true;
+		const runAll = () => [ ...exitHooks ].reverse().forEach( ( run ) => run() );
+		process.on( 'exit', runAll );
+		for ( const [ sig, n ] of [ [ 'SIGINT', 2 ], [ 'SIGTERM', 15 ], [ 'SIGHUP', 1 ] ] ) {
+			process.on( sig, () => {
+				console.log( `FAIL  interrupted by ${ sig }: restoring what the suite set up` );
+				runAll();
+				process.exit( 128 + n );
+			} );
+		}
+	}
+	let done = false;
+	const run = () => {
+		if ( done ) return;
+		done = true;
+		exitHooks.delete( run );
+		try {
+			fn();
+		} catch ( e ) {
+			console.log( `FAIL  restoring after the suite: ${ e && e.message ? e.message : e }` );
+			process.exitCode = 1;
+		}
+	};
+	exitHooks.add( run );
+	return run;
+}
+
 // Minimal reporter: PASS/FAIL lines, non-zero exit when anything failed.
 function reporter( name ) {
 	const results = [];
@@ -441,4 +479,4 @@ async function listSettled( page, timeout = 60000 ) {
 	}, null, { timeout } );
 }
 
-module.exports = { BASE, WP, launch, login, loginAs, createPost, deletePost, openEditor, freshParagraph, autoConfirm, reporter, closeBrowser, activateClassicTheme, pickCombo, comboValue, setSwitch, switchOn, loadAuthState, saveAuthState, authPath, openEntry, entryActions, entryAction, entryText, leaveEntry, listSettled };
+module.exports = { BASE, WP, onExit, launch, login, loginAs, createPost, deletePost, openEditor, freshParagraph, autoConfirm, reporter, closeBrowser, activateClassicTheme, pickCombo, comboValue, setSwitch, switchOn, loadAuthState, saveAuthState, authPath, openEntry, entryActions, entryAction, entryText, leaveEntry, listSettled };

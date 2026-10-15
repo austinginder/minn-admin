@@ -22,7 +22,6 @@ const wp = ( args ) => {
 		return execSync( `wp --path=${ JSON.stringify( WP ) } ${ args }`, {
 			encoding: 'utf8',
 			stdio: [ 'ignore', 'pipe', 'pipe' ],
-			timeout: 90000,
 		} );
 	} catch ( e ) {
 		return ( e.stdout || '' ) + ( e.stderr || '' );

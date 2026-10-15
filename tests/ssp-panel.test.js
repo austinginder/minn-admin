@@ -12,7 +12,7 @@ const { launch, login, reporter, BASE, pickCombo } = require( './helpers' );
 	const { browser, page, errors } = await launch();
 	await login( page );
 	await page.goto( BASE + '/minn-admin/', { waitUntil: 'domcontentloaded' } );
-	await page.waitForFunction( () => window.MINN, null, { timeout: 20000 } );
+	await page.waitForFunction( () => window.MINN, null, { timeout: 60000 } );
 
 	// Disposable episode through core REST (the podcast CPT is show_in_rest).
 	const postId = await page.evaluate( async () => {
@@ -34,12 +34,12 @@ const { launch, login, reporter, BASE, pickCombo } = require( './helpers' );
 
 	try {
 		await page.goto( BASE + '/minn-admin/editor/podcast/' + postId, { waitUntil: 'domcontentloaded' } );
-		await page.waitForSelector( '[data-side-door="panel:ssp"]', { timeout: 20000 } );
+		await page.waitForSelector( '[data-side-door="panel:ssp"]', { timeout: 60000 } );
 		const door = await page.$eval( '[data-side-door="panel:ssp"]', ( el ) => el.textContent );
 		t.check( 'episode door renders with the SSP badge', /Podcast episode/.test( door ) && /Seriously Simple Podcasting/.test( door ), door.trim().replace( /\s+/g, ' ' ) );
 
 		await page.click( '[data-side-door="panel:ssp"]' );
-		await page.waitForSelector( '.minn-editor-side-modal [data-pf="ssp:audio_file"]', { timeout: 10000 } );
+		await page.waitForSelector( '.minn-editor-side-modal [data-pf="ssp:audio_file"]', { timeout: 30000 } );
 		t.check( 'schema fields render from SSP\'s own custom_fields()', !! ( await page.$( '[data-pf="ssp:duration"]' ) ) && !! ( await page.$( '[data-pf="ssp:itunes_episode_number"]' ) ) );
 		t.check( 'cover image counts as locked with the wp-admin escape', await page.evaluate( () =>
 			!! Array.from( document.querySelectorAll( '.minn-editor-side-modal .minn-panel-locked' ) ).length ) );

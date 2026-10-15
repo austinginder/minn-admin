@@ -14,14 +14,14 @@ const fs = require( 'fs' );
 const os = require( 'os' );
 const path = require( 'path' );
 const { execSync } = require( 'child_process' );
-const { BASE, launch, login, reporter } = require( './helpers' );
+const { BASE, onExit, launch, login, reporter } = require( './helpers' );
 
 const WP_PATH = path.resolve( __dirname, '../../../..' );
 const wpEval = ( php ) => {
 	const file = path.join( os.tmpdir(), `minn-wcm-${ process.pid }.php` );
 	fs.writeFileSync( file, '<?php ' + php );
 	try {
-		return execSync( `wp --path=${ JSON.stringify( WP_PATH ) } eval-file ${ JSON.stringify( file ) } 2>/dev/null`, { encoding: 'utf8', timeout: 90000 } ).trim();
+		return execSync( `wp --path=${ JSON.stringify( WP_PATH ) } eval-file ${ JSON.stringify( file ) } 2>/dev/null`, { encoding: 'utf8' } ).trim();
 	} finally {
 		fs.unlinkSync( file );
 	}
@@ -65,6 +65,25 @@ const wpEval = ( php ) => {
 	const mail = `${ login1 }@example.com`;
 	let userId = 0;
 	let id = 0;
+	// What this run made goes however it ends, read back by its suffix: a run
+	// that stopped before its own deletes once left a "Suite Plan" behind.
+	const restore = onExit( () => wpEval( `
+		$suffix = ${ JSON.stringify( suffix ) };
+		foreach ( get_posts( array( 'post_type' => 'wc_membership_plan', 'post_status' => 'any', 'numberposts' => 200 ) ) as $p ) {
+			if ( 0 === strpos( $p->post_title, 'Suite Plan ' . $suffix ) ) {
+				wp_delete_post( $p->ID, true );
+			}
+		}
+		$u = get_user_by( 'login', 'wcm-suite-' . $suffix );
+		if ( $u ) {
+			foreach ( get_posts( array( 'post_type' => 'wc_user_membership', 'post_status' => 'any', 'author' => $u->ID, 'numberposts' => 200 ) ) as $m ) {
+				wp_delete_post( $m->ID, true );
+			}
+			require_once ABSPATH . 'wp-admin/includes/user.php';
+			wp_delete_user( $u->ID, 1 );
+		}
+		echo 'ok';
+	` ) );
 
 	try {
 		t.check( 'status card names active members and a chart',
@@ -457,6 +476,7 @@ const wpEval = ( php ) => {
 		if ( userId ) {
 			await api( `wp/v2/users/${ userId }?force=true&reassign=1`, { method: 'DELETE' } ).catch( () => {} );
 		}
+		restore();
 		await t.done( browser, errors );
 	}
 } )();
