@@ -727,5 +727,32 @@
   "collection_lines": 44391,
   "collection_code_lines": 33981,
   "collection_routes": 35
+ },
+ {
+  "at": "2026-10-15T17:12:51.044Z",
+  "ref": "working tree",
+  "commit": "293c987e",
+  "version": "0.45.0",
+  "label": "network management, field panels and option pages on the kernel",
+  "adapters": 146,
+  "lines": 82703,
+  "code_lines": 61747,
+  "routes": 57,
+  "permission_callbacks": 74,
+  "cap_checks": 435,
+  "sql_reads": 26,
+  "sql_writes": 13,
+  "routes_declarable": 27,
+  "routes_handler": 30,
+  "resources": 51,
+  "endpoints": 321,
+  "kernel_adapters": 106,
+  "partial_adapters": 0,
+  "kernel_core_lines": 3168,
+  "kernel_code_lines": 2043,
+  "collection_adapters": 69,
+  "collection_lines": 44390,
+  "collection_code_lines": 33977,
+  "collection_routes": 32
  }
 ]
