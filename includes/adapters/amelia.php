@@ -36,11 +36,6 @@ function minn_admin_amelia_can_write_status() {
 	return current_user_can( 'amelia_write_status_appointments' );
 }
 
-function minn_admin_amelia_table( $suffix ) {
-	global $wpdb;
-	return $wpdb->prefix . 'amelia_' . $suffix;
-}
-
 function minn_admin_amelia_has_tables() {
 	return Minn_Admin_Kernel_SQL::exists( 'amelia_appointments' );
 }
@@ -79,11 +74,6 @@ function minn_admin_amelia_utc_iso( $mysql_datetime ) {
 	}
 	$ts = strtotime( $dt . ' UTC' );
 	return false === $ts ? '' : gmdate( 'Y-m-d\TH:i:s\Z', $ts );
-}
-
-function minn_admin_amelia_display_name( $first, $last ) {
-	$name = trim( trim( (string) $first ) . ' ' . trim( (string) $last ) );
-	return '' !== $name ? $name : __( '(no name)', 'minn-admin' );
 }
 
 /**
@@ -141,21 +131,10 @@ function minn_admin_amelia_admin_url() {
  * with json_decode only.
  */
 function minn_admin_amelia_detail( array $row ) {
-	$row   = (object) $row;
-	$who   = array(
-		array( 'label' => __( 'Name', 'minn-admin' ), 'value' => minn_admin_amelia_display_name( $row->customer_first, $row->customer_last ) ),
-		array( 'label' => __( 'Email', 'minn-admin' ), 'value' => $row->customer_email ? (string) $row->customer_email : '—' ),
-		array( 'label' => __( 'Phone', 'minn-admin' ), 'value' => $row->customer_phone ? (string) $row->customer_phone : '—' ),
-		array( 'label' => __( 'People', 'minn-admin' ), 'value' => (string) max( 1, (int) $row->persons ) ),
-	);
-	$when  = array(
-		array( 'label' => __( 'Service', 'minn-admin' ), 'value' => $row->service_name ? (string) $row->service_name : '—' ),
-		array( 'label' => __( 'Employee', 'minn-admin' ), 'value' => minn_admin_amelia_display_name( $row->provider_first, $row->provider_last ) ),
-		array( 'label' => __( 'Starts', 'minn-admin' ), 'value' => minn_admin_amelia_utc_iso( $row->bookingStart ) ),
-		array( 'label' => __( 'Ends', 'minn-admin' ), 'value' => minn_admin_amelia_utc_iso( $row->bookingEnd ) ),
-		array( 'label' => __( 'Status', 'minn-admin' ), 'value' => (string) $row->status ),
-	);
-	if ( null !== $row->price && '' !== (string) $row->price ) {
+	$row    = (object) $row;
+	$priced = null !== $row->price && '' !== (string) $row->price;
+	$when   = array();
+	if ( $priced ) {
 		$when[] = array( 'label' => __( 'Price', 'minn-admin' ), 'value' => (string) $row->price );
 	}
 	$notes = trim( (string) $row->internalNotes );
@@ -212,10 +191,7 @@ function minn_admin_amelia_detail( array $row ) {
 			$extra[] = array( 'label' => __( 'Time zone', 'minn-admin' ), 'value' => $part( 'timeZone' ) );
 		}
 	}
-	$sections = array(
-		array( 'title' => __( 'Customer', 'minn-admin' ), 'rows' => $who ),
-		array( 'title' => __( 'Appointment', 'minn-admin' ), 'rows' => $when ),
-	);
+	$sections = array();
 	if ( $extra ) {
 		$sections[] = array( 'title' => __( 'Answers', 'minn-admin' ), 'rows' => $extra );
 	}
@@ -226,33 +202,38 @@ function minn_admin_amelia_detail( array $row ) {
 	if ( '' !== $profile && '' !== $notes ) {
 		$sections[] = array( 'title' => __( 'Customer profile', 'minn-admin' ), 'rows' => array( array( 'label' => __( 'Notes', 'minn-admin' ), 'value' => $profile ) ) );
 	}
-	$service = $row->service_name ? (string) $row->service_name : '';
-	return array(
-		'kind'     => 'booking',
-		'status'   => (string) $row->status,
-		'title'    => $service ? $service : __( 'Appointment', 'minn-admin' ),
-		'customer' => array(
-			'name'  => minn_admin_amelia_display_name( $row->customer_first, $row->customer_last ),
-			'email' => $row->customer_email ? (string) $row->customer_email : '',
-			'phone' => $row->customer_phone ? (string) $row->customer_phone : '',
-		),
-		'booking'  => array(
-			'service'  => $service,
-			'employee' => minn_admin_amelia_display_name( $row->provider_first, $row->provider_last ),
-			'starts'   => minn_admin_amelia_utc_iso( $row->bookingStart ),
-			'ends'     => minn_admin_amelia_utc_iso( $row->bookingEnd ),
-			'people'   => max( 1, (int) $row->persons ),
-			'price'    => ( null !== $row->price && '' !== (string) $row->price ) ? (string) $row->price : '',
-			'notes'    => '' !== $notes ? $notes : $profile,
-		),
+	return minn_admin_booking_detail( array(
+		'noun'     => __( 'Appointment', 'minn-admin' ),
+		'name'     => minn_admin_booking_name( $row->customer_first, $row->customer_last ),
+		'email'    => $row->customer_email,
+		'phone'    => $row->customer_phone,
+		'people'   => $row->persons,
+		'service'  => $row->service_name,
+		'employee' => minn_admin_booking_name( $row->provider_first, $row->provider_last ),
+		'starts'   => minn_admin_amelia_utc_iso( $row->bookingStart ),
+		'ends'     => minn_admin_amelia_utc_iso( $row->bookingEnd ),
+		'status'   => $row->status,
+		'rows'     => $when,
 		'sections' => $sections,
-		'adminUrl' => minn_admin_amelia_admin_url(),
-	);
+		'booking'  => array( 'price' => $priced ? (string) $row->price : '' ),
+		'notes'    => '' !== $notes ? $notes : $profile,
+		'admin'    => minn_admin_amelia_admin_url(),
+	) );
 }
 
 $minn_amelia_list = array( 'id', 'status', 'bookingStart', 'bookingEnd', 'internalNotes', 'providerId', 's.name' => 'service_name', 'c.firstName' => 'customer_first', 'c.lastName' => 'customer_last', 'c.email' => 'customer_email', 'p.firstName' => 'provider_first', 'p.lastName' => 'provider_last' );
 
-minn_admin_resource( 'amelia/appointments', function () use ( $minn_amelia_list ) {
+// bookingStart is UTC (their DateTimeService writes getCustomDateTimeInUtc).
+$minn_amelia_views = array(
+	'upcoming' => function () {
+		return array( 'status' => array( 'approved', 'pending' ), 'bookingStart' => array( 'op' => '>=', 'value' => Minn_Admin_Kernel::at( 'utc' ) ) );
+	},
+	'pending'  => array( 'status' => 'pending' ),
+	'today'    => minn_admin_booking_today( 'bookingStart', 'utc' ),
+	'canceled' => array( 'status' => array( 'canceled', 'rejected', 'no-show' ) ),
+);
+
+minn_admin_resource( 'amelia/appointments', function () use ( $minn_amelia_list, $minn_amelia_views ) {
 	return array(
 		'active'    => 'minn_admin_amelia_active',
 		'gates'     => array( 'view' => 'minn_admin_amelia_can_read', 'status' => 'minn_admin_amelia_can_write_status' ),
@@ -283,72 +264,27 @@ minn_admin_resource( 'amelia/appointments', function () use ( $minn_amelia_list 
 			'where'   => 'minn_admin_amelia_scope',
 		),
 		'list'      => array(
-			// bookingStart is UTC (their DateTimeService writes getCustomDateTimeInUtc).
-			'filter' => array(
-				'param'   => 'range',
-				'default' => 'upcoming',
-				'values'  => array(
-					'upcoming' => function () {
-						return array( 'status' => array( 'approved', 'pending' ), 'bookingStart' => array( 'op' => '>=', 'value' => Minn_Admin_Kernel::at( 'utc' ) ) );
-					},
-					'pending'  => array( 'status' => 'pending' ),
-					'today'    => function () {
-						return array(
-							"bookingStart\0from" => array( 'op' => '>=', 'value' => Minn_Admin_Kernel::at( 'utc', 0 ) ),
-							"bookingStart\0to"   => array( 'op' => '<', 'value' => Minn_Admin_Kernel::at( 'utc', 1 ) ),
-						);
-					},
-					'canceled' => array( 'status' => array( 'canceled', 'rejected', 'no-show' ) ),
-					'all'      => array(),
-				),
-				'order'   => array( 'upcoming' => 'ASC', 'pending' => 'ASC', 'today' => 'ASC' ),
-			),
+			'filter' => minn_admin_booking_filter( $minn_amelia_views ),
 			'search' => array( 'columns' => array( 'c.firstName', 'c.lastName', 'c.email', 's.name', 'p.firstName', 'p.lastName', 'internalNotes' ) ),
 			'order'  => array( 'column' => 'bookingStart', 'dir' => 'DESC' ),
 			'row'    => function ( array $r ) {
-				$customer = minn_admin_amelia_display_name( $r['customer_first'], $r['customer_last'] );
-				$email    = trim( (string) $r['customer_email'] );
-				return array(
-					'id'       => (int) $r['id'],
-					'customer' => $email ? $customer . ' · ' . $email : $customer,
-					'service'  => $r['service_name'] ? (string) $r['service_name'] : __( '(no service)', 'minn-admin' ),
-					'status'   => (string) $r['status'],
-					'date'     => $r['bookingStart'],
-					'provider' => minn_admin_amelia_display_name( $r['provider_first'], $r['provider_last'] ),
-				);
+				return minn_admin_booking_row( $r['id'], minn_admin_booking_name( $r['customer_first'], $r['customer_last'] ), $r['customer_email'], $r['service_name'], $r['status'], $r['bookingStart'], minn_admin_booking_name( $r['provider_first'], $r['provider_last'] ) );
 			},
-			'fields' => array(
-				'id'       => 'int',
-				'customer' => 'text',
-				'service'  => 'text',
-				'status'   => 'text',
-				'date'     => array( 'type' => 'datetime', 'stored' => 'utc', 'wire' => 'z' ),
-				'provider' => 'text',
-			),
+			'fields' => minn_admin_booking_fields( 'utc' ),
 		),
 		'item'      => array( 'view' => 'minn_admin_amelia_detail' ),
 		'actions'   => array(
 			// Through Amelia's UpdateAppointmentStatus controller, so their
 			// notifications and booking rows follow the change.
-			'status' => array(
-				'gate'   => 'status',
-				'run'    => function ( $id, $row, $r ) {
-					$status = sanitize_key( (string) $r->get_param( 'status' ) );
-					if ( ! in_array( $status, array( 'approved', 'pending', 'canceled', 'rejected', 'no-show' ), true ) ) {
-						return new WP_Error( 'bad_status', __( 'Unknown status', 'minn-admin' ), array( 'status' => 400 ) );
-					}
-					$out = minn_admin_amelia_invoke( '\AmeliaBooking\Application\Controller\Booking\Appointment\UpdateAppointmentStatusController', array( 'status' => $status ), array( 'id' => $id ), 'POST' );
-					return is_wp_error( $out ) ? $out : $status;
-				},
-				'expect' => function ( $id, $fresh, $status ) {
-					return is_array( $fresh ) && $status === (string) $fresh['status'];
+			'status' => minn_admin_booking_move( array(
+				'known'  => array( 'approved', 'pending', 'canceled', 'rejected', 'no-show' ),
+				'write'  => function ( $id, $status ) {
+					return minn_admin_amelia_invoke( '\AmeliaBooking\Application\Controller\Booking\Appointment\UpdateAppointmentStatusController', array( 'status' => $status ), array( 'id' => $id ), 'POST' );
 				},
 				'fail'   => __( 'Amelia could not update that appointment.', 'minn-admin' ),
-				'reply'  => function ( $id, $fresh, $status ) {
-					/* translators: %s: appointment status */
-					return array( 'status' => $status, 'message' => sprintf( __( 'Appointment marked %s.', 'minn-admin' ), $status ) );
-				},
-			),
+				/* translators: %s: appointment status */
+				'marked' => __( 'Appointment marked %s.', 'minn-admin' ),
+			) ),
 		),
 	);
 } );
@@ -356,111 +292,34 @@ minn_admin_resource( 'amelia/appointments', function () use ( $minn_amelia_list 
 minn_admin_endpoint( 'amelia/status', array(
 	'active' => 'minn_admin_amelia_active',
 	'gate'   => 'minn_admin_amelia_can_read',
-	'run'    => function () {
-		$open = array( array( 'label' => __( 'Open Amelia ↗', 'minn-admin' ), 'href' => minn_admin_amelia_admin_url() ) );
-		if ( ! minn_admin_amelia_has_tables() ) {
-			return array(
-				'rows'    => array( array( 'label' => __( 'Appointments', 'minn-admin' ), 'value' => '—', 'hint' => __( 'No bookings yet', 'minn-admin' ) ) ),
-				'actions' => $open,
-			);
-		}
-		if ( minn_admin_amelia_provider_scope() < 0 ) {
-			return array( 'rows' => array( array( 'label' => __( 'Appointments', 'minn-admin' ), 'value' => '—' ) ), 'actions' => $open );
-		}
-		$id      = 'amelia/appointments';
-		$active  = array( 'status' => array( 'approved', 'pending' ) );
-		$today   = Minn_Admin_Kernel::count( $id, array(
-			"bookingStart\0from" => array( 'op' => '>=', 'value' => Minn_Admin_Kernel::at( 'utc', 0 ) ),
-			"bookingStart\0to"   => array( 'op' => '<', 'value' => Minn_Admin_Kernel::at( 'utc', 1 ) ),
-		) );
-		$next    = Minn_Admin_Kernel::first( $id, 'bookingStart', $active + array( 'bookingStart' => array( 'op' => '>=', 'value' => Minn_Admin_Kernel::at( 'utc' ) ) ) );
-		$next_ts = $next ? strtotime( minn_admin_amelia_utc_iso( $next ) ) : false;
-		return array(
-			'rows'    => array(
-				array( 'label' => __( 'Today', 'minn-admin' ), 'value' => number_format_i18n( $today ) ),
-				array( 'label' => __( 'Pending', 'minn-admin' ), 'value' => number_format_i18n( Minn_Admin_Kernel::count( $id, array( 'status' => 'pending' ) ) ) ),
-				array(
-					'label' => __( 'Next', 'minn-admin' ),
-					'value' => $next_ts ? wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $next_ts ) : '—',
-					'hint'  => $next_ts ? '' : __( 'Nothing upcoming', 'minn-admin' ),
-				),
-			),
+	'run'    => function () use ( $minn_amelia_views ) {
+		return minn_admin_booking_card( 'amelia/appointments', $minn_amelia_views, array(
+			'ready' => minn_admin_amelia_has_tables(),
+			'noun'  => __( 'Appointments', 'minn-admin' ),
+			'empty' => __( 'No bookings yet', 'minn-admin' ),
+			'scope' => 'minn_admin_amelia_scope',
+			'next'  => 'bookingStart',
+			'iso'   => 'minn_admin_amelia_utc_iso',
 			// The next 14 site-local days, starting today: confirmed and pending apart.
-			'chart'   => array(
-				'title'     => __( 'Next 14 days', 'minn-admin' ),
-				'primary'   => __( 'Booked', 'minn-admin' ),
-				'secondary' => __( 'Pending', 'minn-admin' ),
-				'points'    => array_values( Minn_Admin_Kernel::days( $id, array( 'column' => 'bookingStart', 'clock' => 'utc', 'ahead' => true, 'where' => $active, 'split' => 'status', 'secondary' => array( 'pending' ) ) ) ),
-			),
-			'actions' => $open,
-		);
+			'chart' => array( 'column' => 'bookingStart', 'clock' => 'utc', 'where' => array( 'status' => array( 'approved', 'pending' ) ), 'secondary' => array( 'pending' ) ),
+			'open'  => array( __( 'Open Amelia ↗', 'minn-admin' ), minn_admin_amelia_admin_url() ),
+		) );
 	},
 ) );
 
-add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
-	if ( ! minn_admin_amelia_active() || ! minn_admin_amelia_can_read() ) {
-		return $surfaces;
-	}
-	$can_write = minn_admin_amelia_can_write_status();
-	$status    = function ( $label, $to, $when = null, $confirm = false ) {
-		$ui = array( 'label' => $label, 'body' => array( 'status' => $to ) );
-		if ( null !== $when ) {
-			$ui['key']  = 'status';
-			$ui['when'] = $when;
-		}
-		if ( $confirm ) {
-			$ui['confirm'] = __( 'Cancel this appointment? Amelia will notify the customer.', 'minn-admin' );
-			$ui['danger']  = true;
-		}
-		return Minn_Admin_Kernel::ui( 'amelia/appointments', 'status', $ui );
-	};
-	$actions = array( array( 'label' => __( 'Open in Amelia ↗', 'minn-admin' ), 'href' => minn_admin_amelia_admin_url() ) );
-	$bulk    = array();
-	if ( $can_write ) {
-		$actions = array_merge( array(
-			$status( __( 'Approve', 'minn-admin' ), 'approved', 'pending' ),
-			$status( __( 'Cancel', 'minn-admin' ), 'canceled', 'approved', true ),
-			$status( __( 'Cancel', 'minn-admin' ), 'canceled', 'pending', true ),
-			$status( __( 'Mark no-show', 'minn-admin' ), 'no-show', 'approved' ),
-		), $actions );
-		$cancel  = $status( __( 'Cancel', 'minn-admin' ), 'canceled' );
-		unset( $cancel['confirm'] );
-		$cancel['danger'] = true;
-		$bulk    = array( $status( __( 'Approve', 'minn-admin' ), 'approved' ), $cancel );
-	}
-	$surfaces['amelia'] = array(
-		'label'      => __( 'Bookings', 'minn-admin' ),
-		'family'     => 'bookings',
-		'group'      => 'commerce',
-		'sub'        => 'Amelia',
-		'plugin'     => 'ameliabooking',
-		'icon'       => 'calendar',
-		'cap'        => 'read',
-		'status'     => array( 'route' => 'minn-admin/v1/amelia/status' ),
-		'collection' => Minn_Admin_Kernel::collection( 'amelia/appointments', array(
-			'viewLabel' => __( 'Appointments', 'minn-admin' ),
-			'filter'    => array(
-				'label'   => __( 'When', 'minn-admin' ),
-				'options' => array(
-					array( 'upcoming', __( 'Upcoming', 'minn-admin' ) ),
-					array( 'pending', __( 'Pending', 'minn-admin' ) ),
-					array( 'today', __( 'Today', 'minn-admin' ) ),
-					array( 'canceled', __( 'Canceled', 'minn-admin' ) ),
-					array( 'all', __( 'All', 'minn-admin' ) ),
-				),
-			),
-			'columns'   => array(
-				array( 'key' => 'customer', 'label' => __( 'Customer', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.6fr)' ),
-				array( 'key' => 'service', 'label' => __( 'Service', 'minn-admin' ) ),
-				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '110px' ),
-				array( 'key' => 'date', 'label' => __( 'When', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
-			),
-			'detail'    => array(
-				'sectionsRoute' => 'minn-admin/v1/amelia/appointments/{id}',
-			),
-			'actions'   => $actions,
-			'bulk'      => $bulk,
-		) ),
-	);
-	return $surfaces;
+minn_admin_add_surface( 'amelia', function () {
+	return minn_admin_amelia_active() && minn_admin_amelia_can_read();
+}, function () {
+	return minn_admin_booking_surface( 'amelia/appointments', array(
+		'sub'    => 'Amelia',
+		'plugin' => 'ameliabooking',
+		'status' => 'amelia/status',
+		'noun'   => __( 'Appointments', 'minn-admin' ),
+		'open'   => array( __( 'Open in Amelia ↗', 'minn-admin' ), minn_admin_amelia_admin_url() ),
+		'moves'  => minn_admin_amelia_can_write_status() ? array(
+			array( __( 'Approve', 'minn-admin' ), 'approved', 'pending' ),
+			array( __( 'Cancel', 'minn-admin' ), 'canceled', array( 'approved', 'pending' ), __( 'Cancel this appointment? Amelia will notify the customer.', 'minn-admin' ) ),
+			array( __( 'Mark no-show', 'minn-admin' ), 'no-show', 'approved' ),
+		) : array(),
+	) );
 } );

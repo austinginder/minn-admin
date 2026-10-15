@@ -63,11 +63,6 @@ function minn_admin_latepoint_can_write() {
 	return current_user_can( 'manage_options' );
 }
 
-function minn_admin_latepoint_table( $suffix ) {
-	global $wpdb;
-	return $wpdb->prefix . 'latepoint_' . $suffix;
-}
-
 function minn_admin_latepoint_has_tables() {
 	return Minn_Admin_Kernel_SQL::exists( 'latepoint_bookings' );
 }
@@ -165,11 +160,6 @@ function minn_admin_latepoint_utc_iso( $mysql_datetime ) {
 function minn_admin_latepoint_when_label( $mysql_datetime ) {
 	$iso = minn_admin_latepoint_utc_iso( $mysql_datetime );
 	return '' === $iso ? '' : wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), strtotime( $iso ) );
-}
-
-function minn_admin_latepoint_display_name( $first, $last ) {
-	$name = trim( trim( (string) $first ) . ' ' . trim( (string) $last ) );
-	return '' !== $name ? $name : __( '(no name)', 'minn-admin' );
 }
 
 /**
@@ -291,20 +281,7 @@ function minn_admin_latepoint_detail( array $r ) {
 	if ( '' === $comment && isset( $row->customer_comment ) ) {
 		$comment = trim( (string) $row->customer_comment );
 	}
-	$name = minn_admin_latepoint_display_name( $row->customer_first, $row->customer_last );
-	$who  = array(
-		array( 'label' => __( 'Name', 'minn-admin' ), 'value' => $name ),
-		array( 'label' => __( 'Email', 'minn-admin' ), 'value' => $row->customer_email ? (string) $row->customer_email : '—' ),
-		array( 'label' => __( 'Phone', 'minn-admin' ), 'value' => $row->customer_phone ? (string) $row->customer_phone : '—' ),
-		array( 'label' => __( 'People', 'minn-admin' ), 'value' => (string) max( 1, (int) $row->total_attendees ) ),
-	);
-	$when = array(
-		array( 'label' => __( 'Service', 'minn-admin' ), 'value' => $row->service_name ? (string) $row->service_name : '—' ),
-		array( 'label' => __( 'Employee', 'minn-admin' ), 'value' => minn_admin_latepoint_display_name( $row->agent_first, $row->agent_last ) ),
-		array( 'label' => __( 'Starts', 'minn-admin' ), 'value' => minn_admin_latepoint_utc_iso( $row->start_datetime_utc ) ),
-		array( 'label' => __( 'Ends', 'minn-admin' ), 'value' => minn_admin_latepoint_utc_iso( $row->end_datetime_utc ) ),
-		array( 'label' => __( 'Status', 'minn-admin' ), 'value' => (string) $row->status ),
-	);
+	$when = array();
 	if ( $row->booking_code ) {
 		$when[] = array( 'label' => __( 'Code', 'minn-admin' ), 'value' => (string) $row->booking_code );
 	}
@@ -315,49 +292,49 @@ function minn_admin_latepoint_detail( array $r ) {
 	if ( '' !== $comment ) {
 		$when[] = array( 'label' => __( 'Booking note', 'minn-admin' ), 'value' => $comment );
 	}
-	$sections = array(
-		array( 'title' => __( 'Customer', 'minn-admin' ), 'rows' => $who ),
-		array( 'title' => __( 'Appointment', 'minn-admin' ), 'rows' => $when ),
-	);
 	// The page's Notes card holds one note: the internal one, else the
 	// customer's. With both, the customer's gets a card of its own.
+	$sections = array();
 	if ( '' !== $internal && '' !== $comment ) {
 		$sections[] = array( 'title' => __( 'From the customer', 'minn-admin' ), 'rows' => array( array( 'label' => __( 'Booking note', 'minn-admin' ), 'value' => $comment ) ) );
 	}
-	$service = $row->service_name ? (string) $row->service_name : '';
-	return array(
-		'kind'     => 'booking',
-		'status'   => (string) $row->status,
-		'title'    => $service ? $service : __( 'Appointment', 'minn-admin' ),
-		'customer' => array(
-			'name'  => $name,
-			'email' => $row->customer_email ? (string) $row->customer_email : '',
-			'phone' => $row->customer_phone ? (string) $row->customer_phone : '',
-		),
-		'booking'  => array(
-			'service'  => $service,
-			'employee' => minn_admin_latepoint_display_name( $row->agent_first, $row->agent_last ),
-			'starts'   => minn_admin_latepoint_utc_iso( $row->start_datetime_utc ),
-			'ends'     => minn_admin_latepoint_utc_iso( $row->end_datetime_utc ),
-			'people'   => max( 1, (int) $row->total_attendees ),
-			'code'     => $row->booking_code ? (string) $row->booking_code : '',
-			'notes'    => '' !== $internal ? $internal : $comment,
-		),
+	return minn_admin_booking_detail( array(
+		'noun'     => __( 'Appointment', 'minn-admin' ),
+		'name'     => minn_admin_booking_name( $row->customer_first, $row->customer_last ),
+		'email'    => $row->customer_email,
+		'phone'    => $row->customer_phone,
+		'people'   => $row->total_attendees,
+		'service'  => $row->service_name,
+		'employee' => minn_admin_booking_name( $row->agent_first, $row->agent_last ),
+		'starts'   => minn_admin_latepoint_utc_iso( $row->start_datetime_utc ),
+		'ends'     => minn_admin_latepoint_utc_iso( $row->end_datetime_utc ),
+		'status'   => $row->status,
+		'rows'     => $when,
 		'sections' => $sections,
-		'adminUrl' => minn_admin_latepoint_admin_url(),
-	);
+		'booking'  => array( 'code' => $row->booking_code ? (string) $row->booking_code : '' ),
+		'notes'    => '' !== $internal ? $internal : $comment,
+		'admin'    => minn_admin_latepoint_admin_url(),
+	) );
 }
 
 $minn_latepoint_list = array( 'id', 'status', 'start_datetime_utc', 'end_datetime_utc', 'booking_code', 'total_attendees', 's.name' => 'service_name', 'c.first_name' => 'customer_first', 'c.last_name' => 'customer_last', 'c.email' => 'customer_email', 'a.first_name' => 'agent_first', 'a.last_name' => 'agent_last' );
 
-/** Approved, pending or awaiting payment, and still ahead. */
-function minn_admin_latepoint_upcoming() {
-	return array( 'status' => array( 'approved', 'pending', 'payment_pending' ), 'start_datetime_utc' => array( 'op' => '>=', 'value' => Minn_Admin_Kernel::at( 'utc' ) ) );
-}
+$minn_latepoint_views = array(
+	// Approved, pending or awaiting payment, and still ahead.
+	'upcoming' => function () {
+		return array( 'status' => array( 'approved', 'pending', 'payment_pending' ), 'start_datetime_utc' => array( 'op' => '>=', 'value' => Minn_Admin_Kernel::at( 'utc' ) ) );
+	},
+	'pending'  => array( 'status' => array( 'pending', 'payment_pending' ) ),
+	// start_date is LatePoint's site-local day.
+	'today'    => function () {
+		return array( 'start_date' => Minn_Admin_Kernel::at( 'date', 0 ) );
+	},
+	'canceled' => array( 'status' => array( 'cancelled', 'no_show' ) ),
+);
 
 // OsBookingModel::filter_allowed_records() constrains agent, location and
 // service each on its own: every read here holds all three.
-minn_admin_resource( 'latepoint/bookings', function () use ( $minn_latepoint_list ) {
+minn_admin_resource( 'latepoint/bookings', function () use ( $minn_latepoint_list, $minn_latepoint_views ) {
 	return array(
 		'active'  => 'minn_admin_latepoint_active',
 		'gates'   => array( 'view' => 'minn_admin_latepoint_can_read', 'status' => 'minn_admin_latepoint_can_write' ),
@@ -385,55 +362,21 @@ minn_admin_resource( 'latepoint/bookings', function () use ( $minn_latepoint_lis
 			},
 		),
 		'list'    => array(
-			'filter' => array(
-				'param'   => 'range',
-				'default' => 'upcoming',
-				'values'  => array(
-					'upcoming' => 'minn_admin_latepoint_upcoming',
-					'pending'  => array( 'status' => array( 'pending', 'payment_pending' ) ),
-					// start_date is LatePoint's site-local day.
-					'today'    => function () {
-						return array( 'start_date' => Minn_Admin_Kernel::at( 'date', 0 ) );
-					},
-					'canceled' => array( 'status' => array( 'cancelled', 'no_show' ) ),
-					'all'      => array(),
-				),
-				'order'   => array( 'upcoming' => 'ASC', 'pending' => 'ASC', 'today' => 'ASC' ),
-			),
+			'filter' => minn_admin_booking_filter( $minn_latepoint_views ),
 			'search' => array( 'columns' => array( 'c.first_name', 'c.last_name', 'c.email', 's.name', 'a.first_name', 'a.last_name', 'booking_code' ) ),
 			'order'  => array( 'column' => 'start_datetime_utc', 'dir' => 'DESC' ),
 			'row'    => function ( array $r ) {
-				$customer = minn_admin_latepoint_display_name( $r['customer_first'], $r['customer_last'] );
-				$email    = trim( (string) $r['customer_email'] );
-				return array(
-					'id'       => (int) $r['id'],
-					'customer' => $email ? $customer . ' · ' . $email : $customer,
-					'service'  => $r['service_name'] ? (string) $r['service_name'] : __( '(no service)', 'minn-admin' ),
-					'status'   => (string) $r['status'],
-					'date'     => $r['start_datetime_utc'],
-					'provider' => minn_admin_latepoint_display_name( $r['agent_first'], $r['agent_last'] ),
-				);
+				return minn_admin_booking_row( $r['id'], minn_admin_booking_name( $r['customer_first'], $r['customer_last'] ), $r['customer_email'], $r['service_name'], $r['status'], $r['start_datetime_utc'], minn_admin_booking_name( $r['agent_first'], $r['agent_last'] ) );
 			},
-			'fields' => array(
-				'id'       => 'int',
-				'customer' => 'text',
-				'service'  => 'text',
-				'status'   => 'text',
-				'date'     => array( 'type' => 'datetime', 'stored' => 'utc', 'wire' => 'z' ),
-				'provider' => 'text',
-			),
+			'fields' => minn_admin_booking_fields( 'utc' ),
 		),
 		'item'    => array( 'view' => 'minn_admin_latepoint_detail' ),
 		'actions' => array(
 			// Through their model's update_status(), which runs their status
 			// hooks and notifications.
-			'status' => array(
-				'gate'   => 'status',
-				'run'    => function ( $id, $row, $r ) {
-					$status = sanitize_key( (string) $r->get_param( 'status' ) );
-					if ( ! in_array( $status, array( 'approved', 'pending', 'cancelled', 'no_show', 'completed', 'payment_pending' ), true ) ) {
-						return new WP_Error( 'bad_status', __( 'Unknown status', 'minn-admin' ), array( 'status' => 400 ) );
-					}
+			'status' => minn_admin_booking_move( array(
+				'known'  => array( 'approved', 'pending', 'cancelled', 'no_show', 'completed', 'payment_pending' ),
+				'write'  => function ( $id, $status ) {
 					try {
 						$booking = new OsBookingModel( $id );
 						if ( $booking->is_new_record() ) {
@@ -446,17 +389,11 @@ minn_admin_resource( 'latepoint/bookings', function () use ( $minn_latepoint_lis
 					} catch ( \Throwable $e ) {
 						return new WP_Error( 'update_failed', __( 'LatePoint could not update that appointment.', 'minn-admin' ), array( 'status' => 500 ) );
 					}
-					return $status;
-				},
-				'expect' => function ( $id, $fresh, $status ) {
-					return is_array( $fresh ) && $status === (string) $fresh['status'];
 				},
 				'fail'   => __( 'LatePoint could not update that appointment.', 'minn-admin' ),
-				'reply'  => function ( $id, $fresh, $status ) {
-					/* translators: %s: appointment status */
-					return array( 'status' => $status, 'message' => sprintf( __( 'Appointment marked %s.', 'minn-admin' ), str_replace( '_', ' ', $status ) ) );
-				},
-			),
+				/* translators: %s: appointment status */
+				'marked' => __( 'Appointment marked %s.', 'minn-admin' ),
+			) ),
 		),
 	);
 } );
@@ -498,7 +435,7 @@ minn_admin_resource( 'latepoint/event-registrations', function () {
 			'row'    => function ( array $r ) {
 				return array(
 					'id'       => (int) $r['id'],
-					'customer' => minn_admin_latepoint_display_name( $r['first_name'], $r['last_name'] ) . ( $r['email'] ? ' · ' . $r['email'] : '' ),
+					'customer' => minn_admin_booking_name( $r['first_name'], $r['last_name'] ) . ( $r['email'] ? ' · ' . $r['email'] : '' ),
 					'event'    => (string) $r['event_name'],
 					'quantity' => (int) $r['quantity'],
 					'status'   => (string) $r['status'],
@@ -535,7 +472,7 @@ minn_admin_resource( 'latepoint/event-registrations', function () {
 					array(
 						'title' => __( 'Customer', 'minn-admin' ),
 						'rows'  => array_values( array_filter( array(
-							array( 'label' => __( 'Name', 'minn-admin' ), 'value' => minn_admin_latepoint_display_name( $row->first_name, $row->last_name ) ),
+							array( 'label' => __( 'Name', 'minn-admin' ), 'value' => minn_admin_booking_name( $row->first_name, $row->last_name ) ),
 							$row->email ? array( 'label' => __( 'Email', 'minn-admin' ), 'value' => (string) $row->email, 'type' => 'email' ) : null,
 							$row->phone ? array( 'label' => __( 'Phone', 'minn-admin' ), 'value' => (string) $row->phone ) : null,
 						) ) ),
@@ -587,116 +524,40 @@ minn_admin_resource( 'latepoint/event-registrations', function () {
 minn_admin_endpoint( 'latepoint/status', array(
 	'active' => 'minn_admin_latepoint_active',
 	'gate'   => 'minn_admin_latepoint_can_read',
-	'run'    => function () {
-		$open = array( array( 'label' => __( 'Open LatePoint ↗', 'minn-admin' ), 'href' => minn_admin_latepoint_admin_url() ) );
-		if ( ! minn_admin_latepoint_has_tables() ) {
-			return array(
-				'rows'    => array( array( 'label' => __( 'Appointments', 'minn-admin' ), 'value' => '—', 'hint' => __( 'No bookings yet', 'minn-admin' ) ) ),
-				'actions' => $open,
-			);
-		}
-		if ( null === minn_admin_latepoint_scope_where( minn_admin_latepoint_scope() ) ) {
-			return array( 'rows' => array( array( 'label' => __( 'Appointments', 'minn-admin' ), 'value' => '—' ) ), 'actions' => $open );
-		}
-		$id      = 'latepoint/bookings';
-		$next    = Minn_Admin_Kernel::first( $id, 'start_datetime_utc', minn_admin_latepoint_upcoming() );
-		$next_ts = $next ? strtotime( minn_admin_latepoint_utc_iso( $next ) ) : false;
-		return array(
-			'rows'    => array(
-				array( 'label' => __( 'Today', 'minn-admin' ), 'value' => number_format_i18n( Minn_Admin_Kernel::count( $id, array( 'start_date' => Minn_Admin_Kernel::at( 'date', 0 ) ) ) ) ),
-				array( 'label' => __( 'Pending', 'minn-admin' ), 'value' => number_format_i18n( Minn_Admin_Kernel::count( $id, array( 'status' => array( 'pending', 'payment_pending' ) ) ) ) ),
-				array(
-					'label' => __( 'Next', 'minn-admin' ),
-					'value' => $next_ts ? wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $next_ts ) : '—',
-					'hint'  => $next_ts ? '' : __( 'Nothing upcoming', 'minn-admin' ),
-				),
-			),
+	'run'    => function () use ( $minn_latepoint_views ) {
+		return minn_admin_booking_card( 'latepoint/bookings', $minn_latepoint_views, array(
+			'ready' => minn_admin_latepoint_has_tables(),
+			'noun'  => __( 'Appointments', 'minn-admin' ),
+			'empty' => __( 'No bookings yet', 'minn-admin' ),
+			'scope' => function () {
+				return minn_admin_latepoint_scope_where( minn_admin_latepoint_scope() );
+			},
+			'next'  => 'start_datetime_utc',
+			'iso'   => 'minn_admin_latepoint_utc_iso',
 			// The next 14 site-local days (start_date is their site-local day
 			// column): approved apart from the rest.
-			'chart'   => array(
-				'title'     => __( 'Next 14 days', 'minn-admin' ),
-				'primary'   => __( 'Booked', 'minn-admin' ),
-				'secondary' => __( 'Pending', 'minn-admin' ),
-				'points'    => array_values( Minn_Admin_Kernel::days( $id, array(
-					'column'    => 'start_date',
-					'clock'     => 'date',
-					'ahead'     => true,
-					'where'     => array( 'status' => array( 'approved', 'pending', 'payment_pending' ) ),
-					'split'     => 'status',
-					'secondary' => array( 'pending', 'payment_pending' ),
-				) ) ),
-			),
-			'actions' => $open,
-		);
+			'chart' => array( 'column' => 'start_date', 'clock' => 'date', 'where' => array( 'status' => array( 'approved', 'pending', 'payment_pending' ) ), 'secondary' => array( 'pending', 'payment_pending' ) ),
+			'open'  => array( __( 'Open LatePoint ↗', 'minn-admin' ), minn_admin_latepoint_admin_url() ),
+		) );
 	},
 ) );
 
-add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
-	if ( ! minn_admin_latepoint_active() || ! minn_admin_latepoint_can_read() ) {
-		return $surfaces;
-	}
-	$status  = function ( $label, $to, $when = null, $confirm = false ) {
-		$ui = array( 'label' => $label, 'body' => array( 'status' => $to ) );
-		if ( null !== $when ) {
-			$ui['key']  = 'status';
-			$ui['when'] = $when;
-		}
-		if ( $confirm ) {
-			$ui['confirm'] = __( 'Cancel this appointment? LatePoint will notify the customer.', 'minn-admin' );
-		}
-		if ( 'cancelled' === $to ) {
-			$ui['danger'] = true;
-		}
-		return Minn_Admin_Kernel::ui( 'latepoint/bookings', 'status', $ui );
-	};
-	$actions = array( array( 'label' => __( 'Open in LatePoint ↗', 'minn-admin' ), 'href' => minn_admin_latepoint_admin_url() ) );
-	$bulk    = array();
-	if ( minn_admin_latepoint_can_write() ) {
-		$actions = array_merge( array(
-			$status( __( 'Approve', 'minn-admin' ), 'approved', 'pending' ),
-			$status( __( 'Cancel', 'minn-admin' ), 'cancelled', 'approved', true ),
-			$status( __( 'Cancel', 'minn-admin' ), 'cancelled', 'pending', true ),
-			$status( __( 'Mark no-show', 'minn-admin' ), 'no_show', 'approved' ),
-		), $actions );
-		$bulk    = array( $status( __( 'Approve', 'minn-admin' ), 'approved' ), $status( __( 'Cancel', 'minn-admin' ), 'cancelled' ) );
-	}
-	$surfaces['latepoint'] = array(
-		'label'      => __( 'Bookings', 'minn-admin' ),
-		'family'     => 'bookings',
-		'group'      => 'commerce',
-		'sub'        => 'LatePoint',
-		'plugin'     => 'latepoint',
-		'icon'       => 'calendar',
-		'cap'        => 'read',
-		'status'     => array( 'route' => 'minn-admin/v1/latepoint/status' ),
-		'collection' => Minn_Admin_Kernel::collection( 'latepoint/bookings', array(
-			'viewLabel' => __( 'Appointments', 'minn-admin' ),
-			'filter'    => array(
-				'label'   => __( 'When', 'minn-admin' ),
-				'options' => array(
-					array( 'upcoming', __( 'Upcoming', 'minn-admin' ) ),
-					array( 'pending', __( 'Pending', 'minn-admin' ) ),
-					array( 'today', __( 'Today', 'minn-admin' ) ),
-					array( 'canceled', __( 'Canceled', 'minn-admin' ) ),
-					array( 'all', __( 'All', 'minn-admin' ) ),
-				),
-			),
-			'columns'   => array(
-				array( 'key' => 'customer', 'label' => __( 'Customer', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.6fr)' ),
-				array( 'key' => 'service', 'label' => __( 'Service', 'minn-admin' ) ),
-				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '130px' ),
-				array( 'key' => 'date', 'label' => __( 'When', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
-			),
-			'detail'    => array(
-				'sectionsRoute' => 'minn-admin/v1/latepoint/bookings/{id}',
-			),
-			'actions'   => $actions,
-			'bulk'      => $bulk,
-		) ),
-	);
+minn_admin_add_surface( 'latepoint', function () {
+	return minn_admin_latepoint_active() && minn_admin_latepoint_can_read();
+}, function () {
 	$regs = minn_admin_latepoint_regs_view();
-	if ( $regs ) {
-		$surfaces['latepoint']['views'] = array( $regs );
-	}
-	return $surfaces;
+	return minn_admin_booking_surface( 'latepoint/bookings', array(
+		'sub'     => 'LatePoint',
+		'plugin'  => 'latepoint',
+		'status'  => 'latepoint/status',
+		'noun'    => __( 'Appointments', 'minn-admin' ),
+		'open'    => array( __( 'Open in LatePoint ↗', 'minn-admin' ), minn_admin_latepoint_admin_url() ),
+		'moves'   => minn_admin_latepoint_can_write() ? array(
+			array( __( 'Approve', 'minn-admin' ), 'approved', 'pending' ),
+			array( __( 'Cancel', 'minn-admin' ), 'cancelled', array( 'approved', 'pending' ), __( 'Cancel this appointment? LatePoint will notify the customer.', 'minn-admin' ) ),
+			array( __( 'Mark no-show', 'minn-admin' ), 'no_show', 'approved' ),
+		) : array(),
+		'width'   => '130px',
+		'surface' => $regs ? array( 'views' => array( $regs ) ) : array(),
+	) );
 } );

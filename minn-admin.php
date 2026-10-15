@@ -222,6 +222,7 @@ require_once MINN_ADMIN_DIR . 'includes/adapters/wp-mail-logging.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/suremails.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/site-mailer.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/ottokit.php';
+require_once MINN_ADMIN_DIR . 'includes/adapters/bookings-kit.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/amelia.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/latepoint.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/bookly.php';

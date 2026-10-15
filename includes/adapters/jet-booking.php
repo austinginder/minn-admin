@@ -299,21 +299,27 @@ function minn_admin_jet_booking_detail( array $r ) {
 	);
 }
 
-/** Today's check-ins, on the stored clock (a day epoch on the site's wall clock read as UTC). */
-function minn_admin_jet_booking_today() {
-	return array(
-		"check_in_date\0from" => array( 'op' => '>=', 'value' => Minn_Admin_Kernel::at( 'local-epoch', 0 ) ),
-		"check_in_date\0to"   => array( 'op' => '<', 'value' => Minn_Admin_Kernel::at( 'local-epoch', 1 ) ),
-	);
-}
-
 /** Valid and checking in today or later: what upcoming and "next" mean. */
 function minn_admin_jet_booking_upcoming() {
 	return array( 'status' => minn_admin_jet_booking_status_set( 'valid' ), 'check_in_date' => array( 'op' => '>=', 'value' => Minn_Admin_Kernel::at( 'local-epoch', 0 ) ) );
 }
 
+// Their status sets are filterable, so each view reads them live. Today is
+// today's check-ins, on the stored clock (a day epoch on the site's wall
+// clock read as UTC).
+$minn_jet_booking_views = array(
+	'upcoming' => 'minn_admin_jet_booking_upcoming',
+	'pending'  => function () {
+		return array( 'status' => minn_admin_jet_booking_status_set( 'in_progress' ) );
+	},
+	'today'    => minn_admin_booking_today( 'check_in_date', 'local-epoch' ),
+	'canceled' => function () {
+		return array( 'status' => minn_admin_jet_booking_status_set( 'invalid' ) );
+	},
+);
+
 // A booking vendor sees only their own bookings, as their list scopes them.
-minn_admin_resource( 'jet-booking/bookings', function () {
+minn_admin_resource( 'jet-booking/bookings', function () use ( $minn_jet_booking_views ) {
 	return array(
 		'active'  => 'minn_admin_jet_booking_active',
 		'gates'   => array( 'view' => 'minn_admin_jet_booking_can_read' ),
@@ -331,22 +337,7 @@ minn_admin_resource( 'jet-booking/bookings', function () {
 			'where'   => 'minn_admin_jet_booking_scope',
 		),
 		'list'    => array(
-			'filter' => array(
-				'param'   => 'range',
-				'default' => 'upcoming',
-				'values'  => array(
-					'upcoming' => 'minn_admin_jet_booking_upcoming',
-					'pending'  => function () {
-						return array( 'status' => minn_admin_jet_booking_status_set( 'in_progress' ) );
-					},
-					'today'    => 'minn_admin_jet_booking_today',
-					'canceled' => function () {
-						return array( 'status' => minn_admin_jet_booking_status_set( 'invalid' ) );
-					},
-					'all'      => array(),
-				),
-				'order'   => array( 'upcoming' => 'ASC', 'pending' => 'ASC', 'today' => 'ASC' ),
-			),
+			'filter' => minn_admin_booking_filter( $minn_jet_booking_views ),
 			'search' => array(
 				'columns' => array( 'user_email', 'p.post_title', 'u.display_name', 'u.user_email' ),
 				'also'    => function ( $term ) {
@@ -372,30 +363,20 @@ minn_admin_resource( 'jet-booking/bookings', function () {
 		),
 		'item'    => array( 'view' => 'minn_admin_jet_booking_detail' ),
 		'actions' => array(
-			'status' => array(
+			'status' => minn_admin_booking_move( array(
 				'gate'   => 'view',
-				'run'    => function ( $id, $row, $r ) {
-					$status = sanitize_key( (string) $r->get_param( 'status' ) );
-					if ( ! isset( minn_admin_jet_booking_statuses()[ $status ] ) ) {
-						return new WP_Error( 'bad_status', __( 'Unknown status', 'minn-admin' ), array( 'status' => 400 ) );
-					}
+				'labels' => 'minn_admin_jet_booking_statuses',
+				'write'  => function ( $id, $status ) {
 					try {
 						jet_abaf()->db->update_booking( $id, array( 'status' => $status ) );
 					} catch ( \Throwable $e ) {
 						return new WP_Error( 'update_failed', __( 'JetBooking could not update that booking.', 'minn-admin' ), array( 'status' => 500 ) );
 					}
-					return $status;
-				},
-				'expect' => function ( $id, $fresh, $status ) {
-					return is_array( $fresh ) && $status === (string) $fresh['status'];
 				},
 				'fail'   => __( 'JetBooking could not update that booking.', 'minn-admin' ),
-				'reply'  => function ( $id, $fresh, $status ) {
-					$labels = minn_admin_jet_booking_statuses();
-					/* translators: %s: booking status label */
-					return array( 'status' => $status, 'message' => sprintf( __( 'Booking marked %s.', 'minn-admin' ), strtolower( (string) ( $labels[ $status ] ?? $status ) ) ) );
-				},
-			),
+				/* translators: %s: booking status label */
+				'marked' => __( 'Booking marked %s.', 'minn-admin' ),
+			) ),
 			'delete' => array(
 				'method' => 'DELETE',
 				'gate'   => 'view',
@@ -418,112 +399,54 @@ minn_admin_resource( 'jet-booking/bookings', function () {
 minn_admin_endpoint( 'jet-booking/status', array(
 	'active' => 'minn_admin_jet_booking_active',
 	'gate'   => 'minn_admin_jet_booking_can_read',
-	'run'    => function () {
-		$open = array( array( 'label' => __( 'Open JetBooking ↗', 'minn-admin' ), 'href' => minn_admin_jet_booking_admin_url() ) );
-		if ( ! minn_admin_jet_booking_has_tables() ) {
-			return array(
-				'rows'    => array( array( 'label' => __( 'Bookings', 'minn-admin' ), 'value' => '—', 'hint' => __( 'No bookings yet', 'minn-admin' ) ) ),
-				'actions' => $open,
-			);
-		}
-		$id   = 'jet-booking/bookings';
-		$next = Minn_Admin_Kernel::first( $id, 'check_in_date', minn_admin_jet_booking_upcoming() );
-		return array(
-			'rows'    => array(
-				array( 'label' => __( 'Today', 'minn-admin' ), 'value' => number_format_i18n( Minn_Admin_Kernel::count( $id, minn_admin_jet_booking_today() ) ), 'hint' => __( 'check-ins', 'minn-admin' ) ),
-				array( 'label' => __( 'Pending', 'minn-admin' ), 'value' => number_format_i18n( Minn_Admin_Kernel::count( $id, array( 'status' => minn_admin_jet_booking_status_set( 'in_progress' ) ) ) ) ),
-				array(
-					'label' => __( 'Next', 'minn-admin' ),
-					'value' => $next ? minn_admin_jet_booking_day_label( $next ) : '—',
-					'hint'  => $next ? __( 'check-in', 'minn-admin' ) : __( 'Nothing upcoming', 'minn-admin' ),
-				),
-			),
+	'run'    => function () use ( $minn_jet_booking_views ) {
+		return minn_admin_booking_card( 'jet-booking/bookings', $minn_jet_booking_views, array(
+			'ready' => minn_admin_jet_booking_has_tables(),
+			'noun'  => __( 'Bookings', 'minn-admin' ),
+			'empty' => __( 'No bookings yet', 'minn-admin' ),
+			'next'  => 'check_in_date',
+			'label' => 'minn_admin_jet_booking_day_label',
+			'today' => __( 'check-ins', 'minn-admin' ),
+			'soon'  => __( 'check-in', 'minn-admin' ),
 			// The next 14 site-local days of check-ins: in progress apart from
 			// the rest, cancelled left out.
-			'chart'   => array(
-				'title'     => __( 'Next 14 days', 'minn-admin' ),
-				'primary'   => __( 'Booked', 'minn-admin' ),
-				'secondary' => __( 'Pending', 'minn-admin' ),
-				'points'    => array_values( Minn_Admin_Kernel::days( $id, array(
-					'column'    => 'check_in_date',
-					'clock'     => 'local-epoch',
-					'ahead'     => true,
-					'where'     => array( 'status' => array( 'not' => minn_admin_jet_booking_status_set( 'invalid' ) ) ),
-					'split'     => 'status',
-					'secondary' => minn_admin_jet_booking_status_set( 'in_progress' ),
-				) ) ),
+			'chart' => array(
+				'column'    => 'check_in_date',
+				'clock'     => 'local-epoch',
+				'where'     => array( 'status' => array( 'not' => minn_admin_jet_booking_status_set( 'invalid' ) ) ),
+				'secondary' => minn_admin_jet_booking_status_set( 'in_progress' ),
 			),
-			'actions' => $open,
-		);
+			'open'  => array( __( 'Open JetBooking ↗', 'minn-admin' ), minn_admin_jet_booking_admin_url() ),
+		) );
 	},
 ) );
 
-add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
-	if ( ! minn_admin_jet_booking_active() || ! minn_admin_jet_booking_can_read() ) {
-		return $surfaces;
-	}
-	$labels   = minn_admin_jet_booking_statuses();
-	$progress = minn_admin_jet_booking_status_set( 'in_progress' );
-	$valid    = minn_admin_jet_booking_status_set( 'valid' );
-	$res      = 'jet-booking/bookings';
-	$actions  = array();
-	$bulk     = array();
-	// Mark completed is offered while the booking is still in progress;
-	// Cancel while it is any valid status. Their vocabulary is filterable,
-	// so the `when` gates are built from the live sets, one action per status.
-	foreach ( $progress as $st ) {
-		$actions[] = Minn_Admin_Kernel::ui( $res, 'status', array( 'label' => __( 'Mark completed', 'minn-admin' ), 'body' => array( 'status' => 'completed' ), 'key' => 'status', 'when' => $st ) );
-	}
-	foreach ( $valid as $st ) {
-		$actions[] = Minn_Admin_Kernel::ui( $res, 'status', array( 'label' => __( 'Cancel', 'minn-admin' ), 'body' => array( 'status' => 'cancelled' ), 'confirm' => __( 'Cancel this booking? JetBooking runs its own workflows and order sync for the change.', 'minn-admin' ), 'danger' => true, 'key' => 'status', 'when' => $st ) );
-	}
-	$actions[] = Minn_Admin_Kernel::ui( $res, 'delete', array( 'label' => __( 'Delete', 'minn-admin' ), 'confirm' => __( 'Delete this booking permanently? JetBooking has no trash for bookings.', 'minn-admin' ), 'danger' => true ) );
-	$actions[] = array(
-		'label' => __( 'Open in JetBooking ↗', 'minn-admin' ),
-		'href'  => minn_admin_jet_booking_admin_url(),
-	);
-	$bulk = array(
-		Minn_Admin_Kernel::ui( $res, 'status', array( 'label' => __( 'Mark completed', 'minn-admin' ), 'body' => array( 'status' => 'completed' ) ) ),
-		Minn_Admin_Kernel::ui( $res, 'status', array( 'label' => __( 'Cancel', 'minn-admin' ), 'body' => array( 'status' => 'cancelled' ), 'danger' => true ) ),
-	);
-	$surfaces['jet-booking'] = array(
-		'label'      => __( 'Bookings', 'minn-admin' ),
-		'family'     => 'bookings',
-		'group'      => 'commerce',
-		'sub'        => 'JetBooking',
-		'plugin'     => 'jet-booking',
-		'icon'       => 'calendar',
+minn_admin_add_surface( 'jet-booking', function () {
+	return minn_admin_jet_booking_active() && minn_admin_jet_booking_can_read();
+}, function () {
+	return minn_admin_booking_surface( 'jet-booking/bookings', array(
+		'sub'     => 'JetBooking',
+		'plugin'  => 'jet-booking',
+		'status'  => 'jet-booking/status',
+		'noun'    => __( 'Bookings', 'minn-admin' ),
+		'open'    => array( __( 'Open in JetBooking ↗', 'minn-admin' ), minn_admin_jet_booking_admin_url() ),
+		// Mark completed is offered while the booking is still in progress;
+		// Cancel while it is any valid status. Their vocabulary is filterable,
+		// so the `when` gates are built from the live sets, one action per status.
+		'moves'   => array(
+			array( __( 'Mark completed', 'minn-admin' ), 'completed', minn_admin_jet_booking_status_set( 'in_progress' ) ),
+			array( __( 'Cancel', 'minn-admin' ), 'cancelled', minn_admin_jet_booking_status_set( 'valid' ), __( 'Cancel this booking? JetBooking runs its own workflows and order sync for the change.', 'minn-admin' ) ),
+		),
+		'actions' => array(
+			Minn_Admin_Kernel::ui( 'jet-booking/bookings', 'delete', array( 'label' => __( 'Delete', 'minn-admin' ), 'confirm' => __( 'Delete this booking permanently? JetBooking has no trash for bookings.', 'minn-admin' ), 'danger' => true ) ),
+		),
 		// The routes gate on JetBooking's own capability; this is nav gating
 		// only, and it sits on a surface holding customer contact details, so
 		// it says the floor for reaching Minn at all rather than 'read'.
-		'cap'        => 'edit_posts',
-		'status'     => array( 'route' => 'minn-admin/v1/jet-booking/status' ),
-		'collection' => Minn_Admin_Kernel::collection( $res, array(
-			'viewLabel' => __( 'Bookings', 'minn-admin' ),
-			'filter'    => array(
-				'label'   => __( 'When', 'minn-admin' ),
-				'options' => array(
-					array( 'upcoming', __( 'Upcoming', 'minn-admin' ) ),
-					array( 'pending', __( 'Pending', 'minn-admin' ) ),
-					array( 'today', __( 'Today', 'minn-admin' ) ),
-					array( 'canceled', __( 'Canceled', 'minn-admin' ) ),
-					array( 'all', __( 'All', 'minn-admin' ) ),
-				),
-			),
-			'columns'   => array(
-				array( 'key' => 'customer', 'label' => __( 'Customer', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.6fr)' ),
-				array( 'key' => 'service', 'label' => __( 'Booked', 'minn-admin' ) ),
-				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '110px' ),
-				// A stay starts on a day, not at an hour: "in 11h" for a midnight
-				// check-in read as a time. The day reads as their screen shows it.
-				array( 'key' => 'check_in', 'label' => __( 'Check-in', 'minn-admin' ) ),
-			),
-			'detail'    => array(
-				'sectionsRoute' => 'minn-admin/v1/jet-booking/bookings/{id}',
-			),
-			'actions'   => $actions,
-			'bulk'      => $bulk,
-		) ),
-	);
-	return $surfaces;
+		'cap'     => 'edit_posts',
+		'service' => __( 'Booked', 'minn-admin' ),
+		// A stay starts on a day, not at an hour: "in 11h" for a midnight
+		// check-in read as a time. The day reads as their screen shows it.
+		'when'    => array( 'key' => 'check_in', 'label' => __( 'Check-in', 'minn-admin' ) ),
+	) );
 } );

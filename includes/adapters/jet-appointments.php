@@ -296,20 +296,25 @@ function minn_admin_jet_apb_detail( array $r ) {
 	);
 }
 
-/** Today on the slot's clock (a naive epoch: the site's wall clock read as UTC). */
-function minn_admin_jet_apb_today() {
-	return array(
-		"slot\0from" => array( 'op' => '>=', 'value' => Minn_Admin_Kernel::at( 'local-epoch', 0 ) ),
-		"slot\0to"   => array( 'op' => '<', 'value' => Minn_Admin_Kernel::at( 'local-epoch', 1 ) ),
-	);
-}
-
 /** Valid and still ahead: what upcoming and "next" mean. */
 function minn_admin_jet_apb_upcoming() {
 	return array( 'status' => minn_admin_jet_apb_status_set( 'valid' ), 'slot' => array( 'op' => '>=', 'value' => Minn_Admin_Kernel::at( 'local-epoch' ) ) );
 }
 
-minn_admin_resource( 'jet-appointments/appointments', function () {
+// Their status sets are filterable, so each view reads them live. The slot
+// is a naive epoch: the site's wall clock read as UTC.
+$minn_jet_apb_views = array(
+	'upcoming' => 'minn_admin_jet_apb_upcoming',
+	'pending'  => function () {
+		return array( 'status' => minn_admin_jet_apb_status_set( 'in_progress' ) );
+	},
+	'today'    => minn_admin_booking_today( 'slot', 'local-epoch' ),
+	'canceled' => function () {
+		return array( 'status' => minn_admin_jet_apb_status_set( 'invalid' ) );
+	},
+);
+
+minn_admin_resource( 'jet-appointments/appointments', function () use ( $minn_jet_apb_views ) {
 	return array(
 		'active'  => 'minn_admin_jet_apb_active',
 		// Their contexts, one per endpoint they ship: the list, one
@@ -332,23 +337,7 @@ minn_admin_resource( 'jet-appointments/appointments', function () {
 			'detail'  => array( 'ID', 'status', 'slot', 'slot_end', 'user_id', 'user_name', 'user_email', 'order_id', 'type', 's.post_title' => 'service_title', 'pr.post_title' => 'provider_title' ),
 		),
 		'list'    => array(
-			// Their status sets are filterable, so each view reads them live.
-			'filter' => array(
-				'param'   => 'range',
-				'default' => 'upcoming',
-				'values'  => array(
-					'upcoming' => 'minn_admin_jet_apb_upcoming',
-					'pending'  => function () {
-						return array( 'status' => minn_admin_jet_apb_status_set( 'in_progress' ) );
-					},
-					'today'    => 'minn_admin_jet_apb_today',
-					'canceled' => function () {
-						return array( 'status' => minn_admin_jet_apb_status_set( 'invalid' ) );
-					},
-					'all'      => array(),
-				),
-				'order'   => array( 'upcoming' => 'ASC', 'pending' => 'ASC', 'today' => 'ASC' ),
-			),
+			'filter' => minn_admin_booking_filter( $minn_jet_apb_views ),
 			'search' => array(
 				'columns' => array( 'user_name', 'user_email', 's.post_title', 'pr.post_title' ),
 				'also'    => function ( $term ) {
@@ -356,18 +345,11 @@ minn_admin_resource( 'jet-appointments/appointments', function () {
 				},
 			),
 			'order'  => array( 'column' => 'slot', 'dir' => 'DESC' ),
+			// The date is the site's wall clock at that slot, with the offset that date had.
 			'row'    => function ( array $r ) {
-				return array(
-					'id'       => (int) $r['ID'],
-					'customer' => minn_admin_jet_apb_customer_label( (object) $r ),
-					'service'  => $r['service_title'] ? (string) $r['service_title'] : __( '(no service)', 'minn-admin' ),
-					'status'   => (string) $r['status'],
-					// The site's wall clock at that slot, with the offset that date had.
-					'date'     => minn_admin_jet_apb_iso( $r['slot'] ),
-					'provider' => $r['provider_title'] ? (string) $r['provider_title'] : '',
-				);
+				return minn_admin_booking_row( $r['ID'], minn_admin_jet_apb_customer_label( (object) $r ), '', $r['service_title'], $r['status'], minn_admin_jet_apb_iso( $r['slot'] ), $r['provider_title'] ? (string) $r['provider_title'] : '' );
 			},
-			'fields' => array( 'id' => 'int', 'customer' => 'text', 'service' => 'text', 'status' => 'text', 'date' => 'text', 'provider' => 'text' ),
+			'fields' => minn_admin_booking_fields( '' ),
 		),
 		'item'    => array( 'gate' => 'detail', 'view' => 'minn_admin_jet_apb_detail' ),
 		'actions' => array(
@@ -375,30 +357,19 @@ minn_admin_resource( 'jet-appointments/appointments', function () {
 			// constructor loads the stored row, save() moves the slot through
 			// the excluded-dates table on invalid/valid flips, writes, and
 			// fires jet-apb/db/update/appointments.
-			'status' => array(
-				'gate'   => 'status',
-				'run'    => function ( $id, $row, $r ) {
-					$status = sanitize_key( (string) $r->get_param( 'status' ) );
-					if ( ! isset( minn_admin_jet_apb_statuses()[ $status ] ) ) {
-						return new WP_Error( 'bad_status', __( 'Unknown status', 'minn-admin' ), array( 'status' => 400 ) );
-					}
+			'status' => minn_admin_booking_move( array(
+				'labels' => 'minn_admin_jet_apb_statuses',
+				'write'  => function ( $id, $status ) {
 					try {
 						( new \JET_APB\Resources\Appointment_Model( array( 'status' => $status ), $id ) )->save();
 					} catch ( \Throwable $e ) {
 						return new WP_Error( 'update_failed', __( 'JetAppointments could not update that appointment.', 'minn-admin' ), array( 'status' => 500 ) );
 					}
-					return $status;
-				},
-				'expect' => function ( $id, $fresh, $status ) {
-					return is_array( $fresh ) && $status === (string) $fresh['status'];
 				},
 				'fail'   => __( 'JetAppointments could not update that appointment.', 'minn-admin' ),
-				'reply'  => function ( $id, $fresh, $status ) {
-					$labels = minn_admin_jet_apb_statuses();
-					/* translators: %s: appointment status label */
-					return array( 'status' => $status, 'message' => sprintf( __( 'Appointment marked %s.', 'minn-admin' ), strtolower( (string) ( $labels[ $status ] ?? $status ) ) ) );
-				},
-			),
+				/* translators: %s: appointment status label */
+				'marked' => __( 'Appointment marked %s.', 'minn-admin' ),
+			) ),
 			// Their manager: removes the row, its meta, and the slot's
 			// excluded-dates entry, the way their delete endpoint does.
 			'delete' => array(
@@ -423,106 +394,41 @@ minn_admin_resource( 'jet-appointments/appointments', function () {
 minn_admin_endpoint( 'jet-appointments/status', array(
 	'active' => 'minn_admin_jet_apb_active',
 	'gate'   => 'minn_admin_jet_apb_can_read',
-	'run'    => function () {
-		$open = array( array( 'label' => __( 'Open JetAppointments ↗', 'minn-admin' ), 'href' => minn_admin_jet_apb_admin_url() ) );
-		if ( ! minn_admin_jet_apb_has_tables() ) {
-			return array(
-				'rows'    => array( array( 'label' => __( 'Appointments', 'minn-admin' ), 'value' => '—', 'hint' => __( 'No appointments yet', 'minn-admin' ) ) ),
-				'actions' => $open,
-			);
-		}
-		$id   = 'jet-appointments/appointments';
-		$next = Minn_Admin_Kernel::first( $id, 'slot', minn_admin_jet_apb_upcoming() );
-		return array(
-			'rows'    => array(
-				array( 'label' => __( 'Today', 'minn-admin' ), 'value' => number_format_i18n( Minn_Admin_Kernel::count( $id, minn_admin_jet_apb_today() ) ) ),
-				array( 'label' => __( 'Pending', 'minn-admin' ), 'value' => number_format_i18n( Minn_Admin_Kernel::count( $id, array( 'status' => minn_admin_jet_apb_status_set( 'in_progress' ) ) ) ) ),
-				array(
-					'label' => __( 'Next', 'minn-admin' ),
-					'value' => $next ? minn_admin_jet_apb_slot_label( $next ) : '—',
-					'hint'  => $next ? '' : __( 'Nothing upcoming', 'minn-admin' ),
-				),
-			),
+	'run'    => function () use ( $minn_jet_apb_views ) {
+		return minn_admin_booking_card( 'jet-appointments/appointments', $minn_jet_apb_views, array(
+			'ready' => minn_admin_jet_apb_has_tables(),
+			'noun'  => __( 'Appointments', 'minn-admin' ),
+			'empty' => __( 'No appointments yet', 'minn-admin' ),
+			'next'  => 'slot',
+			'label' => 'minn_admin_jet_apb_slot_label',
 			// The next 14 site-local days, starting today: in progress apart
 			// from the rest, cancelled left out.
-			'chart'   => array(
-				'title'     => __( 'Next 14 days', 'minn-admin' ),
-				'primary'   => __( 'Booked', 'minn-admin' ),
-				'secondary' => __( 'Pending', 'minn-admin' ),
-				'points'    => array_values( Minn_Admin_Kernel::days( $id, array(
-					'column'    => 'slot',
-					'clock'     => 'local-epoch',
-					'ahead'     => true,
-					'where'     => array( 'status' => array( 'not' => minn_admin_jet_apb_status_set( 'invalid' ) ) ),
-					'split'     => 'status',
-					'secondary' => minn_admin_jet_apb_status_set( 'in_progress' ),
-				) ) ),
+			'chart' => array(
+				'column'    => 'slot',
+				'clock'     => 'local-epoch',
+				'where'     => array( 'status' => array( 'not' => minn_admin_jet_apb_status_set( 'invalid' ) ) ),
+				'secondary' => minn_admin_jet_apb_status_set( 'in_progress' ),
 			),
-			'actions' => $open,
-		);
+			'open'  => array( __( 'Open JetAppointments ↗', 'minn-admin' ), minn_admin_jet_apb_admin_url() ),
+		) );
 	},
 ) );
 
-add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
-	if ( ! minn_admin_jet_apb_active() || ! minn_admin_jet_apb_can_read() ) {
-		return $surfaces;
-	}
-	$res     = 'jet-appointments/appointments';
-	$actions = array();
-	$bulk    = array();
-	if ( minn_admin_jet_apb_can_update() ) {
-		$cancel = __( 'Cancel this appointment? JetAppointments runs its own workflows and notifications for the change.', 'minn-admin' );
-		foreach ( minn_admin_jet_apb_status_set( 'in_progress' ) as $st ) {
-			$actions[] = Minn_Admin_Kernel::ui( $res, 'status', array( 'label' => __( 'Mark completed', 'minn-admin' ), 'body' => array( 'status' => 'completed' ), 'key' => 'status', 'when' => $st ) );
-		}
-		foreach ( minn_admin_jet_apb_status_set( 'valid' ) as $st ) {
-			$actions[] = Minn_Admin_Kernel::ui( $res, 'status', array( 'label' => __( 'Cancel', 'minn-admin' ), 'body' => array( 'status' => 'cancelled' ), 'confirm' => $cancel, 'danger' => true, 'key' => 'status', 'when' => $st ) );
-		}
-		$bulk = array(
-			Minn_Admin_Kernel::ui( $res, 'status', array( 'label' => __( 'Mark completed', 'minn-admin' ), 'body' => array( 'status' => 'completed' ) ) ),
-			Minn_Admin_Kernel::ui( $res, 'status', array( 'label' => __( 'Cancel', 'minn-admin' ), 'body' => array( 'status' => 'cancelled' ), 'danger' => true ) ),
-		);
-	}
-	if ( minn_admin_jet_apb_can_delete() ) {
-		$actions[] = Minn_Admin_Kernel::ui( $res, 'delete', array( 'label' => __( 'Delete', 'minn-admin' ), 'confirm' => __( 'Delete this appointment permanently? JetAppointments has no trash.', 'minn-admin' ), 'danger' => true ) );
-	}
-	$actions[] = array(
-		'label' => __( 'Open in JetAppointments ↗', 'minn-admin' ),
-		'href'  => minn_admin_jet_apb_admin_url(),
-	);
-	$surfaces['jet-appointments'] = array(
-		'label'      => __( 'Bookings', 'minn-admin' ),
-		'family'     => 'bookings',
-		'group'      => 'commerce',
-		'sub'        => 'JetAppointments',
-		'plugin'     => 'jet-appointments-booking',
-		'icon'       => 'calendar',
-		'cap'        => 'read',
-		'status'     => array( 'route' => 'minn-admin/v1/jet-appointments/status' ),
-		'collection' => Minn_Admin_Kernel::collection( $res, array(
-			'viewLabel' => __( 'Appointments', 'minn-admin' ),
-			'filter'    => array(
-				'label'   => __( 'When', 'minn-admin' ),
-				'options' => array(
-					array( 'upcoming', __( 'Upcoming', 'minn-admin' ) ),
-					array( 'pending', __( 'Pending', 'minn-admin' ) ),
-					array( 'today', __( 'Today', 'minn-admin' ) ),
-					array( 'canceled', __( 'Canceled', 'minn-admin' ) ),
-					array( 'all', __( 'All', 'minn-admin' ) ),
-				),
-			),
-			'columns'   => array(
-				array( 'key' => 'customer', 'label' => __( 'Customer', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.6fr)' ),
-				array( 'key' => 'service', 'label' => __( 'Service', 'minn-admin' ) ),
-				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '110px' ),
-				array( 'key' => 'date', 'label' => __( 'When', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
-			),
-			'detail'    => array(
-				'sectionsRoute' => 'minn-admin/v1/jet-appointments/appointments/{id}',
-			),
-			'actions'   => $actions,
-			'bulk'      => $bulk,
-		) ),
-	);
-	return $surfaces;
+minn_admin_add_surface( 'jet-appointments', function () {
+	return minn_admin_jet_apb_active() && minn_admin_jet_apb_can_read();
+}, function () {
+	return minn_admin_booking_surface( 'jet-appointments/appointments', array(
+		'sub'     => 'JetAppointments',
+		'plugin'  => 'jet-appointments-booking',
+		'status'  => 'jet-appointments/status',
+		'noun'    => __( 'Appointments', 'minn-admin' ),
+		'open'    => array( __( 'Open in JetAppointments ↗', 'minn-admin' ), minn_admin_jet_apb_admin_url() ),
+		'moves'   => minn_admin_jet_apb_can_update() ? array(
+			array( __( 'Mark completed', 'minn-admin' ), 'completed', minn_admin_jet_apb_status_set( 'in_progress' ) ),
+			array( __( 'Cancel', 'minn-admin' ), 'cancelled', minn_admin_jet_apb_status_set( 'valid' ), __( 'Cancel this appointment? JetAppointments runs its own workflows and notifications for the change.', 'minn-admin' ) ),
+		) : array(),
+		'actions' => minn_admin_jet_apb_can_delete() ? array(
+			Minn_Admin_Kernel::ui( 'jet-appointments/appointments', 'delete', array( 'label' => __( 'Delete', 'minn-admin' ), 'confirm' => __( 'Delete this appointment permanently? JetAppointments has no trash.', 'minn-admin' ), 'danger' => true ) ),
+		) : array(),
+	) );
 } );

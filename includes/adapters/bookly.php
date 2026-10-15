@@ -43,24 +43,9 @@ function minn_admin_bookly_can_read() {
 	return current_user_can( 'manage_options' );
 }
 
+// The supervisors and staff who may read a booking may change its status.
 function minn_admin_bookly_can_write() {
-	if ( ! is_user_logged_in() ) {
-		return false;
-	}
-	if ( class_exists( '\Bookly\Lib\Utils\Common' ) ) {
-		if ( \Bookly\Lib\Utils\Common::isCurrentUserSupervisor() ) {
-			return true;
-		}
-		if ( method_exists( '\Bookly\Lib\Utils\Common', 'isCurrentUserStaff' ) ) {
-			return (bool) \Bookly\Lib\Utils\Common::isCurrentUserStaff();
-		}
-	}
-	return current_user_can( 'manage_options' );
-}
-
-function minn_admin_bookly_table( $suffix ) {
-	global $wpdb;
-	return $wpdb->prefix . 'bookly_' . $suffix;
+	return minn_admin_bookly_can_read();
 }
 
 function minn_admin_bookly_has_tables() {
@@ -120,14 +105,6 @@ function minn_admin_bookly_local_iso( $mysql_datetime ) {
 	}
 }
 
-function minn_admin_bookly_display_name( $first, $last, $full = '' ) {
-	$name = trim( trim( (string) $first ) . ' ' . trim( (string) $last ) );
-	if ( '' === $name ) {
-		$name = trim( (string) $full );
-	}
-	return '' !== $name ? $name : __( '(no name)', 'minn-admin' );
-}
-
 function minn_admin_bookly_admin_url() {
 	if ( class_exists( '\Bookly\Backend\Modules\Appointments\Page' )
 		&& method_exists( '\Bookly\Backend\Modules\Appointments\Page', 'pageSlug' ) ) {
@@ -146,68 +123,57 @@ function minn_admin_bookly_statuses() {
 
 /** A booking's detail: the customer, the appointment and both notes. */
 function minn_admin_bookly_detail( array $row ) {
-	$row  = (object) $row;
-	$name = minn_admin_bookly_display_name( $row->customer_first, $row->customer_last, $row->customer_full );
-	$who  = array(
-		array( 'label' => __( 'Name', 'minn-admin' ), 'value' => $name ),
-		array( 'label' => __( 'Email', 'minn-admin' ), 'value' => $row->customer_email ? (string) $row->customer_email : '—' ),
-		array( 'label' => __( 'Phone', 'minn-admin' ), 'value' => $row->customer_phone ? (string) $row->customer_phone : '—' ),
-		array( 'label' => __( 'People', 'minn-admin' ), 'value' => (string) max( 1, (int) $row->number_of_persons ) ),
-	);
-	$when = array(
-		array( 'label' => __( 'Service', 'minn-admin' ), 'value' => $row->service_name ? (string) $row->service_name : '—' ),
-		array( 'label' => __( 'Employee', 'minn-admin' ), 'value' => $row->staff_name ? (string) $row->staff_name : '—' ),
-		array( 'label' => __( 'Starts', 'minn-admin' ), 'value' => minn_admin_bookly_local_iso( $row->start_date ) ),
-		array( 'label' => __( 'Ends', 'minn-admin' ), 'value' => minn_admin_bookly_local_iso( $row->end_date ) ),
-		array( 'label' => __( 'Status', 'minn-admin' ), 'value' => (string) $row->status ),
-	);
+	$row = (object) $row;
 	// The staff's note is on the appointment, the customer's on their booking
 	// of it. Both are text the client escapes.
 	$internal = trim( (string) $row->internal_note );
 	$comment  = trim( (string) $row->customer_notes );
+	$when     = array();
 	if ( '' !== $internal ) {
 		$when[] = array( 'label' => __( 'Notes', 'minn-admin' ), 'value' => $internal );
 	}
 	if ( '' !== $comment ) {
 		$when[] = array( 'label' => __( 'Booking note', 'minn-admin' ), 'value' => $comment );
 	}
-	$sections = array(
-		array( 'title' => __( 'Customer', 'minn-admin' ), 'rows' => $who ),
-		array( 'title' => __( 'Appointment', 'minn-admin' ), 'rows' => $when ),
-	);
 	// The page's Notes card holds one note: the internal one, else the
 	// customer's. With both, the customer's gets a card of its own.
+	$sections = array();
 	if ( '' !== $internal && '' !== $comment ) {
 		$sections[] = array( 'title' => __( 'From the customer', 'minn-admin' ), 'rows' => array( array( 'label' => __( 'Booking note', 'minn-admin' ), 'value' => $comment ) ) );
 	}
-	$service = $row->service_name ? (string) $row->service_name : '';
-	return array(
-		'kind'     => 'booking',
-		'status'   => (string) $row->status,
-		'title'    => $service ? $service : __( 'Appointment', 'minn-admin' ),
-		'customer' => array(
-			'name'  => $name,
-			'email' => $row->customer_email ? (string) $row->customer_email : '',
-			'phone' => $row->customer_phone ? (string) $row->customer_phone : '',
-		),
-		'booking'  => array(
-			'service'  => $service,
-			'employee' => $row->staff_name ? (string) $row->staff_name : '',
-			'starts'   => minn_admin_bookly_local_iso( $row->start_date ),
-			'ends'     => minn_admin_bookly_local_iso( $row->end_date ),
-			'people'   => max( 1, (int) $row->number_of_persons ),
-			'notes'    => '' !== $internal ? $internal : $comment,
-		),
+	return minn_admin_booking_detail( array(
+		'noun'     => __( 'Appointment', 'minn-admin' ),
+		'name'     => minn_admin_booking_name( $row->customer_first, $row->customer_last, $row->customer_full ),
+		'email'    => $row->customer_email,
+		'phone'    => $row->customer_phone,
+		'people'   => $row->number_of_persons,
+		'service'  => $row->service_name,
+		'employee' => $row->staff_name ? (string) $row->staff_name : '',
+		'starts'   => minn_admin_bookly_local_iso( $row->start_date ),
+		'ends'     => minn_admin_bookly_local_iso( $row->end_date ),
+		'status'   => $row->status,
+		'rows'     => $when,
 		'sections' => $sections,
-		'adminUrl' => minn_admin_bookly_admin_url(),
-	);
+		'notes'    => '' !== $internal ? $internal : $comment,
+		'admin'    => minn_admin_bookly_admin_url(),
+	) );
 }
 
 $minn_bookly_list = array( 'id', 'status', 'number_of_persons', 'a.start_date', 'a.end_date', 's.title' => 'service_name', 'c.first_name' => 'customer_first', 'c.last_name' => 'customer_last', 'c.full_name' => 'customer_full', 'c.email' => 'customer_email', 'st.full_name' => 'staff_name' );
 
+// start_date is WP-local.
+$minn_bookly_views = array(
+	'upcoming' => function () {
+		return array( 'status' => array( 'approved', 'pending', 'waitlisted' ), 'a.start_date' => array( 'op' => '>=', 'value' => Minn_Admin_Kernel::at( 'local' ) ) );
+	},
+	'pending'  => array( 'status' => array( 'pending', 'waitlisted' ) ),
+	'today'    => minn_admin_booking_today( 'a.start_date', 'local' ),
+	'canceled' => array( 'status' => array( 'cancelled', 'rejected' ) ),
+);
+
 // One row per customer's booking of an appointment (customer_appointments),
 // joined to the appointment, customer, service and staff member.
-minn_admin_resource( 'bookly/appointments', function () use ( $minn_bookly_list ) {
+minn_admin_resource( 'bookly/appointments', function () use ( $minn_bookly_list, $minn_bookly_views ) {
 	return array(
 		'active'  => 'minn_admin_bookly_active',
 		'gates'   => array( 'view' => 'minn_admin_bookly_can_read', 'status' => 'minn_admin_bookly_can_write' ),
@@ -227,59 +193,20 @@ minn_admin_resource( 'bookly/appointments', function () use ( $minn_bookly_list 
 			'where'   => 'minn_admin_bookly_scope',
 		),
 		'list'    => array(
-			// start_date is WP-local.
-			'filter' => array(
-				'param'   => 'range',
-				'default' => 'upcoming',
-				'values'  => array(
-					'upcoming' => function () {
-						return array( 'status' => array( 'approved', 'pending', 'waitlisted' ), 'a.start_date' => array( 'op' => '>=', 'value' => Minn_Admin_Kernel::at( 'local' ) ) );
-					},
-					'pending'  => array( 'status' => array( 'pending', 'waitlisted' ) ),
-					'today'    => function () {
-						return array(
-							"a.start_date\0from" => array( 'op' => '>=', 'value' => Minn_Admin_Kernel::at( 'local', 0 ) ),
-							"a.start_date\0to"   => array( 'op' => '<', 'value' => Minn_Admin_Kernel::at( 'local', 1 ) ),
-						);
-					},
-					'canceled' => array( 'status' => array( 'cancelled', 'rejected' ) ),
-					'all'      => array(),
-				),
-				'order'   => array( 'upcoming' => 'ASC', 'pending' => 'ASC', 'today' => 'ASC' ),
-			),
+			'filter' => minn_admin_booking_filter( $minn_bookly_views ),
 			'search' => array( 'columns' => array( 'c.first_name', 'c.last_name', 'c.full_name', 'c.email', 's.title', 'st.full_name' ) ),
 			'order'  => array( 'column' => 'a.start_date', 'dir' => 'DESC' ),
 			'row'    => function ( array $r ) {
-				$customer = minn_admin_bookly_display_name( $r['customer_first'], $r['customer_last'], $r['customer_full'] );
-				$email    = trim( (string) $r['customer_email'] );
-				return array(
-					'id'       => (int) $r['id'],
-					'customer' => $email ? $customer . ' · ' . $email : $customer,
-					'service'  => $r['service_name'] ? (string) $r['service_name'] : __( '(no service)', 'minn-admin' ),
-					'status'   => (string) $r['status'],
-					'date'     => $r['start_date'],
-					'provider' => $r['staff_name'] ? (string) $r['staff_name'] : __( '(no name)', 'minn-admin' ),
-				);
+				return minn_admin_booking_row( $r['id'], minn_admin_booking_name( $r['customer_first'], $r['customer_last'], $r['customer_full'] ), $r['customer_email'], $r['service_name'], $r['status'], $r['start_date'], $r['staff_name'] ? (string) $r['staff_name'] : __( '(no name)', 'minn-admin' ) );
 			},
-			'fields' => array(
-				'id'       => 'int',
-				'customer' => 'text',
-				'service'  => 'text',
-				'status'   => 'text',
-				'date'     => array( 'type' => 'datetime', 'stored' => 'site', 'wire' => 'z' ),
-				'provider' => 'text',
-			),
+			'fields' => minn_admin_booking_fields( 'site' ),
 		),
 		'item'    => array( 'view' => 'minn_admin_bookly_detail' ),
 		'actions' => array(
 			// Through their CustomerAppointment entity, then their sender.
-			'status' => array(
-				'gate'   => 'status',
-				'run'    => function ( $id, $row, $r ) {
-					$status = sanitize_key( (string) $r->get_param( 'status' ) );
-					if ( ! in_array( $status, minn_admin_bookly_statuses(), true ) ) {
-						return new WP_Error( 'bad_status', __( 'Unknown status', 'minn-admin' ), array( 'status' => 400 ) );
-					}
+			'status' => minn_admin_booking_move( array(
+				'known'  => 'minn_admin_bookly_statuses',
+				'write'  => function ( $id, $status ) {
 					try {
 						$ca = new \Bookly\Lib\Entities\CustomerAppointment();
 						if ( ! $ca->load( $id ) ) {
@@ -299,17 +226,11 @@ minn_admin_resource( 'bookly/appointments', function () use ( $minn_bookly_list 
 					} catch ( \Throwable $e ) {
 						return new WP_Error( 'update_failed', __( 'Bookly could not update that appointment.', 'minn-admin' ), array( 'status' => 500 ) );
 					}
-					return $status;
-				},
-				'expect' => function ( $id, $fresh, $status ) {
-					return is_array( $fresh ) && $status === (string) $fresh['status'];
 				},
 				'fail'   => __( 'Bookly could not update that appointment.', 'minn-admin' ),
-				'reply'  => function ( $id, $fresh, $status ) {
-					/* translators: %s: appointment status */
-					return array( 'status' => $status, 'message' => sprintf( __( 'Appointment marked %s.', 'minn-admin' ), str_replace( '_', ' ', $status ) ) );
-				},
-			),
+				/* translators: %s: appointment status */
+				'marked' => __( 'Appointment marked %s.', 'minn-admin' ),
+			) ),
 		),
 	);
 } );
@@ -317,107 +238,33 @@ minn_admin_resource( 'bookly/appointments', function () use ( $minn_bookly_list 
 minn_admin_endpoint( 'bookly/status', array(
 	'active' => 'minn_admin_bookly_active',
 	'gate'   => 'minn_admin_bookly_can_read',
-	'run'    => function () {
-		$open = array( array( 'label' => __( 'Open Bookly ↗', 'minn-admin' ), 'href' => minn_admin_bookly_admin_url() ) );
-		if ( ! minn_admin_bookly_has_tables() ) {
-			return array(
-				'rows'    => array( array( 'label' => __( 'Appointments', 'minn-admin' ), 'value' => '—', 'hint' => __( 'No bookings yet', 'minn-admin' ) ) ),
-				'actions' => $open,
-			);
-		}
-		if ( null === minn_admin_bookly_scope() ) {
-			return array( 'rows' => array( array( 'label' => __( 'Appointments', 'minn-admin' ), 'value' => '—' ) ), 'actions' => $open );
-		}
-		$id      = 'bookly/appointments';
-		$active  = array( 'status' => array( 'approved', 'pending', 'waitlisted' ) );
-		$next    = Minn_Admin_Kernel::first( $id, 'a.start_date', $active + array( 'a.start_date' => array( 'op' => '>=', 'value' => Minn_Admin_Kernel::at( 'local' ) ) ) );
-		$next_ts = $next ? strtotime( minn_admin_bookly_local_iso( $next ) ) : false;
-		return array(
-			'rows'    => array(
-				array( 'label' => __( 'Today', 'minn-admin' ), 'value' => number_format_i18n( Minn_Admin_Kernel::count( $id, array(
-					"a.start_date\0from" => array( 'op' => '>=', 'value' => Minn_Admin_Kernel::at( 'local', 0 ) ),
-					"a.start_date\0to"   => array( 'op' => '<', 'value' => Minn_Admin_Kernel::at( 'local', 1 ) ),
-				) ) ) ),
-				array( 'label' => __( 'Pending', 'minn-admin' ), 'value' => number_format_i18n( Minn_Admin_Kernel::count( $id, array( 'status' => array( 'pending', 'waitlisted' ) ) ) ) ),
-				array(
-					'label' => __( 'Next', 'minn-admin' ),
-					'value' => $next_ts ? wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $next_ts ) : '—',
-					'hint'  => $next_ts ? '' : __( 'Nothing upcoming', 'minn-admin' ),
-				),
-			),
+	'run'    => function () use ( $minn_bookly_views ) {
+		return minn_admin_booking_card( 'bookly/appointments', $minn_bookly_views, array(
+			'ready' => minn_admin_bookly_has_tables(),
+			'noun'  => __( 'Appointments', 'minn-admin' ),
+			'empty' => __( 'No bookings yet', 'minn-admin' ),
+			'scope' => 'minn_admin_bookly_scope',
+			'next'  => 'a.start_date',
+			'iso'   => 'minn_admin_bookly_local_iso',
 			// The next 14 site-local days, starting today: approved and the rest apart.
-			'chart'   => array(
-				'title'     => __( 'Next 14 days', 'minn-admin' ),
-				'primary'   => __( 'Booked', 'minn-admin' ),
-				'secondary' => __( 'Pending', 'minn-admin' ),
-				'points'    => array_values( Minn_Admin_Kernel::days( $id, array( 'column' => 'a.start_date', 'clock' => 'local', 'ahead' => true, 'where' => $active, 'split' => 'status', 'secondary' => array( 'pending', 'waitlisted' ) ) ) ),
-			),
-			'actions' => $open,
-		);
+			'chart' => array( 'column' => 'a.start_date', 'clock' => 'local', 'where' => array( 'status' => array( 'approved', 'pending', 'waitlisted' ) ), 'secondary' => array( 'pending', 'waitlisted' ) ),
+			'open'  => array( __( 'Open Bookly ↗', 'minn-admin' ), minn_admin_bookly_admin_url() ),
+		) );
 	},
 ) );
 
-add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
-	if ( ! minn_admin_bookly_active() || ! minn_admin_bookly_can_read() ) {
-		return $surfaces;
-	}
-	$status  = function ( $label, $to, $when = null, $confirm = false ) {
-		$ui = array( 'label' => $label, 'body' => array( 'status' => $to ) );
-		if ( null !== $when ) {
-			$ui['key']  = 'status';
-			$ui['when'] = $when;
-		}
-		if ( $confirm ) {
-			$ui['confirm'] = __( 'Cancel this appointment? Bookly will notify the customer.', 'minn-admin' );
-		}
-		if ( 'cancelled' === $to ) {
-			$ui['danger'] = true;
-		}
-		return Minn_Admin_Kernel::ui( 'bookly/appointments', 'status', $ui );
-	};
-	$actions = array( array( 'label' => __( 'Open in Bookly ↗', 'minn-admin' ), 'href' => minn_admin_bookly_admin_url() ) );
-	$bulk    = array();
-	if ( minn_admin_bookly_can_write() ) {
-		$actions = array_merge( array(
-			$status( __( 'Approve', 'minn-admin' ), 'approved', 'pending' ),
-			$status( __( 'Cancel', 'minn-admin' ), 'cancelled', 'approved', true ),
-			$status( __( 'Cancel', 'minn-admin' ), 'cancelled', 'pending', true ),
-		), $actions );
-		$bulk    = array( $status( __( 'Approve', 'minn-admin' ), 'approved' ), $status( __( 'Cancel', 'minn-admin' ), 'cancelled' ) );
-	}
-	$surfaces['bookly'] = array(
-		'label'      => __( 'Bookings', 'minn-admin' ),
-		'family'     => 'bookings',
-		'group'      => 'commerce',
-		'sub'        => 'Bookly',
-		'plugin'     => 'bookly-responsive-appointment-booking-tool',
-		'icon'       => 'calendar',
-		'cap'        => 'read',
-		'status'     => array( 'route' => 'minn-admin/v1/bookly/status' ),
-		'collection' => Minn_Admin_Kernel::collection( 'bookly/appointments', array(
-			'viewLabel' => __( 'Appointments', 'minn-admin' ),
-			'filter'    => array(
-				'label'   => __( 'When', 'minn-admin' ),
-				'options' => array(
-					array( 'upcoming', __( 'Upcoming', 'minn-admin' ) ),
-					array( 'pending', __( 'Pending', 'minn-admin' ) ),
-					array( 'today', __( 'Today', 'minn-admin' ) ),
-					array( 'canceled', __( 'Canceled', 'minn-admin' ) ),
-					array( 'all', __( 'All', 'minn-admin' ) ),
-				),
-			),
-			'columns'   => array(
-				array( 'key' => 'customer', 'label' => __( 'Customer', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.6fr)' ),
-				array( 'key' => 'service', 'label' => __( 'Service', 'minn-admin' ) ),
-				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '110px' ),
-				array( 'key' => 'date', 'label' => __( 'When', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
-			),
-			'detail'    => array(
-				'sectionsRoute' => 'minn-admin/v1/bookly/appointments/{id}',
-			),
-			'actions'   => $actions,
-			'bulk'      => $bulk,
-		) ),
-	);
-	return $surfaces;
+minn_admin_add_surface( 'bookly', function () {
+	return minn_admin_bookly_active() && minn_admin_bookly_can_read();
+}, function () {
+	return minn_admin_booking_surface( 'bookly/appointments', array(
+		'sub'    => 'Bookly',
+		'plugin' => 'bookly-responsive-appointment-booking-tool',
+		'status' => 'bookly/status',
+		'noun'   => __( 'Appointments', 'minn-admin' ),
+		'open'   => array( __( 'Open in Bookly ↗', 'minn-admin' ), minn_admin_bookly_admin_url() ),
+		'moves'  => minn_admin_bookly_can_write() ? array(
+			array( __( 'Approve', 'minn-admin' ), 'approved', 'pending' ),
+			array( __( 'Cancel', 'minn-admin' ), 'cancelled', array( 'approved', 'pending' ), __( 'Cancel this appointment? Bookly will notify the customer.', 'minn-admin' ) ),
+		) : array(),
+	) );
 } );
