@@ -15,7 +15,14 @@
  * Two tiers. minn_admin_resource() declares a list, an item and its actions.
  * minn_admin_endpoint() is the handler tier: a route whose logic stays in the
  * adapter (a status card, a send, a job) still gets the kernel's route, gate,
- * typed ids and error shape. The API is internal until a second family ports.
+ * typed ids and error shape. The API is internal: only Minn's own adapters
+ * declare through it.
+ *
+ * A declaration the kernel cannot read whole registers nothing: a key it does
+ * not know (a misspelt 'when' would let an action run in any state), a field
+ * type it does not know, a scope without its column and function. So does
+ * one whose function throws, and an endpoint whose gate takes anything but
+ * the request; the rest of the REST API is untouched either way.
  *
  * A resource:
  *
@@ -140,6 +147,42 @@ class Minn_Admin_Kernel {
 	/** What has registered routes this request, so nothing registers twice. */
 	private static $done = array();
 
+	/** What the kernel refused (see wrong()). */
+	private static $refused = array();
+
+	/** "METHOD /route" => who registered it, so a second declaration of one is refused, never shadowed. */
+	private static $claimed = array();
+
+	/** The clocks a date column may be read on. */
+	const CLOCKS = array( 'utc', 'local', 'date', 'epoch', 'local-epoch', 'db' );
+
+	/**
+	 * Every key a declaration may hold, by where it sits. Anything else is a
+	 * mistake the kernel would otherwise read as absent.
+	 */
+	const KEYS = array(
+		'resource' => array( 'active', 'gates', 'item_gate', 'labels', 'source', 'list', 'item', 'reads', 'create', 'actions', 'id', 'file' ),
+		'source'   => array( 'table', 'key', 'columns', 'detail', 'network', 'joins', 'where', 'rows', 'list', 'get', 'exists' ),
+		'join'     => array( 'table', 'network', 'core', 'on', 'first' ),
+		'list'     => array( 'per_page', 'max', 'filter', 'tab', 'scope', 'facets', 'search', 'range', 'order', 'sort', 'keys', 'batch', 'row', 'fields' ),
+		'filter'   => array( 'param', 'column', 'values', 'default', 'order', 'many' ),
+		'tab'      => array( 'param', 'column', 'gate', 'refuse' ),
+		'scope'    => array( 'column', 'allowed', 'refuse' ),
+		'facet'    => array( 'param', 'column', 'type', 'values' ),
+		'search'   => array( 'param', 'columns', 'meta', 'also' ),
+		'meta'     => array( 'table', 'key', 'name', 'value', 'skip', 'only', 'network' ),
+		'range'    => array( 'column', 'clock' ),
+		'order'    => array( 'column', 'dir' ),
+		'sort'     => array( 'columns', 'param', 'dir' ),
+		'keys'     => array( 'items', 'total' ),
+		'item'     => array( 'view', 'fields', 'gate' ),
+		'read'     => array( 'gate', 'view', 'fields' ),
+		'create'   => array( 'gate', 'run', 'expect', 'reply', 'done', 'fields', 'fail', 'fail_code' ),
+		'action'   => array( 'method', 'item', 'gate', 'when', 'code', 'refuse', 'run', 'expect', 'args', 'fail', 'fail_code', 'reply', 'done' ),
+		'endpoint' => array( 'methods', 'gate', 'run', 'active', 'args', 'labels', 'path', 'file' ),
+		'field'    => array( 'type', 'decode', 'values', 'stored', 'wire', 'nullable' ),
+	);
+
 	/**
 	 * Declare a resource. Routes register at rest_api_init.
 	 *
@@ -154,8 +197,13 @@ class Minn_Admin_Kernel {
 	public static function resource( $id, $def ) {
 		$id = trim( (string) $id, '/' );
 		if ( ! preg_match( '#^[a-z0-9-]+(/[a-z0-9-]+)*$#', $id ) || ! ( is_array( $def ) || is_callable( $def ) ) ) {
-			/* translators: %s: the resource id an adapter declared. */
-			_doing_it_wrong( __METHOD__, esc_html( sprintf( __( 'A resource id is lowercase path segments and its declaration an array or a function: %s', 'minn-admin' ), $id ) ), 'Minn Admin 0.46.0' );
+			self::wrong( __METHOD__, "A resource id is lowercase path segments and its declaration an array or a function: {$id}" );
+			return;
+		}
+		if ( isset( self::$resources[ $id ] ) ) {
+			// The first declaration keeps the id: a second would silently
+			// replace a resource other code already reads.
+			self::wrong( __METHOD__, "{$id} is declared twice, so the second declaration is ignored." );
 			return;
 		}
 		self::$resources[ $id ] = array( 'lazy' => $def, 'id' => $id, 'file' => self::caller() );
@@ -181,11 +229,34 @@ class Minn_Admin_Kernel {
 		}
 		if ( array_key_exists( 'lazy', $slot ) ) {
 			if ( ! did_action( 'init' ) ) {
-				_doing_it_wrong( __METHOD__, esc_html( "{$id} was needed before init, so its labels are not yet in the reader's language." ), 'Minn Admin 0.46.0' );
+				self::wrong( __METHOD__, "{$id} was needed before init, so its labels are not yet in the reader's language." );
 			}
 			// A declaration array is never callable; array( 'Class', 'method' ) is.
-			$def = is_callable( $slot['lazy'] ) ? call_user_func( $slot['lazy'] ) : $slot['lazy'];
+			// One that throws (a vendor class an update renamed) is a resource
+			// with no routes: it runs at rest_api_init, where a throw would fail
+			// every REST request on the site.
+			try {
+				$def = is_callable( $slot['lazy'] ) ? call_user_func( $slot['lazy'] ) : $slot['lazy'];
+			} catch ( \Throwable $e ) {
+				self::log( $id, $e );
+				self::wrong( __METHOD__, "{$id}'s declaration threw, so it has no routes." );
+				$def = array( 'active' => false );
+			}
 			$def = is_array( $def ) ? $def : array();
+			// Refused here, not only at registration: load(), the card readers,
+			// distinct() and collection() read the declaration too, and a scope
+			// or a fixed condition the kernel cannot read is none to them.
+			// It runs where nothing else catches, at rest_api_init: a shape it
+			// trips over is a declaration it cannot read, never a fatal.
+			try {
+				$why = self::unreadable( $def, 'resource' );
+			} catch ( \Throwable $e ) {
+				$why = 'its declaration cannot be read';
+			}
+			if ( '' !== $why ) {
+				self::wrong( __METHOD__, "{$id}: {$why}, so it has no routes." );
+				$def = array( 'active' => false );
+			}
 			$def['id']              = $slot['id'];
 			$def['file']            = $slot['file'];
 			self::$resources[ $id ] = $def;
@@ -233,6 +304,40 @@ class Minn_Admin_Kernel {
 			return 0 === strpos( $file, $root ) ? substr( $file, strlen( $root ) ) : basename( $file );
 		}
 		return '';
+	}
+
+	/**
+	 * A declaration the kernel refuses, or part of one: a notice for its
+	 * author, and a line in refused(), which a runner reads whenever the REST
+	 * server started.
+	 *
+	 * @param string $fn      The function the mistake is in.
+	 * @param string $message What was refused, and why.
+	 */
+	private static function wrong( $fn, $message ) {
+		self::$refused[] = (string) $message;
+		// Registration runs at rest_api_init, and during a REST request a
+		// notice rides the response as an X-WP-DoingItWrong header, to anyone.
+		$rest = ( defined( 'REST_REQUEST' ) && REST_REQUEST ) || ( function_exists( 'wp_is_serving_rest_request' ) && wp_is_serving_rest_request() );
+		if ( $rest ) {
+			if ( defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG ) {
+				error_log( 'Minn Admin ' . $fn . ': ' . $message ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			}
+			return;
+		}
+		_doing_it_wrong( $fn, esc_html( $message ), 'Minn Admin 0.46.0' );
+	}
+
+	/** What the kernel refused, or declared and could not apply, this request, in order. */
+	public static function refused() {
+		return self::$refused;
+	}
+
+	/** A throw, for the adapter's author: in the debug log, never in a response. */
+	private static function log( $where, \Throwable $e ) {
+		if ( defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG ) {
+			error_log( 'Minn Admin ' . $where . ': ' . get_class( $e ) . ': ' . $e->getMessage() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		}
 	}
 
 	private static function hook() {
@@ -297,11 +402,187 @@ class Minn_Admin_Kernel {
 			return;
 		}
 		self::$done[ $kind . ':' . $key ] = true;
-		if ( 'resource' === $kind ) {
-			self::register_resource( $def );
-		} else {
-			self::register_endpoint( $def );
+		try {
+			if ( 'resource' === $kind ) {
+				self::register_resource( $def );
+			} else {
+				self::register_endpoint( $def );
+			}
+		} catch ( \Throwable $e ) {
+			self::log( (string) ( $def['id'] ?? $def['path'] ?? $key ), $e );
+			self::wrong( 'minn_admin_' . $kind, ( $def['id'] ?? $def['path'] ?? $key ) . ' threw while its routes registered.' );
 		}
+	}
+
+	/**
+	 * Why a declaration cannot be read whole, or '' when it can: the first
+	 * key it holds that its place does not take, a field of a type the
+	 * kernel cannot encode, a scope without its column and function.
+	 *
+	 * @param array  $def  Declaration.
+	 * @param string $kind resource | endpoint.
+	 * @return string
+	 */
+	private static function unreadable( array $def, $kind ) {
+		$at = function ( $where, $arr, $place ) {
+			if ( null !== $arr && ! is_array( $arr ) ) {
+				return "{$where} is not a list of keys";
+			}
+			foreach ( is_array( $arr ) ? array_keys( $arr ) : array() as $k ) {
+				if ( ! in_array( $k, self::KEYS[ $place ], true ) ) {
+					return "{$where} holds \"{$k}\", which the kernel does not read";
+				}
+			}
+			return '';
+		};
+		$fields = function ( $where, $f ) use ( $at ) {
+			if ( null === $f ) {
+				return '';
+			}
+			if ( ! is_array( $f ) ) {
+				return "{$where} is not a list of fields";
+			}
+			foreach ( $f as $name => $spec ) {
+				$type = is_array( $spec ) ? ( $spec['type'] ?? '' ) : $spec;
+				if ( ! is_string( $type ) || ! in_array( $type, Minn_Admin_Kernel_Fields::TYPES, true ) ) {
+					return "{$where}.{$name} has no type the kernel encodes";
+				}
+				$why = is_array( $spec ) ? $at( "{$where}.{$name}", $spec, 'field' ) : '';
+				if ( '' !== $why ) {
+					return $why;
+				}
+			}
+			return '';
+		};
+		if ( 'endpoint' === $kind ) {
+			return $at( 'the endpoint', $def, 'endpoint' );
+		}
+		$l      = is_array( $def['list'] ?? null ) ? $def['list'] : array();
+		$checks = array(
+			array( 'the resource', $def, 'resource' ),
+			array( 'source', $def['source'] ?? null, 'source' ),
+			array( 'list', $def['list'] ?? null, 'list' ),
+			array( 'item', $def['item'] ?? null, 'item' ),
+			array( 'create', $def['create'] ?? null, 'create' ),
+		);
+		foreach ( array( 'filter', 'tab', 'scope', 'search', 'range', 'order', 'sort', 'keys' ) as $k ) {
+			$checks[] = array( "list.{$k}", $l[ $k ] ?? null, $k );
+		}
+		$src      = is_array( $def['source'] ?? null ) ? $def['source'] : array();
+		$checks[] = array( 'list.search.meta', is_array( $l['search'] ?? null ) ? ( $l['search']['meta'] ?? null ) : null, 'meta' );
+		foreach ( array( 'gates' => $def['gates'] ?? null, 'labels' => $def['labels'] ?? null, 'reads' => $def['reads'] ?? null, 'actions' => $def['actions'] ?? null, 'list.facets' => $l['facets'] ?? null, 'source.joins' => $src['joins'] ?? null ) as $where => $v ) {
+			if ( null !== $v && ! is_array( $v ) ) {
+				return "{$where} is not a list";
+			}
+		}
+		foreach ( (array) ( $l['facets'] ?? array() ) as $i => $f ) {
+			$checks[] = array( "list.facets[{$i}]", $f, 'facet' );
+		}
+		foreach ( (array) ( $src['joins'] ?? array() ) as $alias => $j ) {
+			$checks[] = array( "source.joins.{$alias}", $j, 'join' );
+		}
+		foreach ( (array) ( $def['reads'] ?? array() ) as $slug => $read ) {
+			$checks[] = array( "reads.{$slug}", $read, 'read' );
+		}
+		foreach ( (array) ( $def['actions'] ?? array() ) as $slug => $a ) {
+			$checks[] = array( "actions.{$slug}", $a, 'action' );
+		}
+		foreach ( $checks as $c ) {
+			$why = $at( $c[0], $c[1], $c[2] );
+			if ( '' !== $why ) {
+				return $why;
+			}
+		}
+		$why = $fields( 'list.fields', $l['fields'] ?? null );
+		$why = '' !== $why ? $why : $fields( 'item.fields', $def['item']['fields'] ?? null );
+		$why = '' !== $why ? $why : $fields( 'create.fields', $def['create']['fields'] ?? null );
+		foreach ( (array) ( $def['reads'] ?? array() ) as $slug => $read ) {
+			$why = '' !== $why ? $why : $fields( "reads.{$slug}.fields", $read['fields'] ?? null );
+		}
+		if ( '' === $why && isset( $l['scope'] ) && ( empty( $l['scope']['column'] ) || ! is_string( $l['scope']['column'] ) || ! is_callable( $l['scope']['allowed'] ?? null ) ) ) {
+			// A scope that cannot be asked would read as no scope at all.
+			$why = 'list.scope needs a column and an allowed function';
+		}
+		if ( '' === $why && isset( $l['range'] ) && ! in_array( $l['range']['clock'] ?? 'local', self::CLOCKS, true ) ) {
+			$why = 'list.range names a clock the kernel does not read';
+		}
+		if ( '' === $why && array_key_exists( 'exists', (array) ( $def['source'] ?? array() ) ) && ! is_callable( $def['source']['exists'] ) ) {
+			// One that is not callable would leave gone to the source's own read.
+			$why = 'source.exists is not callable';
+		}
+		return $why;
+	}
+
+	/**
+	 * Register a route's endpoints, each method on each route once across
+	 * every declaration: one claimed already is refused, not left to
+	 * WordPress, which would serve whichever came first.
+	 *
+	 * @param string $route Route under the namespace, with its leading slash.
+	 * @param array  $eps   Endpoint args (one, or a list of them).
+	 * @param string $who   The declaration, for the notice.
+	 */
+	private static function route( $route, array $eps, $who ) {
+		$eps  = isset( $eps['methods'] ) ? array( $eps ) : $eps;
+		$keep = array();
+		foreach ( $eps as $ep ) {
+			$methods = array();
+			foreach ( (array) $ep['methods'] as $m ) {
+				foreach ( explode( ',', (string) $m ) as $one ) {
+					$methods[] = strtoupper( trim( $one ) );
+				}
+			}
+			$taken = array();
+			foreach ( $methods as $m ) {
+				if ( isset( self::$claimed[ "{$m} {$route}" ] ) ) {
+					$taken[] = $m;
+				}
+			}
+			if ( $taken ) {
+				self::wrong( 'minn_admin_resource', "{$who}: " . implode( ', ', $taken ) . " {$route} is already declared by " . self::$claimed[ "{$taken[0]} {$route}" ] . ', so it has no route.' );
+				continue;
+			}
+			foreach ( $methods as $m ) {
+				self::$claimed[ "{$m} {$route}" ] = $who;
+			}
+			$keep[] = $ep;
+		}
+		if ( $keep ) {
+			register_rest_route( self::NS, $route, $keep );
+		}
+	}
+
+	/**
+	 * Whether an endpoint's gate takes only what it is asked with: nothing,
+	 * or the request (typed as one). A gate with any other parameter (a
+	 * capability check whose user id defaults) would be handed the request
+	 * in its place, and a user id read from it is user 1.
+	 *
+	 * @param callable $gate Gate.
+	 * @return bool
+	 */
+	private static function takes_request( $gate ) {
+		try {
+			if ( is_string( $gate ) && false !== strpos( $gate, '::' ) ) {
+				$gate = explode( '::', $gate, 2 );
+			}
+			if ( is_array( $gate ) ) {
+				$rf = new ReflectionMethod( $gate[0], $gate[1] );
+			} elseif ( is_object( $gate ) && ! $gate instanceof Closure ) {
+				$rf = new ReflectionMethod( $gate, '__invoke' );
+			} else {
+				$rf = new ReflectionFunction( $gate );
+			}
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+		foreach ( $rf->getParameters() as $prm ) {
+			$t = $prm->getType();
+			if ( false === strpos( $t instanceof ReflectionNamedType ? $t->getName() : (string) $t, 'WP_REST_Request' ) ) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/**
@@ -323,7 +604,7 @@ class Minn_Admin_Kernel {
 	}
 
 	private static function missing_gate( $where, $name ) {
-		_doing_it_wrong( 'minn_admin_resource', esc_html( "{$where} names no declared gate \"{$name}\", so it has no route." ), 'Minn Admin 0.46.0' );
+		self::wrong( 'minn_admin_resource', "{$where} names no declared gate \"{$name}\", so it has no route." );
 	}
 
 	private static function register_resource( array $res ) {
@@ -334,22 +615,26 @@ class Minn_Admin_Kernel {
 			self::missing_gate( $res['id'], 'view' );
 			return;
 		}
-		if ( ! empty( $res['list']['filter'] ) && empty( $res['list']['filter']['values'] ) ) {
-			_doing_it_wrong( 'minn_admin_resource', esc_html( "{$res['id']} declares a filter with no values, so it has no list route." ), 'Minn Admin 0.46.0' );
-			$res['list'] = array();
+		// No list route, and nothing else changed: the item, reads and actions
+		// still hold the list's scope (a filter's values built from the
+		// vendor's data can come out empty).
+		$listed = ! empty( $res['list'] );
+		if ( $listed && ! empty( $res['list']['filter'] ) && empty( $res['list']['filter']['values'] ) ) {
+			self::wrong( 'minn_admin_resource', "{$res['id']} declares a filter with no values, so it has no list route." );
+			$listed = false;
 		}
 		if ( ! empty( $res['list']['filter']['many'] ) && ( isset( $res['list']['filter']['default'] ) || isset( $res['list']['filter']['order'] ) ) ) {
-			_doing_it_wrong( 'minn_admin_resource', esc_html( "{$res['id']} declares a default or an order on a filter taking several values, which it never applies." ), 'Minn Admin 0.46.0' );
+			self::wrong( 'minn_admin_resource', "{$res['id']} declares a default or an order on a filter taking several values, which it never applies." );
 		}
 		if ( isset( $res['list']['sort'] ) ) {
 			$why = self::sort_problem( $res['list']['sort'], $res );
 			if ( '' !== $why ) {
-				_doing_it_wrong( 'minn_admin_resource', esc_html( "{$res['id']} declares a sort it cannot apply ({$why}), so its list keeps its declared order." ), 'Minn Admin 0.46.0' );
+				self::wrong( 'minn_admin_resource', "{$res['id']} declares a sort it cannot apply ({$why}), so its list keeps its declared order." );
 				unset( $res['list']['sort'] );
 			}
 		}
 		$base_eps = array();
-		if ( ! empty( $res['list'] ) ) {
+		if ( $listed ) {
 			$base_eps[] = array(
 				'minn_file'           => $res['file'],
 				'methods'             => 'GET',
@@ -366,10 +651,13 @@ class Minn_Admin_Kernel {
 				self::missing_gate( $res['id'] . ' create', $c_gate );
 			} elseif ( ! empty( $res['list']['scope'] ) || ! empty( $res['item_gate'] ) ) {
 				// A create cannot ask a scope or a row gate before its row exists.
-				_doing_it_wrong( 'minn_admin_resource', esc_html( "{$res['id']} declares a create beside a scope or a row gate, so it has no route." ), 'Minn Admin 0.46.0' );
+				self::wrong( 'minn_admin_resource', "{$res['id']} declares a create beside a scope or a row gate, so it has no route." );
+			} elseif ( isset( $res['create']['expect'] ) && 'exists' !== $res['create']['expect'] && ( is_string( $res['create']['expect'] ) || ! is_callable( $res['create']['expect'] ) ) ) {
+				// A misspelt expect would answer 500 after the vendor made the row.
+				self::wrong( 'minn_admin_resource', "{$res['id']} create declares an expect that is neither 'exists' nor a function, so it has no route." );
 			} elseif ( empty( $res['source']['table'] ) && ( empty( $res['create']['expect'] ) || 'exists' === $res['create']['expect'] ) ) {
 				// Only a table proves a row is new (its key); any other source says how.
-				_doing_it_wrong( 'minn_admin_resource', esc_html( "{$res['id']} creates through a source that is not a table and declares no expect, so it has no route." ), 'Minn Admin 0.46.0' );
+				self::wrong( 'minn_admin_resource', "{$res['id']} creates through a source that is not a table and declares no expect, so it has no route." );
 			} else {
 				$base_eps[] = array(
 					'minn_file'           => $res['file'],
@@ -382,7 +670,7 @@ class Minn_Admin_Kernel {
 			}
 		}
 		if ( $base_eps ) {
-			register_rest_route( self::NS, $base, $base_eps );
+			self::route( $base, $base_eps, $res['id'] );
 		}
 		foreach ( (array) ( $res['reads'] ?? array() ) as $slug => $read ) {
 			$gate_name = (string) ( $read['gate'] ?? ( $res['item']['gate'] ?? 'view' ) );
@@ -391,7 +679,7 @@ class Minn_Admin_Kernel {
 				self::missing_gate( $res['id'] . ' read ' . $slug, $gate_name );
 				continue;
 			}
-			register_rest_route( self::NS, $item . '/' . sanitize_key( (string) $slug ), array(
+			self::route( $item . '/' . sanitize_key( (string) $slug ), array(
 				'minn_file'           => $res['file'],
 				'methods'             => 'GET',
 				'permission_callback' => $gate,
@@ -400,11 +688,11 @@ class Minn_Admin_Kernel {
 					$out = is_wp_error( $row ) ? $row : call_user_func( $read['view'], $row, $r );
 					return is_wp_error( $out ) || empty( $read['fields'] ) ? $out : Minn_Admin_Kernel_Fields::out( $read['fields'], (array) $out );
 				} ),
-			) );
+			), $res['id'] );
 		}
 		$item_eps = array();
 		// Each method on each route once: a second would be shadowed by the first.
-		$taken = array( 'GET ' . $base => ! empty( $res['list'] ), 'POST ' . $base => ! empty( $res['create'] ), 'GET ' . $item => ! empty( $res['item'] ) );
+		$taken = array( 'GET ' . $base => $listed, 'POST ' . $base => ! empty( $res['create'] ), 'GET ' . $item => ! empty( $res['item'] ) );
 		foreach ( array_keys( (array) ( $res['reads'] ?? array() ) ) as $slug ) {
 			$taken[ 'GET ' . $item . '/' . sanitize_key( (string) $slug ) ] = true;
 		}
@@ -434,7 +722,7 @@ class Minn_Admin_Kernel {
 			// without one the kernel could not tell a refusal from success.
 			$expect = $action['expect'] ?? null;
 			if ( ! ( 'gone' === $expect || 'ran' === $expect || ( is_array( $expect ) && $expect ) || ( ! is_string( $expect ) && is_callable( $expect ) ) ) ) {
-				_doing_it_wrong( 'minn_admin_resource', esc_html( "{$res['id']} action {$slug} declares no post-condition ('expect'), so it has no route." ), 'Minn Admin 0.46.0' );
+				self::wrong( 'minn_admin_resource', "{$res['id']} action {$slug} declares no post-condition ('expect'), so it has no route." );
 				continue;
 			}
 			$method = strtoupper( (string) ( $action['method'] ?? 'POST' ) );
@@ -443,14 +731,18 @@ class Minn_Admin_Kernel {
 			if ( ! in_array( $method, array( 'POST', 'PUT', 'PATCH', 'DELETE' ), true ) ) {
 				$why = "method {$method} is not one of POST, PUT, PATCH, DELETE";
 			} elseif ( '' === (string) $slug || sanitize_key( (string) $slug ) !== (string) $slug ) {
-				$why = __( 'its slug is not a key', 'minn-admin' );
+				$why = 'its slug is not a key';
 			} elseif ( ! empty( $taken[ $method . ' ' . $path ] ) ) {
 				$why = "{$method} on its route is taken";
+			} elseif ( 'gone' === $expect && empty( $res['source']['table'] ) && ! is_callable( $res['source']['exists'] ?? null ) ) {
+				// A callable source's own read can fail, or hide the row from
+				// this caller, and either reads as gone.
+				$why = 'it proves gone, and its source is no table and declares no exists';
 			} elseif ( isset( $action['args'] ) && ! self::args_ok( $action['args'], $item ) ) {
-				$why = __( 'its args are not schemas (no callbacks, no default, a boolean required, no name the route captures)', 'minn-admin' );
+				$why = 'its args are not schemas (a type each, no callbacks, no default, a boolean required, no name the route captures)';
 			}
 			if ( '' !== $why ) {
-				_doing_it_wrong( 'minn_admin_resource', esc_html( "{$res['id']} action {$slug}: {$why}, so it has no route." ), 'Minn Admin 0.46.0' );
+				self::wrong( 'minn_admin_resource', "{$res['id']} action {$slug}: {$why}, so it has no route." );
 				continue;
 			}
 			$taken[ $method . ' ' . $path ] = true;
@@ -465,23 +757,30 @@ class Minn_Admin_Kernel {
 			if ( self::on_item( $action ) ) {
 				$item_eps[] = $ep;
 			} else {
-				register_rest_route( self::NS, $item . '/' . sanitize_key( (string) $slug ), $ep );
+				self::route( $item . '/' . sanitize_key( (string) $slug ), $ep, $res['id'] );
 			}
 		}
 		if ( $item_eps ) {
-			register_rest_route( self::NS, $item, $item_eps );
+			self::route( $item, $item_eps, $res['id'] );
 		}
 	}
 
 	private static function register_endpoint( array $ep ) {
 		$gate = $ep['gate'] ?? null;
 		if ( ! is_callable( $gate ) ) {
-			/* translators: %s: the endpoint's route. */
-			_doing_it_wrong( 'minn_admin_endpoint', esc_html( sprintf( __( '%s has no gate, so it has no route.', 'minn-admin' ), $ep['path'] ) ), 'Minn Admin 0.46.0' );
+			self::wrong( 'minn_admin_endpoint', "{$ep['path']} has no gate, so it has no route." );
+			return;
+		}
+		$why = self::unreadable( $ep, 'endpoint' );
+		if ( '' === $why && ! self::takes_request( $gate ) ) {
+			$why = 'its gate takes something other than the request it is asked with';
+		}
+		if ( '' !== $why ) {
+			self::wrong( 'minn_admin_endpoint', "{$ep['path']}: {$why}, so it has no route." );
 			return;
 		}
 		if ( isset( $ep['args'] ) && ! self::args_ok( $ep['args'], $ep['path'] ) ) {
-			_doing_it_wrong( 'minn_admin_endpoint', esc_html( "{$ep['path']}: its args are not schemas (no callbacks, no default, a boolean required, no name the route captures), so it has no route." ), 'Minn Admin 0.46.0' );
+			self::wrong( 'minn_admin_endpoint', "{$ep['path']}: its args are not schemas (a type each, no callbacks, no default, a boolean required, no name the route captures), so it has no route." );
 			return;
 		}
 		$run = $ep['run'] ?? null;
@@ -510,7 +809,7 @@ class Minn_Admin_Kernel {
 				return $bad ? $bad : call_user_func( $run, $r, $ctx );
 			} ),
 		);
-		register_rest_route( self::NS, '/' . $ep['path'], $args );
+		self::route( '/' . $ep['path'], $args, $ep['path'] );
 	}
 
 	/**
@@ -534,31 +833,114 @@ class Minn_Admin_Kernel {
 				}
 				return Minn_Admin_Kernel::fail( 'minn_failed', __( 'That did not work. Nothing was reported as done.', 'minn-admin' ), 500 );
 			}
-			return is_wp_error( $out ) ? Minn_Admin_Kernel::clean_error( $out ) : rest_ensure_response( $out );
+			if ( is_wp_error( $out ) ) {
+				return Minn_Admin_Kernel::clean_error( $out );
+			}
+			$out = rest_ensure_response( $out );
+			// A vendor's own error response (rest_do_request()'s answer, passed
+			// on) keeps its shape and status, with the same scrub as an error.
+			if ( $out->get_status() >= 400 ) {
+				$out->set_data( self::scrub( $out->get_data() ) );
+			}
+			return $out;
 		};
 	}
 
 	/** A handler's WP_Error as it may leave: see guarded(). */
 	public static function clean_error( WP_Error $e ) {
 		$data = $e->get_error_data();
-		$data = is_array( $data ) ? $data : array();
-		foreach ( array_keys( $data ) as $k ) {
-			if ( preg_match( '/^(sql|query|queries|trace|backtrace|stack|file|line|exception|last_error|debug)$/i', (string) $k ) ) {
-				unset( $data[ $k ] );
-			}
-		}
+		$data = is_array( $data ) ? self::scrub( $data ) : array();
 		$status         = (int) ( $data['status'] ?? 0 );
 		$data['status'] = ( $status >= 400 && $status <= 599 ) ? $status : 500;
-		// A vendor message that quotes a query or a server path is replaced.
-		$message = (string) $e->get_error_message();
-		// SQL as a database prints it, not words that happen to be verbs
-		// ("could not delete the set", "Select a state from the list").
-		if ( preg_match( '/\b(?:SELECT\b[\s\S]{0,400}?\bFROM\s+[`\w]|INSERT\s+INTO\s+[`\w]|UPDATE\s+[`\w.]+\s+SET\s|DELETE\s+FROM\s+[`\w]|REPLACE\s+INTO\s+[`\w])/', $message )
-			|| preg_match( '/You have an error in your SQL syntax|WordPress database error|Unknown column|Table \S+ doesn\'t exist/i', $message )
-			|| false !== strpos( $message, wp_normalize_path( ABSPATH ) ) || false !== strpos( $message, ABSPATH ) ) {
+		$message        = (string) $e->get_error_message();
+		if ( self::leaks( $message ) ) {
 			$message = __( 'That did not work. Nothing was reported as done.', 'minn-admin' );
 		}
 		return new WP_Error( $e->get_error_code(), $message, $data );
+	}
+
+	/**
+	 * Error data as it may leave, at any depth: no key shaped like debug
+	 * output, and no text that quotes a query, a database error or a server
+	 * path (an empty string in its place, so the shape the client reads holds;
+	 * a message the generic one).
+	 *
+	 * @param mixed $data Data.
+	 * @param int   $depth How deep this is.
+	 * @return mixed
+	 */
+	private static function scrub( $data, $depth = 0 ) {
+		if ( is_string( $data ) ) {
+			return self::leaks( $data ) ? '' : $data;
+		}
+		if ( is_object( $data ) ) {
+			$data = (array) json_decode( (string) wp_json_encode( $data ), true );
+		}
+		if ( ! is_array( $data ) ) {
+			return $data;
+		}
+		if ( $depth > 8 ) {
+			return array();
+		}
+		foreach ( $data as $k => $v ) {
+			if ( is_string( $k ) && preg_match( '/^(sql|query|queries|trace|backtrace|stack|file|line|exception|last_error|last_query|debug)$/i', $k ) ) {
+				unset( $data[ $k ] );
+				continue;
+			}
+			// A message the client shows reads as one, not as a blank.
+			$data[ $k ] = 'message' === $k && is_string( $v ) && self::leaks( $v ) ? __( 'That did not work. Nothing was reported as done.', 'minn-admin' ) : self::scrub( $v, $depth + 1 );
+		}
+		return $data;
+	}
+
+	/**
+	 * Whether text quotes SQL as a database prints it, a database's own
+	 * error, or a path on this server. Keywords in capitals are SQL; in any
+	 * case only shapes no sentence takes count ("SELECT *", "FROM wp_posts",
+	 * "WHERE id = 5", a quoted identifier), so "could not delete the set" and
+	 * "Select a state from the list" are left as they are.
+	 *
+	 * @param string $text Text.
+	 * @return bool
+	 */
+	private static function leaks( $text ) {
+		global $wpdb;
+		$text   = (string) $text;
+		$prefix = preg_quote( (string) $wpdb->base_prefix, '/' );
+		$sql    = array(
+			'/\b(?:SELECT\b[\s\S]{0,400}?\bFROM\s+[`\w]|INSERT\s+INTO\s+[`\w]|UPDATE\s+[`\w.]+\s+SET\s|DELETE\s+FROM\s+[`\w]|REPLACE\s+INTO\s+[`\w])/',
+			'/\bselect\s+(?:\*|count\s*\(|distinct\s)/i',
+			// A table on this database's prefix, never a function call (wp_mail()).
+			'' === $prefix ? '' : '/\b(?:from|into|update|join|table)\s+`?' . $prefix . '\w++(?!\(\s*\))/i',
+			'/\bwhere\s+`?[\w.]+`?\s*(?:=|<>|!=|<=|>=|\bin\s*\(|\blike\s|\bis\s+(?:not\s+)?null\b)/i',
+			'/`\w+`\s*\.\s*`\w+`/',
+			// The database's own words, in the shapes it prints them.
+			'/You have an error in your SQL syntax|WordPress database error|Unknown column|Table \S+ doesn\'t exist|Duplicate entry \'|Data too long for column|Data truncated for column|Incorrect \w+ value: \'|Out of range value|doesn\'t have a default value|Column \'[^\']*\' cannot be null|foreign key constraint|Deadlock found|Lock wait timeout|server has gone away|Lost connection to (?:MySQL |MariaDB )?server|Can\'t connect to (?:local )?(?:MySQL |MariaDB )?server|Unknown database \'|command denied to user \'|Access denied for user \'|SQLSTATE\[/i',
+			// A file on a server: a script by its extension, anything under a
+			// server's own roots (a URL's path, "/blog/2020/old-post", is no file).
+			'#(?:^|[\s(\'"=:])(?:[A-Za-z]:)?(?:[\\\\/][\w.@~-]+){2,}\.(?:php|inc|phtml)\b#',
+			'#(?:^|[\s(\'"=:\[])(?:/(?:home\d*|var|srv|usr|opt|tmp|etc|root|run|dev|Users|Library|private|Volumes|mnt|data|www|app|nas|storage|hermes|chroot|kunden|homepages|customers|clients)/[\w.@~-]|[A-Za-z]:\\\\[\w.@~-]+\\\\)#',
+		);
+		foreach ( $sql as $re ) {
+			if ( '' !== $re && preg_match( $re, $text ) ) {
+				return true;
+			}
+		}
+		$dirs = array( ABSPATH, WP_CONTENT_DIR );
+		foreach ( array( ABSPATH, WP_CONTENT_DIR ) as $d ) {
+			$dirs[] = wp_normalize_path( $d );
+			$real   = realpath( $d ); // A symlinked install prints its real path.
+			if ( is_string( $real ) ) {
+				$dirs[] = $real;
+			}
+		}
+		foreach ( array_unique( $dirs ) as $dir ) {
+			$dir = rtrim( (string) $dir, '/\\' );
+			if ( strlen( $dir ) > 1 && false !== strpos( $text, $dir ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	public static function fail( $code, $message, $status ) {
@@ -634,7 +1016,20 @@ class Minn_Admin_Kernel {
 		$src = $res['source'] ?? array();
 		if ( ! empty( $src['get'] ) ) {
 			$row = call_user_func( $src['get'], (int) $id );
-			return is_array( $row ) ? $row : null;
+			if ( ! is_array( $row ) ) {
+				return null;
+			}
+			// The source's fixed conditions hold for a row read by id as they
+			// do for the list, which reads them in list_where().
+			if ( isset( $src['where'] ) ) {
+				$fixed = self::fixed( $src );
+				try {
+					return null !== $fixed && Minn_Admin_Kernel_SQL::matches( $row, $fixed ) ? $row : null;
+				} catch ( \Throwable $e ) {
+					return null;
+				}
+			}
+			return $row;
 		}
 		if ( empty( $src['table'] ) || ! Minn_Admin_Kernel_SQL::exists( self::table_of( $src ) ) ) {
 			return null;
@@ -913,6 +1308,27 @@ class Minn_Admin_Kernel {
 			list( $rows, $total ) = self::array_page( $l, $q, (array) call_user_func( $src['rows'] ) );
 		} elseif ( ! empty( $src['list'] ) ) {
 			list( $rows, $total ) = call_user_func( $src['list'], $q );
+			// And to the source's fixed conditions, which it reads in
+			// list_where(): a row outside them never shows, and a total that
+			// counted one cannot be trusted.
+			if ( isset( $src['where'] ) ) {
+				$fixed = self::fixed( $src );
+				$kept  = array();
+				foreach ( (array) $rows as $row ) {
+					try {
+						$ok = null !== $fixed && Minn_Admin_Kernel_SQL::matches( (array) $row, $fixed );
+					} catch ( \Throwable $e ) {
+						$ok = false;
+					}
+					if ( $ok ) {
+						$kept[] = $row;
+					}
+				}
+				if ( count( $kept ) !== count( (array) $rows ) ) {
+					$total = count( $kept );
+				}
+				$rows = $kept;
+			}
 			// A callable source is handed the scope in $q['allowed']; its rows
 			// are held to it here as well, and a row without the scope column
 			// cannot show that it belongs.
@@ -937,7 +1353,7 @@ class Minn_Admin_Kernel {
 				$args          = array_merge( $args, $a );
 			}
 			if ( ! empty( $l['range'] ) ) {
-				list( $rs, $ra ) = minn_admin_chart_range_clause( $r, Minn_Admin_Kernel_SQL::col( $l['range']['column'] ), (string) ( $l['range']['clock'] ?? 'local' ) );
+				list( $rs, $ra ) = self::range_sql( $r, $l['range']['column'], (string) ( $l['range']['clock'] ?? 'local' ) );
 				$sql             = array_merge( $sql, $rs );
 				$args            = array_merge( $args, $ra );
 			}
@@ -959,11 +1375,62 @@ class Minn_Admin_Kernel {
 				return (array) $row;
 			}, (array) $rows ) );
 		}
+		$built = array();
 		foreach ( (array) $rows as $row ) {
-			$built   = empty( $l['row'] ) ? (array) $row : call_user_func( $l['row'], (array) $row, $q );
-			$items[] = empty( $l['fields'] ) ? $built : Minn_Admin_Kernel_Fields::out( $l['fields'], (array) $built );
+			$built[] = (array) ( empty( $l['row'] ) ? (array) $row : call_user_func( $l['row'], (array) $row, $q ) );
+		}
+		// The database's clock is read once for the page, not once per value.
+		$db = array();
+		foreach ( (array) ( $l['fields'] ?? array() ) as $name => $spec ) {
+			$spec = Minn_Admin_Kernel_Fields::spec( $spec );
+			if ( 'datetime' === $spec['type'] && 'db' === ( $spec['stored'] ?? '' ) ) {
+				foreach ( $built as $b ) {
+					if ( isset( $b[ $name ] ) && is_scalar( $b[ $name ] ) ) {
+						$db[] = (string) $b[ $name ];
+					}
+				}
+			}
+		}
+		if ( $db ) {
+			Minn_Admin_Kernel_SQL::db_epochs( $db );
+		}
+		foreach ( $built as $b ) {
+			$items[] = empty( $l['fields'] ) ? $b : Minn_Admin_Kernel_Fields::out( $l['fields'], $b );
 		}
 		return array( $keys['items'] => $items, $keys['total'] => (int) $total );
+	}
+
+	/**
+	 * A clicked day's bounds (site-local) as SQL on a column's clock. The
+	 * database's own clock compares with what it read at each bound's
+	 * instant; a bound it cannot read narrows to nothing, never to all.
+	 *
+	 * @param WP_REST_Request $r      Request (after, before).
+	 * @param string          $column Column.
+	 * @param string          $clock  utc | local | epoch | local-epoch | db.
+	 * @return array [ sql fragments, args ]
+	 */
+	private static function range_sql( WP_REST_Request $r, $column, $clock ) {
+		$col = Minn_Admin_Kernel_SQL::col( $column );
+		if ( 'db' !== $clock ) {
+			return minn_admin_chart_range_clause( $r, $col, $clock );
+		}
+		$sql  = array();
+		$args = array();
+		foreach ( array( 'after' => '>=', 'before' => '<=' ) as $param => $op ) {
+			if ( '' === minn_admin_chart_bound( $r->get_param( $param ) ) ) {
+				continue;
+			}
+			$stamp = minn_admin_chart_bound_epoch( $r->get_param( $param ), 'epoch' );
+			$at    = null === $stamp ? null : Minn_Admin_Kernel_SQL::db_at( $stamp );
+			if ( null === $at ) {
+				$sql[] = '1 = 0';
+				continue;
+			}
+			$sql[]  = "{$col} {$op} %s";
+			$args[] = $at;
+		}
+		return array( $sql, $args );
 	}
 
 	/**
@@ -975,8 +1442,8 @@ class Minn_Admin_Kernel {
 	private static function array_page( array $l, array $q, array $rows ) {
 		$term  = '' === $q['search'] ? '' : $q['search'];
 		$clock = (string) ( $l['range']['clock'] ?? 'epoch' );
-		$from  = empty( $l['range']['column'] ) ? null : minn_admin_chart_bound_epoch( self::param( $q['request'], 'after' ), $clock );
-		$to    = empty( $l['range']['column'] ) ? null : minn_admin_chart_bound_epoch( self::param( $q['request'], 'before' ), $clock );
+		$from  = empty( $l['range']['column'] ) ? null : minn_admin_chart_bound_epoch( self::param( $q['request'], 'after' ), 'db' === $clock ? 'epoch' : $clock );
+		$to    = empty( $l['range']['column'] ) ? null : minn_admin_chart_bound_epoch( self::param( $q['request'], 'before' ), 'db' === $clock ? 'epoch' : $clock );
 		$kept  = array();
 		foreach ( $rows as $row ) {
 			$row = (array) $row;
@@ -995,7 +1462,8 @@ class Minn_Admin_Kernel {
 			}
 			if ( null !== $from || null !== $to ) {
 				$v  = $row[ $l['range']['column'] ] ?? '';
-				$ts = is_numeric( $v ) ? (int) $v : ( '' === (string) $v ? false : strtotime( (string) $v ) );
+				$ts = is_numeric( $v ) ? (int) $v : ( '' === (string) $v ? false : ( 'db' === $clock ? Minn_Admin_Kernel_SQL::db_epoch( $v ) : strtotime( (string) $v ) ) );
+				$ts = null === $ts ? false : $ts;
 				if ( false === $ts || ( null !== $from && $ts < $from ) || ( null !== $to && $ts > $to ) ) {
 					continue;
 				}
@@ -1050,7 +1518,7 @@ class Minn_Admin_Kernel {
 	private static function sort_problem( $sort, array $res ) {
 		$map = self::sort_map( $sort );
 		if ( ! $map ) {
-			return __( 'no columns, or one that is not an identifier', 'minn-admin' );
+			return 'no columns, or one that is not an identifier';
 		}
 		$l     = $res['list'];
 		$param = $sort['param'] ?? 'orderby';
@@ -1064,11 +1532,11 @@ class Minn_Admin_Kernel {
 		}
 		foreach ( array( $param, $dir ) as $key ) {
 			if ( ! is_string( $key ) || '' === $key || sanitize_key( $key ) !== $key || in_array( $key, $taken, true ) ) {
-				return __( 'a request key that is not a free key', 'minn-admin' );
+				return 'a request key that is not a free key';
 			}
 		}
 		if ( $param === $dir ) {
-			return __( 'one request key for both', 'minn-admin' );
+			return 'one request key for both';
 		}
 		$src = $res['source'];
 		if ( ! empty( $src['table'] ) && is_array( $src['columns'] ?? null ) ) {
@@ -1077,8 +1545,7 @@ class Minn_Admin_Kernel {
 				$alias = false === strpos( $col, '.' ) ? 'e' : strstr( $col, '.', true );
 				$bare  = self::bare( $col );
 				if ( 'e' === $alias ? ! in_array( $bare, $own, true ) : ! isset( $src['joins'][ $alias ] ) ) {
-					/* translators: %s: a column name. */
-					return sprintf( __( 'column %s is not the source\'s', 'minn-admin' ), $col );
+					return "column {$col} is not the source's";
 				}
 			}
 		}
@@ -1255,13 +1722,18 @@ class Minn_Admin_Kernel {
 				} catch ( \Throwable $e ) {
 					$held = false;
 				}
+			} elseif ( ! empty( $res['source']['table'] ) ) {
+				// A read that failed returns no row too: gone only once the
+				// store answers that it holds none.
+				$fixed = self::fixed( $res['source'] );
+				$held  = null !== $fixed && Minn_Admin_Kernel_SQL::absent( self::table_of( $res['source'] ), $res['source']['key'], $id, $fixed );
 			} else {
 				$held = null === $fresh;
 			}
 		} elseif ( $send ) {
 			// A send leaves nothing to read back, so the run's own answer is
-			// the proof: true, whom it sent to, or a list saying sent.
-			$held = ! $failed && ( true === $ran || ( is_string( $ran ) && (bool) trim( $ran ) ) || ( is_array( $ran ) && true === ( $ran['sent'] ?? null ) ) );
+			// the proof: true, the address it sent to, or a list saying sent.
+			$held = ! $failed && ( true === $ran || ( is_string( $ran ) && self::addresses( $ran ) ) || ( is_array( $ran ) && true === ( $ran['sent'] ?? null ) ) );
 		} elseif ( is_array( $expect ) ) {
 			$held = is_array( $fresh ) && self::holds( $expect, $fresh );
 		} elseif ( is_callable( $expect ) ) {
@@ -1353,8 +1825,8 @@ class Minn_Admin_Kernel {
 	}
 
 	/**
-	 * Whether args are what check_args() checks: name => schema arrays, no
-	 * callback of any kind (which WordPress would run before the gate), no
+	 * Whether args are what check_args() checks: name => schema arrays, each
+	 * with its JSON type, no callback of any kind (which WordPress would run before the gate), no
 	 * 'default' (the kernel applies none, so one would only read as applied),
 	 * 'required' a boolean when given, and no name the route itself captures
 	 * (id, or a (?P<file>) of its path): the sanitized value is written back
@@ -1381,6 +1853,12 @@ class Minn_Admin_Kernel {
 				}
 			}
 			if ( array_key_exists( 'required', $schema ) && ! is_bool( $schema['required'] ) ) {
+				return false;
+			}
+			// Without a type, rest_validate_value_from_schema() checks nothing.
+			$types = array( 'string', 'integer', 'number', 'boolean', 'array', 'object', 'null' );
+			$type  = $schema['type'] ?? null;
+			if ( ! ( is_string( $type ) ? in_array( $type, $types, true ) : ( is_array( $type ) && $type && ! array_diff( $type, $types ) ) ) ) {
 				return false;
 			}
 		}
@@ -1417,6 +1895,47 @@ class Minn_Admin_Kernel {
 			$r->set_param( $name, rest_sanitize_value_from_schema( $r->get_param( $name ), $schema, $name ) );
 		}
 		return null;
+	}
+
+	/**
+	 * Whether text is only addresses, comma-separated, each bare or as
+	 * "Name <address>": whom a send went to, not a mailer's error that
+	 * happens to quote one.
+	 *
+	 * @param string $text Text.
+	 * @return bool
+	 */
+	private static function addresses( $text ) {
+		// A quoted name and an <address> come out whole first: a comma in
+		// either ("Smith, Dana" <dana@example.com>) separates nothing.
+		$found = array();
+		$rest  = preg_replace( '/"[^"]*"/', ' ', (string) $text );
+		$rest  = preg_replace_callback( '/<([^<>]*)>/', function ( $m ) use ( &$found ) {
+			$found[] = trim( $m[1] );
+			return ' ';
+		}, $rest );
+		$named = (bool) $found;
+		foreach ( explode( ',', $rest ) as $part ) {
+			$part = trim( $part );
+			if ( '' === $part ) {
+				continue;
+			}
+			if ( false !== strpos( $part, '@' ) && ! preg_match( '/\s/', $part ) ) {
+				$found[] = $part; // A bare address.
+			} elseif ( ! $named || false !== strpos( $part, ':' ) ) {
+				// Words with no address beside them, or a mailer's reply around
+				// one ("550 5.1.1 <a@b.c>: Recipient address rejected"): not whom it went to.
+				return false;
+			}
+		}
+		foreach ( $found as $a ) {
+			// is_email(), as WordPress and WooCommerce hold a recipient to: a
+			// send to an address they drop never went.
+			if ( ! is_email( $a ) ) {
+				return false;
+			}
+		}
+		return (bool) $found;
 	}
 
 	/** A create's answer as an id: a positive int, or a string of digits; anything else is 0. */
@@ -1456,8 +1975,16 @@ class Minn_Admin_Kernel {
 	 */
 	public static function inbox_counts( array $c ) {
 		$scope = array();
-		if ( isset( $c['scope'] ) && is_array( $c['scope']['allowed'] ) ) {
-			$scope = array( $c['scope']['column'] => array_values( array_map( 'intval', $c['scope']['allowed'] ) ) );
+		if ( isset( $c['scope'] ) ) {
+			$allowed = is_array( $c['scope'] ) && array_key_exists( 'allowed', $c['scope'] ) ? $c['scope']['allowed'] : false;
+			// null is no restriction; anything but ids (false, a WP_Error, a
+			// missing key) is an empty scope, never an open one.
+			if ( null !== $allowed && ! is_array( $allowed ) ) {
+				$allowed = array();
+			}
+			if ( is_array( $allowed ) ) {
+				$scope = array( $c['scope']['column'] => array_values( array_map( 'intval', $allowed ) ) );
+			}
 		}
 		$out = array();
 		foreach ( array( 'received', 'unread', 'spam' ) as $k ) {
@@ -1504,13 +2031,17 @@ class Minn_Admin_Kernel {
 	/**
 	 * The rule a date column on its clock needs for "within the last N seconds".
 	 *
-	 * @param string $clock   utc | local | epoch | local-epoch.
+	 * @param string $clock   utc | local | epoch | local-epoch | db.
 	 * @param int    $seconds The window.
 	 * @return array
 	 */
 	public static function since( $clock, $seconds ) {
 		$seconds = (int) $seconds;
 		switch ( (string) $clock ) {
+			case 'db':
+				// A moment the database cannot read matches no row (an empty IN list).
+				$at = Minn_Admin_Kernel_SQL::db_at( time() - $seconds );
+				return null === $at ? array() : array( 'op' => '>=', 'value' => $at );
 			case 'epoch':
 				return array( 'op' => '>=', 'value' => time() - $seconds );
 			case 'local-epoch':
@@ -1526,7 +2057,7 @@ class Minn_Admin_Kernel {
 	 * "5 mins ago" for a date as a column on its clock stores it, or a dash.
 	 *
 	 * @param mixed  $stored Stored value.
-	 * @param string $clock  utc | local | epoch | local-epoch.
+	 * @param string $clock  utc | local | epoch | local-epoch | db.
 	 * @return string
 	 */
 	public static function ago( $stored, $clock ) {
@@ -1534,7 +2065,9 @@ class Minn_Admin_Kernel {
 			return '—';
 		}
 		$now = time();
-		if ( 'epoch' === $clock ) {
+		if ( 'db' === $clock ) {
+			$ts = (int) Minn_Admin_Kernel_SQL::db_epoch( $stored );
+		} elseif ( 'epoch' === $clock ) {
 			$ts = (int) floatval( $stored );
 		} elseif ( 'local-epoch' === $clock || 'local' === $clock ) {
 			$ts  = 'local' === $clock ? (int) strtotime( (string) $stored ) : (int) $stored;
@@ -1671,13 +2204,17 @@ class Minn_Admin_Kernel {
 	 * whole number of site days from today's local midnight (0 is today's,
 	 * 1 tomorrow's, -13 the chart window's first). Clocks: utc and local
 	 * datetimes, date (Y-m-d), epoch, and local-epoch (the site's wall clock
-	 * read as an epoch).
+	 * read as an epoch), and db (the database's own clock, as it read then;
+	 * null when it cannot say).
 	 *
-	 * @param string     $clock utc | local | date | epoch | local-epoch.
+	 * @param string     $clock utc | local | date | epoch | local-epoch | db.
 	 * @param string|int $when  'now' or a day offset.
-	 * @return string|int
+	 * @return string|int|null
 	 */
 	public static function at( $clock, $when = 'now' ) {
+		if ( 'db' === $clock ) {
+			return Minn_Admin_Kernel_SQL::db_at( (int) self::at( 'epoch', $when ) );
+		}
 		$zone = wp_timezone();
 		if ( 'now' === $when ) {
 			$t = new DateTimeImmutable( 'now', $zone );

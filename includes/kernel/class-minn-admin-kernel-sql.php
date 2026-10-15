@@ -48,7 +48,8 @@ class Minn_Admin_Kernel_SQL {
 	 */
 	public static function ident( $name ) {
 		$name = (string) $name;
-		if ( ! preg_match( '/^[A-Za-z_][A-Za-z0-9_]{0,63}$/', $name ) ) {
+		// \z, not $: a $ also matches before a final newline.
+		if ( ! preg_match( '/^[A-Za-z_][A-Za-z0-9_]{0,63}\z/', $name ) ) {
 			throw new InvalidArgumentException( 'minn_kernel_identifier=' . $name );
 		}
 		return $name;
@@ -64,7 +65,7 @@ class Minn_Admin_Kernel_SQL {
 	 */
 	private static function full( $name ) {
 		$name = (string) $name;
-		if ( ! preg_match( '/^[A-Za-z0-9_]{1,64}$/', $name ) || ctype_digit( $name ) ) {
+		if ( ! preg_match( '/^[A-Za-z0-9_]{1,64}\z/', $name ) || ctype_digit( $name ) ) {
 			throw new InvalidArgumentException( 'minn_kernel_table=' . $name );
 		}
 		return $name;
@@ -624,6 +625,25 @@ class Minn_Admin_Kernel_SQL {
 	}
 
 	/**
+	 * Whether the store holds no row with this key under conditions: true
+	 * only when the count answers zero, so a read that failed (which returns
+	 * no row too) never proves a delete.
+	 *
+	 * @param string|array $table Table spec.
+	 * @param string       $key   Key column.
+	 * @param int          $id    Key value.
+	 * @param array        $where Conditions (a source's fixed ones).
+	 * @return bool
+	 */
+	public static function absent( $table, $key, $id, array $where = array() ) {
+		global $wpdb;
+		list( $sql, $args ) = self::where( $where, 'e' );
+		$q                  = 'SELECT COUNT(*) FROM ' . self::from( $table ) . ' WHERE ' . implode( ' AND ', array_merge( array( self::col( $key ) . ' = %d' ), $sql ) );
+		$n                  = $wpdb->get_var( $wpdb->prepare( $q, array_merge( array( (int) $id ), $args ) ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		return null !== $n && '' === (string) $wpdb->last_error && 0 === (int) $n;
+	}
+
+	/**
 	 * One column of the first row under conditions in an order: the newest
 	 * by the key (DESC), or the soonest by a date (the column itself, ASC).
 	 *
@@ -715,7 +735,7 @@ class Minn_Admin_Kernel_SQL {
 				$name          = self::ident( (string) $k );
 				$clock         = (string) $g['clock'];
 				$expr          = self::day_sql( self::col( (string) ( $g['day'] ?? '' ) ), $clock );
-				$days[ $name ] = 'epoch' === $clock || 'local-epoch' === $clock;
+				$days[ $name ] = in_array( $clock, array( 'epoch', 'local-epoch', 'db' ), true );
 			} else {
 				$src  = is_int( $k ) ? (string) $g : (string) $k;
 				$bare = explode( "\0", $src, 2 )[0];
@@ -799,6 +819,9 @@ class Minn_Admin_Kernel_SQL {
 	 */
 	private static function day_sql( $col, $clock ) {
 		switch ( $clock ) {
+			case 'db':
+				// The database reads its own clock's datetime as the instant it was.
+				return minn_admin_chart_epoch_day_sql( "UNIX_TIMESTAMP({$col})", 'epoch' );
 			case 'date':
 				return $col;
 			case 'local':
@@ -881,8 +904,9 @@ class Minn_Admin_Kernel_SQL {
 		if ( ! $values ) {
 			throw new InvalidArgumentException( 'minn_kernel_update_without_values' );
 		}
-		// The key names the rows; it is never one of the values written.
-		if ( array_key_exists( $key, $values ) ) {
+		// The key names the rows; it is never one of the values written,
+		// whatever its case (MySQL's column names are not case-sensitive).
+		if ( in_array( strtolower( (string) $key ), array_map( 'strtolower', array_map( 'strval', array_keys( $values ) ) ), true ) ) {
 			throw new InvalidArgumentException( 'minn_kernel_update_key' );
 		}
 		list( $cols, $phs, $vargs ) = self::assign( $values );
@@ -905,11 +929,26 @@ class Minn_Admin_Kernel_SQL {
 	private static function writable( $table ) {
 		global $wpdb;
 		$name = is_array( $table ) && isset( $table['core'] ) ? '' : self::table( $table );
-		// By its name too: on a network site "usermeta" with the site's own
-		// prefix is no table of anyone's, and still a name that means theirs.
-		$bare = strtolower( (string) ( is_array( $table ) ? ( $table['table'] ?? '' ) : $table ) );
-		if ( '' === $name || in_array( $name, array_values( $wpdb->tables( 'all', true ) ), true ) || in_array( $bare, array_map( 'strtolower', $wpdb->tables( 'all', false ) ), true ) ) {
+		// By its name too, as table() reads it (a spec in the table's place
+		// included): on a network site "options" on the base prefix is the
+		// main site's, and "usermeta" with the site's own prefix is no table
+		// of anyone's, and still a name that means theirs. (Another site's,
+		// "3_options", is no identifier.)
+		$core = array_map( 'strtolower', $wpdb->tables( 'all', false ) );
+		$bare = strtolower( (string) $name );
+		foreach ( array_unique( array( (string) $wpdb->prefix, (string) $wpdb->base_prefix ) ) as $p ) {
+			if ( '' !== $p && 0 === strpos( $bare, strtolower( $p ) ) ) {
+				$bare = substr( $bare, strlen( $p ) );
+				break;
+			}
+		}
+		if ( '' === $name || in_array( $name, array_values( $wpdb->tables( 'all', true ) ), true ) || in_array( $bare, $core, true ) ) {
 			throw new InvalidArgumentException( 'minn_kernel_core_table' );
+		}
+		// A network site writes its own tables: one on the base prefix is the
+		// main site's, or the whole network's, and no site's admin may write it.
+		if ( is_multisite() && $wpdb->prefix !== $wpdb->base_prefix && 0 !== strpos( $name, $wpdb->prefix ) ) {
+			throw new InvalidArgumentException( 'minn_kernel_network_write' );
 		}
 	}
 
@@ -944,7 +983,15 @@ class Minn_Admin_Kernel_SQL {
 				}
 				continue;
 			}
-			if ( preg_match( '/^(tinyint|smallint|mediumint|int|integer|bigint|decimal|numeric|float|double|real|bit)\b/i', (string) $c['Type'] ) ) {
+			if ( preg_match( '/^(tinyint|smallint|mediumint|int|integer|bigint)\b/i', (string) $c['Type'], $m ) ) {
+				// A whole number within the column's range: MySQL without strict
+				// modes would round 5.5 and clamp 300 into a tinyint.
+				if ( ! self::whole_fits( $v, strtolower( $m[1] ), false !== stripos( (string) $c['Type'], 'unsigned' ) ) ) {
+					return false;
+				}
+				continue;
+			}
+			if ( preg_match( '/^(decimal|numeric|float|double|real|bit)\b/i', (string) $c['Type'] ) ) {
 				if ( ! is_bool( $v ) && ! is_numeric( $v ) ) {
 					return false;
 				}
@@ -960,6 +1007,38 @@ class Minn_Admin_Kernel_SQL {
 			}
 		}
 		return true;
+	}
+
+	/**
+	 * Whether a value is a whole number an integer column of this kind holds:
+	 * an int, a bool, or digits (a sign allowed where the column is signed).
+	 *
+	 * @param mixed  $v        Value.
+	 * @param string $kind     tinyint | smallint | mediumint | int | integer | bigint.
+	 * @param bool   $unsigned Whether the column is unsigned.
+	 * @return bool
+	 */
+	private static function whole_fits( $v, $kind, $unsigned ) {
+		$s = is_bool( $v ) ? (string) (int) $v : ( is_int( $v ) ? (string) $v : ( is_string( $v ) ? trim( $v ) : '' ) );
+		if ( ! preg_match( '/^(-?)0*(\d{1,20})\z/', $s, $m ) ) {
+			return false;
+		}
+		$neg  = '-' === $m[1] && '0' !== $m[2];
+		$bits = array( 'tinyint' => 8, 'smallint' => 16, 'mediumint' => 24, 'int' => 32, 'integer' => 32, 'bigint' => 64 );
+		$n    = $bits[ $kind ] ?? 64;
+		if ( $unsigned && $neg ) {
+			return false;
+		}
+		// Each bound as digits, compared as digits: a bigint's are past PHP's int.
+		$bound = array(
+			8  => array( '127', '128', '255' ),
+			16 => array( '32767', '32768', '65535' ),
+			24 => array( '8388607', '8388608', '16777215' ),
+			32 => array( '2147483647', '2147483648', '4294967295' ),
+			64 => array( '9223372036854775807', '9223372036854775808', '18446744073709551615' ),
+		)[ $n ];
+		$max = $unsigned ? $bound[2] : ( $neg ? $bound[1] : $bound[0] );
+		return strlen( $m[2] ) < strlen( $max ) || ( strlen( $m[2] ) === strlen( $max ) && strcmp( $m[2], $max ) <= 0 );
 	}
 
 	/** Columns as identifiers, a placeholder for each value (NULL as itself), and the values. */
@@ -1020,6 +1099,28 @@ class Minn_Admin_Kernel_SQL {
 			$out[ (string) $v ] = self::$epochs[ (string) $v ] ?? null;
 		}
 		return $out;
+	}
+
+	/**
+	 * The datetime the database's own clock reads at an instant (what NOW()
+	 * wrote then), asked of the database so its zone's daylight saving holds;
+	 * null when the read fails.
+	 *
+	 * @param int $epoch Instant.
+	 * @return string|null
+	 */
+	public static function db_at( $epoch ) {
+		global $wpdb;
+		static $seen = array();
+		$epoch = (int) $epoch;
+		if ( ! isset( $seen[ $epoch ] ) ) {
+			$v = $epoch > 0 ? $wpdb->get_var( $wpdb->prepare( 'SELECT FROM_UNIXTIME(%d)', $epoch ) ) : null;
+			if ( ! self::is_datetime( $v ) ) {
+				return null; // Not remembered: a read that failed proves nothing.
+			}
+			$seen[ $epoch ] = substr( (string) $v, 0, 19 );
+		}
+		return $seen[ $epoch ];
 	}
 
 	/** One datetime on the database's clock as its epoch, or null (see db_epochs()). */
@@ -1127,8 +1228,11 @@ class Minn_Admin_Kernel_SQL {
 		$col   = self::col( $c['column'] );
 		$clock = (string) ( $c['clock'] ?? 'utc' );
 		$days  = self::empty_days( $ahead, (string) ( $c['label'] ?? '' ) );
-		$day   = self::day_sql( $col, in_array( $clock, array( 'date', 'utc', 'epoch', 'local-epoch' ), true ) ? $clock : 'local' );
+		$day   = self::day_sql( $col, in_array( $clock, array( 'date', 'utc', 'epoch', 'local-epoch', 'db' ), true ) ? $clock : 'local' );
 		$since = $ahead ? Minn_Admin_Kernel::at( $clock, 0 ) : Minn_Admin_Kernel::at( $clock, -13 );
+		if ( null === $since || ( $ahead && null === Minn_Admin_Kernel::at( $clock, 14 ) ) ) {
+			return $days; // A bound the database could not read: no days, never every row.
+		}
 		$bound = array( $c['column'] . "\0since" => array( 'op' => '>=', 'value' => $since ) );
 		if ( $ahead ) {
 			$bound[ $c['column'] . "\0until" ] = array( 'op' => '<', 'value' => Minn_Admin_Kernel::at( $clock, 14 ) );
@@ -1146,7 +1250,7 @@ class Minn_Admin_Kernel_SQL {
 		foreach ( (array) $wpdb->get_results( self::prepare( $q, $args ) ) as $r ) { // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 			$r = (object) array( 'd' => $r->_minn_d, 's' => $r->_minn_s, 'n' => $r->_minn_n );
 			$d = (string) $r->d;
-			if ( 'epoch' === $clock || 'local-epoch' === $clock ) {
+			if ( in_array( $clock, array( 'epoch', 'local-epoch', 'db' ), true ) ) {
 				$d = minn_admin_chart_epoch_bucket_day( $d );
 			}
 			$is_second = $by_rule ? '1' === (string) $r->s : in_array( (string) $r->s, array_map( 'strval', $second ), true );

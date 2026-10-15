@@ -30,6 +30,9 @@ defined( 'ABSPATH' ) || exit;
 
 class Minn_Admin_Kernel_Fields {
 
+	/** The types a field may be: a field of any other type never leaves. */
+	const TYPES = array( 'int', 'float', 'bool', 'text', 'enum', 'datetime', 'raw', 'secret' );
+
 	/**
 	 * A declaration's field spec as an array with a type.
 	 *
@@ -56,7 +59,7 @@ class Minn_Admin_Kernel_Fields {
 		$out = array();
 		foreach ( $fields as $name => $spec ) {
 			$spec = self::spec( $spec );
-			if ( 'secret' === $spec['type'] || ! array_key_exists( $name, $row ) ) {
+			if ( 'secret' === $spec['type'] || ! in_array( $spec['type'], self::TYPES, true ) || ! array_key_exists( $name, $row ) ) {
 				continue;
 			}
 			$out[ $name ] = self::encode( $spec, $row[ $name ] );
@@ -98,8 +101,10 @@ class Minn_Admin_Kernel_Fields {
 				return in_array( $v, array_map( 'strval', (array) ( $spec['values'] ?? array() ) ), true ) ? $v : '';
 			case 'datetime':
 				return self::datetime( $v, (string) ( $spec['stored'] ?? 'site' ), (string) ( $spec['wire'] ?? 'iso' ) );
-			default:
+			case 'raw':
 				return $v;
+			default:
+				return null; // A type the kernel does not know sends nothing.
 		}
 	}
 

@@ -25,12 +25,19 @@
  *    card sums and counts, key-bound writes and the database's own clock;
  *    then the gift card shapes: a filter taking several values at once,
  *    groups of conditions ('#any') in SQL and PHP, and money sums; then the
- *    traffic shapes: grouped totals over joins and the days rows fall on.
+ *    traffic shapes: grouped totals over joins and the days rows fall on;
+ *    then what the kernel review closed: a filter with no values keeping
+ *    its scope, a declaration that throws, an endpoint gate's signature,
+ *    writes to a core table however named, errors scrubbed at any depth,
+ *    inbox counts under a scope, gone proven by the store, typed args, a
+ *    send's proof, one declaration per id and route, unknown keys refused;
+ *    then the database's own clock (a column NOW() wrote) in a day range,
+ *    chart days, grouped totals, a window and a last event's age.
  * 2. Every real declaration: each action has a declared gate and a
  *    post-condition, each descriptor action that points at a kernel route
  *    names a declared action with its method and a state the action accepts,
  *    and each collection descriptor's route, paging, search and keys agree
- *    with the resource they read.
+ *    with the resource they read; and the kernel refused none of them.
  *
  * Run: wp eval-file tests/kernel-conformance.test.php --user=admin --path=<absolute site path>
  *
@@ -176,7 +183,8 @@ $def      = array(
 		),
 	),
 );
-// A declaration whose doing-it-wrong notices are part of what is checked.
+// Declarations that are wrong on purpose: their notices are not printed, and
+// what the kernel refused is read from Minn_Admin_Kernel::refused() (1h, 2).
 add_filter( 'doing_it_wrong_trigger_error', '__return_false' );
 Minn_Admin_Kernel::resource( 'minn-conformance/things', $def );
 Minn_Admin_Kernel::resource( 'minn-conformance/nogate', array_merge( $def, array( 'gates' => array( 'manage' => '__return_true' ) ) ) );
@@ -1778,6 +1786,440 @@ try {
 }
 $check( "a table on a prefix that starts with a digit is read; a spec in the table's place is the network's table; a declared name that is no identifier is refused", '1wp_minn_conf_hits' === $tb_digit && $wpdb->base_prefix . 'minn_conf_net' === $tb_nested && 'refused' === $tb_bad, wp_json_encode( array( $tb_digit, $tb_nested, $tb_bad ) ) );
 
+// --- 1h. Closed by the kernel review: each check fails without its fix -------
+$rt = $wpdb->prefix . 'minn_conf_review';
+$wpdb->query( "CREATE TEMPORARY TABLE {$rt} ( id BIGINT UNSIGNED NOT NULL PRIMARY KEY, owner BIGINT NOT NULL, status VARCHAR(20) NOT NULL, created DATETIME NOT NULL, tiny TINYINT NOT NULL DEFAULT 0, n INT NOT NULL DEFAULT 0, big BIGINT UNSIGNED NOT NULL DEFAULT 0 ) ENGINE=InnoDB" ); // phpcs:ignore
+$rv_today = minn_admin_chart_day( 0 );
+foreach ( array(
+	array( 1, 10, 'open', '2026-01-02 10:00:00' ),
+	array( 2, 10, 'open', '2026-01-03 10:00:00' ),
+	array( 3, 20, 'spam', '2026-01-03 11:00:00' ),
+	array( 4, 20, 'open', '2026-01-05 10:00:00' ),
+	array( 5, 30, 'open', '2026-01-06 10:00:00' ),
+	array( 6, 30, 'spam', '2026-01-06 11:00:00' ),
+	array( 7, 10, 'open', $rv_today . ' 10:00:00' ),
+	array( 8, 20, 'open', $rv_today . ' 10:00:00' ),
+) as $s ) {
+	$wpdb->insert( $rt, array( 'id' => $s[0], 'owner' => $s[1], 'status' => $s[2], 'created' => $s[3] ) );
+}
+$rv_def = array(
+	'gates'  => array( 'view' => '__return_true', 'manage' => '__return_true' ),
+	'source' => array( 'table' => 'minn_conf_review', 'key' => 'id', 'columns' => array( 'id', 'owner', 'status', 'created' ) ),
+	'list'   => array(
+		'per_page' => 2,
+		'max'      => 3,
+		'range'    => array( 'column' => 'created', 'clock' => 'local' ),
+		'order'    => array( 'column' => 'id', 'dir' => 'ASC' ),
+		'fields'   => array( 'id' => 'int' ),
+	),
+	'item'   => array(
+		'view'   => function ( $row ) {
+			return array( 'id' => (int) $row['id'] );
+		},
+		'fields' => array( 'id' => 'int' ),
+	),
+);
+$rv = '/minn-admin/v1/minn-conformance/review';
+Minn_Admin_Kernel::resource( 'minn-conformance/review', $rv_def );
+$rv_drew = function ( $needle ) {
+	foreach ( method_exists( 'Minn_Admin_Kernel', 'refused' ) ? Minn_Admin_Kernel::refused() : array() as $m ) {
+		if ( false !== strpos( $m, $needle ) ) {
+			return true;
+		}
+	}
+	return false;
+};
+
+// Two earlier checks held without their primitive; these have the rows to tell.
+list( , $d ) = $call( 'GET', $rv, array( 'per_page' => 1000 ) );
+$check( 'a page size above the cap is capped, over more rows than the cap', 3 === count( $d['items'] ) && 8 === $d['total'], wp_json_encode( $d ) );
+list( , $d ) = $call( 'GET', $rv, array( 'after' => '2026-01-04', 'before' => '2026-01-06 10:30:00' ) );
+$check( 'a chart day range keeps only the rows inside it', 2 === $d['total'] && array( 4, 5 ) === array_column( $d['items'], 'id' ), wp_json_encode( $d ) );
+
+// A filter whose values came out empty loses its list route, not its scope.
+Minn_Admin_Kernel::resource( 'minn-conformance/review-nofilter', array_merge( $rv_def, array(
+	'list' => array_merge( $rv_def['list'], array(
+		'filter' => array( 'param' => 'status', 'column' => 'status', 'values' => array() ),
+		'scope'  => array( 'column' => 'owner', 'allowed' => function () {
+			return array( 30 );
+		} ),
+	) ),
+) ) );
+list( $st ) = $call( 'GET', $rv . '-nofilter' );
+list( $st1 ) = $call( 'GET', $rv . '-nofilter/1' );
+list( $st5 ) = $call( 'GET', $rv . '-nofilter/5' );
+$check( 'a filter whose values came out empty loses its list route, and its items keep the scope', 404 === $st && 403 === $st1 && 200 === $st5 && $rv_drew( 'minn-conformance/review-nofilter declares a filter with no values' ), "{$st} {$st1} {$st5}" );
+
+// A declaration that throws is a resource with no routes, never a fatal.
+$rv_threw = false;
+try {
+	Minn_Admin_Kernel::resource( 'minn-conformance/review-throws', function () {
+		throw new RuntimeException( 'vendor class renamed in /srv/secret/class.php' );
+	} );
+	Minn_Admin_Kernel::collection( 'minn-conformance/review-throws', array( 'columns' => array() ) );
+} catch ( \Throwable $e ) {
+	$rv_threw = true;
+}
+list( $st ) = $call( 'GET', $rv . '-throws' );
+list( $st2 ) = $call( 'GET', $rv );
+$check( 'a declaration that throws registers nothing and stops nothing else', ! $rv_threw && 404 === $st && 200 === $st2 && $rv_drew( "minn-conformance/review-throws's declaration threw" ), ( $rv_threw ? 'threw ' : '' ) . "{$st} {$st2}" );
+
+// An endpoint's gate is held to its signature when the route registers.
+Minn_Admin_Kernel::endpoint( 'minn-conformance/review-gate-user', array(
+	'gate' => function ( $user_id = 0 ) {
+		return true;
+	},
+	'run'  => '__return_true',
+) );
+list( $st ) = $call( 'GET', '/minn-admin/v1/minn-conformance/review-gate-user' );
+$check( 'an endpoint whose gate takes something other than the request has no route', 404 === $st && $rv_drew( 'minn-conformance/review-gate-user: its gate takes' ), (string) $st );
+
+// Writes to a core table are refused however the spec names it. Each would
+// match no row if it ran (an id nothing has, a name nothing holds).
+$rv_core = function ( callable $fn ) {
+	try {
+		$fn();
+	} catch ( InvalidArgumentException $e ) {
+		return 'minn_kernel_core_table' === $e->getMessage();
+	}
+	return false;
+};
+$rv_never = array( 'option_name' => 'minn-conformance-never-' . wp_generate_password( 8, false ) );
+$check( "a write to a core table is refused however its spec names it: nested or on the base prefix (on a network site, the main site's)", $rv_core( function () use ( $rv_never ) {
+	Minn_Admin_Kernel_SQL::delete( array( 'table' => array( 'table' => 'options', 'network' => true ) ), 'option_id', 2147483000, $rv_never );
+} ) && $rv_core( function () use ( $rv_never ) {
+	Minn_Admin_Kernel_SQL::delete( array( 'table' => 'options', 'network' => true ), 'option_id', 2147483000, $rv_never );
+} ) && $rv_core( function () {
+	Minn_Admin_Kernel_SQL::update( array( 'table' => array( 'table' => 'posts', 'network' => true ) ), 'ID', 2147483000, array( 'post_title' => 'x' ), array( 'post_title' => 'minn-conformance-never' ) );
+} ) );
+
+// What an error says, at any depth.
+$cl_keep2 = array( 'Please select one from the list.', 'wp_mail() reported the message could not be sent.', 'See https://example.com/docs/setup.php for the steps.' );
+$cl_drop2 = array( 'select * from wp_users', 'delete from `wp_minn` where id = 1', "Duplicate entry 'a@b.c' for key 'email'", 'SQLSTATE[23000]: Integrity constraint violation', 'failed in ' . WP_CONTENT_DIR . '/plugins/x/y.php', 'Fatal error in /srv/www/site/wp-content/plugins/x/class-y.php on line 3' );
+$cl_ok2   = true;
+foreach ( $cl_keep2 as $m ) {
+	$cl_ok2 = $cl_ok2 && $m === Minn_Admin_Kernel::clean_error( new WP_Error( 'x', $m, array( 'status' => 400 ) ) )->get_error_message();
+}
+foreach ( $cl_drop2 as $m ) {
+	$cl_ok2 = $cl_ok2 && $m !== Minn_Admin_Kernel::clean_error( new WP_Error( 'x', $m, array( 'status' => 400 ) ) )->get_error_message();
+}
+$check( "an error loses lowercase SQL, a database's own words and any server path, and keeps a sentence", $cl_ok2 );
+Minn_Admin_Kernel::endpoint( 'minn-conformance/review-err-nested', array( 'gate' => '__return_true', 'run' => function () {
+	return new WP_Error( 'x', 'Nope.', array( 'status' => 409, 'field' => 'email', 'details' => array( 'query' => 'SELECT 1', 'why' => 'select * from wp_users', 'ok' => 'kept' ) ) );
+} ) );
+Minn_Admin_Kernel::endpoint( 'minn-conformance/review-err-response', array( 'gate' => '__return_true', 'run' => function () {
+	return new WP_REST_Response( array( 'code' => 'vendor', 'message' => "WordPress database error Table 'x' doesn't exist", 'data' => array( 'status' => 500, 'sql' => 'SELECT * FROM wp_x' ) ), 500 );
+} ) );
+list( $st, $d ) = $call( 'GET', '/minn-admin/v1/minn-conformance/review-err-nested' );
+$check( "an error's nested data loses debug keys and quoted SQL, and keeps the rest", 409 === $st && 'email' === ( $d['data']['field'] ?? '' ) && ! array_key_exists( 'query', (array) ( $d['data']['details'] ?? array() ) ) && '' === ( $d['data']['details']['why'] ?? null ) && 'kept' === ( $d['data']['details']['ok'] ?? '' ), wp_json_encode( $d ) );
+list( $st, $d ) = $call( 'GET', '/minn-admin/v1/minn-conformance/review-err-response' );
+$check( "a vendor's error response keeps its status and shape, scrubbed as an error is", 500 === $st && 'vendor' === ( $d['code'] ?? '' ) && __( 'That did not work. Nothing was reported as done.', 'minn-admin' ) === ( $d['message'] ?? null ) && ! isset( $d['data']['sql'] ), wp_json_encode( $d ) );
+
+// Inbox counts under a scope.
+$rv_inbox = function ( $scope ) {
+	$c = array(
+		'table'    => 'minn_conf_review',
+		'received' => array(),
+		'spam'     => array( 'status' => 'spam' ),
+		'chart'    => array( 'column' => 'created', 'clock' => 'local', 'split' => 'status', 'secondary' => array( 'spam' ) ),
+	);
+	if ( false !== $scope ) {
+		$c['scope'] = $scope;
+	}
+	return Minn_Admin_Kernel::inbox_counts( $c );
+};
+$n_open = $rv_inbox( false );
+$n_null = $rv_inbox( array( 'column' => 'owner', 'allowed' => null ) );
+$n_10   = $rv_inbox( array( 'column' => 'owner', 'allowed' => array( 10 ) ) );
+$check( 'inbox counts: no scope or a null one counts every row; ids count theirs, the chart too', 8 === $n_open['received'] && 2 === $n_open['spam'] && 2 === $n_open['days'][ $rv_today ]['value'] && 8 === $n_null['received'] && 3 === $n_10['received'] && 0 === $n_10['spam'] && 1 === $n_10['days'][ $rv_today ]['value'], wp_json_encode( array( $n_open['received'], $n_null['received'], $n_10['received'], $n_10['days'][ $rv_today ] ?? null ) ) );
+$rv_empty = true;
+foreach ( array( array(), false, 'all', new WP_Error( 'x' ), 'missing' ) as $allowed ) {
+	$sc       = 'missing' === $allowed ? array( 'column' => 'owner' ) : array( 'column' => 'owner', 'allowed' => $allowed );
+	$n        = $rv_inbox( $sc );
+	$rv_empty = $rv_empty && 0 === $n['received'] && 0 === $n['spam'] && 0 === $n['days'][ $rv_today ]['value'];
+}
+$check( 'inbox counts: an empty scope, or one that is not ids, counts nothing', $rv_empty );
+
+// Gone is proven by the store, never by a read that could not be made.
+$rv_where = true;
+Minn_Admin_Kernel::resource( 'minn-conformance/review-gone', array_merge( $rv_def, array(
+	'source'  => array_merge( $rv_def['source'], array( 'where' => function () use ( &$rv_where ) {
+		return $rv_where ? array() : false;
+	} ) ),
+	'actions' => array( 'drop' => array(
+		'method' => 'DELETE',
+		'gate'   => 'manage',
+		'run'    => function () use ( &$rv_where ) {
+			$rv_where = false; // the read after the run cannot be made
+			return true;
+		},
+		'expect' => 'gone',
+	) ),
+) ) );
+list( $st, $d ) = $call( 'DELETE', $rv . '-gone/1' );
+$rv_where = true;
+$check( 'a delete whose read-back cannot be made never counts as gone', 500 === $st && 'not_applied' === ( $d['code'] ?? '' ) && 1 === (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$rt} WHERE id = 1" ), $st . ' ' . wp_json_encode( $d ) ); // phpcs:ignore
+
+// Arg schemas declare their type.
+Minn_Admin_Kernel::endpoint( 'minn-conformance/review-args', array( 'gate' => '__return_true', 'methods' => 'POST', 'args' => array( 'note' => array( 'maxLength' => 5 ) ), 'run' => '__return_true' ) );
+list( $st ) = $call( 'POST', '/minn-admin/v1/minn-conformance/review-args', array(), array( 'note' => 'far too long' ) );
+$check( 'an arg schema without a type gives its endpoint no route', 404 === $st, (string) $st );
+
+// A send's text proves it only when it names an address.
+Minn_Admin_Kernel::resource( 'minn-conformance/review-send', array_merge( $rv_def, array( 'actions' => array(
+	'say'  => array( 'gate' => 'manage', 'run' => function () {
+		return 'Queued';
+	}, 'expect' => 'ran' ),
+	'mail' => array( 'gate' => 'manage', 'run' => function () {
+		return 'Dana <dana@example.com>';
+	}, 'expect' => 'ran' ),
+) ) ) );
+list( $st ) = $call( 'POST', $rv . '-send/1/say' );
+list( $st2 ) = $call( 'POST', $rv . '-send/1/mail' );
+$check( "a send's text proves it only when it names an address", 500 === $st && 200 === $st2, "{$st} {$st2}" );
+
+// A callable source's own get is held to the source's fixed conditions.
+Minn_Admin_Kernel::resource( 'minn-conformance/review-get', array_merge( $rv_def, array(
+	'source' => array(
+		'rows'  => function () use ( $wpdb, $rt ) {
+			return $wpdb->get_results( "SELECT * FROM {$rt} ORDER BY id", ARRAY_A ); // phpcs:ignore
+		},
+		'get'   => function ( $id ) use ( $wpdb, $rt ) {
+			return $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$rt} WHERE id = %d", $id ), ARRAY_A ); // phpcs:ignore
+		},
+		'where' => array( 'owner' => 10 ),
+	),
+) ) );
+list( , $d ) = $call( 'GET', $rv . '-get' );
+list( $st1 ) = $call( 'GET', $rv . '-get/1' );
+list( $st3 ) = $call( 'GET', $rv . '-get/3' );
+$check( "a source's fixed conditions hold for a row read through its own get", 3 === ( $d['total'] ?? null ) && 200 === $st1 && 404 === $st3, wp_json_encode( array( $d['total'] ?? null, $st1, $st3 ) ) );
+
+// One declaration per id, one per method and route.
+Minn_Admin_Kernel::resource( 'minn-conformance/review', array_merge( $rv_def, array( 'gates' => array( 'view' => '__return_false' ) ) ) );
+$rv_first = Minn_Admin_Kernel::resources()['minn-conformance/review'] ?? array();
+Minn_Admin_Kernel::endpoint( 'minn-conformance/review-dup', array( 'gate' => '__return_true', 'run' => function () {
+	return array( 'which' => 'first' );
+} ) );
+Minn_Admin_Kernel::endpoint( 'minn-conformance/review-dup', array( 'gate' => '__return_true', 'run' => function () {
+	return array( 'which' => 'second' );
+} ) );
+Minn_Admin_Kernel::endpoint( 'minn-conformance/review', array( 'gate' => '__return_true', 'run' => function () {
+	return array( 'which' => 'endpoint' );
+} ) );
+list( , $d ) = $call( 'GET', '/minn-admin/v1/minn-conformance/review-dup' );
+list( , $d2 ) = $call( 'GET', $rv );
+$check( 'a second declaration of a resource id or of a method on a route is refused, the first kept', '__return_true' === ( $rv_first['gates']['view'] ?? null ) && 'first' === ( $d['which'] ?? '' ) && isset( $d2['items'] ) && $rv_drew( 'minn-conformance/review is declared twice' ) && $rv_drew( 'GET /minn-conformance/review-dup is already declared' ) && $rv_drew( 'GET /minn-conformance/review is already declared' ), wp_json_encode( array( $rv_first['gates']['view'] ?? null, $d, array_keys( (array) $d2 ) ) ) );
+
+// A declaration the kernel cannot read whole registers nothing.
+$rv_scope = array( 'column' => 'owner', 'allowed' => function () {
+	return array( 30 );
+} );
+Minn_Admin_Kernel::resource( 'minn-conformance/review-topscope', array_merge( $rv_def, array( 'scope' => $rv_scope ) ) );
+Minn_Admin_Kernel::resource( 'minn-conformance/review-whentypo', array_merge( $rv_def, array( 'actions' => array( 'close' => array(
+	'gate'   => 'manage',
+	'whne'   => array( 'status' => array( 'spam' ) ),
+	'run'    => '__return_true',
+	'expect' => function () {
+		return true;
+	},
+) ) ) ) );
+Minn_Admin_Kernel::resource( 'minn-conformance/review-fieldtype', array_merge( $rv_def, array( 'list' => array_merge( $rv_def['list'], array( 'fields' => array( 'id' => 'innt' ) ) ) ) ) );
+Minn_Admin_Kernel::resource( 'minn-conformance/review-noallowed', array_merge( $rv_def, array( 'list' => array_merge( $rv_def['list'], array( 'scope' => array( 'column' => 'owner' ) ) ) ) ) );
+Minn_Admin_Kernel::endpoint( 'minn-conformance/review-method', array( 'gate' => '__return_true', 'method' => 'POST', 'run' => '__return_true' ) );
+list( $a ) = $call( 'GET', $rv . '-topscope/1' );
+list( $b ) = $call( 'POST', $rv . '-whentypo/1/close' );
+list( $c ) = $call( 'GET', $rv . '-fieldtype' );
+list( $e ) = $call( 'GET', $rv . '-noallowed/1' );
+list( $f ) = $call( 'GET', '/minn-admin/v1/minn-conformance/review-method' );
+$check( 'a declaration holding a key the kernel does not read, a field type it cannot encode, or a scope it cannot ask registers nothing', 404 === $a && 404 === $b && 404 === $c && 404 === $e && 404 === $f, "{$a} {$b} {$c} {$e} {$f}" );
+$check( 'each one says why', $rv_drew( 'minn-conformance/review-topscope: the resource holds "scope"' ) && $rv_drew( 'minn-conformance/review-whentypo: actions.close holds "whne"' ) && $rv_drew( 'minn-conformance/review-fieldtype: list.fields.id has no type' ) && $rv_drew( 'minn-conformance/review-noallowed: list.scope needs' ) && $rv_drew( 'minn-conformance/review-method: the endpoint holds "method"' ), implode( ' | ', array_slice( method_exists( 'Minn_Admin_Kernel', 'refused' ) ? Minn_Admin_Kernel::refused() : array(), -8 ) ) );
+$check( 'a field type the kernel does not know never leaves', array( 'a' => 1 ) === Minn_Admin_Kernel_Fields::out( array( 'a' => 'int', 'b' => 'innt' ), array( 'a' => '1', 'b' => 'raw value' ) ) );
+
+// Identifiers, keys and whole numbers in writes.
+$rv_nl = false;
+try {
+	Minn_Admin_Kernel_SQL::ident( "status\n" );
+} catch ( InvalidArgumentException $e ) {
+	$rv_nl = true;
+}
+$check( 'an identifier with a trailing newline is refused', $rv_nl );
+$rv_key = false;
+try {
+	Minn_Admin_Kernel_SQL::update( 'minn_conf_review', 'id', 2, array( 'ID' => 9 ) );
+} catch ( InvalidArgumentException $e ) {
+	$rv_key = 'minn_kernel_update_key' === $e->getMessage();
+}
+$check( "an update never writes its key, whatever the key's case", $rv_key && 1 === (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$rt} WHERE id = 2" ) ); // phpcs:ignore
+$rv_fit = function ( array $values ) {
+	return Minn_Admin_Kernel_SQL::update( 'minn_conf_review', 'id', 3, $values );
+};
+$rv_refused = 0 === $rv_fit( array( 'tiny' => 300 ) ) && 0 === $rv_fit( array( 'n' => 5.5 ) ) && 0 === $rv_fit( array( 'n' => '1e3' ) ) && 0 === $rv_fit( array( 'n' => '2147483648' ) ) && 0 === $rv_fit( array( 'big' => -1 ) ) && 0 === $rv_fit( array( 'big' => '18446744073709551616' ) );
+$rv_kept    = 1 === $rv_fit( array( 'tiny' => -128 ) ) && 1 === $rv_fit( array( 'n' => '-2147483648' ) ) && 1 === $rv_fit( array( 'big' => '18446744073709551615' ) );
+$rv_row     = $wpdb->get_row( "SELECT tiny, n, big FROM {$rt} WHERE id = 3", ARRAY_A ); // phpcs:ignore
+$check( 'a write holds whole numbers to their column: no fraction, no exponent, nothing past its range', $rv_refused && $rv_kept && array( 'tiny' => '-128', 'n' => '-2147483648', 'big' => '18446744073709551615' ) === $rv_row, wp_json_encode( array( $rv_refused, $rv_kept, $rv_row ) ) );
+
+// A refused declaration is refused to every reader, not only to routes: a
+// card, a row read by id or a tab list would read its unread scope as none.
+$rv_load = Minn_Admin_Kernel::load( 'minn-conformance/review-topscope', 1 );
+$check( 'a refused declaration counts nothing and reads no row', 0 === Minn_Admin_Kernel::count( 'minn-conformance/review-topscope' ) && is_wp_error( $rv_load ) && 404 === ( $rv_load->get_error_data()['status'] ?? 0 ) && array() === Minn_Admin_Kernel::distinct( 'minn-conformance/review-topscope', 'owner' ), wp_json_encode( array( Minn_Admin_Kernel::count( 'minn-conformance/review-topscope' ), is_wp_error( $rv_load ) ) ) );
+
+// Gone is proven only by a table or the store's own exists.
+$rv_rows = function () use ( $wpdb, $rt ) {
+	return $wpdb->get_results( "SELECT * FROM {$rt} ORDER BY id", ARRAY_A ); // phpcs:ignore
+};
+$rv_get  = function ( $id ) use ( $wpdb, $rt ) {
+	return $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$rt} WHERE id = %d", $id ), ARRAY_A ); // phpcs:ignore
+};
+Minn_Admin_Kernel::resource( 'minn-conformance/review-noexists', array_merge( $rv_def, array(
+	'source'  => array( 'rows' => $rv_rows, 'get' => $rv_get ),
+	'actions' => array( 'drop' => array( 'method' => 'DELETE', 'gate' => 'manage', 'run' => '__return_true', 'expect' => 'gone' ) ),
+) ) );
+Minn_Admin_Kernel::resource( 'minn-conformance/review-badexists', array_merge( $rv_def, array(
+	'source' => array( 'rows' => $rv_rows, 'get' => $rv_get, 'exists' => 'minn_conformance_no_such_function' ),
+) ) );
+list( $st ) = $call( 'DELETE', $rv . '-noexists/1' );
+list( $st2 ) = $call( 'GET', $rv . '-badexists' );
+$check( "a delete proving gone through a source that is no table and has no exists gets no route, and an exists that is not callable refuses its resource", 404 === $st && 404 === $st2 && 1 === (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$rt} WHERE id = 1" ), "{$st} {$st2}" ); // phpcs:ignore
+
+// A create's misspelt expect and a clock the kernel does not read.
+Minn_Admin_Kernel::resource( 'minn-conformance/review-createtypo', array_merge( $rv_def, array(
+	'create' => array( 'gate' => 'manage', 'run' => function () {
+		return 99;
+	}, 'expect' => 'exist' ),
+) ) );
+Minn_Admin_Kernel::resource( 'minn-conformance/review-clock', array_merge( $rv_def, array( 'list' => array_merge( $rv_def['list'], array( 'range' => array( 'column' => 'created', 'clock' => 'utcc' ) ) ) ) ) );
+list( $st ) = $call( 'POST', $rv . '-createtypo', array(), array() );
+list( $st2 ) = $call( 'GET', $rv . '-clock' );
+$check( "a create whose expect is neither 'exists' nor a function, and a range on an unknown clock, register nothing", 404 === $st && 404 === $st2, "{$st} {$st2}" );
+
+// A callable list is held to the source's fixed conditions.
+Minn_Admin_Kernel::resource( 'minn-conformance/review-listwhere', array_merge( $rv_def, array(
+	'source' => array(
+		'list'  => function () use ( $rv_rows ) {
+			$rows = $rv_rows();
+			return array( $rows, count( $rows ) ); // ignores the fixed condition it is handed
+		},
+		'get'   => $rv_get,
+		'where' => array( 'owner' => 10 ),
+	),
+) ) );
+list( , $d ) = $call( 'GET', $rv . '-listwhere' );
+$check( "a callable list's rows are held to the source's fixed conditions, its total too", 3 === ( $d['total'] ?? null ) && array( 1, 2, 7 ) === array_column( (array) ( $d['items'] ?? array() ), 'id' ), wp_json_encode( $d ) );
+
+// A network site writes only its own tables.
+$rv_net = 'allowed';
+try {
+	Minn_Admin_Kernel_SQL::delete( array( 'table' => 'minn_conf_never', 'network' => true ), 'id', 2147483000 );
+} catch ( InvalidArgumentException $e ) {
+	$rv_net = $e->getMessage();
+}
+$rv_sub = is_multisite() && $wpdb->prefix !== $wpdb->base_prefix;
+$check( $rv_sub ? "a network site's write to a table on the base prefix is refused" : 'a single site writes a table on its own prefix', $rv_sub ? 'minn_kernel_network_write' === $rv_net : 'allowed' === $rv_net, $rv_net );
+
+// A declaration whose parts are not arrays is refused, never a fatal at
+// rest_api_init (the whole REST API) and never read as no list.
+$rv_threw2 = false;
+try {
+	Minn_Admin_Kernel::resource( 'minn-conformance/review-closure-source', array_merge( $rv_def, array( 'source' => function () {
+		return array();
+	} ) ) );
+	Minn_Admin_Kernel::resource( 'minn-conformance/review-list-true', array_merge( $rv_def, array( 'list' => true ) ) );
+} catch ( \Throwable $e ) {
+	$rv_threw2 = true;
+}
+list( $st ) = $call( 'GET', $rv . '-closure-source' );
+list( $st2 ) = $call( 'GET', $rv . '-list-true' );
+list( $st3 ) = $call( 'GET', $rv );
+$check( 'a declaration whose source is a function, or whose list is not a list, registers nothing and stops nothing else', ! $rv_threw2 && 404 === $st && 404 === $st2 && 200 === $st3, ( $rv_threw2 ? 'threw ' : '' ) . "{$st} {$st2} {$st3}" );
+
+// A send proves itself with addresses only, not a mailer's error quoting one.
+Minn_Admin_Kernel::resource( 'minn-conformance/review-send2', array_merge( $rv_def, array( 'actions' => array(
+	'err'  => array( 'gate' => 'manage', 'run' => function () {
+		return 'SMTP Error: The following recipients failed: bob@example.com';
+	}, 'expect' => 'ran' ),
+	'many' => array( 'gate' => 'manage', 'run' => function () {
+		return 'Dana <dana@example.com>, bob@example.com';
+	}, 'expect' => 'ran' ),
+	'name' => array( 'gate' => 'manage', 'run' => function () {
+		return '"Smith, Dana" <dana@example.com>, Lee, Kim <kim@example.com>, Team @ Acme <team@example.com>, bob@example.com';
+	}, 'expect' => 'ran' ),
+	'word' => array( 'gate' => 'manage', 'run' => function () {
+		return 'Queued for dana';
+	}, 'expect' => 'ran' ),
+	'smtp' => array( 'gate' => 'manage', 'run' => function () {
+		return '550 5.1.1 <dana@example.com>: Recipient address rejected';
+	}, 'expect' => 'ran' ),
+	'typo' => array( 'gate' => 'manage', 'run' => function () {
+		return 'dana@gmailcom';
+	}, 'expect' => 'ran' ),
+) ) ) );
+list( $st ) = $call( 'POST', $rv . '-send2/1/err' );
+list( $st2 ) = $call( 'POST', $rv . '-send2/1/many' );
+list( $st3 ) = $call( 'POST', $rv . '-send2/1/name' );
+list( $st4 ) = $call( 'POST', $rv . '-send2/1/word' );
+list( $st5 ) = $call( 'POST', $rv . '-send2/1/smtp' );
+list( $st6 ) = $call( 'POST', $rv . '-send2/1/typo' );
+$check( "a send's text proves it only when it is addresses WordPress would mail (a name may hold a comma), not words, a mailer's reply or a typo", 500 === $st && 200 === $st2 && 200 === $st3 && 500 === $st4 && 500 === $st5 && 500 === $st6, "{$st} {$st2} {$st3} {$st4} {$st5} {$st6}" );
+
+// More of what a database or a server prints, and sentences that only look like it.
+$cl_keep3 = array( 'Could not send from wp_mail(): SMTP down', 'Duplicate entry: a redirect for this URL already exists.', 'Incorrect password value.', 'Access denied for user role editor.', 'A redirect from /blog/2020/old-post already exists.', 'POST /v3/mg.example.com/messages returned 401', '421 4.7.0 Error: too many connections from 192.0.2.4' );
+$cl_drop3 = array( "Can't connect to MySQL server on 'db-prod-3.internal' (111)", "Can't connect to server on 'db' (115)", "Column 'email' cannot be null", 'Lost connection to MySQL server during query', "Unknown database 'acme_live'", 'unlink(/var/www/acme/shared/uploads/secret.csv): Permission denied', 'Could not open /home/acme/backups/db-2026-10-15.sql.gz', 'Could not write /tmp/backup.zip', 'Could not read /home2/acme/public_html/export.csv', 'Could not open /kunden/homepages/1/d2/backup.sql', 'insert into ' . $wpdb->base_prefix . 'minn_x(id) values (1)' );
+$cl_ok3   = true;
+$cl_bad3  = array();
+foreach ( $cl_keep3 as $m ) {
+	if ( $m !== Minn_Admin_Kernel::clean_error( new WP_Error( 'x', $m, array( 'status' => 400 ) ) )->get_error_message() ) {
+		$cl_bad3[] = 'dropped: ' . $m;
+	}
+}
+foreach ( $cl_drop3 as $m ) {
+	if ( $m === Minn_Admin_Kernel::clean_error( new WP_Error( 'x', $m, array( 'status' => 400 ) ) )->get_error_message() ) {
+		$cl_bad3[] = 'kept: ' . $m;
+	}
+}
+$check( "an error loses a database's connection and column errors and any server path, and keeps sentences that only look like them", ! $cl_bad3, implode( ' | ', $cl_bad3 ) );
+
+// --- 1i. The database's own clock: a column NOW() wrote ---------------------
+// A database five hours from UTC, whatever the site's zone, for this section.
+$dc_zone = (string) $wpdb->get_var( 'SELECT @@session.time_zone' );
+$wpdb->query( "SET time_zone = '+05:00'" ); // phpcs:ignore
+$dt = $wpdb->prefix . 'minn_conf_dbclock';
+$wpdb->query( "CREATE TEMPORARY TABLE {$dt} ( id BIGINT UNSIGNED NOT NULL PRIMARY KEY, created DATETIME NOT NULL ) ENGINE=InnoDB" ); // phpcs:ignore
+$wpdb->query( "INSERT INTO {$dt} ( id, created ) VALUES ( 1, NOW() ), ( 2, NOW() - INTERVAL 3 DAY ), ( 3, NOW() - INTERVAL 20 DAY ), ( 4, NOW() - INTERVAL 2 HOUR )" ); // phpcs:ignore
+Minn_Admin_Kernel::resource( 'minn-conformance/dbclock', array(
+	'gates'  => array( 'view' => '__return_true' ),
+	'source' => array( 'table' => 'minn_conf_dbclock', 'key' => 'id', 'columns' => array( 'id', 'created' ) ),
+	'list'   => array(
+		'range'  => array( 'column' => 'created', 'clock' => 'db' ),
+		'order'  => array( 'column' => 'id', 'dir' => 'ASC' ),
+		'fields' => array(
+			'id'      => 'int',
+			'created' => array( 'type' => 'datetime', 'stored' => 'db', 'wire' => 'iso-utc' ),
+		),
+	),
+) );
+$dc       = '/minn-admin/v1/minn-conformance/dbclock';
+$dc_today = 1 + ( time() - 2 * HOUR_IN_SECONDS >= (int) Minn_Admin_Kernel::at( 'epoch', 0 ) ? 1 : 0 ); // row 4 is today unless it is not yet 2 a.m.
+list( , $d ) = $call( 'GET', $dc );
+$dc_first    = strtotime( (string) ( $d['items'][0]['created'] ?? '' ) );
+$check( "the database's clock: a row NOW() wrote leaves as the instant it was", $dc_first && abs( $dc_first - time() ) < 300, wp_json_encode( $d['items'][0] ?? null ) );
+list( , $d )  = $call( 'GET', $dc, array( 'after' => minn_admin_chart_day( 0 ) ) );
+list( , $d2 ) = $call( 'GET', $dc, array( 'after' => minn_admin_chart_day( -5 ), 'before' => minn_admin_chart_day( -2 ) . ' 23:59:59' ) );
+$check( "the database's clock: a day range reads its bounds as the database does", $dc_today === ( $d['total'] ?? null ) && array( 2 ) === array_column( (array) ( $d2['items'] ?? array() ), 'id' ), wp_json_encode( array( $d['total'] ?? null, $dc_today, array_column( (array) ( $d2['items'] ?? array() ), 'id' ) ) ) );
+$dc_days = array();
+$dc_tot  = array();
+try {
+	$dc_days = Minn_Admin_Kernel::days( 'minn-conformance/dbclock', array( 'column' => 'created', 'clock' => 'db' ) );
+	$dc_tot  = Minn_Admin_Kernel_SQL::totals( 'minn_conf_dbclock', array( 'day' => array( 'day' => 'created', 'clock' => 'db' ) ), array( 'n' => array( 'count' => '*' ) ) );
+} catch ( \Throwable $e ) {
+	$dc_days = array( 'threw' => $e->getMessage() );
+}
+$check( "the database's clock: chart days put each row on its site day", $dc_today === ( $dc_days[ minn_admin_chart_day( 0 ) ]['value'] ?? null ) && 1 === ( $dc_days[ minn_admin_chart_day( -3 ) ]['value'] ?? null ) && 3 === array_sum( array_column( array_filter( $dc_days, 'is_array' ), 'value' ) ), wp_json_encode( $dc_days ) );
+$check( "the database's clock: grouped totals fall on the same days", in_array( array( 'day' => minn_admin_chart_day( 0 ), 'n' => (string) $dc_today ), $dc_tot, true ) && in_array( array( 'day' => minn_admin_chart_day( -20 ), 'n' => '1' ), $dc_tot, true ), wp_json_encode( $dc_tot ) );
+$dc_ago = Minn_Admin_Kernel::ago( $wpdb->get_var( "SELECT created FROM {$dt} WHERE id = 1" ), 'db' ); // phpcs:ignore
+$check( "the database's clock: a window counts on it, and a last event's age reads it", 1 === Minn_Admin_Kernel::count( 'minn-conformance/dbclock', array( 'created' => Minn_Admin_Kernel::since( 'db', HOUR_IN_SECONDS ) ) ) && false === strpos( $dc_ago, 'hour' ), wp_json_encode( array( Minn_Admin_Kernel::count( 'minn-conformance/dbclock', array( 'created' => Minn_Admin_Kernel::since( 'db', HOUR_IN_SECONDS ) ) ), $dc_ago ) ) );
+$wpdb->query( $wpdb->prepare( 'SET time_zone = %s', '' === $dc_zone ? 'SYSTEM' : $dc_zone ) ); // phpcs:ignore
+
 // --- 2. Every real declaration ----------------------------------------------
 $real = array_filter( Minn_Admin_Kernel::resources(), function ( $r ) {
 	return 0 !== strpos( $r['id'], 'minn-conformance/' );
@@ -1887,7 +2329,8 @@ foreach ( Minn_Admin_Kernel::endpoints() as $ep ) {
 		continue;
 	}
 	$n_gates++;
-	$rf = is_array( $g ) ? new ReflectionMethod( $g[0], $g[1] ) : new ReflectionFunction( $g );
+	$g  = is_string( $g ) && false !== strpos( $g, '::' ) ? explode( '::', $g, 2 ) : $g;
+	$rf = is_array( $g ) ? new ReflectionMethod( $g[0], $g[1] ) : ( is_object( $g ) && ! $g instanceof Closure ? new ReflectionMethod( $g, '__invoke' ) : new ReflectionFunction( $g ) );
 	foreach ( $rf->getParameters() as $prm ) {
 		if ( false === strpos( (string) $prm->getType(), 'WP_REST_Request' ) ) {
 			$odd_gates[] = $ep['path'];
@@ -1896,6 +2339,16 @@ foreach ( Minn_Admin_Kernel::endpoints() as $ep ) {
 	}
 }
 $check( "every endpoint's gate takes nothing or the request it is asked with ({$n_gates})", $n_gates > 0 && ! $odd_gates, implode( ', ', $odd_gates ) );
+
+// The kernel refused nothing a real adapter declares: no key it does not
+// read, no gate it cannot ask, no route twice. It records each refusal
+// whenever the REST server started, which under WP-CLI is before this runs,
+// and resources() above built every declaration, a plugin's that is not
+// active on this lab included.
+$real_refused = array_values( array_filter( method_exists( 'Minn_Admin_Kernel', 'refused' ) ? Minn_Admin_Kernel::refused() : array( 'Minn_Admin_Kernel::refused() is missing' ), function ( $m ) {
+	return false === strpos( $m, 'minn-conformance' );
+} ) );
+$check( 'the kernel refused no real declaration, in whole or in part', ! $real_refused, implode( ' | ', array_slice( $real_refused, 0, 5 ) ) );
 
 $failed = count( array_filter( $results, function ( $r ) {
 	return ! $r;
