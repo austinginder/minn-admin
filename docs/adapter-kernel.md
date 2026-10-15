@@ -319,15 +319,18 @@ declares a sort applies the pick it reads in `$q['sort']`. `collection()` hands 
 the matching `sortQuery`, and a sort the kernel cannot apply is dropped with a notice
 that says why.
 
+OR between condition sets on different columns is `'#any'` (a group per state), and a
+family's repeated surface, card and detail code lives in its kit (`mail-kit.php`,
+`forms-kit.php`, `bookings-kit.php`, `activity-log-kit.php` and the others in
+`includes/adapters/`), which builds them from what each vendor alone says.
+
 What the kernel does not have yet: the save path for edit forms (changed fields only,
 a base stamp and a 409 on a stale copy), which the entry-edit adapters will need when
 they port (the post type and taxonomy definitions use the same stamp and partial save
-in `class-minn-admin-cpt.php`), OR between condition sets on different columns
-(Wordfence's chart says it as one condition because its data allows it), and SQL
-expressions in a column list (LatePoint's detail reads its order's comment with a second
-read instead). The forms
-adapters still carry their own workarounds for the shapes above; moving them onto the
-new primitives is a pass of its own.
+in `class-minn-admin-cpt.php`), SQL expressions in a column list or a count (LatePoint's
+detail reads its order's comment with a second read instead, and JetSearch's duplicate
+count keeps its own `COUNT(DISTINCT TRIM(name))`), and tables of another site in a
+multi-tenant install (WP Freighter reads its tenants' tables itself).
 
 ## Measuring progress
 
