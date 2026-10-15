@@ -27969,7 +27969,7 @@
 		if ( 'idle' === sw.phase ) {
 			body = `
 				<p class="minn-labs-text">${ esc( __( 'Minn Engine runs this site without WordPress: the same database, wp-content, theme and plugins, served by a new engine. It is early and has not been tried on many sites, so take a backup first.' ) ) }</p>
-				<p class="minn-labs-text">${ esc( __( 'Checking downloads Minn from the Minn update service, verifies its signature and reports what this site will and will not get. Nothing changes until you switch, and `wp minn eject` brings WordPress back.' ) ) }</p>
+				<p class="minn-labs-text">${ esc( __( 'Checking downloads Minn from the Minn update service, verifies its signature and reports what this site will and will not get. Nothing changes until you switch, and the wp minn eject command brings WordPress back.' ) ) }</p>
 				<div class="minn-labs-actions">
 					<button class="minn-btn-primary" data-minnswitch="check">${ esc( __( 'Check this site' ) ) }</button>
 					<button class="minn-btn-soft" data-minnswitch="hide">${ esc( __( 'Hide' ) ) }</button>
@@ -28021,10 +28021,39 @@
 				setMinnLabs( true );
 				toast( __( 'Minn Labs unlocked: Run this site on Minn' ) );
 				renderSystem();
+				minnLabsReveal();
 			} );
 		}
 		const card = $( '#minn-labs', view );
 		if ( card ) bindMinnSwitchCard( card );
+	}
+
+	// The footer that unlocks the card sits at the bottom of the screen and
+	// the card near the top: take the reader there, mark it for a moment,
+	// and put focus on its first button.
+	function minnLabsReveal() {
+		const card = document.getElementById( 'minn-labs' );
+		const sc = $( '.minn-scroll' );
+		if ( ! card || ! sc ) return;
+		const bar = document.getElementById( 'minn-sys-jump' );
+		const top = Math.max( 0, card.offsetTop - ( bar ? bar.offsetHeight : 0 ) - 34 );
+		// The ring starts once the scroll has arrived, or it fades on the way there.
+		let marked = false;
+		const mark = () => {
+			if ( marked ) return;
+			marked = true;
+			card.classList.add( 'minn-labs-new' );
+			setTimeout( () => card.classList.remove( 'minn-labs-new' ), 2400 );
+		};
+		if ( Math.abs( sc.scrollTop - top ) < 2 ) {
+			mark();
+		} else {
+			sc.addEventListener( 'scrollend', mark, { once: true } );
+			setTimeout( mark, 1500 );
+			sc.scrollTo( { top, behavior: scrollMotion() } );
+		}
+		const first = $( '[data-minnswitch]', card );
+		if ( first ) first.focus( { preventScroll: true } );
 	}
 
 	// The card's buttons; each repaint swaps the card and binds the new one.
@@ -28291,6 +28320,7 @@
 				${ intPlain( __( 'Hook listeners' ), intg.listeners.map( ( l ) => ( { a: l.hook, b: l.owners.join( ', ' ), mono: true } ) ) ) }
 			</div>` : '';
 
+		const labsCard = minnSwitchCardHtml();
 		view.innerHTML = `
 			<div class="minn-sys-topbar">
 				<div class="minn-sys-summary">
@@ -28303,6 +28333,7 @@
 			<div class="minn-sys-jump" id="minn-sys-jump">
 				${ [
 					[ __( 'Health' ), 'minn-sys-sec-health' ],
+					labsCard ? [ __( 'Run on Minn' ), 'minn-labs' ] : null,
 					debugCard ? [ __( 'Debug' ), 'minn-sys-debug' ] : null,
 					[ __( 'System' ), 'minn-sys-grid' ],
 					extCard ? [ __( 'Extensions' ), 'minn-sys-extensions' ] : null,
@@ -28347,7 +28378,7 @@
 					</div>`;
 				} ).join( '' ) }
 			</div>
-			${ minnSwitchCardHtml() }
+			${ labsCard }
 				${ debugCard }
 			<div class="minn-sys-grid" id="minn-sys-grid">
 				${ s.groups.map( groupCard ).join( '' ) }

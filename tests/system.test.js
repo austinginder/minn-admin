@@ -337,6 +337,19 @@ const fs = require( 'fs' );
 		const card = await page.waitForSelector( '#minn-labs', { timeout: 5000 } ).catch( () => null );
 		t.check( 'a ⌥-click unlocks it', !! card );
 		if ( card ) {
+			// The footer is at the bottom and the card near the top: the unlock takes the reader to it.
+			await page.waitForTimeout( 1200 );
+			const seen = await page.evaluate( () => {
+				const r = document.getElementById( 'minn-labs' ).getBoundingClientRect();
+				return {
+					inView: r.top >= 0 && r.top < window.innerHeight - 80,
+					focused: !! document.activeElement && document.activeElement.matches( '#minn-labs [data-minnswitch]' ),
+					jump: [ ...document.querySelectorAll( '#minn-sys-jump [data-jump]' ) ].some( ( b ) => b.dataset.jump === 'minn-labs' ),
+				};
+			} );
+			t.check( 'the unlock scrolls the card into view, focuses it, and adds it to the jump bar', seen.inView && seen.focused && seen.jump, JSON.stringify( seen ) );
+		}
+		if ( card ) {
 			await page.click( '[data-minnswitch="check"]' );
 			await page.waitForFunction( () => ! /Downloading Minn/.test( document.querySelector( '#minn-labs' ).textContent ), null, { timeout: 180000 } );
 			const checked = await page.evaluate( () => document.querySelector( '#minn-labs' ).textContent.replace( /\s+/g, ' ' ) );

@@ -5234,6 +5234,12 @@ button.minn-ac-item:hover { background: var(--hover); }
 .minn-labs-line.amber { color: var(--amber-text); }
 .minn-labs-line.red { color: var(--red-text); }
 .minn-labs-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+/* Just unlocked: a ring that fades, so the eye finds the card after the scroll. */
+.minn-labs-new { animation: minn-labs-new 2.4s ease-out; }
+@keyframes minn-labs-new {
+  0%, 35% { box-shadow: 0 0 0 3px var(--accent-ring); border-color: var(--accent); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
 
 /* Debug tools card — live wp-config toggles. */
 .minn-sys-debug { padding: 0; margin-top: 14px; margin-bottom: 14px; overflow: hidden; }
