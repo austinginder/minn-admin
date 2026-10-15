@@ -741,6 +741,182 @@ $hex            = md5( 'minn' ); // Starts with a letter: an int cast would make
 list( $st, $d ) = $call( 'GET', '/minn-admin/v1/minn-conformance/ep-hex/' . $hex );
 $check( 'an endpoint id that is not \d+ reaches the handler as its string', 200 === $st && $hex === ( $d['id'] ?? '' ), $st . ' ' . wp_json_encode( $d ) );
 
+// --- 1c. Booking shapes: joins, views with their own order, cards ahead ----
+$bk  = $wpdb->prefix . 'minn_conf_bk';
+$bkc = $wpdb->prefix . 'minn_conf_bk_cust';
+$bki = $wpdb->prefix . 'minn_conf_bk_items';
+$wpdb->query( "CREATE TEMPORARY TABLE {$bk} ( id BIGINT UNSIGNED NOT NULL PRIMARY KEY, owner BIGINT NOT NULL, status VARCHAR(20) NOT NULL, cust_id BIGINT NOT NULL, starts DATETIME NOT NULL, note VARCHAR(60) NOT NULL ) ENGINE=InnoDB" ); // phpcs:ignore
+$wpdb->query( "CREATE TEMPORARY TABLE {$bkc} ( id BIGINT UNSIGNED NOT NULL PRIMARY KEY, name VARCHAR(60) NOT NULL, email VARCHAR(60) NOT NULL ) ENGINE=InnoDB" ); // phpcs:ignore
+$wpdb->query( "CREATE TEMPORARY TABLE {$bki} ( id BIGINT UNSIGNED NOT NULL PRIMARY KEY, bk_id BIGINT NOT NULL, label VARCHAR(60) NOT NULL ) ENGINE=InnoDB" ); // phpcs:ignore
+foreach ( array( array( 1, 'Ann Able', 'ann@x.test' ), array( 2, 'Bo Brook', 'bo@x.test' ) ) as $c ) {
+	$wpdb->insert( $bkc, array( 'id' => $c[0], 'name' => $c[1], 'email' => $c[2] ) );
+}
+$utc_day = function ( $days, $hour = 12 ) {
+	return ( new DateTimeImmutable( 'today', wp_timezone() ) )->modify( sprintf( '%+d days', $days ) )->setTime( $hour, 0 )->setTimezone( new DateTimeZone( 'UTC' ) )->format( 'Y-m-d H:i:s' );
+};
+// id, owner, status, customer, starts (UTC), note.
+$bks = array(
+	array( 1, 10, 'approved', 1, $utc_day( 0 ), 'today, approved' ),
+	array( 2, 10, 'pending', 2, $utc_day( 0, 15 ), 'today, pending' ),
+	array( 3, 10, 'approved', 2, $utc_day( 3 ), 'in three days' ),
+	array( 4, 10, 'canceled', 1, $utc_day( 5 ), 'canceled' ),
+	array( 5, 10, 'approved', 1, $utc_day( -4 ), 'four days ago' ),
+	array( 6, 20, 'approved', 1, $utc_day( 1 ), 'another owner' ),
+);
+foreach ( $bks as $b ) {
+	$wpdb->insert( $bk, array( 'id' => $b[0], 'owner' => $b[1], 'status' => $b[2], 'cust_id' => $b[3], 'starts' => $b[4], 'note' => $b[5] ) );
+}
+// Several items per booking: the first-row join picks the lowest id.
+foreach ( array( array( 7, 3, 'second' ), array( 4, 3, 'first' ), array( 9, 1, 'only' ) ) as $it ) {
+	$wpdb->insert( $bki, array( 'id' => $it[0], 'bk_id' => $it[1], 'label' => $it[2] ) );
+}
+$gate_rows = array();
+Minn_Admin_Kernel::resource( 'minn-conformance/bk', array(
+	'gates'     => array( 'view' => '__return_true', 'manage' => '__return_true' ),
+	'item_gate' => function ( $id, $gate, $row = null ) use ( &$gate_rows ) {
+		$gate_rows[] = is_array( $row ) ? (int) $row['id'] : 'none';
+		return true;
+	},
+	'source'    => array(
+		'table'   => 'minn_conf_bk',
+		'key'     => 'id',
+		'joins'   => array(
+			'c'  => array( 'table' => 'minn_conf_bk_cust', 'on' => array( 'id' => 'e.cust_id' ) ),
+			'it' => array( 'table' => 'minn_conf_bk_items', 'first' => array( 'key' => 'id', 'by' => 'bk_id', 'of' => 'id' ) ),
+		),
+		'columns' => array( 'id', 'status', 'starts', 'note' => 'what', 'c.name', 'c.email' => 'customer_email', 'it.label' => 'first_item' ),
+		'where'   => array( 'owner' => 10 ),
+	),
+	'list'      => array(
+		'filter' => array(
+			'param'   => 'range',
+			'default' => 'upcoming',
+			'values'  => array(
+				'upcoming' => function () {
+					return array( 'status' => array( 'approved', 'pending' ), 'starts' => array( 'op' => '>=', 'value' => Minn_Admin_Kernel::at( 'utc', 0 ) ) );
+				},
+				'today'    => function () {
+					return array( "starts\0from" => array( 'op' => '>=', 'value' => Minn_Admin_Kernel::at( 'utc', 0 ) ), "starts\0to" => array( 'op' => '<', 'value' => Minn_Admin_Kernel::at( 'utc', 1 ) ) );
+				},
+				'broken'   => function () {
+					return new WP_Error( 'x', 'x' );
+				},
+				'all'      => array(),
+			),
+			'order'   => array( 'upcoming' => 'ASC', 'today' => 'ASC' ),
+		),
+		'search' => array( 'columns' => array( 'c.name', 'c.email', 'note' ) ),
+		'order'  => array( 'column' => 'starts', 'dir' => 'DESC' ),
+		'fields' => array( 'id' => 'int', 'what' => 'text', 'name' => 'text', 'customer_email' => 'text', 'first_item' => 'text' ),
+	),
+	'item'      => array( 'view' => function ( array $row ) {
+		return $row;
+	} ),
+	'actions'   => array( 'touch' => array( 'gate' => 'manage', 'run' => '__return_true', 'expect' => function () {
+		return true;
+	} ) ),
+) );
+$bids = function ( $params = array() ) use ( $call ) {
+	list( $st, $d ) = $call( 'GET', '/minn-admin/v1/minn-conformance/bk', $params );
+	return array( $st, array_column( (array) ( $d['items'] ?? array() ), 'id' ), $d );
+};
+list( $st, $got, $d ) = $bids( array( 'range' => 'all' ) );
+$check( 'a joined list reads joined columns under their names, and never another owner', 200 === $st && array( 4, 3, 2, 1, 5 ) === $got && 'Ann Able' === ( $d['items'][4]['name'] ?? '' ) && 'ann@x.test' === ( $d['items'][4]['customer_email'] ?? '' ), wp_json_encode( $d ) );
+$by = array_column( (array) $d['items'], null, 'id' );
+$check( "a 'first' join reads the lowest row of the many, and none when there is none", 'first' === ( $by[3]['first_item'] ?? '' ) && 'only' === ( $by[1]['first_item'] ?? '' ) && '' === ( $by[2]['first_item'] ?? 'x' ), wp_json_encode( $by ) );
+$check( "a plain column can be named in the row ('note' => 'what')", 'canceled' === ( $by[4]['what'] ?? '' ) );
+list( , $got ) = $bids();
+$check( 'a view whose conditions are a function, with its own order (upcoming soonest first)', array( 1, 2, 3 ) === $got, wp_json_encode( $got ) );
+list( , $got ) = $bids( array( 'range' => 'today' ) );
+$check( "today's bounds on a UTC column are the site's local day", array( 1, 2 ) === $got, wp_json_encode( $got ) );
+list( $st, $got, $d ) = $bids( array( 'range' => 'broken' ) );
+$check( 'a view that cannot answer shows nothing', 200 === $st && array() === $got && 0 === ( $d['total'] ?? -1 ), wp_json_encode( $d ) );
+list( , $got ) = $bids( array( 'range' => 'all', 'search' => 'bo@' ) );
+$check( 'search reaches a joined column', array( 3, 2 ) === $got, wp_json_encode( $got ) );
+list( $st ) = $call( 'GET', '/minn-admin/v1/minn-conformance/bk/6' );
+$check( "another owner's booking by id is not found", 404 === $st, (string) $st );
+$gate_rows      = array();
+list( $st, $d ) = $call( 'GET', '/minn-admin/v1/minn-conformance/bk/3' );
+$check( 'an item reads through the joins', 200 === $st && 'Bo Brook' === ( $d['name'] ?? '' ) && 'first' === ( $d['first_item'] ?? '' ), wp_json_encode( $d ) );
+$call( 'POST', '/minn-admin/v1/minn-conformance/bk/3/touch' );
+$check( 'the row gate is handed the row it decides on', array( 3, 3 ) === $gate_rows, wp_json_encode( $gate_rows ) );
+$check( 'a card counts through the joins, the conditions and the owner', 2 === Minn_Admin_Kernel::count( 'minn-conformance/bk', array( 'c.name' => 'Bo Brook' ) ) && 5 === Minn_Admin_Kernel::count( 'minn-conformance/bk' ) );
+$check( "a card's first is the soonest value among the rows it may see", $utc_day( 0 ) === Minn_Admin_Kernel::first( 'minn-conformance/bk', 'starts', array( 'starts' => array( 'op' => '>=', 'value' => Minn_Admin_Kernel::at( 'utc', 0 ) ) ) ) );
+$ahead = Minn_Admin_Kernel::days( 'minn-conformance/bk', array( 'column' => 'starts', 'clock' => 'utc', 'ahead' => true, 'where' => array( 'status' => array( 'approved', 'pending' ) ), 'split' => 'status', 'secondary' => array( 'pending' ) ) );
+$keys  = array_keys( $ahead );
+$today = $ahead[ Minn_Admin_Kernel::at( 'date', 0 ) ] ?? array();
+$in3   = $ahead[ Minn_Admin_Kernel::at( 'date', 3 ) ] ?? array();
+$check( 'a chart ahead is fourteen days from today', 14 === count( $keys ) && Minn_Admin_Kernel::at( 'date', 0 ) === $keys[0] && Minn_Admin_Kernel::at( 'date', 13 ) === $keys[13], wp_json_encode( $keys ) );
+$check( "a chart ahead splits without overlap: today's approved and pending apart", 1 === ( $today['value'] ?? -1 ) && 1 === ( $today['secondary'] ?? -1 ) && 1 === ( $in3['value'] ?? -1 ) && 0 === ( $in3['secondary'] ?? -1 ), wp_json_encode( array( $today, $in3 ) ) );
+$check( "a chart ahead counts no other owner's rows and no past ones", 3 === array_sum( array_map( function ( $x ) {
+	return (int) $x['value'] + (int) $x['secondary'];
+}, $ahead ) ), wp_json_encode( $ahead ) );
+$site_answer = false;
+$check( 'a card whose conditions cannot be read counts nothing and has no first', 0 === Minn_Admin_Kernel::count( 'minn-conformance/log' ) && null === Minn_Admin_Kernel::first( 'minn-conformance/log', 'created' ) && 0 === array_sum( array_column( Minn_Admin_Kernel::days( 'minn-conformance/log', array( 'column' => 'created', 'clock' => 'epoch' ) ), 'value' ) ) );
+$site_answer = array( 'site_id' => 1 );
+$zone = wp_timezone();
+$mid  = new DateTimeImmutable( 'today', $zone );
+$check( "at(): 'now' on the epoch clock is now", abs( Minn_Admin_Kernel::at( 'epoch' ) - time() ) <= 2 );
+$check( "at(): a local epoch is the epoch plus the site's offset", Minn_Admin_Kernel::at( 'local-epoch', 0 ) === $mid->getTimestamp() + $mid->getOffset() );
+$check( "at(): day 0 is the site's midnight on every clock", $mid->format( 'Y-m-d' ) === Minn_Admin_Kernel::at( 'date', 0 ) && $mid->format( 'Y-m-d 00:00:00' ) === Minn_Admin_Kernel::at( 'local', 0 ) && $mid->setTimezone( new DateTimeZone( 'UTC' ) )->format( 'Y-m-d H:i:s' ) === Minn_Admin_Kernel::at( 'utc', 0 ) );
+$check( "columns(): '*' is every main-table column beside joined ones", 'e.*, c.name AS name' === Minn_Admin_Kernel_SQL::columns( array( '*', 'c.name' ) ) );
+$bad = false;
+try {
+	Minn_Admin_Kernel_SQL::from( array( 'table' => 'minn_conf_bk', 'joins' => array( 'e' => array( 'table' => 'x', 'on' => array( 'id' => 'e.id' ) ) ) ) );
+} catch ( InvalidArgumentException $e ) {
+	$bad = true;
+}
+$check( "a join may not take the main table's alias", $bad );
+// From the review of the booking shapes.
+$seen_where = null;
+Minn_Admin_Kernel::resource( 'minn-conformance/srcfilter', array(
+	'gates'  => array( 'view' => '__return_true' ),
+	'source' => array( 'list' => function ( array $q ) use ( &$seen_where ) {
+		$seen_where = $q['where'];
+		return array( array(), 0 );
+	} ),
+	'list'   => array( 'filter' => array( 'param' => 'status', 'values' => array( 'publish' => array( 'post_status' => 'publish' ), 'spam' => array( 'post_status' => 'spam' ) ) ) ),
+) );
+$call( 'GET', '/minn-admin/v1/minn-conformance/srcfilter', array( 'status' => 'spam' ) );
+$check( "a callable source reads a filter's conditions under their own names", 'spam' === ( $seen_where['post_status'] ?? null ), wp_json_encode( $seen_where ) );
+$wpdb->query( "ALTER TABLE {$bkc} ADD COLUMN owner BIGINT NOT NULL DEFAULT 10" ); // phpcs:ignore
+Minn_Admin_Kernel::resource( 'minn-conformance/bkscope', array(
+	'gates'  => array( 'view' => '__return_true' ),
+	'source' => array(
+		'table'   => 'minn_conf_bk',
+		'key'     => 'id',
+		'joins'   => array( 'c' => array( 'table' => 'minn_conf_bk_cust', 'on' => array( 'id' => 'e.cust_id' ) ) ),
+		'columns' => array( 'id', 'c.owner' ),
+	),
+	'list'   => array( 'scope' => array( 'column' => 'owner', 'allowed' => function () {
+		return array( 10 );
+	} ) ),
+	'item'   => array( 'view' => function ( array $row ) {
+		return $row;
+	} ),
+) );
+list( $st )     = $call( 'GET', '/minn-admin/v1/minn-conformance/bkscope/6' );
+list( $ok, $d ) = $call( 'GET', '/minn-admin/v1/minn-conformance/bkscope/1' );
+$check( "a joined column sharing the scope column's name never stands in for it", 403 === $st && 200 === $ok && ! array_key_exists( '_minn_scope', (array) $d ), $st . ' ' . $ok . ' ' . wp_json_encode( $d ) );
+$check( 'a core table is named the way $wpdb names it', $wpdb->users === Minn_Admin_Kernel_SQL::table( array( 'core' => 'users' ) ) && $wpdb->posts === Minn_Admin_Kernel_SQL::table( array( 'core' => 'posts' ) ) );
+$bad = false;
+try {
+	Minn_Admin_Kernel_SQL::table( array( 'core' => 'nope' ) );
+} catch ( InvalidArgumentException $e ) {
+	$bad = true;
+}
+$check( 'a core table that is not one is refused', $bad );
+$bad = false;
+try {
+	Minn_Admin_Kernel_SQL::from( array( 'table' => 'minn_conf_bk', 'joins' => array( 'E' => array( 'table' => 'x', 'on' => array( 'id' => 'e.id' ) ) ) ) );
+} catch ( InvalidArgumentException $e ) {
+	$bad = true;
+}
+$check( "a join may not take the main table's alias in another case", $bad );
+$no_col = Minn_Admin_Kernel_SQL::has_column( 'minn_conf_bk', 'late_column' );
+$wpdb->query( "ALTER TABLE {$bk} ADD COLUMN late_column VARCHAR(10) NULL" ); // phpcs:ignore
+$check( 'a column a migration adds after a "no" is seen at the next read', ! $no_col && Minn_Admin_Kernel_SQL::has_column( 'minn_conf_bk', 'late_column' ) );
+
 // --- 2. Every real declaration ----------------------------------------------
 $real = array_filter( Minn_Admin_Kernel::resources(), function ( $r ) {
 	return 0 !== strpos( $r['id'], 'minn-conformance/' );

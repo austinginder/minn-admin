@@ -23,11 +23,16 @@
  *     'active'    => callable(): bool        // routes register only when true
  *     'gates'     => array( 'view' => callable(): bool, 'delete' => … ),
  *                                            // called with no arguments; 'view' is required
- *     'item_gate' => callable( int $id, string $gate ): bool   // the row-level check
+ *     'item_gate' => callable( int $id, string $gate, array $row ): bool   // the row-level check
  *     'labels'    => array( 'not_found' => …, 'forbidden' => … ),
  *     'source'    => array( 'table' => 'evf_entries', 'key' => 'entry_id', 'columns' => [ … ], 'detail' => [ … ],
  *                 //           'network' => true,   // a table the network shares, on the base prefix
  *                 //           'columns' may be a callable, asked when a read runs, never at declaration
+ *                 //           'joins' => alias => array( 'table', 'on' => array( col => 'alias.col' ) ),
+ *                 //           LEFT JOINs (Minn_Admin_Kernel_SQL::from()) to a unique key (a join to a
+ *                 //           column many rows share multiplies rows: use 'first'); the main table is "e" and a
+ *                 //           column anywhere may be "alias.col"; 'columns' => array( 'c.email' =>
+ *                 //           'customer_email' ) names a joined column in the row
  *                 //           'where'   => conditions | callable(): conditions )
  *                 // 'where' holds for every read of the source: the list, an item, a status
  *                 // card's counts (a site column, a vendor's own row scope); an array source
@@ -41,7 +46,9 @@
  *     'list'      => array(
  *       'per_page' => 25, 'max' => 100,
  *       'filter'   => array( 'param' => 'status', 'column' => 'status', 'values' => [ … ], 'default' => … ),
- *                  // values may map each value to conditions instead: array( 'unread' => array( 'viewed' => 0 ) )
+ *                  // values may map each value to conditions instead: array( 'unread' => array( 'viewed' => 0 ) ),
+ *                  // or to a callable answering them when the request runs (an upcoming view's "now");
+ *                  // 'order' => array( 'upcoming' => 'ASC' ) sorts a value its own way
  *       'tab'      => array( 'param' => 'form_id', 'column' => 'form_id', 'gate' => callable( int $tab ): bool, 'refuse' => … ),
  *                  // the gate, when declared, is asked before the scope (a per-form capability)
  *       'scope'    => array( 'column' => 'form_id', 'allowed' => callable(): ?int[], 'refuse' => … ),
@@ -463,18 +470,19 @@ class Minn_Admin_Kernel {
 			return self::fail( 'not_found', self::label( $res, 'not_found', __( 'Not found.', 'minn-admin' ) ), 404 );
 		}
 		$forbidden = self::fail( 'forbidden', self::label( $res, 'forbidden', __( 'You cannot access that item.', 'minn-admin' ) ), 403 );
-		if ( ! empty( $res['item_gate'] ) && ! self::yes( $res['item_gate'], $id, $gate ) ) {
+		if ( ! empty( $res['item_gate'] ) && ! self::yes( $res['item_gate'], $id, $gate, $row ) ) {
 			return $forbidden;
 		}
 		// The list's scope holds for the row too, so a resource whose row
 		// gate is missing or narrower than its scope cannot be read by id.
 		$allowed = self::scope( $res );
+		$col     = array_key_exists( '_minn_scope', $row ) ? '_minn_scope' : ( isset( $res['list']['scope']['column'] ) ? self::bare( $res['list']['scope']['column'] ) : '' );
 		if ( is_array( $allowed ) ) {
-			$col = (string) $res['list']['scope']['column'];
-			if ( ! array_key_exists( $col, $row ) || ! in_array( (int) $row[ $col ], $allowed, true ) ) {
+			if ( '' === $col || ! array_key_exists( $col, $row ) || ! in_array( (int) $row[ $col ], $allowed, true ) ) {
 				return $forbidden;
 			}
 		}
+		unset( $row['_minn_scope'] );
 		return $row;
 	}
 
@@ -515,6 +523,12 @@ class Minn_Admin_Kernel {
 			return null;
 		}
 		$cols = self::cols( $src[ $which ] ?? $src['columns'] ?? array() );
+		// The scope column under a name no other column can take, so a joined
+		// column of the same name can never stand in for it in load().
+		if ( ! empty( $res['list']['scope']['column'] ) ) {
+			$cols                                             = $cols ? $cols : array( '*' );
+			$cols[ (string) $res['list']['scope']['column'] ] = '_minn_scope';
+		}
 		return Minn_Admin_Kernel_SQL::row( self::table_of( $src ), $src['key'], (int) $id, $cols, $fixed );
 	}
 
@@ -527,7 +541,13 @@ class Minn_Admin_Kernel {
 		if ( ! is_array( $cols ) ) {
 			$cols = is_callable( $cols ) ? call_user_func( $cols ) : array();
 		}
-		return array_values( (array) $cols );
+		return (array) $cols;
+	}
+
+	/** A column's name in a row: "c.email" reads as "email". */
+	private static function bare( $col ) {
+		$col = explode( "\0", (string) $col, 2 )[0];
+		return false === strpos( $col, '.' ) ? $col : substr( $col, strpos( $col, '.' ) + 1 );
 	}
 
 	/** A request value as text: '' for an array or an object, never a notice. */
@@ -538,7 +558,7 @@ class Minn_Admin_Kernel {
 
 	/** A table source's table, as the SQL layer names it. */
 	private static function table_of( array $src ) {
-		return array( 'table' => (string) $src['table'], 'network' => ! empty( $src['network'] ) );
+		return array( 'table' => (string) $src['table'], 'network' => ! empty( $src['network'] ), 'joins' => (array) ( $src['joins'] ?? array() ) );
 	}
 
 	/**
@@ -593,8 +613,17 @@ class Minn_Admin_Kernel {
 				$v = (string) ( $f['default'] ?? $names[0] );
 			}
 			$q['filter'] = $v;
+			if ( isset( $f['order'][ $v ] ) ) {
+				$q['dir'] = 'ASC' === strtoupper( (string) $f['order'][ $v ] ) ? 'ASC' : 'DESC';
+			}
 			if ( $mapped ) {
-				$q['where'] = array_merge( $q['where'], (array) $values[ $v ] );
+				$conds = is_callable( $values[ $v ] ) && ! is_array( $values[ $v ] ) ? call_user_func( $values[ $v ] ) : $values[ $v ];
+				if ( ! is_array( $conds ) ) {
+					$q['none'] = true; // A view that cannot say what it holds shows nothing.
+				}
+				// Under their own names, as a callable source reads them
+				// ($q['where']['post_status']); every other rule is tagged.
+				$q['where'] = array_merge( $q['where'], (array) $conds );
 			} else {
 				$q['where'][ $f['column'] ] = $v;
 			}
@@ -702,7 +731,7 @@ class Minn_Admin_Kernel {
 			// are held to it here as well, and a row without the scope column
 			// cannot show that it belongs.
 			if ( isset( $q['allowed'] ) ) {
-				$col  = (string) $l['scope']['column'];
+				$col  = self::bare( $l['scope']['column'] );
 				$kept = array_values( array_filter( (array) $rows, function ( $row ) use ( $col, $q ) {
 					$row = (array) $row;
 					return array_key_exists( $col, $row ) && in_array( (int) $row[ $col ], $q['allowed'], true );
@@ -722,7 +751,7 @@ class Minn_Admin_Kernel {
 				$args          = array_merge( $args, $a );
 			}
 			if ( ! empty( $l['range'] ) ) {
-				list( $rs, $ra ) = minn_admin_chart_range_clause( $r, 'e.' . Minn_Admin_Kernel_SQL::ident( $l['range']['column'] ), (string) ( $l['range']['clock'] ?? 'local' ) );
+				list( $rs, $ra ) = minn_admin_chart_range_clause( $r, Minn_Admin_Kernel_SQL::col( $l['range']['column'] ), (string) ( $l['range']['clock'] ?? 'local' ) );
 				$sql             = array_merge( $sql, $rs );
 				$args            = array_merge( $args, $ra );
 			}
@@ -733,7 +762,7 @@ class Minn_Admin_Kernel {
 				'sql'     => $sql,
 				'args'    => $args,
 				'order'   => $l['order']['column'] ?? $src['key'],
-				'dir'     => $l['order']['dir'] ?? 'DESC',
+				'dir'     => $q['dir'] ?? ( $l['order']['dir'] ?? 'DESC' ),
 				'limit'   => $q['per_page'],
 				'offset'  => ( $q['page'] - 1 ) * $q['per_page'],
 			) );
@@ -797,7 +826,7 @@ class Minn_Admin_Kernel {
 		$parts = array();
 		$args  = array();
 		foreach ( (array) ( $s['columns'] ?? array() ) as $c ) {
-			$parts[] = 'e.' . Minn_Admin_Kernel_SQL::ident( $c ) . ' LIKE %s';
+			$parts[] = Minn_Admin_Kernel_SQL::col( $c ) . ' LIKE %s';
 			$args[]  = $like;
 		}
 		$mt = empty( $s['meta'] ) ? null : array( 'table' => $s['meta']['table'], 'network' => ! empty( $s['meta']['network'] ) );
@@ -1187,5 +1216,113 @@ class Minn_Admin_Kernel {
 			$base[ $k . "\0extra" ] = $rule;
 		}
 		return Minn_Admin_Kernel_SQL::distinct( self::table_of( $res['source'] ), $column, $base );
+	}
+
+	/**
+	 * The value a date column on a clock holds at a moment: 'now', or a
+	 * whole number of site days from today's local midnight (0 is today's,
+	 * 1 tomorrow's, -13 the chart window's first). Clocks: utc and local
+	 * datetimes, date (Y-m-d), epoch, and local-epoch (the site's wall clock
+	 * read as an epoch).
+	 *
+	 * @param string     $clock utc | local | date | epoch | local-epoch.
+	 * @param string|int $when  'now' or a day offset.
+	 * @return string|int
+	 */
+	public static function at( $clock, $when = 'now' ) {
+		$zone = wp_timezone();
+		if ( 'now' === $when ) {
+			$t = new DateTimeImmutable( 'now', $zone );
+		} else {
+			// From the day's date, as the chart's own days are named: a zone
+			// that skips midnight starts that day at its first instant, and
+			// the next day is still at midnight.
+			$date = minn_admin_chart_day( (int) $when );
+			if ( 'date' === $clock ) {
+				return $date;
+			}
+			if ( 'local' === $clock ) {
+				return $date . ' 00:00:00';
+			}
+			if ( 'local-epoch' === $clock ) {
+				return (int) strtotime( $date . ' 00:00:00 UTC' );
+			}
+			$t = new DateTimeImmutable( $date . ' 00:00:00', $zone );
+		}
+		switch ( (string) $clock ) {
+			case 'epoch':
+				return $t->getTimestamp();
+			case 'local-epoch':
+				return $t->getTimestamp() + $t->getOffset();
+			case 'local':
+				return $t->format( 'Y-m-d H:i:s' );
+			case 'date':
+				return $t->format( 'Y-m-d' );
+			default:
+				return $t->setTimezone( new DateTimeZone( 'UTC' ) )->format( 'Y-m-d H:i:s' );
+		}
+	}
+
+	/**
+	 * A resource's rows a status card reads, under its fixed conditions and
+	 * scope plus these: null when the caller may see none or the table is
+	 * missing.
+	 *
+	 * @param string $id    Resource id.
+	 * @param array  $where Further conditions.
+	 * @return array|null [ table spec, conditions ]
+	 */
+	private static function card_rows( $id, array $where ) {
+		$res  = self::def( $id );
+		$base = is_array( $res ) ? self::base_where( $res ) : null;
+		if ( null === $base ) {
+			return null;
+		}
+		foreach ( $where as $k => $rule ) {
+			$base[ $k . "\0card" ] = $rule;
+		}
+		return array( self::table_of( $res['source'] ), $base );
+	}
+
+	/**
+	 * How many of a resource's rows the caller may see meet conditions.
+	 *
+	 * @param string $id    Resource id.
+	 * @param array  $where Conditions.
+	 * @return int
+	 */
+	public static function count( $id, array $where = array() ) {
+		$c = self::card_rows( $id, $where );
+		return $c ? Minn_Admin_Kernel_SQL::count( $c[0], $c[1] ) : 0;
+	}
+
+	/**
+	 * The lowest value of a column among the rows the caller may see that
+	 * meet conditions (the next booking's start), or null.
+	 *
+	 * @param string $id     Resource id.
+	 * @param string $column Column.
+	 * @param array  $where  Conditions.
+	 * @return string|null
+	 */
+	public static function first( $id, $column, array $where = array() ) {
+		$c = self::card_rows( $id, $where );
+		return $c ? Minn_Admin_Kernel_SQL::latest( $c[0], $column, $c[1], $column, 'ASC' ) : null;
+	}
+
+	/**
+	 * A status chart's days over the rows the caller may see: column, clock,
+	 * where, split, secondary and ahead, as Minn_Admin_Kernel_SQL::chart_days().
+	 *
+	 * @param string $id Resource id.
+	 * @param array  $c  Chart.
+	 * @return array Days (empty days when the caller may see nothing).
+	 */
+	public static function days( $id, array $c ) {
+		$rows = self::card_rows( $id, (array) ( $c['where'] ?? array() ) );
+		if ( ! $rows ) {
+			return Minn_Admin_Kernel_SQL::empty_days( ! empty( $c['ahead'] ) );
+		}
+		return Minn_Admin_Kernel_SQL::chart_days( array_merge( $c, array( 'table' => $rows[0], 'where' => $rows[1] ) ) );
 	}
 }

@@ -274,11 +274,23 @@ status card without a secondary series, and an array source for a vendor that ke
 list in an option or a queue. A status card counts through its resource
 (`Minn_Admin_Kernel::log_counts()`), so it can never count a row the list would hide.
 
+The bookings port (five adapters, LatePoint's event registrations among them) added
+joins: a source names the tables it LEFT JOINs to a unique key (or, with `first`, the
+lowest row of a one-to-many table, a group booking's first customer), the main table is
+`e`, and any column, condition, search or sort may name `alias.column`. Views may hold
+conditions computed when the request runs and a sort of their own; `Minn_Admin_Kernel::at()`
+gives "now" or a local midnight on whatever clock a column keeps (UTC or site datetime, a
+date, an epoch or the site's wall clock read as one); and a status card reads through its
+resource with `count()`, `first()` and `days()`, looking back or fourteen days ahead, with a
+row counted in one series only.
+
 What the kernel does not have yet: the save path for edit forms (changed fields only,
 a base stamp and a 409 on a stale copy), which the entry-edit adapters will need when
 they port (the post type and taxonomy definitions use the same stamp and partial save
-in `class-minn-admin-cpt.php`), and OR between condition sets on different columns
-(Wordfence's chart says it as one condition because its data allows it). The forms
+in `class-minn-admin-cpt.php`), OR between condition sets on different columns
+(Wordfence's chart says it as one condition because its data allows it), and SQL
+expressions in a column list (LatePoint's detail reads its order's comment with a second
+read instead). The forms
 adapters still carry their own workarounds for the shapes above; moving them onto the
 new primitives is a pass of its own.
 

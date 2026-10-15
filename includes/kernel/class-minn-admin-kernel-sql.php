@@ -21,7 +21,9 @@
  *
  * A table is named without its prefix: 'evf_entries' for the site's table,
  * or array( 'table' => 'stream', 'network' => true ) for one the whole
- * network shares on the base prefix.
+ * network shares on the base prefix, or array( 'core' => 'users' ) for a core
+ * table by its $wpdb name. A table may carry 'joins' (see from()):
+ * the main table is then "e", and any column may be named "alias.column".
  *
  * @package minn-admin
  */
@@ -52,6 +54,15 @@ class Minn_Admin_Kernel_SQL {
 	 */
 	public static function table( $table ) {
 		global $wpdb;
+		// A core table by its $wpdb name, so CUSTOM_USER_TABLE and the
+		// network's shared users table are honoured.
+		if ( is_array( $table ) && ! empty( $table['core'] ) ) {
+			$core = (string) $table['core'];
+			if ( ! in_array( $core, array( 'posts', 'postmeta', 'users', 'usermeta', 'comments', 'commentmeta', 'terms', 'term_taxonomy', 'term_relationships', 'options' ), true ) ) {
+				throw new InvalidArgumentException( 'minn_kernel_core_table=' . $core );
+			}
+			return self::ident( $wpdb->$core );
+		}
 		$network = is_array( $table ) && ! empty( $table['network'] );
 		$name    = is_array( $table ) ? (string) ( $table['table'] ?? '' ) : (string) $table;
 		return self::ident( ( $network ? $wpdb->base_prefix : $wpdb->prefix ) . self::ident( $name ) );
@@ -76,6 +87,8 @@ class Minn_Admin_Kernel_SQL {
 
 	/**
 	 * Whether a table that exists has a column (a vendor's later migration).
+	 * Only a yes is remembered for the request, so a column a migration adds
+	 * meanwhile is seen at the next read.
 	 *
 	 * @param string|array $table  Table without the prefix, or table + network.
 	 * @param string       $column Column.
@@ -86,7 +99,7 @@ class Minn_Admin_Kernel_SQL {
 		static $seen = array();
 		$name = self::table( $table );
 		$col  = self::ident( $column );
-		if ( ! isset( $seen[ $name . '.' . $col ] ) ) {
+		if ( empty( $seen[ $name . '.' . $col ] ) ) {
 			$seen[ $name . '.' . $col ] = self::exists( $table ) && (bool) $wpdb->get_var( $wpdb->prepare( "SHOW COLUMNS FROM `{$name}` LIKE %s", $wpdb->esc_like( $col ) ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- identifier from ident().
 		}
 		return $seen[ $name . '.' . $col ];
@@ -116,13 +129,94 @@ class Minn_Admin_Kernel_SQL {
 	public static function where( array $where, $alias = '' ) {
 		$sql  = array();
 		$args = array();
-		$pre  = '' === $alias ? '' : self::ident( $alias ) . '.';
 		foreach ( $where as $col => $rule ) {
-			list( $s, $a ) = self::rule( $pre . self::ident( explode( "\0", (string) $col, 2 )[0] ), $rule );
+			list( $s, $a ) = self::rule( self::col( $col, $alias ), $rule );
 			$sql[]         = $s;
 			$args          = array_merge( $args, $a );
 		}
 		return array( $sql, $args );
+	}
+
+	/**
+	 * A column as SQL: "e.status" for the main table, "c.email" for one a
+	 * join names, a bare name with the alias ''. A tag after a NUL is dropped.
+	 *
+	 * @param string $name  Column, or "alias.column".
+	 * @param string $alias The main table's alias.
+	 * @return string
+	 */
+	public static function col( $name, $alias = 'e' ) {
+		$name = explode( "\0", (string) $name, 2 )[0];
+		if ( false !== strpos( $name, '.' ) ) {
+			list( $a, $c ) = explode( '.', $name, 2 );
+			return self::ident( $a ) . '.' . self::ident( $c );
+		}
+		return ( '' === $alias ? '' : self::ident( $alias ) . '.' ) . self::ident( $name );
+	}
+
+	/**
+	 * A table and its joins as SQL, the main table as "e".
+	 *
+	 * 'joins' => alias => array( 'table', 'network', 'on' => array( own column
+	 * => 'alias.column' ) ) is a LEFT JOIN on equal columns; with 'first' =>
+	 * array( 'key', 'by', 'of' ) instead of 'on' it joins the lowest-keyed row
+	 * of a one-to-many table (a group booking's first customer):
+	 * alias.key = ( SELECT MIN( key ) FROM table WHERE by = e.of ).
+	 *
+	 * @param string|array $table Table spec.
+	 * @return string
+	 */
+	public static function from( $table ) {
+		$sql = self::table( $table ) . ' e';
+		foreach ( (array) ( is_array( $table ) ? ( $table['joins'] ?? array() ) : array() ) as $alias => $j ) {
+			$alias = self::ident( $alias );
+			if ( 'e' === strtolower( $alias ) || ! is_array( $j ) ) {
+				throw new InvalidArgumentException( 'minn_kernel_join=' . $alias );
+			}
+			$t = self::table( $j );
+			if ( ! empty( $j['first'] ) ) {
+				$key = self::ident( $j['first']['key'] );
+				$f   = 'f_' . $alias;
+				$on  = "{$alias}.{$key} = ( SELECT MIN( {$f}.{$key} ) FROM {$t} {$f} WHERE {$f}." . self::ident( $j['first']['by'] ) . ' = ' . self::col( $j['first']['of'] ) . ' )';
+			} else {
+				$parts = array();
+				foreach ( (array) ( $j['on'] ?? array() ) as $own => $other ) {
+					$parts[] = "{$alias}." . self::ident( $own ) . ' = ' . self::col( $other );
+				}
+				if ( ! $parts ) {
+					throw new InvalidArgumentException( 'minn_kernel_join=' . $alias );
+				}
+				$on = implode( ' AND ', $parts );
+			}
+			$sql .= " LEFT JOIN {$t} {$alias} ON {$on}";
+		}
+		return $sql;
+	}
+
+	/**
+	 * A select list: 'col' is e.col, 'c.email' is c.email AS email, and
+	 * 'c.email' => 'customer_email' names the result. '*' (or an empty list)
+	 * is every column of the main table, for a vendor whose site may add its
+	 * own.
+	 *
+	 * @param array $columns Columns.
+	 * @return string
+	 */
+	public static function columns( array $columns ) {
+		if ( ! $columns ) {
+			return 'e.*';
+		}
+		$out = array();
+		foreach ( $columns as $k => $v ) {
+			$src   = is_int( $k ) ? (string) $v : (string) $k;
+			if ( '*' === $src ) {
+				$out[] = 'e.*';
+				continue;
+			}
+			$as    = is_int( $k ) ? ( false !== strpos( $src, '.' ) ? substr( $src, strpos( $src, '.' ) + 1 ) : $src ) : (string) $v;
+			$out[] = self::col( $src ) . ( false !== strpos( $src, '.' ) || ! is_int( $k ) ? ' AS ' . self::ident( $as ) : '' );
+		}
+		return implode( ', ', $out );
 	}
 
 	/**
@@ -307,10 +401,10 @@ class Minn_Admin_Kernel_SQL {
 	}
 
 	/**
-	 * COUNT(*) of a table under conditions.
+	 * COUNT(*) of a table (and its joins) under conditions.
 	 *
-	 * @param string $table Table without the prefix.
-	 * @param array  $where Conditions.
+	 * @param string|array $table Table spec.
+	 * @param array        $where Conditions.
 	 * @return int
 	 */
 	public static function count( $table, array $where = array() ) {
@@ -318,26 +412,25 @@ class Minn_Admin_Kernel_SQL {
 		if ( ! self::exists( $table ) ) {
 			return 0;
 		}
-		list( $sql, $args ) = self::where( $where );
-		$q                  = 'SELECT COUNT(*) FROM ' . self::table( $table ) . ( $sql ? ' WHERE ' . implode( ' AND ', $sql ) : '' );
+		list( $sql, $args ) = self::where( $where, 'e' );
+		$q                  = 'SELECT COUNT(*) FROM ' . self::from( $table ) . ( $sql ? ' WHERE ' . implode( ' AND ', $sql ) : '' );
 		return (int) $wpdb->get_var( self::prepare( $q, $args ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 	}
 
 	/**
 	 * One row by key, as an associative array, or null.
 	 *
-	 * @param string|array $table   Table without the prefix.
+	 * @param string|array $table   Table spec.
 	 * @param string       $key     Key column.
 	 * @param int          $id      Key value.
-	 * @param string[]     $columns Columns to read ([] for all).
+	 * @param array        $columns Columns (see columns(); [] for the main table's all).
 	 * @param array        $where   Conditions the row must also meet (a site column).
 	 * @return array|null
 	 */
 	public static function row( $table, $key, $id, array $columns = array(), array $where = array() ) {
 		global $wpdb;
-		list( $sql, $args ) = self::where( $where );
-		$cols               = $columns ? implode( ', ', array_map( array( __CLASS__, 'ident' ), $columns ) ) : '*';
-		$q                  = 'SELECT ' . $cols . ' FROM ' . self::table( $table ) . ' WHERE ' . implode( ' AND ', array_merge( array( self::ident( $key ) . ' = %d' ), $sql ) ) . ' LIMIT 1';
+		list( $sql, $args ) = self::where( $where, 'e' );
+		$q                  = 'SELECT ' . self::columns( $columns ) . ' FROM ' . self::from( $table ) . ' WHERE ' . implode( ' AND ', array_merge( array( self::col( $key ) . ' = %d' ), $sql ) ) . ' LIMIT 1';
 		$row                = $wpdb->get_row( $wpdb->prepare( $q, array_merge( array( (int) $id ), $args ) ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		return is_array( $row ) ? $row : null;
 	}
@@ -345,8 +438,8 @@ class Minn_Admin_Kernel_SQL {
 	/**
 	 * Rows of a table under conditions, as associative arrays.
 	 *
-	 * @param string|array $table   Table without the prefix.
-	 * @param string[]     $columns Columns to read.
+	 * @param string|array $table   Table spec.
+	 * @param array        $columns Columns (see columns()).
 	 * @param array        $where   Conditions.
 	 * @param array        $order   Column => ASC|DESC.
 	 * @param int          $limit   At most this many (0 for no limit).
@@ -357,12 +450,12 @@ class Minn_Admin_Kernel_SQL {
 		if ( ! self::exists( $table ) ) {
 			return array();
 		}
-		list( $sql, $args ) = self::where( $where );
+		list( $sql, $args ) = self::where( $where, 'e' );
 		$by                 = array();
 		foreach ( $order as $col => $dir ) {
-			$by[] = self::ident( $col ) . ( 'DESC' === strtoupper( (string) $dir ) ? ' DESC' : ' ASC' );
+			$by[] = self::col( $col ) . ( 'DESC' === strtoupper( (string) $dir ) ? ' DESC' : ' ASC' );
 		}
-		$q = 'SELECT ' . implode( ', ', array_map( array( __CLASS__, 'ident' ), $columns ) ) . ' FROM ' . self::table( $table )
+		$q = 'SELECT ' . self::columns( $columns ) . ' FROM ' . self::from( $table )
 			. ( $sql ? ' WHERE ' . implode( ' AND ', $sql ) : '' )
 			. ( $by ? ' ORDER BY ' . implode( ', ', $by ) : '' )
 			. ( $limit > 0 ? ' LIMIT ' . (int) $limit : '' );
@@ -371,16 +464,18 @@ class Minn_Admin_Kernel_SQL {
 	}
 
 	/**
-	 * One column of the newest row under conditions (by the key), or null.
+	 * One column of the first row under conditions in an order: the newest
+	 * by the key (DESC), or the soonest by a date (the column itself, ASC).
 	 *
-	 * @param string|array $table  Table without the prefix.
+	 * @param string|array $table  Table spec.
 	 * @param string       $column Column to read.
 	 * @param array        $where  Conditions.
-	 * @param string       $key    The key that orders rows by age.
+	 * @param string       $key    The column that orders rows.
+	 * @param string       $dir    DESC or ASC.
 	 * @return string|null
 	 */
-	public static function latest( $table, $column, array $where, $key ) {
-		$rows = self::select( $table, array( $column ), $where, array( $key => 'DESC' ), 1 );
+	public static function latest( $table, $column, array $where, $key, $dir = 'DESC' ) {
+		$rows = self::select( $table, array( $column ), $where, array( $key => $dir ), 1 );
 		return $rows ? (string) reset( $rows[0] ) : null;
 	}
 
@@ -388,7 +483,7 @@ class Minn_Admin_Kernel_SQL {
 	 * The most frequent value of a column under conditions, with its count,
 	 * ties broken by the value; null when no row matches.
 	 *
-	 * @param string|array $table  Table without the prefix.
+	 * @param string|array $table  Table spec.
 	 * @param string       $column Column to group by.
 	 * @param array        $where  Conditions.
 	 * @return array|null array( 'value' => string, 'count' => int )
@@ -398,9 +493,9 @@ class Minn_Admin_Kernel_SQL {
 		if ( ! self::exists( $table ) ) {
 			return null;
 		}
-		list( $sql, $args ) = self::where( $where );
-		$col                = self::ident( $column );
-		$q                  = "SELECT {$col} AS v, COUNT(*) AS n FROM " . self::table( $table ) . ( $sql ? ' WHERE ' . implode( ' AND ', $sql ) : '' ) . " GROUP BY {$col} ORDER BY n DESC, {$col} ASC LIMIT 1";
+		list( $sql, $args ) = self::where( $where, 'e' );
+		$col                = self::col( $column );
+		$q                  = "SELECT {$col} AS v, COUNT(*) AS n FROM " . self::from( $table ) . ( $sql ? ' WHERE ' . implode( ' AND ', $sql ) : '' ) . " GROUP BY {$col} ORDER BY n DESC, {$col} ASC LIMIT 1";
 		$row                = $wpdb->get_row( self::prepare( $q, $args ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		return is_array( $row ) ? array( 'value' => (string) $row['v'], 'count' => (int) $row['n'] ) : null;
 	}
@@ -408,7 +503,7 @@ class Minn_Admin_Kernel_SQL {
 	/**
 	 * The distinct values of a column under conditions, sorted, at most 1,000.
 	 *
-	 * @param string|array $table  Table without the prefix.
+	 * @param string|array $table  Table spec.
 	 * @param string       $column Column.
 	 * @param array        $where  Conditions.
 	 * @return string[]
@@ -418,9 +513,9 @@ class Minn_Admin_Kernel_SQL {
 		if ( ! self::exists( $table ) ) {
 			return array();
 		}
-		list( $sql, $args ) = self::where( $where );
-		$col                = self::ident( $column );
-		$q                  = "SELECT DISTINCT {$col} FROM " . self::table( $table ) . ( $sql ? ' WHERE ' . implode( ' AND ', $sql ) : '' ) . " ORDER BY {$col} ASC LIMIT 1000";
+		list( $sql, $args ) = self::where( $where, 'e' );
+		$col                = self::col( $column );
+		$q                  = "SELECT DISTINCT {$col} FROM " . self::from( $table ) . ( $sql ? ' WHERE ' . implode( ' AND ', $sql ) : '' ) . " ORDER BY {$col} ASC LIMIT 1000";
 		return array_map( 'strval', (array) $wpdb->get_col( self::prepare( $q, $args ) ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 	}
 
@@ -434,61 +529,83 @@ class Minn_Admin_Kernel_SQL {
 	 */
 	public static function page( array $q ) {
 		global $wpdb;
-		$t     = self::table( $q['table'] ) . ' e';
-		$cols  = implode( ', ', array_map( function ( $c ) {
-			return 'e.' . Minn_Admin_Kernel_SQL::ident( $c );
-		}, $q['columns'] ) );
+		$t     = self::from( $q['table'] );
 		$where = $q['sql'] ? ' WHERE ' . implode( ' AND ', $q['sql'] ) : '';
 		$total = (int) $wpdb->get_var( self::prepare( "SELECT COUNT(*) FROM {$t}{$where}", $q['args'] ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		$dir   = 'ASC' === strtoupper( (string) ( $q['dir'] ?? 'DESC' ) ) ? 'ASC' : 'DESC';
-		$order = 'e.' . self::ident( $q['order'] ) . ' ' . $dir;
+		$order = self::col( $q['order'] ) . ' ' . $dir;
 		// Every sort breaks ties by the key, so pages never overlap.
 		if ( $q['order'] !== $q['key'] ) {
-			$order .= ', e.' . self::ident( $q['key'] ) . ' ' . $dir;
+			$order .= ', ' . self::col( $q['key'] ) . ' ' . $dir;
 		}
 		$rows = $wpdb->get_results( // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-			self::prepare( "SELECT {$cols} FROM {$t}{$where} ORDER BY {$order} LIMIT %d OFFSET %d", array_merge( $q['args'], array( (int) $q['limit'], (int) $q['offset'] ) ) ),
+			self::prepare( 'SELECT ' . self::columns( $q['columns'] ) . " FROM {$t}{$where} ORDER BY {$order} LIMIT %d OFFSET %d", array_merge( $q['args'], array( (int) $q['limit'], (int) $q['offset'] ) ) ),
 			ARRAY_A
 		);
 		return array( is_array( $rows ) ? $rows : array(), $total );
 	}
 
 	/**
-	 * Rows per site day for the status chart, split into primary and
-	 * secondary (spam) series by a condition on one column, or one series
-	 * when no split is declared.
+	 * A chart's fourteen days with nothing counted: the last fourteen, or
+	 * from today on.
 	 *
-	 * @param array $c table, column (the date), clock (utc|local|epoch|local-epoch),
-	 *                 where (conditions for every counted row), split (column,
-	 *                 optional), secondary (values of split that count as secondary).
-	 * @return array Days from minn_admin_chart_days(), bumped.
+	 * @param bool $ahead From today on.
+	 * @return array
+	 */
+	public static function empty_days( $ahead = false ) {
+		if ( ! $ahead ) {
+			return minn_admin_chart_days();
+		}
+		$days = array();
+		for ( $i = 0; $i < 14; $i++ ) {
+			$d          = minn_admin_chart_day( $i );
+			$days[ $d ] = array( 'label' => $d, 'value' => 0, 'secondary' => 0 );
+		}
+		return $days;
+	}
+
+	/**
+	 * Rows per site day for a status chart: the last fourteen days, or with
+	 * 'ahead' the fourteen from today on. A row whose split value is one of
+	 * 'secondary' counts there, every other row in the primary series, so a
+	 * day's two counts never overlap; with no split there is one series.
+	 *
+	 * @param array $c table, column (the date), clock (utc|local|date|epoch|
+	 *                 local-epoch), where (conditions for every counted row),
+	 *                 split (column, optional), secondary (its values), ahead.
+	 * @return array Days keyed Y-m-d: label, value, secondary (and from / to
+	 *               looking back, the bounds a clicked bar sends).
 	 */
 	public static function chart_days( array $c ) {
 		global $wpdb;
-		$days  = minn_admin_chart_days();
-		$col   = self::ident( $c['column'] );
+		$ahead = ! empty( $c['ahead'] );
+		$col   = self::col( $c['column'] );
 		$clock = (string) ( $c['clock'] ?? 'utc' );
+		$days  = self::empty_days( $ahead );
 		if ( 'utc' === $clock ) {
-			$day   = minn_admin_chart_utc_day_sql( $col );
-			$since = array( "{$col} >= %s", minn_admin_chart_utc_since() );
+			$day = minn_admin_chart_utc_day_sql( $col );
 		} elseif ( 'epoch' === $clock || 'local-epoch' === $clock ) {
-			$day   = minn_admin_chart_epoch_day_sql( $col, $clock );
-			$since = array( "{$col} >= %d", minn_admin_chart_epoch_since( 14, $clock ) );
+			$day = minn_admin_chart_epoch_day_sql( $col, $clock );
+		} elseif ( 'date' === $clock ) {
+			$day = $col;
 		} else {
-			$day   = "DATE({$col})";
-			$since = array( "{$col} >= %s", minn_admin_chart_local_since() );
+			$day = "DATE({$col})";
 		}
-		list( $sql, $args ) = self::where( (array) ( $c['where'] ?? array() ) );
-		$sql[]              = $since[0];
-		$args[]             = $since[1];
-		$split              = empty( $c['split'] ) ? "''" : self::ident( $c['split'] );
-		$q                  = "SELECT {$day} AS d, {$split} AS s, COUNT(*) AS n FROM " . self::table( $c['table'] ) . ' WHERE ' . implode( ' AND ', $sql ) . ' GROUP BY d, s';
+		$since = $ahead ? Minn_Admin_Kernel::at( $clock, 0 ) : Minn_Admin_Kernel::at( $clock, -13 );
+		$bound = array( $c['column'] . "\0since" => array( 'op' => '>=', 'value' => $since ) );
+		if ( $ahead ) {
+			$bound[ $c['column'] . "\0until" ] = array( 'op' => '<', 'value' => Minn_Admin_Kernel::at( $clock, 14 ) );
+		}
+		list( $sql, $args ) = self::where( array_merge( (array) ( $c['where'] ?? array() ), $bound ), 'e' );
+		$split              = empty( $c['split'] ) ? "''" : self::col( $c['split'] );
+		$q                  = "SELECT {$day} AS _minn_d, {$split} AS _minn_s, COUNT(*) AS _minn_n FROM " . self::from( $c['table'] ) . ' WHERE ' . implode( ' AND ', $sql ) . ' GROUP BY _minn_d, _minn_s';
 		foreach ( (array) $wpdb->get_results( self::prepare( $q, $args ) ) as $r ) { // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			$r = (object) array( 'd' => $r->_minn_d, 's' => $r->_minn_s, 'n' => $r->_minn_n );
 			$d = (string) $r->d;
 			if ( 'epoch' === $clock || 'local-epoch' === $clock ) {
 				$d = minn_admin_chart_epoch_bucket_day( $d );
 			}
-			minn_admin_chart_bump( $days, $d, ! empty( $c['split'] ) && in_array( (string) $r->s, array_map( 'strval', (array) ( $c['secondary'] ?? array() ) ), true ), (int) $r->n );
+			minn_admin_chart_bump( $days, substr( $d, 0, 10 ), ! empty( $c['split'] ) && in_array( (string) $r->s, array_map( 'strval', (array) ( $c['secondary'] ?? array() ) ), true ), (int) $r->n );
 		}
 		return $days;
 	}
