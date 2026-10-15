@@ -3870,6 +3870,10 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 
 /* ===== Orders ===== */
 .minn-order-cols { grid-template-columns: 120px 1fr 130px minmax(0,150px) minmax(0,140px) 100px 40px; }
+/* With PDF Invoices & Packing Slips, an Invoice column before Total (adapters/wcpdf.php). */
+.minn-order-cols.minn-order-cols-docs { grid-template-columns: 120px 1fr 130px minmax(0,150px) minmax(0,140px) minmax(0,110px) 100px 40px; }
+.minn-wcpdf-cell { color: var(--text2); text-decoration: none; font-variant-numeric: tabular-nums; }
+.minn-wcpdf-cell:hover { color: var(--accent); text-decoration: underline; }
 .minn-sub-cols { grid-template-columns: 130px 1fr minmax(0,150px) 110px 110px 120px 100px 40px; }
 .minn-sub-order-row {
 	display: flex;
@@ -4170,6 +4174,16 @@ button.minn-chip.sel[data-tagchip]:hover { border-color: var(--red); color: var(
 .minn-order-read-name { font-weight: 600; color: var(--text); }
 .minn-order-read-sub { font-weight: 600; font-size: 12px; color: var(--text); margin-top: 8px; }
 .minn-order-read-empty { color: var(--text3); }
+/* The Documents card (PDF Invoices & Packing Slips): one row per document. */
+.minn-wcpdf-doc { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; }
+.minn-wcpdf-doc + .minn-wcpdf-doc { border-top: 1px solid var(--border); }
+.minn-wcpdf-main { flex: 1; min-width: 0; }
+.minn-wcpdf-title { font-weight: 600; font-size: 13px; color: var(--text); }
+.minn-wcpdf-meta { font-size: 12px; color: var(--text2); margin-top: 2px; font-variant-numeric: tabular-nums; }
+.minn-wcpdf-notes { font-size: 12px; color: var(--text2); margin-top: 4px; white-space: pre-line; overflow-wrap: anywhere; }
+.minn-wcpdf-acts { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.minn-wcpdf-acts .minn-order-editpen { margin-inline-start: 0; }
+.minn-wcpdf-form { display: flex; flex-direction: column; gap: 12px; }
 .minn-order-composer-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
 .minn-note-visibility { display: flex; align-items: center; gap: 9px; min-width: 0; color: var(--text2); font-size: 13px; }
 .minn-note-visibility > span { line-height: 1.25; }
@@ -5487,6 +5501,10 @@ html[dir="rtl"] .minn-notif-panel { animation-name: minnSlideInRtl; }
   .minn-order-cols { grid-template-columns: 86px 1fr 84px; }
   .minn-order-cols > :nth-child(3), .minn-order-cols > :nth-child(4),
   .minn-order-cols > :nth-child(5), .minn-order-cols > :nth-child(7) { display: none; }
+  /* The Invoice column shifts Total to the 7th cell and the row end to the 8th. */
+  .minn-order-cols.minn-order-cols-docs { grid-template-columns: 86px 1fr 84px; }
+  .minn-order-cols.minn-order-cols-docs > :nth-child(6), .minn-order-cols.minn-order-cols-docs > :nth-child(8) { display: none; }
+  .minn-order-cols.minn-order-cols-docs > :nth-child(7) { display: block; }
   .minn-sub-cols { grid-template-columns: 86px 1fr 84px; }
   .minn-sub-cols > :nth-child(3), .minn-sub-cols > :nth-child(4),
   .minn-sub-cols > :nth-child(5), .minn-sub-cols > :nth-child(6),

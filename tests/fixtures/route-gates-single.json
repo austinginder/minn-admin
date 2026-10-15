@@ -176,6 +176,10 @@
             "shop_manager",
             "administrator"
         ],
+        "DELETE /minn-admin/v1/wcpdf/orders/(?P<id>\\d+)/documents/(?P<type>[a-z0-9_-]+)": [
+            "shop_manager",
+            "administrator"
+        ],
         "DELETE /minn-admin/v1/wpcode/snippets/(?P<id>\\d+)": [
             "administrator"
         ],
@@ -1202,6 +1206,10 @@
             "shop_manager",
             "administrator"
         ],
+        "GET /minn-admin/v1/wcpdf/orders/(?P<id>\\d+)/documents": [
+            "shop_manager",
+            "administrator"
+        ],
         "GET /minn-admin/v1/wp-migrate/backups": [
             "shop_manager",
             "administrator"
@@ -2053,6 +2061,14 @@
             "shop_manager",
             "administrator"
         ],
+        "POST /minn-admin/v1/wcpdf/orders/(?P<id>\\d+)/documents/(?P<type>[a-z0-9_-]+)/create": [
+            "shop_manager",
+            "administrator"
+        ],
+        "POST /minn-admin/v1/wcpdf/orders/(?P<id>\\d+)/documents/(?P<type>[a-z0-9_-]+)/regenerate": [
+            "shop_manager",
+            "administrator"
+        ],
         "POST /minn-admin/v1/wp-migrate/accept": [
             "shop_manager",
             "administrator"
@@ -2118,6 +2134,10 @@
             "administrator"
         ],
         "PUT /minn-admin/v1/jet-theme-core/templates/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "PUT /minn-admin/v1/wcpdf/orders/(?P<id>\\d+)/documents/(?P<type>[a-z0-9_-]+)": [
+            "shop_manager",
             "administrator"
         ],
         "PUT /minn-admin/v1/wpcode/snippets/(?P<id>\\d+)": [
