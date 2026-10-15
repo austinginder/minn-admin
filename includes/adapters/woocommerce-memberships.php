@@ -2365,7 +2365,8 @@ minn_admin_endpoint( 'wcm/members/(?P<id>\d+)/notes/(?P<note>\d+)', array(
 	'active'  => 'minn_admin_wcm_active',
 	'methods' => 'DELETE',
 	'gate'    => 'minn_admin_wcm_can',
-	'labels'  => array( 'not_found' => __( 'Membership not found.', 'minn-admin' ) ),
+	// No labels: an endpoint declared as its file loads would translate them
+	// before init. A membership that is not there is minn_admin_wcm_load's 404.
 	'run'     => function ( WP_REST_Request $request, array $ctx ) {
 		$m = minn_admin_wcm_load( $ctx['id'], 'edit_post' );
 		if ( is_wp_error( $m ) ) {
