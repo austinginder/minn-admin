@@ -194,6 +194,15 @@ Minn_Admin_Kernel::endpoint( 'minn-conformance/ep/(?P<id>\d+)', array(
 	},
 ) );
 
+Minn_Admin_Kernel::endpoint( 'minn-conformance/ep-item/(?P<id>\d+)', array(
+	'gate' => function ( WP_REST_Request $r ) {
+		return 7 === (int) Minn_Admin::path_param( $r );
+	},
+	'run'  => function ( $r, $ctx ) {
+		return array( 'id' => $ctx['id'] );
+	},
+) );
+
 // Shapes a check can answer with that are not a yes: each must deny.
 $shape     = true;
 $shape_fn  = function () use ( &$shape ) {
@@ -377,6 +386,9 @@ $gate_on    = false;
 list( $st ) = $call( 'GET', '/minn-admin/v1/minn-conformance/ep/7' );
 $check( 'an endpoint gate refuses', in_array( $st, array( 401, 403 ), true ), (string) $st );
 $gate_on = true;
+list( $st7, $d7 ) = $call( 'GET', '/minn-admin/v1/minn-conformance/ep-item/7' );
+list( $st8 )       = $call( 'GET', '/minn-admin/v1/minn-conformance/ep-item/8' );
+$check( "an endpoint's gate is asked with the request, so a gate on one item refuses before the handler runs", 200 === $st7 && 7 === ( $d7['id'] ?? 0 ) && 403 === $st8, $st7 . ' ' . $st8 );
 
 // A declared column that is not an identifier fails closed.
 list( $st, $d ) = $call( 'GET', '/minn-admin/v1/minn-conformance/badcol' );
@@ -1712,6 +1724,27 @@ foreach ( Minn_Admin_Surfaces::for_current_user() as $s ) {
 	}
 }
 printf( "kernel resources checked: %d (%s)\n", count( $real ), implode( ', ', array_keys( $real ) ) );
+
+// An endpoint's gate is asked with the request, as WordPress asks a
+// permission callback: a gate that takes anything else (a capability with a
+// default) would be handed the request in its place.
+$odd_gates = array();
+$n_gates   = 0;
+foreach ( Minn_Admin_Kernel::endpoints() as $ep ) {
+	$g = $ep['gate'] ?? null;
+	if ( ! is_callable( $g ) || 0 === strpos( (string) ( $ep['path'] ?? '' ), 'minn-conformance/' ) ) {
+		continue;
+	}
+	$n_gates++;
+	$rf = is_array( $g ) ? new ReflectionMethod( $g[0], $g[1] ) : new ReflectionFunction( $g );
+	foreach ( $rf->getParameters() as $prm ) {
+		if ( false === strpos( (string) $prm->getType(), 'WP_REST_Request' ) ) {
+			$odd_gates[] = $ep['path'];
+			break;
+		}
+	}
+}
+$check( "every endpoint's gate takes nothing or the request it is asked with ({$n_gates})", $n_gates > 0 && ! $odd_gates, implode( ', ', $odd_gates ) );
 
 $failed = count( array_filter( $results, function ( $r ) {
 	return ! $r;

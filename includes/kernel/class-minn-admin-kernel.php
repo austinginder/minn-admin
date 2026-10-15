@@ -186,10 +186,12 @@ class Minn_Admin_Kernel {
 	 * Declare a handler-tier endpoint.
 	 *
 	 * @param string $path Route under minn-admin/v1, may hold (?P<id>\d+).
-	 * @param array  $def  methods, gate (callable, required), run (callable(
-	 *                     WP_REST_Request, array ctx )), active, args (JSON
-	 *                     schemas the kernel checks after the gate, as an
-	 *                     action's are).
+	 * @param array  $def  methods, gate (callable, required, asked with the
+	 *                     request, as WordPress asks a permission callback,
+	 *                     so a per-item capability is checked before anything
+	 *                     runs), run (callable( WP_REST_Request, array ctx )),
+	 *                     active, args (JSON schemas the kernel checks after
+	 *                     the gate, as an action's are).
 	 *                     Any message in it is translated when declared, so
 	 *                     an endpoint declared as its file loads keeps its
 	 *                     messages inside run.
@@ -468,8 +470,10 @@ class Minn_Admin_Kernel {
 		$args = array(
 			'minn_file'           => $ep['file'],
 			'methods'             => $ep['methods'] ?? 'GET',
-			'permission_callback' => function () use ( $gate ) {
-				return Minn_Admin_Kernel::yes( $gate );
+			// Asked with the request, as WordPress asks it: a gate on one item
+			// (edit this form) refuses before the handler runs, 401 signed out.
+			'permission_callback' => function ( WP_REST_Request $r ) use ( $gate ) {
+				return Minn_Admin_Kernel::yes( $gate, $r );
 			},
 			'callback'            => self::guarded( function ( WP_REST_Request $r ) use ( $run, $ep ) {
 				$ctx = array();

@@ -613,7 +613,11 @@ minn_admin_resource( 'everest/entries', function () {
 } );
 minn_admin_endpoint( 'everest/status', array(
 	'active' => 'minn_admin_everest_active',
-	'gate'   => 'minn_admin_everest_can',
+	// Their gate takes a capability, so it is asked with its own default:
+	// the kernel asks an endpoint's gate with the request.
+	'gate'   => function () {
+		return minn_admin_everest_can();
+	},
 	'run'    => function () {
 		return minn_admin_everest_status_model();
 	},
@@ -621,7 +625,11 @@ minn_admin_endpoint( 'everest/status', array(
 
 minn_admin_endpoint( 'everest/forms', array(
 	'active' => 'minn_admin_everest_active',
-	'gate'   => 'minn_admin_everest_can',
+	// Their gate takes a capability, so it is asked with its own default:
+	// the kernel asks an endpoint's gate with the request.
+	'gate'   => function () {
+		return minn_admin_everest_can();
+	},
 	'run'    => function ( WP_REST_Request $request ) {
 		$manage = ! empty( $request['manage'] );
 		$scope  = minn_admin_everest_allowed_form_ids();

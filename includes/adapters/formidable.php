@@ -308,7 +308,11 @@ minn_admin_resource( 'formidable/entries', function () {
 
 minn_admin_endpoint( 'formidable/forms', array(
 	'active' => 'minn_admin_formidable_active',
-	'gate'   => 'minn_admin_formidable_can',
+	// Their gate takes a capability, so it is asked with its own default:
+	// the kernel asks an endpoint's gate with the request.
+	'gate'   => function () {
+		return minn_admin_formidable_can();
+	},
 	'run'    => function ( WP_REST_Request $request ) {
 		$manage = ! empty( $request['manage'] );
 		$out    = array();
@@ -325,7 +329,11 @@ minn_admin_endpoint( 'formidable/forms', array(
 
 minn_admin_endpoint( 'formidable/status', array(
 	'active' => 'minn_admin_formidable_active',
-	'gate'   => 'minn_admin_formidable_can',
+	// Their gate takes a capability, so it is asked with its own default:
+	// the kernel asks an endpoint's gate with the request.
+	'gate'   => function () {
+		return minn_admin_formidable_can();
+	},
 	'run'    => 'minn_admin_formidable_status_model',
 ) );
 
