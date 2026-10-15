@@ -58,7 +58,6 @@ function minn_admin_duplicator_table() {
 }
 
 function minn_admin_duplicator_active() {
-	global $wpdb;
 	if ( ! defined( 'DUPLICATOR_VERSION' ) && ! class_exists( 'DUP_Package' ) && ! minn_admin_duplicator_is_v5() ) {
 		return false;
 	}
@@ -68,9 +67,7 @@ function minn_admin_duplicator_active() {
 	if ( ! Minn_Admin::install_owner() ) {
 		return false;
 	}
-	$table = minn_admin_duplicator_table();
-	$found = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
-	return $found && 0 === strcasecmp( (string) $found, $table );
+	return Minn_Admin_Kernel_SQL::exists( Minn_Admin_Kernel_SQL::named( minn_admin_duplicator_table() ) );
 }
 
 /** Their created-column quirk: UTC exactly when the site offset is truthy. */
@@ -157,15 +154,15 @@ function minn_admin_duplicator_archive_size( $name, $hash ) {
 
 /** Display rows for the packages table, newest first. */
 function minn_admin_duplicator_rows() {
-	global $wpdb;
-	$table = minn_admin_duplicator_table();
 	// 5.0 dropped the owner column and added archive_name (which saves
 	// reconstructing the file stem) plus flags. Select per generation rather
 	// than asking for columns the installed one does not have.
 	$cols = minn_admin_duplicator_is_v5()
-		? 'id, name, hash, status, created, archive_name'
-		: 'id, name, hash, status, created, owner';
-	$rows = $wpdb->get_results( "SELECT {$cols} FROM {$table} ORDER BY id DESC" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		? array( 'id', 'name', 'hash', 'status', 'created', 'archive_name' )
+		: array( 'id', 'name', 'hash', 'status', 'created', 'owner' );
+	$rows = array_map( function ( $r ) {
+		return (object) $r;
+	}, Minn_Admin_Kernel_SQL::select( Minn_Admin_Kernel_SQL::named( minn_admin_duplicator_table() ), $cols, array(), array( 'id' => 'DESC' ) ) );
 	$gmt  = minn_admin_duplicator_dates_are_gmt();
 	$items = array();
 	foreach ( (array) $rows as $r ) {
@@ -264,9 +261,7 @@ function minn_admin_duplicator_download_files( $id ) {
 	if ( ! minn_admin_duplicator_can_download() ) {
 		return new WP_Error( 'forbidden', __( 'You are not allowed to download backups.', 'minn-admin' ), array( 'status' => 403 ) );
 	}
-	global $wpdb;
-	$table = minn_admin_duplicator_table();
-	$row   = $wpdb->get_row( $wpdb->prepare( "SELECT id, name, hash FROM {$table} WHERE id = %d", (int) $id ), ARRAY_A ); // phpcs:ignore WordPress.DB
+	$row = Minn_Admin_Kernel_SQL::row( Minn_Admin_Kernel_SQL::named( minn_admin_duplicator_table() ), 'id', (int) $id, array( 'id', 'name', 'hash' ) );
 	if ( ! $row ) {
 		return new WP_Error( 'not_found', __( 'Package not found.', 'minn-admin' ), array( 'status' => 404 ) );
 	}
@@ -587,10 +582,10 @@ add_action( 'rest_api_init', function () {
 		return current_user_can( minn_admin_duplicator_cap() );
 	};
 
-	register_rest_route( 'minn-admin/v1', '/duplicator/packages', array(
+	minn_admin_endpoint( '/duplicator/packages', array(
 		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) {
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) {
 			$per_page = min( 100, max( 1, (int) $request->get_param( 'per_page' ) ?: 25 ) );
 			$page     = max( 1, (int) $request->get_param( 'page' ) ?: 1 );
 			$all      = minn_admin_duplicator_rows();
@@ -601,20 +596,19 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/duplicator/packages/(?P<id>\d+)', array(
+	minn_admin_endpoint( '/duplicator/packages/(?P<id>\d+)', array(
 		'methods'             => 'DELETE',
 		// Their packageDelete ajax asks CAP_CREATE, one rung above the
 		// CAP_BASIC the list reads at; the build gate already resolves to
 		// that rung on 5.0 and to their filtered cap on 1.5.
-		'permission_callback' => 'minn_admin_duplicator_can_build',
-		'callback'            => function ( WP_REST_Request $request ) {
+		'gate'                => 'minn_admin_duplicator_can_build',
+		'run'                 => function ( WP_REST_Request $request ) {
 			// Duplicator's own loader + delete() — its file cleanup, not a
 			// re-guess. (Their getByID unserializes their own blob; this
 			// shim never does.) getByID does NOT copy the row id onto the
 			// object — delete() queries WHERE id = $this->ID, so a blob
 			// whose stored ID drifted (site clones, fixtures) silently
 			// no-ops. Pin it, and verify the row is really gone.
-			global $wpdb;
 			$id = (int) Minn_Admin::path_param( $request );
 			try {
 				$package = minn_admin_duplicator_is_v5()
@@ -634,18 +628,17 @@ add_action( 'rest_api_init', function () {
 			} catch ( \Throwable $e ) {
 				return new WP_Error( 'delete_failed', __( 'Duplicator could not delete: ', 'minn-admin' ) . $e->getMessage(), array( 'status' => 500 ) );
 			}
-			$table = minn_admin_duplicator_table();
-			if ( $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE id = %d", $id ) ) ) { // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			if ( Minn_Admin_Kernel_SQL::row( Minn_Admin_Kernel_SQL::named( minn_admin_duplicator_table() ), 'id', (int) $id, array( 'id' ) ) ) {
 				return new WP_Error( 'delete_failed', __( 'Duplicator reported success but the package row is still there.', 'minn-admin' ), array( 'status' => 500 ) );
 			}
 			return rest_ensure_response( array( 'deleted' => true ) );
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/duplicator/build', array(
+	minn_admin_endpoint( '/duplicator/build', array(
 		'methods'             => 'POST',
-		'permission_callback' => 'minn_admin_duplicator_can_build',
-		'callback'            => function ( WP_REST_Request $request ) {
+		'gate'                => 'minn_admin_duplicator_can_build',
+		'run'                 => function ( WP_REST_Request $request ) {
 			$name    = sanitize_text_field( (string) $request->get_param( 'name' ) );
 			$db_only = filter_var( $request->get_param( 'db_only' ), FILTER_VALIDATE_BOOLEAN );
 			if ( minn_admin_duplicator_is_v5() ) {
@@ -702,76 +695,74 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/duplicator/build/(?P<token>[A-Za-z0-9]{12})', array(
-		array(
-			// Each poll runs one build chunk, the way their screen's ajax loop
-			// does, and answers with where the package stands.
-			'methods'             => 'POST',
-			'permission_callback' => 'minn_admin_duplicator_can_build',
-			'callback'            => function ( WP_REST_Request $request ) {
-				$rec = get_transient( 'minn_duplicator_job_' . Minn_Admin::path_param( $request, 'token' ) );
-				if ( ! is_array( $rec ) ) {
-					return new WP_Error( 'not_found', __( 'Unknown build', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				if ( ! empty( $rec['canceled'] ) ) {
-					return rest_ensure_response( array( 'status' => 'canceled', 'message' => __( 'Build stopped.', 'minn-admin' ) ) );
-				}
-				if ( minn_admin_duplicator_is_v5() ) {
-					return rest_ensure_response( minn_admin_duplicator_v5_progress( (int) $rec['package_id'] ) );
-				}
-				try {
-					$out = minn_admin_duplicator_build_step( $rec );
-				} catch ( \Throwable $e ) {
-					$out = array( 'status' => 'error', 'message' => __( 'Duplicator build failed: ', 'minn-admin' ) . $e->getMessage() );
-				}
-				if ( ! empty( $out['_package_id'] ) && (int) $out['_package_id'] !== (int) $rec['package_id'] ) {
-					$rec['package_id'] = (int) $out['_package_id'];
-					set_transient( 'minn_duplicator_job_' . Minn_Admin::path_param( $request, 'token' ), $rec, 6 * HOUR_IN_SECONDS );
-				}
-				unset( $out['_package_id'] );
-				return rest_ensure_response( $out );
-			},
-		),
-		array(
-			'methods'             => 'DELETE',
-			'permission_callback' => 'minn_admin_duplicator_can_build',
-			'callback'            => function ( WP_REST_Request $request ) {
-				$rec = get_transient( 'minn_duplicator_job_' . Minn_Admin::path_param( $request, 'token' ) );
-				if ( ! is_array( $rec ) ) {
-					return new WP_Error( 'not_found', __( 'Unknown build', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				try {
-					if ( minn_admin_duplicator_is_v5() ) {
-						// Their own cancellation: the runner sees it on its next
-						// step and unwinds, rather than a status we forced.
-						$package = minn_admin_duplicator_v5_package( (int) $rec['package_id'] );
-						if ( $package && method_exists( $package, 'setForCancel' ) ) {
-							$package->setForCancel();
-						}
-					} else {
-						if ( ! empty( $rec['package_id'] ) ) {
-							$package = DUP_Package::getByID( (int) $rec['package_id'] );
-							if ( $package ) {
-								$package->setStatus( DUP_PackageStatus::ERROR ); // their stop: the package reads as failed and can be deleted
-							}
-						}
-						DUP_Settings::Set( 'active_package_id', -1 );
-						DUP_Settings::Save();
-					}
-				} catch ( \Throwable $e ) {
-					// The token is what stops the next chunk either way.
-				}
-				$rec['canceled'] = true;
+	minn_admin_endpoint( '/duplicator/build/(?P<token>[A-Za-z0-9]{12})', array(
+		// Each poll runs one build chunk, the way their screen's ajax loop
+		// does, and answers with where the package stands.
+		'methods'             => 'POST',
+		'gate'                => 'minn_admin_duplicator_can_build',
+		'run'                 => function ( WP_REST_Request $request ) {
+			$rec = get_transient( 'minn_duplicator_job_' . Minn_Admin::path_param( $request, 'token' ) );
+			if ( ! is_array( $rec ) ) {
+				return new WP_Error( 'not_found', __( 'Unknown build', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			if ( ! empty( $rec['canceled'] ) ) {
+				return rest_ensure_response( array( 'status' => 'canceled', 'message' => __( 'Build stopped.', 'minn-admin' ) ) );
+			}
+			if ( minn_admin_duplicator_is_v5() ) {
+				return rest_ensure_response( minn_admin_duplicator_v5_progress( (int) $rec['package_id'] ) );
+			}
+			try {
+				$out = minn_admin_duplicator_build_step( $rec );
+			} catch ( \Throwable $e ) {
+				$out = array( 'status' => 'error', 'message' => __( 'Duplicator build failed: ', 'minn-admin' ) . $e->getMessage() );
+			}
+			if ( ! empty( $out['_package_id'] ) && (int) $out['_package_id'] !== (int) $rec['package_id'] ) {
+				$rec['package_id'] = (int) $out['_package_id'];
 				set_transient( 'minn_duplicator_job_' . Minn_Admin::path_param( $request, 'token' ), $rec, 6 * HOUR_IN_SECONDS );
-				return rest_ensure_response( array( 'ok' => true, 'status' => 'canceled', 'message' => __( 'Build stopped.', 'minn-admin' ) ) );
-			},
-		),
+			}
+			unset( $out['_package_id'] );
+			return rest_ensure_response( $out );
+		},
+	) );
+	minn_admin_endpoint( '/duplicator/build/(?P<token>[A-Za-z0-9]{12})', array(
+		'methods'             => 'DELETE',
+		'gate'                => 'minn_admin_duplicator_can_build',
+		'run'                 => function ( WP_REST_Request $request ) {
+			$rec = get_transient( 'minn_duplicator_job_' . Minn_Admin::path_param( $request, 'token' ) );
+			if ( ! is_array( $rec ) ) {
+				return new WP_Error( 'not_found', __( 'Unknown build', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			try {
+				if ( minn_admin_duplicator_is_v5() ) {
+					// Their own cancellation: the runner sees it on its next
+					// step and unwinds, rather than a status we forced.
+					$package = minn_admin_duplicator_v5_package( (int) $rec['package_id'] );
+					if ( $package && method_exists( $package, 'setForCancel' ) ) {
+						$package->setForCancel();
+					}
+				} else {
+					if ( ! empty( $rec['package_id'] ) ) {
+						$package = DUP_Package::getByID( (int) $rec['package_id'] );
+						if ( $package ) {
+							$package->setStatus( DUP_PackageStatus::ERROR ); // their stop: the package reads as failed and can be deleted
+						}
+					}
+					DUP_Settings::Set( 'active_package_id', -1 );
+					DUP_Settings::Save();
+				}
+			} catch ( \Throwable $e ) {
+				// The token is what stops the next chunk either way.
+			}
+			$rec['canceled'] = true;
+			set_transient( 'minn_duplicator_job_' . Minn_Admin::path_param( $request, 'token' ), $rec, 6 * HOUR_IN_SECONDS );
+			return rest_ensure_response( array( 'ok' => true, 'status' => 'canceled', 'message' => __( 'Build stopped.', 'minn-admin' ) ) );
+		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/duplicator/status', array(
+	minn_admin_endpoint( '/duplicator/status', array(
 		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function () {
+		'gate'                => $perm,
+		'run'                 => function () {
 			$rows      = minn_admin_duplicator_rows();
 			$completed = array_values( array_filter( $rows, function ( $r ) {
 				return 'completed' === $r['status'];

@@ -180,10 +180,10 @@ add_action( 'rest_api_init', function () {
 		return minn_admin_wp_migrate_can();
 	};
 
-	register_rest_route( 'minn-admin/v1', '/wp-migrate/connection', array(
+	minn_admin_endpoint( '/wp-migrate/connection', array(
 		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function () {
+		'gate'                => $perm,
+		'run'                 => function () {
 			$settings = get_site_option( 'wpmdb_settings' );
 			$settings = is_array( $settings ) ? $settings : array();
 			$key      = isset( $settings['key'] ) ? (string) $settings['key'] : '';
@@ -209,10 +209,10 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/wp-migrate/accept', array(
+	minn_admin_endpoint( '/wp-migrate/accept', array(
 		'methods'             => 'POST',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) {
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) {
 			$settings = get_site_option( 'wpmdb_settings' );
 			$settings = is_array( $settings ) ? $settings : array();
 			foreach ( array( 'push', 'pull' ) as $which ) {
@@ -401,10 +401,10 @@ add_action( 'rest_api_init', function () {
 		return minn_admin_wp_migrate_can();
 	};
 
-	register_rest_route( 'minn-admin/v1', '/wp-migrate/backups', array(
+	minn_admin_endpoint( '/wp-migrate/backups', array(
 		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) {
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) {
 			$all      = minn_admin_wpm_backups();
 			$per_page = min( 100, max( 1, (int) $request->get_param( 'per_page' ) ?: 25 ) );
 			$page     = max( 1, (int) $request->get_param( 'page' ) ?: 1 );
@@ -421,10 +421,10 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/wp-migrate/backups/status', array(
+	minn_admin_endpoint( '/wp-migrate/backups/status', array(
 		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function () {
+		'gate'                => $perm,
+		'run'                 => function () {
 			$all   = minn_admin_wpm_backups();
 			$bytes = 0;
 			foreach ( $all as $r ) {
@@ -452,10 +452,10 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/wp-migrate/backups/(?P<id>[^/]+)/delete', array(
+	minn_admin_endpoint( '/wp-migrate/backups/(?P<id>[^/]+)/delete', array(
 		'methods'             => 'POST',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) {
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) {
 			$id = Minn_Admin::path_param( $request );
 			// Find the row first so the compressed flag comes from the file
 			// that is really there rather than from the caller.

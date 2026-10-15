@@ -354,10 +354,10 @@ add_action( 'rest_api_init', function () {
 		return current_user_can( 'ai1wm_import_site' ) && Minn_Admin::install_owner();
 	};
 
-	register_rest_route( 'minn-admin/v1', '/ai1wm/exports', array(
+	minn_admin_endpoint( '/ai1wm/exports', array(
 		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) {
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) {
 			$per_page = min( 100, max( 1, (int) $request->get_param( 'per_page' ) ?: 25 ) );
 			$page     = max( 1, (int) $request->get_param( 'page' ) ?: 1 );
 			$all      = minn_admin_ai1wm_rows();
@@ -372,10 +372,10 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/ai1wm/exports/(?P<id>[A-Za-z0-9_-]+)', array(
+	minn_admin_endpoint( '/ai1wm/exports/(?P<id>[A-Za-z0-9_-]+)', array(
 		'methods'             => 'DELETE',
-		'permission_callback' => $perm_delete,
-		'callback'            => function ( WP_REST_Request $request ) {
+		'gate'                => $perm_delete,
+		'run'                 => function ( WP_REST_Request $request ) {
 			$filename = minn_admin_ai1wm_id_decode( Minn_Admin::path_param( $request ) );
 			// The route pattern constrains the ENCODED id, so it says nothing
 			// about what comes back out of the decode. Shape the decoded name
@@ -409,12 +409,12 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/ai1wm/export', array(
+	minn_admin_endpoint( '/ai1wm/export', array(
 		'methods'             => 'POST',
-		'permission_callback' => function () {
+		'gate'                => function () {
 			return minn_admin_ai1wm_can_export();
 		},
-		'callback'            => function ( WP_REST_Request $request ) {
+		'run'                 => function ( WP_REST_Request $request ) {
 			$options = array();
 			foreach ( array( 'no_media', 'no_plugins', 'no_themes', 'no_spam_comments', 'no_post_revisions', 'no_inactive_themes', 'no_inactive_plugins', 'no_muplugins', 'no_cache', 'no_database' ) as $k ) {
 				$v = $request->get_param( $k );
@@ -444,48 +444,46 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/ai1wm/export/(?P<job>[a-f0-9]{13,40})', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => function () {
-				return minn_admin_ai1wm_can_export();
-			},
-			'callback'            => function ( WP_REST_Request $request ) {
-				// A stop races the loopback step still running: their cancel
-				// writes 'canceled' and deletes the storage folder, and that
-				// step then overwrites the status with a "could not open"
-				// error. The stop is what the person did, so it is what a
-				// later poll (a reload mid-job) reads.
-				if ( get_transient( 'minn_ai1wm_canceled_' . Minn_Admin::path_param( $request, 'job' ) ) ) {
-					return rest_ensure_response( array( 'status' => 'canceled', 'message' => __( 'Export stopped.', 'minn-admin' ) ) );
-				}
-				$r = minn_admin_ai1wm_dispatch( 'GET', 'exports/' . Minn_Admin::path_param( $request, 'job' ) );
-				if ( is_wp_error( $r ) ) {
-					return $r;
-				}
-				return rest_ensure_response( minn_admin_ai1wm_job_status( $r['data'] ) );
-			},
-		),
-		array(
-			'methods'             => 'DELETE',
-			'permission_callback' => function () {
-				return minn_admin_ai1wm_can_export();
-			},
-			'callback'            => function ( WP_REST_Request $request ) {
-				$r = minn_admin_ai1wm_dispatch( 'DELETE', 'exports/' . Minn_Admin::path_param( $request, 'job' ) );
-				if ( is_wp_error( $r ) ) {
-					return $r;
-				}
-				set_transient( 'minn_ai1wm_canceled_' . Minn_Admin::path_param( $request, 'job' ), 1, 10 * MINUTE_IN_SECONDS );
-				return rest_ensure_response( array( 'ok' => true, 'status' => 'canceled', 'message' => __( 'Export stopped.', 'minn-admin' ) ) );
-			},
-		),
+	minn_admin_endpoint( '/ai1wm/export/(?P<job>[a-f0-9]{13,40})', array(
+		'methods'             => 'GET',
+		'gate'                => function () {
+			return minn_admin_ai1wm_can_export();
+		},
+		'run'                 => function ( WP_REST_Request $request ) {
+			// A stop races the loopback step still running: their cancel
+			// writes 'canceled' and deletes the storage folder, and that
+			// step then overwrites the status with a "could not open"
+			// error. The stop is what the person did, so it is what a
+			// later poll (a reload mid-job) reads.
+			if ( get_transient( 'minn_ai1wm_canceled_' . Minn_Admin::path_param( $request, 'job' ) ) ) {
+				return rest_ensure_response( array( 'status' => 'canceled', 'message' => __( 'Export stopped.', 'minn-admin' ) ) );
+			}
+			$r = minn_admin_ai1wm_dispatch( 'GET', 'exports/' . Minn_Admin::path_param( $request, 'job' ) );
+			if ( is_wp_error( $r ) ) {
+				return $r;
+			}
+			return rest_ensure_response( minn_admin_ai1wm_job_status( $r['data'] ) );
+		},
+	) );
+	minn_admin_endpoint( '/ai1wm/export/(?P<job>[a-f0-9]{13,40})', array(
+		'methods'             => 'DELETE',
+		'gate'                => function () {
+			return minn_admin_ai1wm_can_export();
+		},
+		'run'                 => function ( WP_REST_Request $request ) {
+			$r = minn_admin_ai1wm_dispatch( 'DELETE', 'exports/' . Minn_Admin::path_param( $request, 'job' ) );
+			if ( is_wp_error( $r ) ) {
+				return $r;
+			}
+			set_transient( 'minn_ai1wm_canceled_' . Minn_Admin::path_param( $request, 'job' ), 1, 10 * MINUTE_IN_SECONDS );
+			return rest_ensure_response( array( 'ok' => true, 'status' => 'canceled', 'message' => __( 'Export stopped.', 'minn-admin' ) ) );
+		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/ai1wm/status', array(
+	minn_admin_endpoint( '/ai1wm/status', array(
 		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function () {
+		'gate'                => $perm,
+		'run'                 => function () {
 			return rest_ensure_response( minn_admin_ai1wm_status_model() );
 		},
 	) );

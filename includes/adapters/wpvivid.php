@@ -461,10 +461,10 @@ add_action( 'rest_api_init', function () {
 		return minn_admin_wpvivid_can() && Minn_Admin::install_owner();
 	};
 
-	register_rest_route( 'minn-admin/v1', '/wpvivid/backups', array(
+	minn_admin_endpoint( '/wpvivid/backups', array(
 		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) {
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) {
 			$per_page = min( 100, max( 1, (int) $request->get_param( 'per_page' ) ?: 25 ) );
 			$page     = max( 1, (int) $request->get_param( 'page' ) ?: 1 );
 			$all      = minn_admin_wpvivid_rows();
@@ -476,10 +476,10 @@ add_action( 'rest_api_init', function () {
 	) );
 
 	// Machine-readable status (System health + suite + poll completion).
-	register_rest_route( 'minn-admin/v1', '/wpvivid/status', array(
+	minn_admin_endpoint( '/wpvivid/status', array(
 		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function () {
+		'gate'                => $perm,
+		'run'                 => function () {
 			return rest_ensure_response( array(
 				'last'    => minn_admin_wpvivid_last(),
 				'running' => minn_admin_wpvivid_running(),
@@ -488,19 +488,19 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/wpvivid/card', array(
+	minn_admin_endpoint( '/wpvivid/card', array(
 		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function () {
+		'gate'                => $perm,
+		'run'                 => function () {
 			return rest_ensure_response( minn_admin_wpvivid_status_model() );
 		},
 	) );
 
 	// Id is their task id (alphanumeric + hyphen/underscore), not a DB int.
-	register_rest_route( 'minn-admin/v1', '/wpvivid/backups/(?P<id>[A-Za-z0-9_-]+)', array(
+	minn_admin_endpoint( '/wpvivid/backups/(?P<id>[A-Za-z0-9_-]+)', array(
 		'methods'             => 'DELETE',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) {
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) {
 			global $wpvivid_plugin;
 			$id = sanitize_key( Minn_Admin::path_param( $request ) );
 			if ( ! $id ) {
@@ -529,80 +529,78 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/wpvivid/task/(?P<task>[A-Za-z0-9_-]+)', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) {
-				$task_id = sanitize_key( (string) Minn_Admin::path_param( $request, 'task' ) );
-				if ( ! class_exists( 'WPvivid_taskmanager' ) ) {
-					return new WP_Error( 'unavailable', __( 'WPvivid is not loaded.', 'minn-admin' ), array( 'status' => 500 ) );
+	minn_admin_endpoint( '/wpvivid/task/(?P<task>[A-Za-z0-9_-]+)', array(
+		'methods'             => 'GET',
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) {
+			$task_id = sanitize_key( (string) Minn_Admin::path_param( $request, 'task' ) );
+			if ( ! class_exists( 'WPvivid_taskmanager' ) ) {
+				return new WP_Error( 'unavailable', __( 'WPvivid is not loaded.', 'minn-admin' ), array( 'status' => 500 ) );
+			}
+			// Their task list: status.str ready|running|no_responds|completed|error|cancel,
+			// progress by phase, and a per-step description.
+			$status = WPvivid_taskmanager::get_backup_tasks_status( $task_id );
+			if ( ! is_array( $status ) ) {
+				// Finished tasks leave the task list once their monitor
+				// runs; the backup list is where the result lives.
+				return rest_ensure_response( array( 'status' => 'done', 'percent' => 100, 'message' => __( 'Backup finished.', 'minn-admin' ) ) );
+			}
+			$str      = (string) ( $status['str'] ?? 'running' );
+			$progress = WPvivid_taskmanager::get_backup_tasks_progress( $task_id );
+			$percent  = is_array( $progress ) && isset( $progress['progress'] ) && is_numeric( $progress['progress'] ) ? (int) $progress['progress'] : null;
+			$text     = is_array( $progress ) && ! empty( $progress['descript'] ) ? wp_strip_all_tags( (string) $progress['descript'] ) : '';
+			if ( '' === $text && is_array( $progress ) && ! empty( $progress['doing'] ) ) {
+				$text = ucfirst( str_replace( '_', ' ', (string) $progress['doing'] ) );
+			}
+			if ( 'completed' === $str ) {
+				return rest_ensure_response( array( 'status' => 'done', 'percent' => 100, 'message' => __( 'Backup finished.', 'minn-admin' ) ) );
+			}
+			if ( 'error' === $str ) {
+				return rest_ensure_response( array( 'status' => 'error', 'message' => ! empty( $status['error'] ) ? wp_strip_all_tags( (string) $status['error'] ) : __( 'WPvivid reported an error. Check its log.', 'minn-admin' ) ) );
+			}
+			if ( 'cancel' === $str || WPvivid_taskmanager::is_task_canceled( $task_id ) ) {
+				return rest_ensure_response( array( 'status' => 'canceled', 'message' => __( 'Backup stopped.', 'minn-admin' ) ) );
+			}
+			// Their monitor flips a task to no_responds when its worker
+			// stopped writing progress (a PHP crash or a killed
+			// process); it never recovers from there.
+			if ( 'no_responds' === $str ) {
+				return rest_ensure_response( array( 'status' => 'error', 'message' => __( 'WPvivid reports the backup stopped responding. Its log shows the last step.', 'minn-admin' ) ) );
+			}
+			if ( 'wait_resume' === $str ) {
+				$text = __( 'Waiting for WP-Cron to resume the backup…', 'minn-admin' );
+			}
+			$out = array( 'status' => 'running', 'message' => '' !== $text ? $text : ( 'ready' === $str ? __( 'Starting WPvivid…', 'minn-admin' ) : __( 'Working…', 'minn-admin' ) ) );
+			if ( null !== $percent ) {
+				$out['percent'] = max( 0, min( 100, $percent ) );
+			}
+			return rest_ensure_response( $out );
+		},
+	) );
+	minn_admin_endpoint( '/wpvivid/task/(?P<task>[A-Za-z0-9_-]+)', array(
+		'methods'             => 'DELETE',
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) {
+			global $wpvivid_plugin;
+			$task_id = sanitize_key( (string) Minn_Admin::path_param( $request, 'task' ) );
+			try {
+				// Their cancel: touches the task's _cancel flag file the
+				// running backup checks between steps.
+				if ( $wpvivid_plugin && isset( $wpvivid_plugin->function_realize ) && method_exists( $wpvivid_plugin->function_realize, '_backup_cancel' ) ) {
+					$wpvivid_plugin->function_realize->_backup_cancel( $task_id );
 				}
-				// Their task list: status.str ready|running|no_responds|completed|error|cancel,
-				// progress by phase, and a per-step description.
-				$status = WPvivid_taskmanager::get_backup_tasks_status( $task_id );
-				if ( ! is_array( $status ) ) {
-					// Finished tasks leave the task list once their monitor
-					// runs; the backup list is where the result lives.
-					return rest_ensure_response( array( 'status' => 'done', 'percent' => 100, 'message' => __( 'Backup finished.', 'minn-admin' ) ) );
-				}
-				$str      = (string) ( $status['str'] ?? 'running' );
-				$progress = WPvivid_taskmanager::get_backup_tasks_progress( $task_id );
-				$percent  = is_array( $progress ) && isset( $progress['progress'] ) && is_numeric( $progress['progress'] ) ? (int) $progress['progress'] : null;
-				$text     = is_array( $progress ) && ! empty( $progress['descript'] ) ? wp_strip_all_tags( (string) $progress['descript'] ) : '';
-				if ( '' === $text && is_array( $progress ) && ! empty( $progress['doing'] ) ) {
-					$text = ucfirst( str_replace( '_', ' ', (string) $progress['doing'] ) );
-				}
-				if ( 'completed' === $str ) {
-					return rest_ensure_response( array( 'status' => 'done', 'percent' => 100, 'message' => __( 'Backup finished.', 'minn-admin' ) ) );
-				}
-				if ( 'error' === $str ) {
-					return rest_ensure_response( array( 'status' => 'error', 'message' => ! empty( $status['error'] ) ? wp_strip_all_tags( (string) $status['error'] ) : __( 'WPvivid reported an error. Check its log.', 'minn-admin' ) ) );
-				}
-				if ( 'cancel' === $str || WPvivid_taskmanager::is_task_canceled( $task_id ) ) {
-					return rest_ensure_response( array( 'status' => 'canceled', 'message' => __( 'Backup stopped.', 'minn-admin' ) ) );
-				}
-				// Their monitor flips a task to no_responds when its worker
-				// stopped writing progress (a PHP crash or a killed
-				// process); it never recovers from there.
-				if ( 'no_responds' === $str ) {
-					return rest_ensure_response( array( 'status' => 'error', 'message' => __( 'WPvivid reports the backup stopped responding. Its log shows the last step.', 'minn-admin' ) ) );
-				}
-				if ( 'wait_resume' === $str ) {
-					$text = __( 'Waiting for WP-Cron to resume the backup…', 'minn-admin' );
-				}
-				$out = array( 'status' => 'running', 'message' => '' !== $text ? $text : ( 'ready' === $str ? __( 'Starting WPvivid…', 'minn-admin' ) : __( 'Working…', 'minn-admin' ) ) );
-				if ( null !== $percent ) {
-					$out['percent'] = max( 0, min( 100, $percent ) );
-				}
-				return rest_ensure_response( $out );
-			},
-		),
-		array(
-			'methods'             => 'DELETE',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) {
-				global $wpvivid_plugin;
-				$task_id = sanitize_key( (string) Minn_Admin::path_param( $request, 'task' ) );
-				try {
-					// Their cancel: touches the task's _cancel flag file the
-					// running backup checks between steps.
-					if ( $wpvivid_plugin && isset( $wpvivid_plugin->function_realize ) && method_exists( $wpvivid_plugin->function_realize, '_backup_cancel' ) ) {
-						$wpvivid_plugin->function_realize->_backup_cancel( $task_id );
-					}
-					wp_unschedule_hook( 'minn_admin_wpvivid_run' );
-				} catch ( \Throwable $e ) {
-					return new WP_Error( 'cancel_failed', __( 'WPvivid could not stop the backup.', 'minn-admin' ), array( 'status' => 500 ) );
-				}
-				return rest_ensure_response( array( 'ok' => true, 'status' => 'canceled', 'message' => __( 'Backup stopped.', 'minn-admin' ) ) );
-			},
-		),
+				wp_unschedule_hook( 'minn_admin_wpvivid_run' );
+			} catch ( \Throwable $e ) {
+				return new WP_Error( 'cancel_failed', __( 'WPvivid could not stop the backup.', 'minn-admin' ), array( 'status' => 500 ) );
+			}
+			return rest_ensure_response( array( 'ok' => true, 'status' => 'canceled', 'message' => __( 'Backup stopped.', 'minn-admin' ) ) );
+		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/wpvivid/backup-now', array(
+	minn_admin_endpoint( '/wpvivid/backup-now', array(
 		'methods'             => 'POST',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) {
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) {
 			if ( minn_admin_wpvivid_running() ) {
 				return new WP_Error(
 					'already_running',

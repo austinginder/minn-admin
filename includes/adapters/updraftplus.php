@@ -119,9 +119,7 @@ function minn_admin_updraft_admin() {
  * newest updraft_jobdata_* row whose backup_time is at or after it.
  */
 function minn_admin_updraft_find_nonce( $started ) {
-	global $wpdb;
-	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-	$names = $wpdb->get_col( $wpdb->prepare( "SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE %s ORDER BY option_id DESC LIMIT 20", $wpdb->esc_like( 'updraft_jobdata_' ) . '%' ) );
+	$names = array_column( Minn_Admin_Kernel_SQL::select( array( 'core' => 'options' ), array( 'option_name' ), array( 'option_name' => array( 'starts' => 'updraft_jobdata_' ) ), array( 'option_id' => 'DESC' ), 20 ), 'option_name' );
 	foreach ( (array) $names as $name ) {
 		$data = get_site_option( $name, array() );
 		if ( is_array( $data ) && ! empty( $data['backup_time'] ) && (int) $data['backup_time'] >= $started - 5 ) {
@@ -392,10 +390,10 @@ add_action( 'rest_api_init', function () {
 		return minn_admin_updraftplus_can() && Minn_Admin::install_owner();
 	};
 
-	register_rest_route( 'minn-admin/v1', '/updraft/backups/(?P<id>\d+)', array(
+	minn_admin_endpoint( '/updraft/backups/(?P<id>\d+)', array(
 		'methods'             => 'DELETE',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) {
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) {
 			$ts    = (int) Minn_Admin::path_param( $request );
 			$admin = minn_admin_updraft_admin();
 			if ( ! $admin || ! method_exists( $admin, 'delete_set' ) ) {
@@ -423,10 +421,10 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/updraft/backups', array(
+	minn_admin_endpoint( '/updraft/backups', array(
 		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) {
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) {
 			$per_page = min( 100, max( 1, (int) $request->get_param( 'per_page' ) ?: 25 ) );
 			$page     = max( 1, (int) $request->get_param( 'page' ) ?: 1 );
 			$all      = minn_admin_updraft_history();
@@ -438,10 +436,10 @@ add_action( 'rest_api_init', function () {
 	) );
 
 	// Machine-readable status (System health + suite + poll completion).
-	register_rest_route( 'minn-admin/v1', '/updraft/status', array(
+	minn_admin_endpoint( '/updraft/status', array(
 		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function () {
+		'gate'                => $perm,
+		'run'                 => function () {
 			return rest_ensure_response( array(
 				'last'    => minn_admin_updraft_last(),
 				'running' => minn_admin_updraft_running(),
@@ -451,66 +449,64 @@ add_action( 'rest_api_init', function () {
 	) );
 
 	// Surface status card (rows + actions) — same shape as Disembark/Duplicator.
-	register_rest_route( 'minn-admin/v1', '/updraft/card', array(
+	minn_admin_endpoint( '/updraft/card', array(
 		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function () {
+		'gate'                => $perm,
+		'run'                 => function () {
 			return rest_ensure_response( minn_admin_updraft_status_model() );
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/updraft/job/(?P<token>[A-Za-z0-9]{12})', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) {
-				$rec = get_transient( 'minn_updraft_job_' . Minn_Admin::path_param( $request, 'token' ) );
-				if ( ! is_array( $rec ) ) {
-					return new WP_Error( 'not_found', __( 'Unknown backup job', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				$out = minn_admin_updraft_job_status( $rec );
-				if ( ! empty( $out['_nonce'] ) && $out['_nonce'] !== $rec['nonce'] ) {
-					$rec['nonce'] = $out['_nonce'];
-					set_transient( 'minn_updraft_job_' . Minn_Admin::path_param( $request, 'token' ), $rec, 6 * HOUR_IN_SECONDS );
-				}
-				unset( $out['_nonce'] );
-				return rest_ensure_response( $out );
-			},
-		),
-		array(
-			'methods'             => 'DELETE',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) {
-				$rec = get_transient( 'minn_updraft_job_' . Minn_Admin::path_param( $request, 'token' ) );
-				if ( ! is_array( $rec ) ) {
-					return new WP_Error( 'not_found', __( 'Unknown backup job', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				$nonce = $rec['nonce'] ? $rec['nonce'] : minn_admin_updraft_find_nonce( (int) $rec['started'] );
-				if ( $nonce ) {
-					$admin = minn_admin_updraft_admin();
-					if ( $admin ) {
-						try {
-							$admin->activejobs_delete( $nonce ); // their "delete job": unschedules the resumption + drops the lock
-						} catch ( \Throwable $e ) {
-							// The flag file below still stops the running resumption.
-						}
+	minn_admin_endpoint( '/updraft/job/(?P<token>[A-Za-z0-9]{12})', array(
+		'methods'             => 'GET',
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) {
+			$rec = get_transient( 'minn_updraft_job_' . Minn_Admin::path_param( $request, 'token' ) );
+			if ( ! is_array( $rec ) ) {
+				return new WP_Error( 'not_found', __( 'Unknown backup job', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			$out = minn_admin_updraft_job_status( $rec );
+			if ( ! empty( $out['_nonce'] ) && $out['_nonce'] !== $rec['nonce'] ) {
+				$rec['nonce'] = $out['_nonce'];
+				set_transient( 'minn_updraft_job_' . Minn_Admin::path_param( $request, 'token' ), $rec, 6 * HOUR_IN_SECONDS );
+			}
+			unset( $out['_nonce'] );
+			return rest_ensure_response( $out );
+		},
+	) );
+	minn_admin_endpoint( '/updraft/job/(?P<token>[A-Za-z0-9]{12})', array(
+		'methods'             => 'DELETE',
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) {
+			$rec = get_transient( 'minn_updraft_job_' . Minn_Admin::path_param( $request, 'token' ) );
+			if ( ! is_array( $rec ) ) {
+				return new WP_Error( 'not_found', __( 'Unknown backup job', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			$nonce = $rec['nonce'] ? $rec['nonce'] : minn_admin_updraft_find_nonce( (int) $rec['started'] );
+			if ( $nonce ) {
+				$admin = minn_admin_updraft_admin();
+				if ( $admin ) {
+					try {
+						$admin->activejobs_delete( $nonce ); // their "delete job": unschedules the resumption + drops the lock
+					} catch ( \Throwable $e ) {
+						// The flag file below still stops the running resumption.
 					}
 				}
-				// A start that has not booted yet: drop the one-shot cron events.
-				foreach ( array( 'updraft_backupnow_backup_all', 'updraft_backupnow_backup_database' ) as $hook ) {
-					wp_unschedule_hook( $hook );
-				}
-				$rec['canceled'] = true;
-				set_transient( 'minn_updraft_job_' . Minn_Admin::path_param( $request, 'token' ), $rec, 6 * HOUR_IN_SECONDS );
-				return rest_ensure_response( array( 'ok' => true, 'status' => 'canceled', 'message' => __( 'Backup stopped.', 'minn-admin' ) ) );
-			},
-		),
+			}
+			// A start that has not booted yet: drop the one-shot cron events.
+			foreach ( array( 'updraft_backupnow_backup_all', 'updraft_backupnow_backup_database' ) as $hook ) {
+				wp_unschedule_hook( $hook );
+			}
+			$rec['canceled'] = true;
+			set_transient( 'minn_updraft_job_' . Minn_Admin::path_param( $request, 'token' ), $rec, 6 * HOUR_IN_SECONDS );
+			return rest_ensure_response( array( 'ok' => true, 'status' => 'canceled', 'message' => __( 'Backup stopped.', 'minn-admin' ) ) );
+		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/updraft/backup-now', array(
+	minn_admin_endpoint( '/updraft/backup-now', array(
 		'methods'             => 'POST',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) {
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) {
 			$what  = sanitize_key( (string) $request->get_param( 'what' ) );
 			$event = 'db' === $what ? 'updraft_backupnow_backup_database' : 'updraft_backupnow_backup_all';
 			// Same options their own Backup Now dialog passes; nocloud=0

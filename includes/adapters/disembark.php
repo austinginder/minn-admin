@@ -258,18 +258,18 @@ add_action( 'rest_api_init', function () {
 		return current_user_can( 'manage_options' ) && Minn_Admin::install_owner();
 	};
 
-	register_rest_route( 'minn-admin/v1', '/disembark/status', array(
+	minn_admin_endpoint( '/disembark/status', array(
 		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function () {
+		'gate'                => $perm,
+		'run'                 => function () {
 			return rest_ensure_response( minn_admin_disembark_status_model() );
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/disembark/sessions', array(
+	minn_admin_endpoint( '/disembark/sessions', array(
 		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) {
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) {
 			$per_page = min( 100, max( 1, (int) $request->get_param( 'per_page' ) ?: 25 ) );
 			$page     = max( 1, (int) $request->get_param( 'page' ) ?: 1 );
 			$all      = minn_admin_disembark_sessions();
@@ -280,10 +280,10 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/disembark/sessions/(?P<id>[A-Za-z0-9]{4,64})/delete', array(
+	minn_admin_endpoint( '/disembark/sessions/(?P<id>[A-Za-z0-9]{4,64})/delete', array(
 		'methods'             => 'POST',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) {
+		'gate'                => $perm,
+		'run'                 => function ( WP_REST_Request $request ) {
 			$base = minn_admin_disembark_dir();
 			// Read the id from the PATH, so the route pattern's own traversal
 			// rule actually applies to the value used here; realpath
@@ -299,10 +299,10 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/disembark/cleanup', array(
+	minn_admin_endpoint( '/disembark/cleanup', array(
 		'methods'             => 'POST',
-		'permission_callback' => $perm,
-		'callback'            => function () {
+		'gate'                => $perm,
+		'run'                 => function () {
 			list( $bytes ) = minn_admin_disembark_du( minn_admin_disembark_dir() );
 			minn_admin_disembark_rm_contents( minn_admin_disembark_dir() );
 			return rest_ensure_response( array(
@@ -312,10 +312,10 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
-	register_rest_route( 'minn-admin/v1', '/disembark/regenerate-token', array(
+	minn_admin_endpoint( '/disembark/regenerate-token', array(
 		'methods'             => 'POST',
-		'permission_callback' => $perm,
-		'callback'            => function () {
+		'gate'                => $perm,
+		'run'                 => function () {
 			// Same write their own regenerate endpoint performs.
 			update_option( 'disembark_token', wp_generate_password( 42, false ) );
 			return rest_ensure_response( array(
