@@ -565,5 +565,32 @@
   "collection_lines": 44670,
   "collection_code_lines": 34250,
   "collection_routes": 153
+ },
+ {
+  "at": "2026-10-15T10:18:01.196Z",
+  "ref": "working tree",
+  "commit": "674cebb7",
+  "version": "0.45.0",
+  "label": "forms SQL on the kernel",
+  "adapters": 146,
+  "lines": 82488,
+  "code_lines": 61642,
+  "routes": 211,
+  "permission_callbacks": 267,
+  "cap_checks": 433,
+  "sql_reads": 97,
+  "sql_writes": 17,
+  "routes_declarable": 112,
+  "routes_handler": 96,
+  "resources": 47,
+  "endpoints": 138,
+  "kernel_adapters": 57,
+  "partial_adapters": 0,
+  "kernel_core_lines": 2985,
+  "kernel_code_lines": 1922,
+  "collection_adapters": 69,
+  "collection_lines": 44548,
+  "collection_code_lines": 34134,
+  "collection_routes": 153
  }
 ]
