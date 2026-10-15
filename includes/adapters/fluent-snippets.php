@@ -130,30 +130,26 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		array( 'key' => 'tags', 'label' => __( 'Tags', 'minn-admin' ), 'type' => 'tags', 'required' => false ),
 	);
 
-	$surfaces['fluent-snippets'] = array(
-		'label'      => __( 'Snippets', 'minn-admin' ),
-		'family'     => 'snippets',
+	list( $actions, $bulk ) = minn_admin_snippets_actions( 'minn-admin/v1/fluent-snippets', array(
+		'edit_in' => array(
+			'label' => __( 'Edit in FluentSnippets ↗', 'minn-admin' ),
+			'href'  => admin_url( 'admin.php?page=fluent-snippets' ),
+		),
+		'delete'  => __( 'Delete snippet', 'minn-admin' ),
+		'confirm' => __( 'Delete this snippet permanently? Its code will be gone.', 'minn-admin' ),
+	) );
+	$surfaces['fluent-snippets'] = minn_admin_snippets_surface( array(
 		'sub'        => 'FluentSnippets',
 		'plugin'     => 'easy-code-manager',
-		'icon'       => 'code',
 		// install_plugins is Fluent's own gate; unfiltered_html is needed to write code.
 		'cap'        => 'install_plugins',
-		// Status card (v0.18.0): family parity with Code Snippets.
-		'status'     => array( 'route' => 'minn-admin/v1/fluent-snippets/status' ),
+		'status'     => 'fluent-snippets/status',
 		'collection' => array(
 			'route'     => 'minn-admin/v1/fluent-snippets',
 			'pageQuery' => 'per_page=25&page={page}',
 			'itemsKey'  => 'items',
 			'totalKey'  => 'total',
-			'filter'    => array(
-				'label'   => __( 'Status', 'minn-admin' ),
-				'options' => array(
-					array( 'all', 'All' ),
-					array( 'active', 'Active' ),
-					array( 'inactive', 'Inactive' ),
-				),
-				'query'   => 'active={v}',
-			),
+			'filter'    => minn_admin_snippets_filter(),
 			'create'    => array(
 				'label'    => __( 'Add snippet', 'minn-admin' ),
 				'route'    => 'minn-admin/v1/fluent-snippets',
@@ -168,19 +164,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				),
 				'fields'   => $edit_fields,
 			),
-			'columns'   => array(
-				array( 'key' => 'name', 'label' => __( 'Snippet', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
-				array( 'key' => 'scope', 'label' => __( 'Type · run at', 'minn-admin' ), 'format' => 'mono', 'width' => 'minmax(0,1fr)' ),
-				array( 'key' => 'active', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '100px' ),
-				array( 'key' => 'priority', 'label' => __( 'Priority', 'minn-admin' ), 'format' => 'num', 'width' => '80px' ),
-				array( 'key' => 'modified', 'label' => __( 'Modified', 'minn-admin' ), 'format' => 'ago' ),
-			),
+			'columns'   => minn_admin_snippets_columns( __( 'Type · run at', 'minn-admin' ) ),
 			'detail'    => array(
 				'detailRoute' => 'minn-admin/v1/fluent-snippets/{id}',
-				'skip'        => array(
-					'code', 'name', 'desc', 'scope', 'type', 'run_at',
-					'priority', 'tags', 'active',
-				),
+				'skip'        => array( 'code', 'name', 'desc', 'scope', 'type', 'run_at', 'priority', 'tags', 'active' ),
 				'edit'        => array(
 					'route'    => 'minn-admin/v1/fluent-snippets/{id}',
 					'method'   => 'PUT',
@@ -188,58 +175,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'fields'   => $edit_fields,
 				),
 			),
-			'actions'   => array(
-				array(
-					'label'  => __( 'Activate', 'minn-admin' ),
-					'method' => 'POST',
-					'route'  => 'minn-admin/v1/fluent-snippets/{id}/active',
-					'body'   => array( 'active' => true ),
-					'when'   => array( 'key' => 'active', 'equals' => false ),
-				),
-				array(
-					'label'  => __( 'Deactivate', 'minn-admin' ),
-					'method' => 'POST',
-					'route'  => 'minn-admin/v1/fluent-snippets/{id}/active',
-					'body'   => array( 'active' => false ),
-					'when'   => array( 'key' => 'active', 'equals' => true ),
-				),
-				array(
-					'label' => __( 'Edit in FluentSnippets ↗', 'minn-admin' ),
-					'href'  => admin_url( 'admin.php?page=fluent-snippets' ),
-				),
-				array(
-					'label'   => __( 'Delete snippet', 'minn-admin' ),
-					'method'  => 'DELETE',
-					'route'   => 'minn-admin/v1/fluent-snippets/{id}',
-					'confirm' => __( 'Delete this snippet permanently? Its code will be gone.', 'minn-admin' ),
-					'danger'  => true,
-				),
-			),
-			'bulk'      => array(
-				array(
-					'label'  => __( 'Activate', 'minn-admin' ),
-					'method' => 'POST',
-					'route'  => 'minn-admin/v1/fluent-snippets/{id}/active',
-					'body'   => array( 'active' => true ),
-					'when'   => array( 'key' => 'active', 'equals' => false ),
-				),
-				array(
-					'label'  => __( 'Deactivate', 'minn-admin' ),
-					'method' => 'POST',
-					'route'  => 'minn-admin/v1/fluent-snippets/{id}/active',
-					'body'   => array( 'active' => false ),
-					'when'   => array( 'key' => 'active', 'equals' => true ),
-				),
-				array(
-					'label'   => __( 'Delete', 'minn-admin' ),
-					'method'  => 'DELETE',
-					'route'   => 'minn-admin/v1/fluent-snippets/{id}',
-					'confirm' => __( 'Delete the selected snippets permanently?', 'minn-admin' ),
-					'danger'  => true,
-				),
-			),
+			'actions'   => $actions,
+			'bulk'      => $bulk,
 		),
-	);
+	) );
 	return $surfaces;
 } );
 
@@ -350,18 +289,13 @@ minn_admin_endpoint( 'fluent-snippets/status', array(
 	'active' => 'minn_admin_fluent_ready',
 	'gate'   => 'minn_admin_fluent_can_read',
 	'run'    => function () {
-		$items    = array_map( 'minn_admin_fluent_item', minn_admin_fluent_all() );
-		$active   = count( array_filter( $items, function ( $i ) {
+		$items  = array_map( 'minn_admin_fluent_item', minn_admin_fluent_all() );
+		$active = count( array_filter( $items, function ( $i ) {
 			return ! empty( $i['active'] );
 		} ) );
-		$inactive = count( $items ) - $active;
 		return array(
 			'rows' => array(
-				array(
-					'label' => __( 'Active snippets', 'minn-admin' ),
-					'value' => (string) $active,
-					'hint'  => $inactive ? $inactive . ' inactive' : __( 'nothing inactive', 'minn-admin' ),
-				),
+				minn_admin_snippets_count_row( $active, count( $items ) - $active ),
 				array(
 					'label' => __( 'Storage', 'minn-admin' ),
 					'value' => __( 'Standalone files', 'minn-admin' ),

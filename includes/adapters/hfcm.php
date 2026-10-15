@@ -134,31 +134,20 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		array( 'key' => 'device_type', 'label' => __( 'Devices', 'minn-admin' ), 'type' => 'select', 'options' => $device_options ),
 	);
 
-	$surfaces['hfcm'] = array(
-		'label'      => __( 'Snippets', 'minn-admin' ),
-		'family'     => 'snippets',
+	list( $actions, $bulk ) = minn_admin_snippets_actions( 'hfcm/snippets', array(
+		'edit_in' => array(
+			'label' => __( 'Edit in HFCM ↗', 'minn-admin' ),
+			'href'  => admin_url( 'admin.php?page=hfcm-update&id={id}' ),
+		),
+	) );
+	$surfaces['hfcm'] = minn_admin_snippets_surface( array(
 		'sub'        => 'Header Footer Code Manager',
 		'plugin'     => 'header-footer-code-manager',
-		'icon'       => 'code',
 		'cap'        => 'manage_options',
-		// Status card (v0.18.0): family parity with Code Snippets.
-		'status'     => array( 'route' => 'minn-admin/v1/hfcm/status' ),
-		'collection' => array(
-			'route'     => 'minn-admin/v1/hfcm/snippets',
-			'pageQuery' => 'per_page=25&page={page}',
-			'itemsKey'  => 'items',
-			'totalKey'  => 'total',
-			'search'    => 'search={q}',
-			'filter'    => array(
-				'label'   => __( 'Status', 'minn-admin' ),
-				'options' => array(
-					array( 'all', 'All' ),
-					array( '1', 'Active' ),
-					array( '0', 'Inactive' ),
-				),
-				'query'   => 'active={v}',
-			),
-			'create'    => array(
+		'status'     => 'hfcm/status',
+		'collection' => Minn_Admin_Kernel::collection( 'hfcm/snippets', array(
+			'filter'  => minn_admin_snippets_filter( '1', '0' ),
+			'create'  => array(
 				'label'    => __( 'Add snippet', 'minn-admin' ),
 				'route'    => 'minn-admin/v1/hfcm/snippets',
 				'method'   => 'POST',
@@ -171,13 +160,8 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				),
 				'fields'   => $edit_fields,
 			),
-			'columns'   => array(
-				array( 'key' => 'name', 'label' => __( 'Snippet', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
-				array( 'key' => 'scope', 'label' => __( 'Type · location', 'minn-admin' ), 'format' => 'mono', 'width' => 'minmax(0,1.2fr)' ),
-				array( 'key' => 'active', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '100px' ),
-				array( 'key' => 'modified', 'label' => __( 'Modified', 'minn-admin' ), 'format' => 'ago' ),
-			),
-			'detail'    => array(
+			'columns' => minn_admin_snippets_columns( __( 'Type · location', 'minn-admin' ), array( 'width' => 'minmax(0,1.2fr)', 'priority' => false ) ),
+			'detail'  => array(
 				'detailRoute' => 'minn-admin/v1/hfcm/snippets/{id}',
 				'skip'        => array( 'code', 'name', 'scope', 'snippet_type', 'location', 'device_type', 'display_on', 'active' ),
 				'edit'        => array(
@@ -187,58 +171,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'fields'   => $edit_fields,
 				),
 			),
-			'actions'   => array(
-				array(
-					'label'  => __( 'Activate', 'minn-admin' ),
-					'method' => 'POST',
-					'route'  => 'minn-admin/v1/hfcm/snippets/{id}/active',
-					'body'   => array( 'active' => true ),
-					'when'   => array( 'key' => 'active', 'equals' => false ),
-				),
-				array(
-					'label'  => __( 'Deactivate', 'minn-admin' ),
-					'method' => 'POST',
-					'route'  => 'minn-admin/v1/hfcm/snippets/{id}/active',
-					'body'   => array( 'active' => false ),
-					'when'   => array( 'key' => 'active', 'equals' => true ),
-				),
-				array(
-					'label' => __( 'Edit in HFCM ↗', 'minn-admin' ),
-					'href'  => admin_url( 'admin.php?page=hfcm-update&id={id}' ),
-				),
-				array(
-					'label'   => __( 'Delete', 'minn-admin' ),
-					'method'  => 'DELETE',
-					'route'   => 'minn-admin/v1/hfcm/snippets/{id}',
-					'confirm' => __( 'Delete this snippet permanently?', 'minn-admin' ),
-					'danger'  => true,
-				),
-			),
-			'bulk'      => array(
-				array(
-					'label'  => __( 'Activate', 'minn-admin' ),
-					'method' => 'POST',
-					'route'  => 'minn-admin/v1/hfcm/snippets/{id}/active',
-					'body'   => array( 'active' => true ),
-					'when'   => array( 'key' => 'active', 'equals' => false ),
-				),
-				array(
-					'label'  => __( 'Deactivate', 'minn-admin' ),
-					'method' => 'POST',
-					'route'  => 'minn-admin/v1/hfcm/snippets/{id}/active',
-					'body'   => array( 'active' => false ),
-					'when'   => array( 'key' => 'active', 'equals' => true ),
-				),
-				array(
-					'label'   => __( 'Delete', 'minn-admin' ),
-					'method'  => 'DELETE',
-					'route'   => 'minn-admin/v1/hfcm/snippets/{id}',
-					'confirm' => __( 'Delete the selected snippets permanently?', 'minn-admin' ),
-					'danger'  => true,
-				),
-			),
-		),
-	);
+			'actions' => $actions,
+			'bulk'    => $bulk,
+		) ),
+	) );
 	return $surfaces;
 } );
 
@@ -441,30 +377,15 @@ minn_admin_endpoint( 'hfcm/status', array(
 		$id       = 'hfcm/snippets';
 		$on       = array( 'status' => 'active' );
 		$inactive = Minn_Admin_Kernel::count( $id, array( 'status' => array( 'not' => array( 'active' ) ) ) );
+		$types    = array_map( function ( $t ) {
+			return array( 'value' => strtolower( $t['value'] ), 'count' => $t['count'] );
+		}, Minn_Admin_Kernel_SQL::counts( 'hfcm_scripts', 'snippet_type', $on, 3 ) );
+		$last     = Minn_Admin_Kernel_SQL::select( 'hfcm_scripts', array( 'name', 'last_revision_date' ), array(), array( 'last_revision_date' => 'DESC' ), 1 );
 		$rows     = array(
-			array(
-				'label' => __( 'Active snippets', 'minn-admin' ),
-				'value' => (string) Minn_Admin_Kernel::count( $id, $on ),
-				'hint'  => $inactive ? sprintf( /* translators: %d: number of inactive snippets. */ __( '%d inactive', 'minn-admin' ), $inactive ) : __( 'nothing inactive', 'minn-admin' ),
-			),
+			minn_admin_snippets_count_row( Minn_Admin_Kernel::count( $id, $on ), $inactive ),
+			minn_admin_snippets_running_row( __( 'Running types', 'minn-admin' ), $types ),
+			$last && $last[0]['last_revision_date'] ? minn_admin_snippets_last_row( $last[0]['name'], substr( (string) $last[0]['last_revision_date'], 0, 10 ) ) : null,
 		);
-		$types = Minn_Admin_Kernel_SQL::counts( 'hfcm_scripts', 'snippet_type', $on, 3 );
-		if ( $types ) {
-			$rows[] = array(
-				'label' => __( 'Running types', 'minn-admin' ),
-				'value' => implode( ' · ', array_map( function ( $t ) {
-					return $t['count'] . ' ' . strtolower( $t['value'] );
-				}, $types ) ),
-			);
-		}
-		$last = Minn_Admin_Kernel_SQL::select( 'hfcm_scripts', array( 'name', 'last_revision_date' ), array(), array( 'last_revision_date' => 'DESC' ), 1 );
-		if ( $last && $last[0]['last_revision_date'] ) {
-			$rows[] = array(
-				'label' => __( 'Last change', 'minn-admin' ),
-				'value' => (string) $last[0]['name'],
-				'hint'  => substr( (string) $last[0]['last_revision_date'], 0, 10 ),
-			);
-		}
-		return array( 'rows' => $rows );
+		return array( 'rows' => array_values( array_filter( $rows ) ) );
 	},
 ) );

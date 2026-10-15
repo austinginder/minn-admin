@@ -665,34 +665,25 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		array( 'key' => 'priority', 'label' => __( 'Priority', 'minn-admin' ), 'type' => 'number' ),
 	);
 
-	$surfaces['custom-css-js'] = array(
-		'label'      => __( 'Snippets', 'minn-admin' ),
-		'family'     => 'snippets',
-		'sub'        => 'Simple Custom CSS and JS',
-		'plugin'     => 'custom-css-js',
+	list( $actions, $bulk ) = minn_admin_snippets_actions( 'ccj/snippets', array(
+		'edit_in' => array(
+			'label' => __( 'Edit in Simple Custom CSS and JS ↗', 'minn-admin' ),
+			'href'  => admin_url( 'post.php?post={id}&action=edit' ),
+		),
+		'confirm' => __( 'Delete this custom code permanently?', 'minn-admin' ),
+		'many'    => __( 'Delete the selected codes permanently?', 'minn-admin' ),
+	) );
+	$surfaces['custom-css-js'] = minn_admin_snippets_surface( array(
+		'sub'          => 'Simple Custom CSS and JS',
+		'plugin'       => 'custom-css-js',
 		// The list of these snippets: it stays while their wp-admin list
 		// does, even when a menu tool hides the plugin's Settings page.
 		'contentTypes' => array( 'pt:custom-css-js' ),
-		'icon'       => 'code',
-		'cap'        => 'read',
-		// Status card (v0.18.0): family parity with Code Snippets.
-		'status'     => array( 'route' => 'minn-admin/v1/custom-css-js/status' ),
-		'collection' => array(
-			'route'     => 'minn-admin/v1/ccj/snippets',
-			'pageQuery' => 'per_page=25&page={page}',
-			'itemsKey'  => 'items',
-			'totalKey'  => 'total',
-			'search'    => 'search={q}',
-			'filter'    => array(
-				'label'   => __( 'Status', 'minn-admin' ),
-				'options' => array(
-					array( 'all', 'All' ),
-					array( '1', 'Active' ),
-					array( '0', 'Inactive' ),
-				),
-				'query'   => 'active={v}',
-			),
-			'create'    => array(
+		'cap'          => 'read',
+		'status'       => 'custom-css-js/status',
+		'collection'   => Minn_Admin_Kernel::collection( 'ccj/snippets', array(
+			'filter'  => minn_admin_snippets_filter( '1', '0' ),
+			'create'  => array(
 				'label'    => __( 'Add code', 'minn-admin' ),
 				'route'    => 'minn-admin/v1/ccj/snippets',
 				'method'   => 'POST',
@@ -707,74 +698,20 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				),
 				'fields'   => $edit_fields,
 			),
-			'columns'   => array(
-				array( 'key' => 'name', 'label' => __( 'Snippet', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
-				array( 'key' => 'scope', 'label' => __( 'Type · where', 'minn-admin' ), 'format' => 'mono', 'width' => 'minmax(0,1.2fr)' ),
-				array( 'key' => 'active', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '100px' ),
-				array( 'key' => 'priority', 'label' => __( 'Priority', 'minn-admin' ), 'format' => 'num', 'width' => '80px' ),
-				array( 'key' => 'modified', 'label' => __( 'Modified', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
-			),
-			'detail'    => array(
+			'columns' => minn_admin_snippets_columns( __( 'Type · where', 'minn-admin' ), array( 'width' => 'minmax(0,1.2fr)', 'utc' => true ) ),
+			'detail'  => array(
 				'detailRoute' => 'minn-admin/v1/ccj/snippets/{id}',
 				'skip'        => array( 'code', 'name', 'scope', 'language', 'type', 'side', 'linking', 'priority', 'active' ),
 				'edit'        => array(
-					'route'    => 'minn-admin/v1/ccj/snippets/{id}',
-					'method'   => 'PUT',
-					'fields'   => $edit_fields,
+					'route'  => 'minn-admin/v1/ccj/snippets/{id}',
+					'method' => 'PUT',
+					'fields' => $edit_fields,
 				),
 			),
-			'actions'   => array(
-				array(
-					'label'  => __( 'Activate', 'minn-admin' ),
-					'method' => 'POST',
-					'route'  => 'minn-admin/v1/ccj/snippets/{id}/active',
-					'body'   => array( 'active' => true ),
-					'when'   => array( 'key' => 'active', 'equals' => false ),
-				),
-				array(
-					'label'  => __( 'Deactivate', 'minn-admin' ),
-					'method' => 'POST',
-					'route'  => 'minn-admin/v1/ccj/snippets/{id}/active',
-					'body'   => array( 'active' => false ),
-					'when'   => array( 'key' => 'active', 'equals' => true ),
-				),
-				array(
-					'label' => __( 'Edit in Simple Custom CSS and JS ↗', 'minn-admin' ),
-					'href'  => admin_url( 'post.php?post={id}&action=edit' ),
-				),
-				array(
-					'label'   => __( 'Delete', 'minn-admin' ),
-					'method'  => 'DELETE',
-					'route'   => 'minn-admin/v1/ccj/snippets/{id}',
-					'confirm' => __( 'Delete this custom code permanently?', 'minn-admin' ),
-					'danger'  => true,
-				),
-			),
-			'bulk'      => array(
-				array(
-					'label'  => __( 'Activate', 'minn-admin' ),
-					'method' => 'POST',
-					'route'  => 'minn-admin/v1/ccj/snippets/{id}/active',
-					'body'   => array( 'active' => true ),
-					'when'   => array( 'key' => 'active', 'equals' => false ),
-				),
-				array(
-					'label'  => __( 'Deactivate', 'minn-admin' ),
-					'method' => 'POST',
-					'route'  => 'minn-admin/v1/ccj/snippets/{id}/active',
-					'body'   => array( 'active' => false ),
-					'when'   => array( 'key' => 'active', 'equals' => true ),
-				),
-				array(
-					'label'   => __( 'Delete', 'minn-admin' ),
-					'method'  => 'DELETE',
-					'route'   => 'minn-admin/v1/ccj/snippets/{id}',
-					'confirm' => __( 'Delete the selected codes permanently?', 'minn-admin' ),
-					'danger'  => true,
-				),
-			),
-		),
-	);
+			'actions' => $actions,
+			'bulk'    => $bulk,
+		) ),
+	) );
 	return $surfaces;
 } );
 
@@ -1072,25 +1009,14 @@ minn_admin_endpoint( 'custom-css-js/status', array(
 		foreach ( minn_admin_ccj_rows( array( 'active' => true ) ) as $item ) {
 			$langs[ $item['language'] ] = ( $langs[ $item['language'] ] ?? 0 ) + 1;
 		}
-		$rows = array(
-			array(
-				'label' => __( 'Active codes', 'minn-admin' ),
-				'value' => (string) $active,
-				'hint'  => $inactive
-					/* translators: %d: number of inactive codes. */
-					? sprintf( __( '%d inactive', 'minn-admin' ), $inactive )
-					: __( 'nothing inactive', 'minn-admin' ),
-			),
+		arsort( $langs );
+		$langs = array_map( function ( $l, $c ) {
+			return array( 'value' => $l, 'count' => $c );
+		}, array_keys( $langs ), $langs );
+		$rows  = array(
+			minn_admin_snippets_count_row( $active, $inactive, array(), __( 'Active codes', 'minn-admin' ) ),
+			minn_admin_snippets_running_row( __( 'Running languages', 'minn-admin' ), $langs ),
 		);
-		if ( $langs ) {
-			arsort( $langs );
-			$rows[] = array(
-				'label' => __( 'Running languages', 'minn-admin' ),
-				'value' => implode( ' · ', array_map( function ( $c, $l ) {
-					return $c . ' ' . $l;
-				}, $langs, array_keys( $langs ) ) ),
-			);
-		}
-		return array( 'rows' => $rows );
+		return array( 'rows' => array_values( array_filter( $rows ) ) );
 	},
 ) );

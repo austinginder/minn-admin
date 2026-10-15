@@ -530,115 +530,50 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		array( 'key' => 'tags', 'label' => __( 'Tags', 'minn-admin' ), 'type' => 'tags', 'required' => false ),
 	);
 
-	$surfaces['wpcode'] = array(
-		'label'      => __( 'Snippets', 'minn-admin' ),
-		'family'     => 'snippets',
+	list( $actions, $bulk ) = minn_admin_snippets_actions( 'wpcode/snippets', array(
+		'edit_in' => array(
+			'label' => __( 'Edit in WPCode ↗', 'minn-admin' ),
+			'href'  => admin_url( 'admin.php?page=wpcode-snippet-manager&snippet_id={id}' ),
+		),
+		'delete'  => __( 'Delete snippet', 'minn-admin' ),
+		'confirm' => __( 'Delete this snippet permanently? Its code will be gone.', 'minn-admin' ),
+	) );
+	$surfaces['wpcode'] = minn_admin_snippets_surface( array(
 		'sub'        => 'WPCode',
 		'plugin'     => array( 'insert-headers-and-footers', 'wpcode-premium' ),
-		'icon'       => 'code',
 		'cap'        => 'wpcode_edit_snippets',
-		// Status card (v0.18.0): family parity with Code Snippets.
-		'status'     => array( 'route' => 'minn-admin/v1/wpcode/status' ),
-		'collection' => array(
-			'route'     => 'minn-admin/v1/wpcode/snippets',
-			'pageQuery' => 'per_page=25&page={page}',
-			'itemsKey'  => 'items',
-			'totalKey'  => 'total',
-			'filter'    => array(
-				'label'   => __( 'Status', 'minn-admin' ),
-				'options' => array(
-					array( 'all', 'All' ),
-					array( 'active', 'Active' ),
-					array( 'inactive', 'Inactive' ),
-				),
-				'query'   => 'active={v}',
-			),
-			'create'    => array(
+		'status'     => 'wpcode/status',
+		'collection' => Minn_Admin_Kernel::collection( 'wpcode/snippets', array(
+			'filter'  => minn_admin_snippets_filter(),
+			'create'  => array(
 				'label'    => __( 'Add snippet', 'minn-admin' ),
 				'route'    => 'minn-admin/v1/wpcode/snippets',
 				'method'   => 'POST',
 				'defaults' => array(
-					'active'    => false,
+					'active'      => false,
 					'code_type'   => 'php',
 					'location'    => 'everywhere',
 					'auto_insert' => true,
 					'priority'    => 10,
-					'tags'      => array(),
-					'code'      => '',
+					'tags'        => array(),
+					'code'        => '',
 				),
 				'fields'   => $edit_fields,
 			),
-			'columns'   => array(
-				array( 'key' => 'name', 'label' => __( 'Snippet', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
-				array( 'key' => 'scope', 'label' => __( 'Type · location', 'minn-admin' ), 'format' => 'mono', 'width' => 'minmax(0,1fr)' ),
-				array( 'key' => 'active', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '100px' ),
-				array( 'key' => 'priority', 'label' => __( 'Priority', 'minn-admin' ), 'format' => 'num', 'width' => '80px' ),
-				array( 'key' => 'modified', 'label' => __( 'Modified', 'minn-admin' ), 'format' => 'ago' ),
-			),
-			'detail'    => array(
+			'columns' => minn_admin_snippets_columns( __( 'Type · location', 'minn-admin' ) ),
+			'detail'  => array(
 				'detailRoute' => 'minn-admin/v1/wpcode/snippets/{id}',
-				'skip'        => array(
-					'code', 'name', 'desc', 'scope', 'code_type', 'location',
-					'priority', 'tags', 'active', 'auto_insert',
-				),
+				'skip'        => array( 'code', 'name', 'desc', 'scope', 'code_type', 'location', 'priority', 'tags', 'active', 'auto_insert' ),
 				'edit'        => array(
-					'route'    => 'minn-admin/v1/wpcode/snippets/{id}',
-					'method'   => 'PUT',
-					'fields'   => $edit_fields,
+					'route'  => 'minn-admin/v1/wpcode/snippets/{id}',
+					'method' => 'PUT',
+					'fields' => $edit_fields,
 				),
 			),
-			'actions'   => array(
-				array(
-					'label'  => __( 'Activate', 'minn-admin' ),
-					'method' => 'POST',
-					'route'  => 'minn-admin/v1/wpcode/snippets/{id}/active',
-					'body'   => array( 'active' => true ),
-					'when'   => array( 'key' => 'active', 'equals' => false ),
-				),
-				array(
-					'label'  => __( 'Deactivate', 'minn-admin' ),
-					'method' => 'POST',
-					'route'  => 'minn-admin/v1/wpcode/snippets/{id}/active',
-					'body'   => array( 'active' => false ),
-					'when'   => array( 'key' => 'active', 'equals' => true ),
-				),
-				array(
-					'label' => __( 'Edit in WPCode ↗', 'minn-admin' ),
-					'href'  => admin_url( 'admin.php?page=wpcode-snippet-manager&snippet_id={id}' ),
-				),
-				array(
-					'label'   => __( 'Delete snippet', 'minn-admin' ),
-					'method'  => 'DELETE',
-					'route'   => 'minn-admin/v1/wpcode/snippets/{id}',
-					'confirm' => __( 'Delete this snippet permanently? Its code will be gone.', 'minn-admin' ),
-					'danger'  => true,
-				),
-			),
-			'bulk'      => array(
-				array(
-					'label'  => __( 'Activate', 'minn-admin' ),
-					'method' => 'POST',
-					'route'  => 'minn-admin/v1/wpcode/snippets/{id}/active',
-					'body'   => array( 'active' => true ),
-					'when'   => array( 'key' => 'active', 'equals' => false ),
-				),
-				array(
-					'label'  => __( 'Deactivate', 'minn-admin' ),
-					'method' => 'POST',
-					'route'  => 'minn-admin/v1/wpcode/snippets/{id}/active',
-					'body'   => array( 'active' => false ),
-					'when'   => array( 'key' => 'active', 'equals' => true ),
-				),
-				array(
-					'label'   => __( 'Delete', 'minn-admin' ),
-					'method'  => 'DELETE',
-					'route'   => 'minn-admin/v1/wpcode/snippets/{id}',
-					'confirm' => __( 'Delete the selected snippets permanently?', 'minn-admin' ),
-					'danger'  => true,
-				),
-			),
-		),
-	);
+			'actions' => $actions,
+			'bulk'    => $bulk,
+		) ),
+	) );
 	return $surfaces;
 } );
 
@@ -1091,13 +1026,6 @@ minn_admin_endpoint( 'wpcode/status', array(
 		foreach ( array( 'draft', 'private', 'pending' ) as $st ) {
 			$inactive += isset( $counts->$st ) ? (int) $counts->$st : 0;
 		}
-		$rows  = array(
-			array(
-				'label' => __( 'Active snippets', 'minn-admin' ),
-				'value' => (string) $active,
-				'hint'  => $inactive ? $inactive . ' inactive' : __( 'nothing inactive', 'minn-admin' ),
-			),
-		);
 		$posts = array( 'core' => 'posts' );
 		$types = Minn_Admin_Kernel_SQL::counts(
 			$posts + array( 'joins' => array( 'pm' => array( 'core' => 'postmeta', 'on' => array( 'post_id' => 'e.ID' ) ) ) ),
@@ -1105,22 +1033,12 @@ minn_admin_endpoint( 'wpcode/status', array(
 			array( 'pm.meta_key' => '_wpcode_code_type', 'e.post_type' => 'wpcode', 'e.post_status' => 'publish' ),
 			3
 		);
-		if ( $types ) {
-			$rows[] = array(
-				'label' => __( 'Running types', 'minn-admin' ),
-				'value' => implode( ' · ', array_map( function ( $t ) {
-					return $t['count'] . ' ' . $t['value'];
-				}, $types ) ),
-			);
-		}
-		$last = Minn_Admin_Kernel_SQL::select( $posts, array( 'post_title', 'post_modified' ), array( 'post_type' => 'wpcode', 'post_status' => array( 'publish', 'draft', 'private' ) ), array( 'post_modified' => 'DESC' ), 1 );
-		if ( $last ) {
-			$rows[] = array(
-				'label' => __( 'Last change', 'minn-admin' ),
-				'value' => (string) $last[0]['post_title'],
-				'hint'  => substr( (string) $last[0]['post_modified'], 0, 10 ),
-			);
-		}
-		return array( 'rows' => $rows );
+		$last  = Minn_Admin_Kernel_SQL::select( $posts, array( 'post_title', 'post_modified' ), array( 'post_type' => 'wpcode', 'post_status' => array( 'publish', 'draft', 'private' ) ), array( 'post_modified' => 'DESC' ), 1 );
+		$rows  = array(
+			minn_admin_snippets_count_row( $active, $inactive ),
+			minn_admin_snippets_running_row( __( 'Running types', 'minn-admin' ), $types ),
+			$last ? minn_admin_snippets_last_row( $last[0]['post_title'], substr( (string) $last[0]['post_modified'], 0, 10 ) ) : null,
+		);
+		return array( 'rows' => array_values( array_filter( $rows ) ) );
 	},
 ) );

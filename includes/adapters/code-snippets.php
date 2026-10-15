@@ -101,18 +101,13 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	// plugin's own screen is unaffected, exactly as it is for WPCode.
 	$code_edits = ! class_exists( 'Minn_Admin' ) || Minn_Admin::code_edits_allowed();
 
-	$surfaces['code-snippets'] = array(
-		'label'      => __( 'Snippets', 'minn-admin' ),
-		// Surfaces that share a family collapse to one sidebar item; the topbar
-		// sub badge becomes a provider switcher when more than one is active.
-		'family'     => 'snippets',
+	// Surfaces that share a family collapse to one sidebar item; the topbar
+	// sub badge becomes a provider switcher when more than one is active.
+	$surfaces['code-snippets'] = minn_admin_snippets_surface( array(
 		'sub'        => 'Code Snippets',
 		'plugin'     => array( 'code-snippets', 'code-snippets-pro' ),
-		'icon'       => 'code',
 		'cap'        => $cap,
-		// Status card (v0.18.0): what's running at a glance. First card in
-		// the snippets family.
-		'status'     => array( 'route' => 'minn-admin/v1/code-snippets/status' ),
+		'status'     => 'code-snippets/status',
 		'collection' => array(
 			'route'     => 'code-snippets/v1/snippets',
 			// Asks for shared network rows under their own ids (the
@@ -133,14 +128,8 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				),
 				'fields'   => $edit_fields,
 			),
-			'columns'   => array(
-				array( 'key' => 'name', 'label' => __( 'Snippet', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.8fr)' ),
-				array( 'key' => 'scope', 'label' => __( 'Scope', 'minn-admin' ), 'format' => 'mono', 'width' => '100px' ),
-				array( 'key' => 'active', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '100px' ),
-				array( 'key' => 'priority', 'label' => __( 'Priority', 'minn-admin' ), 'format' => 'num', 'width' => '80px' ),
-				// Code Snippets stores/returns modified via gmdate (UTC, no Z).
-				array( 'key' => 'modified', 'label' => __( 'Modified', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
-			),
+			// Code Snippets stores and returns modified via gmdate (UTC, no Z).
+			'columns'   => minn_admin_snippets_columns( __( 'Scope', 'minn-admin' ), array( 'width' => '100px', 'utc' => true ) ),
 			'detail'    => array(
 				// Re-fetch so the modal always has full code + fresh active flag
 				// (and the keys the action gates read, from the filter below).
@@ -233,7 +222,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				),
 			),
 		),
-	);
+	) );
 
 	if ( ! $code_edits ) {
 		unset( $surfaces['code-snippets']['collection']['create'] );
@@ -305,43 +294,18 @@ minn_admin_endpoint( 'code-snippets/status', array(
 				$inactive += $c['count'];
 			}
 		}
-		$hint = array();
-		if ( $inactive ) {
-			/* translators: %d: number of inactive snippets. */
-			$hint[] = sprintf( __( '%d inactive', 'minn-admin' ), $inactive );
-		}
-		if ( $trashed ) {
-			/* translators: %d: number of trashed snippets. */
-			$hint[] = sprintf( __( '%d trashed', 'minn-admin' ), $trashed );
-		}
-		$rows   = array(
-			array(
-				'label' => __( 'Active snippets', 'minn-admin' ),
-				'value' => (string) $active,
-				'hint'  => $hint ? implode( ' · ', $hint ) : __( 'nothing inactive', 'minn-admin' ),
-			),
-		);
-		$scopes = Minn_Admin_Kernel_SQL::counts( 'snippets', 'scope', array( 'active' => 1 ), 3 );
-		if ( $scopes ) {
-			$rows[] = array(
-				'label' => __( 'Running scopes', 'minn-admin' ),
-				'value' => implode( ' · ', array_map( function ( $s ) {
-					return $s['count'] . ' ' . $s['value'];
-				}, $scopes ) ),
-			);
-		}
-		$last = Minn_Admin_Kernel_SQL::select( 'snippets', array( 'name', 'modified' ), array( 'active' => array( 'op' => '>=', 'value' => 0 ) ), array( 'modified' => 'DESC' ), 1 );
-		$last = $last ? $last[0] : null;
+		/* translators: %d: number of trashed snippets. */
+		$more    = $trashed ? array( sprintf( __( '%d trashed', 'minn-admin' ), $trashed ) ) : array();
+		$last    = Minn_Admin_Kernel_SQL::select( 'snippets', array( 'name', 'modified' ), array( 'active' => array( 'op' => '>=', 'value' => 0 ) ), array( 'modified' => 'DESC' ), 1 );
+		$last    = $last ? $last[0] : null;
 		// modified is stamped with gmdate(), so the day is the site's, not
 		// the UTC one a substr() of the stamp would give.
 		$last_ts = $last && $last['modified'] && '0000-00-00 00:00:00' !== $last['modified'] ? strtotime( $last['modified'] . ' UTC' ) : false;
-		if ( $last_ts ) {
-			$rows[] = array(
-				'label' => __( 'Last change', 'minn-admin' ),
-				'value' => (string) $last['name'],
-				'hint'  => wp_date( get_option( 'date_format' ), $last_ts ),
-			);
-		}
+		$rows    = array_values( array_filter( array(
+			minn_admin_snippets_count_row( $active, $inactive, $more ),
+			minn_admin_snippets_running_row( __( 'Running scopes', 'minn-admin' ), Minn_Admin_Kernel_SQL::counts( 'snippets', 'scope', array( 'active' => 1 ), 3 ) ),
+			$last_ts ? minn_admin_snippets_last_row( $last['name'], wp_date( get_option( 'date_format' ), $last_ts ) ) : null,
+		) ) );
 		if ( defined( 'CODE_SNIPPETS_SAFE_MODE' ) && CODE_SNIPPETS_SAFE_MODE ) {
 			$rows[] = array(
 				'label' => __( 'Safe mode', 'minn-admin' ),
