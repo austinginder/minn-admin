@@ -48,7 +48,7 @@ function minn_admin_srm_cap() {
  * @param string $from        Source path.
  * @param string $to          Target path/URL.
  * @param int    $status_code HTTP status.
- * @return int|WP_Error
+ * @return array|WP_Error The values as sanitized and stored: id, from, to, status_code.
  */
 function minn_admin_srm_update_redirect( $id, $from, $to, $status_code = 301 ) {
 	$post = get_post( (int) $id );
@@ -79,8 +79,33 @@ function minn_admin_srm_update_redirect( $id, $from, $to, $status_code = 301 ) {
 	if ( function_exists( 'srm_flush_cache' ) ) {
 		srm_flush_cache();
 	}
-	return (int) $post->ID;
+	return array( 'id' => (int) $post->ID, 'from' => $from, 'to' => $to, 'status_code' => $code );
 }
+
+function minn_admin_srm_can() {
+	return current_user_can( minn_admin_srm_cap() );
+}
+
+/** One redirect_rule as the list reads it, or null for any other post. */
+function minn_admin_srm_rule( $id ) {
+	$post = get_post( (int) $id );
+	if ( ! $post || 'redirect_rule' !== $post->post_type ) {
+		return null;
+	}
+	return array(
+		'id'          => (int) $post->ID,
+		'from'        => (string) get_post_meta( $post->ID, '_redirect_rule_from', true ),
+		'to'          => (string) get_post_meta( $post->ID, '_redirect_rule_to', true ),
+		'status_code' => (int) get_post_meta( $post->ID, '_redirect_rule_status_code', true ),
+		'regex'       => get_post_meta( $post->ID, '_redirect_rule_from_regex', true ) ? 'yes' : '',
+	);
+}
+
+/** Their redirect_rule posts with one of the rule's meta rows, for the status card's counts. */
+const MINN_ADMIN_SRM_META = array(
+	'core'  => 'posts',
+	'joins' => array( 'pm' => array( 'core' => 'postmeta', 'on' => array( 'post_id' => 'e.ID' ) ) ),
+);
 
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! minn_admin_srm_active() ) {
@@ -96,11 +121,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'cap'        => minn_admin_srm_cap(),
 		// Status card (v0.18.0): family parity with Redirection.
 		'status'     => array( 'route' => 'minn-admin/v1/srm/status' ),
-		'collection' => array(
-			'route'    => 'minn-admin/v1/srm/redirects',
-			'itemsKey' => 'items',
-			'totalKey' => 'total',
-			'search'   => 'search={q}',
+		'collection' => Minn_Admin_Kernel::collection( 'srm/redirects', array(
 			'columns'  => array(
 				array( 'key' => 'from', 'label' => __( 'Source', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.4fr)' ),
 				array( 'key' => 'to', 'label' => __( 'Target', 'minn-admin' ), 'format' => 'mono', 'width' => 'minmax(0,1.4fr)' ),
@@ -148,184 +169,154 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'danger'  => true,
 				),
 			),
-		),
+		) ),
 	);
 	return $surfaces;
 } );
 
-add_action( 'rest_api_init', function () {
-	if ( ! minn_admin_srm_active() ) {
-		return;
-	}
-	$perm = function () {
-		return current_user_can( minn_admin_srm_cap() );
-	};
-
-	// Status card: counts over SRM's redirect_rule CPT — status-code mix and
-	// regex-rule count from their own meta keys. SRM stores no hit counts,
-	// so the card honestly stops at rules.
-	register_rest_route( 'minn-admin/v1', '/srm/status', array(
-		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function () {
-			global $wpdb;
-			$total = (int) $wpdb->get_var(
-				"SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = 'redirect_rule' AND post_status = 'publish'"
-			);
-			$rows = array(
-				array( 'label' => __( 'Redirect rules', 'minn-admin' ), 'value' => (string) $total ),
-			);
-			$codes = $wpdb->get_results(
-				"SELECT pm.meta_value AS code, COUNT(*) AS c FROM {$wpdb->posts} p
-				 JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID AND pm.meta_key = '_redirect_rule_status_code'
-				 WHERE p.post_type = 'redirect_rule' AND p.post_status = 'publish'
-				 GROUP BY pm.meta_value ORDER BY c DESC LIMIT 3"
-			);
-			if ( $codes ) {
-				$rows[] = array(
-					'label' => __( 'Status codes', 'minn-admin' ),
-					'value' => implode( ' · ', array_map( function ( $r ) {
-						return $r->c . '×' . $r->code;
-					}, $codes ) ),
-				);
-			}
-			$regex = (int) $wpdb->get_var(
-				"SELECT COUNT(*) FROM {$wpdb->posts} p
-				 JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID AND pm.meta_key = '_redirect_rule_from_regex'
-				 WHERE p.post_type = 'redirect_rule' AND p.post_status = 'publish' AND pm.meta_value = '1'"
-			);
-			if ( $regex ) {
-				$rows[] = array( 'label' => __( 'Regex rules', 'minn-admin' ), 'value' => (string) $regex );
-			}
-			// Export (SRM 2.3+): their own signed admin-ajax download, minted
-			// per status load for the viewer, so their nonce and their
-			// srm_manage_redirects check stay the gate.
-			$actions = array();
-			if ( class_exists( 'SRM_Export' ) && current_user_can( minn_admin_srm_cap() ) ) {
-				foreach ( array( 'csv' => __( 'Export CSV ↗', 'minn-admin' ), 'json' => __( 'Export JSON ↗', 'minn-admin' ) ) as $format => $label ) {
-					$actions[] = array(
-						'label' => $label,
-						'href'  => add_query_arg(
-							array(
-								'action'        => 'srm_export',
-								'export_format' => $format,
-								'_wpnonce'      => wp_create_nonce( 'srm_export' ),
-							),
-							admin_url( 'admin-ajax.php' )
-						),
-					);
-				}
-			}
-			return rest_ensure_response( array( 'rows' => $rows, 'actions' => $actions ) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/srm/redirects', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) {
-				$rows   = srm_get_redirects();
-				$search = strtolower( trim( (string) $request['search'] ) );
-				$items  = array();
-				foreach ( $rows as $r ) {
-					$from = (string) ( $r['redirect_from'] ?? '' );
-					$to   = (string) ( $r['redirect_to'] ?? '' );
-					if ( '' !== $search && strpos( strtolower( $from . ' ' . $to ), $search ) === false ) {
-						continue;
-					}
+minn_admin_resource( 'srm/redirects', function () {
+	return array(
+		'active'  => 'minn_admin_srm_active',
+		'gates'   => array( 'view' => 'minn_admin_srm_can' ),
+		'labels'  => array( 'not_found' => __( 'Redirect not found.', 'minn-admin' ) ),
+		'source'  => array(
+			// Their own reader, in their order (published rules).
+			'rows'   => function () {
+				$items = array();
+				foreach ( (array) srm_get_redirects() as $r ) {
 					$items[] = array(
 						'id'          => (int) ( $r['ID'] ?? 0 ),
-						'from'        => $from,
-						'to'          => $to,
+						'from'        => (string) ( $r['redirect_from'] ?? '' ),
+						'to'          => (string) ( $r['redirect_to'] ?? '' ),
 						'status_code' => (int) ( $r['status_code'] ?? 302 ),
 						'regex'       => ! empty( $r['enable_regex'] ) ? 'yes' : '',
 					);
 				}
-				$total = count( $items );
-				$page  = max( 1, (int) ( $request['page'] ?: 1 ) );
-				$per   = 25;
-				$items = array_slice( $items, ( $page - 1 ) * $per, $per );
-				return rest_ensure_response( array( 'items' => array_values( $items ), 'total' => $total ) );
+				return $items;
+			},
+			// One rule by id: never another post type, which an edit or a
+			// force-delete through core would otherwise reach.
+			'get'    => 'minn_admin_srm_rule',
+			'exists' => function ( $id ) {
+				return null !== minn_admin_srm_rule( $id );
 			},
 		),
-		array(
-			'methods'             => 'POST',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) {
+		'list'    => array(
+			'search' => array( 'columns' => array( 'from', 'to' ) ),
+			'fields' => array(
+				'id'          => 'int',
+				'from'        => 'text',
+				'to'          => 'text',
+				'status_code' => 'int',
+				'regex'       => 'text',
+			),
+		),
+		'create'  => array(
+			'gate'   => 'view',
+			// The rule they made reads back as a redirect_rule; a taken source
+			// never got this far.
+			'expect' => function ( $id, $fresh ) {
+				return is_array( $fresh ) && $id === $fresh['id'];
+			},
+			'run'    => function ( WP_REST_Request $request ) {
 				// srm_create_redirect() is an upsert: for a source that already
 				// has a rule it rewrites that rule in place (republished,
 				// de-regexed, notes wiped). Adding is adding, so a source that
 				// is already taken is refused rather than silently replaced.
 				if ( function_exists( 'srm_sanitize_redirect_from' ) ) {
-					global $wpdb;
 					$from = srm_sanitize_redirect_from( (string) $request['from'] );
-					if ( '' !== (string) $from && $wpdb->get_var( $wpdb->prepare(
-						"SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = '_redirect_rule_from' AND meta_value = %s LIMIT 1",
-						$from
-					) ) ) {
+					if ( '' !== (string) $from && Minn_Admin_Kernel_SQL::count( array( 'core' => 'postmeta' ), array( 'meta_key' => '_redirect_rule_from', 'meta_value' => $from ) ) ) {
 						return new WP_Error( 'srm_exists', __( 'A redirect from that address already exists. Edit it instead.', 'minn-admin' ), array( 'status' => 400 ) );
 					}
 				}
-				$id = srm_create_redirect(
-					(string) $request['from'],
-					(string) $request['to'],
-					(int) ( $request['status_code'] ?: 301 )
-				);
-				if ( is_wp_error( $id ) ) {
-					return new WP_Error( 'create_failed', $id->get_error_message(), array( 'status' => 400 ) );
-				}
-				return rest_ensure_response( array( 'created' => (int) $id ) );
+				$id = srm_create_redirect( (string) $request['from'], (string) $request['to'], (int) ( $request['status_code'] ?: 301 ) );
+				return is_wp_error( $id ) ? new WP_Error( 'create_failed', $id->get_error_message(), array( 'status' => 400 ) ) : (int) $id;
+			},
+			'reply' => function ( $id ) {
+				return array( 'created' => $id );
 			},
 		),
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/srm/redirects/(?P<id>\d+)', array(
-		array(
-			'methods'             => 'PUT',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) {
-				$result = minn_admin_srm_update_redirect(
-					(int) Minn_Admin::path_param( $request ),
-					(string) $request['from'],
-					(string) $request['to'],
-					(int) ( $request['status_code'] ?: 301 )
-				);
-				if ( is_wp_error( $result ) ) {
-					return $result;
-				}
-				return rest_ensure_response( array(
-					'id'          => (int) $result,
-					'from'        => (string) $request['from'],
-					'to'          => (string) $request['to'],
-					'status_code' => (int) ( $request['status_code'] ?: 301 ),
-				) );
-			},
+		'actions' => array(
+			// Edit by id through the meta keys their own save_post handler
+			// writes: srm_create_redirect() would fork a new rule on a rename.
+			'edit'   => array(
+				'method' => 'PUT',
+				'gate'   => 'view',
+				'run'    => function ( $id, array $row, WP_REST_Request $request ) {
+					return minn_admin_srm_update_redirect( $id, (string) $request['from'], (string) $request['to'], (int) ( $request['status_code'] ?: 301 ) );
+				},
+				'expect' => function ( $id, $fresh, $saved ) {
+					return is_array( $fresh ) && is_array( $saved ) && $fresh['from'] === $saved['from'] && $fresh['to'] === $saved['to'] && $fresh['status_code'] === $saved['status_code'];
+				},
+				'reply'  => function ( $id, $fresh ) {
+					return array( 'id' => $id, 'from' => $fresh['from'], 'to' => $fresh['to'], 'status_code' => $fresh['status_code'] );
+				},
+			),
+			// SRM ships no delete helper: a force-delete through core, of a
+			// redirect_rule only, then the cache flush their screen makes
+			// (without it the removed rule redirects until the cache expires).
+			'delete' => array(
+				'method' => 'DELETE',
+				'gate'   => 'view',
+				'run'    => function ( $id ) {
+					wp_delete_post( $id, true );
+					if ( function_exists( 'srm_flush_cache' ) ) {
+						srm_flush_cache();
+					}
+					return true;
+				},
+				'expect' => 'gone',
+				'reply'  => function ( $id ) {
+					return array( 'deleted' => $id );
+				},
+			),
 		),
-		array(
-			'methods'             => 'DELETE',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) {
-				$id = (int) Minn_Admin::path_param( $request );
-				// Confirm the target IS a redirect before deleting it. SRM
-				// ships no delete helper, so this force-deletes through core,
-				// which bypasses the trash and checks no capability of its
-				// own -- an id for any other post type would have been
-				// destroyed permanently by a route that says "redirect".
-				// The update handler above has always resolved its target
-				// this way; the delete branch did not.
-				$post = get_post( $id );
-				if ( ! $post || 'redirect_rule' !== $post->post_type ) {
-					return new WP_Error( 'not_found', __( 'Redirect not found.', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				wp_delete_post( $id, true );
-				// Their own screen flushes after a delete; without it the
-				// removed rule keeps redirecting until the cache expires.
-				if ( function_exists( 'srm_flush_cache' ) ) {
-					srm_flush_cache();
-				}
-				return rest_ensure_response( array( 'deleted' => $id ) );
-			},
-		),
-	) );
+	);
 } );
+
+// Status card: counts over their redirect_rule posts, the status-code mix and
+// regex rules from their own meta keys. SRM stores no hit counts, so the card
+// honestly stops at rules.
+minn_admin_endpoint( 'srm/status', array(
+	'active' => 'minn_admin_srm_active',
+	'gate'   => 'minn_admin_srm_can',
+	'run'    => function () {
+		$live  = array( 'e.post_type' => 'redirect_rule', 'e.post_status' => 'publish' );
+		$rows  = array(
+			array( 'label' => __( 'Redirect rules', 'minn-admin' ), 'value' => (string) Minn_Admin_Kernel_SQL::count( array( 'core' => 'posts' ), array( 'post_type' => 'redirect_rule', 'post_status' => 'publish' ) ) ),
+		);
+		$codes = Minn_Admin_Kernel_SQL::counts( MINN_ADMIN_SRM_META, 'pm.meta_value', $live + array( 'pm.meta_key' => '_redirect_rule_status_code' ), 3 );
+		if ( $codes ) {
+			$rows[] = array(
+				'label' => __( 'Status codes', 'minn-admin' ),
+				'value' => implode( ' · ', array_map( function ( $c ) {
+					return $c['count'] . '×' . $c['value'];
+				}, $codes ) ),
+			);
+		}
+		$regex = Minn_Admin_Kernel_SQL::count( MINN_ADMIN_SRM_META, $live + array( 'pm.meta_key' => '_redirect_rule_from_regex', 'pm.meta_value' => '1' ) );
+		if ( $regex ) {
+			$rows[] = array( 'label' => __( 'Regex rules', 'minn-admin' ), 'value' => (string) $regex );
+		}
+		// Export (SRM 2.3+): their own signed admin-ajax download, minted per
+		// status load for the viewer, so their nonce and their
+		// srm_manage_redirects check stay the gate.
+		$actions = array();
+		if ( class_exists( 'SRM_Export' ) ) {
+			foreach ( array( 'csv' => __( 'Export CSV ↗', 'minn-admin' ), 'json' => __( 'Export JSON ↗', 'minn-admin' ) ) as $format => $label ) {
+				$actions[] = array(
+					'label' => $label,
+					'href'  => add_query_arg(
+						array(
+							'action'        => 'srm_export',
+							'export_format' => $format,
+							'_wpnonce'      => wp_create_nonce( 'srm_export' ),
+						),
+						admin_url( 'admin-ajax.php' )
+					),
+				);
+			}
+		}
+		return array( 'rows' => $rows, 'actions' => $actions );
+	},
+) );

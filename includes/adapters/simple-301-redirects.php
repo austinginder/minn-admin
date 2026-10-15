@@ -92,131 +92,125 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	return $surfaces;
 } );
 
-add_action( 'rest_api_init', function () {
-	if ( ! minn_admin_s301_active() ) {
-		return;
+function minn_admin_s301_can() {
+	return current_user_can( 'manage_options' );
+}
+
+/** A submitted rule, sanitized as their own writer (Admin/Ajax.php) does, or why not. */
+function minn_admin_s301_rule( WP_REST_Request $request ) {
+	$from = sanitize_text_field( trim( (string) $request['from'] ) );
+	$to   = sanitize_text_field( trim( (string) $request['to'] ) );
+	if ( '' === $from || '' === $to ) {
+		return new WP_Error( 'invalid', __( 'Source and target are both required.', 'minn-admin' ), array( 'status' => 400 ) );
 	}
-	$perm = function () {
-		return current_user_can( 'manage_options' );
-	};
+	return array( $from, $to );
+}
 
-	// Status card: the whole store is one option array (no hits, no log),
-	// so the honest card is rule count + the wildcard toggle.
-	register_rest_route( 'minn-admin/v1', '/s301/status', array(
-		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function () {
-			$rules     = (array) get_option( '301_redirects', array() );
-			$wildcards = get_option( '301_redirects_wildcard', false );
-			return rest_ensure_response( array(
-				'rows' => array(
-					array( 'label' => __( 'Redirect rules', 'minn-admin' ), 'value' => (string) count( $rules ) ),
-					array(
-						'label' => __( 'Wildcards', 'minn-admin' ),
-						'value' => $wildcards ? __( 'On', 'minn-admin' ) : __( 'Off', 'minn-admin' ),
-						'hint'  => $wildcards ? '* patterns match in sources' : '',
-					),
+/** The rule as the list shows it. */
+function minn_admin_s301_item( $from, $to ) {
+	return array( 'id' => minn_admin_s301_encode_id( $from ), 'from' => (string) $from, 'to' => (string) $to );
+}
+
+// The whole store is one option keyed by source, so a rule's id is its source
+// (base64url): handler-tier endpoints the kernel gates, ids the pattern holds.
+// Status card: no hits and no log, so the honest card is rule count + the
+// wildcard toggle.
+minn_admin_endpoint( 's301/status', array(
+	'active' => 'minn_admin_s301_active',
+	'gate'   => 'minn_admin_s301_can',
+	'run'    => function () {
+		$wildcards = get_option( '301_redirects_wildcard', false );
+		return array(
+			'rows' => array(
+				array( 'label' => __( 'Redirect rules', 'minn-admin' ), 'value' => (string) count( (array) get_option( '301_redirects', array() ) ) ),
+				array(
+					'label' => __( 'Wildcards', 'minn-admin' ),
+					'value' => $wildcards ? __( 'On', 'minn-admin' ) : __( 'Off', 'minn-admin' ),
+					'hint'  => $wildcards ? '* patterns match in sources' : '',
 				),
-			) );
-		},
-	) );
+			),
+		);
+	},
+) );
 
-	register_rest_route( 'minn-admin/v1', '/s301/redirects', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) {
-				$rows   = (array) get_option( '301_redirects', array() );
-				$search = strtolower( trim( (string) $request['search'] ) );
-				$items  = array();
-				foreach ( $rows as $from => $to ) {
-					if ( '' !== $search && strpos( strtolower( $from . ' ' . $to ), $search ) === false ) {
-						continue;
-					}
-					$items[] = array(
-						'id'   => minn_admin_s301_encode_id( $from ),
-						'from' => (string) $from,
-						'to'   => (string) $to,
-					);
-				}
-				$total = count( $items );
-				$page  = max( 1, (int) ( $request['page'] ?: 1 ) );
-				$items = array_slice( $items, ( $page - 1 ) * 25, 25 );
-				return rest_ensure_response( array( 'items' => array_values( $items ), 'total' => $total ) );
-			},
-		),
-		array(
-			'methods'             => 'POST',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) {
-				// sanitize_text_field on both sides, matching the vendor's own
-				// writer (Admin/Ajax.php) — without it the shared option ends
-				// up holding values the plugin itself would never store.
-				$from = sanitize_text_field( trim( (string) $request['from'] ) );
-				$to   = sanitize_text_field( trim( (string) $request['to'] ) );
-				if ( '' === $from || '' === $to ) {
-					return new WP_Error( 'invalid', __( 'Source and target are both required.', 'minn-admin' ), array( 'status' => 400 ) );
-				}
-				$rows = (array) get_option( '301_redirects', array() );
-				// The option is keyed by source, so writing one that is
-				// already there replaced its rule; their own add refuses it.
-				if ( array_key_exists( $from, $rows ) ) {
-					return new WP_Error( 's301_exists', __( 'A redirect from that address already exists. Edit it instead.', 'minn-admin' ), array( 'status' => 400 ) );
-				}
-				$rows[ $from ] = $to;
-				update_option( '301_redirects', $rows );
-				return rest_ensure_response( array(
-					'id'   => minn_admin_s301_encode_id( $from ),
-					'from' => $from,
-					'to'   => $to,
-				) );
-			},
-		),
-	) );
+minn_admin_endpoint( 's301/redirects', array(
+	'active' => 'minn_admin_s301_active',
+	'gate'   => 'minn_admin_s301_can',
+	'run'    => function ( WP_REST_Request $request ) {
+		$search = strtolower( trim( (string) $request['search'] ) );
+		$items  = array();
+		foreach ( (array) get_option( '301_redirects', array() ) as $from => $to ) {
+			if ( '' === $search || false !== strpos( strtolower( $from . ' ' . $to ), $search ) ) {
+				$items[] = minn_admin_s301_item( $from, $to );
+			}
+		}
+		$page = max( 1, (int) ( $request['page'] ?: 1 ) );
+		return array( 'items' => array_values( array_slice( $items, ( $page - 1 ) * 25, 25 ) ), 'total' => count( $items ) );
+	},
+) );
 
-	register_rest_route( 'minn-admin/v1', '/s301/redirects/(?P<id>[A-Za-z0-9\-_]+)', array(
-		array(
-			'methods'             => 'PUT',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) {
-				$old  = minn_admin_s301_decode_id( Minn_Admin::path_param( $request ) );
-				// sanitize_text_field on both sides, matching the vendor's own
-				// writer (Admin/Ajax.php) — without it the shared option ends
-				// up holding values the plugin itself would never store.
-				$from = sanitize_text_field( trim( (string) $request['from'] ) );
-				$to   = sanitize_text_field( trim( (string) $request['to'] ) );
-				if ( '' === $from || '' === $to ) {
-					return new WP_Error( 'invalid', __( 'Source and target are both required.', 'minn-admin' ), array( 'status' => 400 ) );
-				}
-				$rows = (array) get_option( '301_redirects', array() );
-				if ( ! array_key_exists( $old, $rows ) ) {
-					return new WP_Error( 'not_found', __( 'Redirect not found.', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				// Renaming the source: drop the old key, write the new one.
-				if ( $old !== $from ) {
-					unset( $rows[ $old ] );
-				}
-				$rows[ $from ] = $to;
-				update_option( '301_redirects', $rows );
-				return rest_ensure_response( array(
-					'id'   => minn_admin_s301_encode_id( $from ),
-					'from' => $from,
-					'to'   => $to,
-				) );
-			},
-		),
-		array(
-			'methods'             => 'DELETE',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) {
-				$from = minn_admin_s301_decode_id( Minn_Admin::path_param( $request ) );
-				$rows = (array) get_option( '301_redirects', array() );
-				if ( isset( $rows[ $from ] ) ) {
-					unset( $rows[ $from ] );
-					update_option( '301_redirects', $rows );
-				}
-				return rest_ensure_response( array( 'deleted' => $from ) );
-			},
-		),
-	) );
-} );
+minn_admin_endpoint( 's301/redirects', array(
+	'methods' => 'POST',
+	'active'  => 'minn_admin_s301_active',
+	'gate'    => 'minn_admin_s301_can',
+	'run'     => function ( WP_REST_Request $request ) {
+		$rule = minn_admin_s301_rule( $request );
+		if ( is_wp_error( $rule ) ) {
+			return $rule;
+		}
+		list( $from, $to ) = $rule;
+		$rows              = (array) get_option( '301_redirects', array() );
+		// The option is keyed by source, so writing one that is already there
+		// would replace its rule; their own add refuses it.
+		if ( array_key_exists( $from, $rows ) ) {
+			return new WP_Error( 's301_exists', __( 'A redirect from that address already exists. Edit it instead.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		$rows[ $from ] = $to;
+		update_option( '301_redirects', $rows );
+		return minn_admin_s301_item( $from, $to );
+	},
+) );
+
+minn_admin_endpoint( 's301/redirects/(?P<id>[A-Za-z0-9\-_]+)', array(
+	'methods' => 'PUT',
+	'active'  => 'minn_admin_s301_active',
+	'gate'    => 'minn_admin_s301_can',
+	'run'     => function ( WP_REST_Request $request, array $ctx ) {
+		$rule = minn_admin_s301_rule( $request );
+		if ( is_wp_error( $rule ) ) {
+			return $rule;
+		}
+		list( $from, $to ) = $rule;
+		$old               = minn_admin_s301_decode_id( $ctx['id'] );
+		$rows              = (array) get_option( '301_redirects', array() );
+		if ( ! array_key_exists( $old, $rows ) ) {
+			return new WP_Error( 'not_found', __( 'Redirect not found.', 'minn-admin' ), array( 'status' => 404 ) );
+		}
+		// Renaming the source: drop the old key, write the new one; never onto
+		// a source another rule already has, which that write would replace.
+		if ( $old !== $from ) {
+			if ( array_key_exists( $from, $rows ) ) {
+				return new WP_Error( 's301_exists', __( 'A redirect from that address already exists. Edit it instead.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
+			unset( $rows[ $old ] );
+		}
+		$rows[ $from ] = $to;
+		update_option( '301_redirects', $rows );
+		return minn_admin_s301_item( $from, $to );
+	},
+) );
+
+minn_admin_endpoint( 's301/redirects/(?P<id>[A-Za-z0-9\-_]+)', array(
+	'methods' => 'DELETE',
+	'active'  => 'minn_admin_s301_active',
+	'gate'    => 'minn_admin_s301_can',
+	'run'     => function ( WP_REST_Request $request, array $ctx ) {
+		$from = minn_admin_s301_decode_id( $ctx['id'] );
+		$rows = (array) get_option( '301_redirects', array() );
+		if ( isset( $rows[ $from ] ) ) {
+			unset( $rows[ $from ] );
+			update_option( '301_redirects', $rows );
+		}
+		return array( 'deleted' => $from );
+	},
+) );

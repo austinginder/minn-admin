@@ -232,326 +232,277 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	return $surfaces;
 } );
 
-add_action( 'rest_api_init', function () {
-	if ( ! defined( 'REDIRECTION_VERSION' ) || ! function_exists( 'red_get_options' ) ) {
-		return;
+function minn_admin_redirection_ready() {
+	return defined( 'REDIRECTION_VERSION' ) && function_exists( 'red_get_options' );
+}
+
+/** Their base plugin role: the gate of every Redirection screen. */
+function minn_admin_redirection_can() {
+	return current_user_can( apply_filters( 'redirection_role', 'manage_options' ) );
+}
+
+/** One of their granular capabilities, or the base role on builds without them. */
+function minn_admin_redirection_has( $const ) {
+	if ( class_exists( 'Redirection_Capabilities' ) && defined( 'Redirection_Capabilities::' . $const ) ) {
+		return (bool) Redirection_Capabilities::has_access( constant( 'Redirection_Capabilities::' . $const ) );
 	}
+	return minn_admin_redirection_can();
+}
 
-	// Their redirect list sends last_access as a date with no time
-	// (date_i18n with the date format), so a hit an hour ago read as hours
-	// older, counted from midnight. The time is in their table, written by
-	// visit() with MySQL NOW(), the database's own clock and zone, which
-	// UNIX_TIMESTAMP() reads back in the same zone. Added to each item of
-	// that list as last_hit; nothing else about their answer changes. The
-	// surface asks with minn_view=1, so their screen and every other client
-	// get the list as they ship it.
-	add_filter( 'rest_request_after_callbacks', function ( $response, $handler, $request ) {
-		if ( ! $request instanceof WP_REST_Request || 'GET' !== $request->get_method() || '/redirection/v1/redirect' !== $request->get_route()
-			|| ! $request->get_param( 'minn_view' ) ) {
-			return $response;
-		}
-		$data = $response instanceof WP_REST_Response ? $response->get_data() : $response;
-		if ( ! is_array( $data ) || empty( $data['items'] ) || ! is_array( $data['items'] ) ) {
-			return $response;
-		}
-		$ids = array();
-		foreach ( $data['items'] as $item ) {
-			if ( is_array( $item ) && ! empty( $item['id'] ) ) {
-				$ids[] = (int) $item['id'];
-			}
-		}
-		if ( ! $ids ) {
-			return $response;
-		}
-		global $wpdb;
-		// A rule never hit (or reset) holds 1970-01-01 00:00:00.
-		$stamps = $wpdb->get_results( 'SELECT id, CASE WHEN last_access > \'1970-01-02\' THEN UNIX_TIMESTAMP(last_access) ELSE 0 END AS ts FROM ' . $wpdb->prefix . 'redirection_items WHERE id IN (' . implode( ',', $ids ) . ')' ); // phpcs:ignore WordPress.DB.PreparedSQL -- integer ids
-		$at = array();
-		foreach ( (array) $stamps as $r ) {
-			$at[ (int) $r->id ] = (int) $r->ts > 0 ? gmdate( 'c', (int) $r->ts ) : '';
-		}
-		foreach ( $data['items'] as $i => $item ) {
-			if ( is_array( $item ) && isset( $item['id'] ) ) {
-				$data['items'][ $i ]['last_hit'] = $at[ (int) $item['id'] ] ?? '';
-			}
-		}
-		if ( $response instanceof WP_REST_Response ) {
-			$response->set_data( $data );
-			return $response;
-		}
-		return $data;
-	}, 10, 3 );
-	$perm = function () {
-		$cap = apply_filters( 'redirection_role', 'manage_options' );
-		return current_user_can( $cap );
-	};
-	// Redirection splits its permissions: the base redirection_role lets a
-	// non-admin manage redirects, but options (log retention, IP logging)
-	// stay behind a SECOND cap its own settings API enforces. Writing
-	// settings at the base role only would let an editor stop redirect/404
-	// logging site-wide — an anti-forensics primitive. Mirror the vendor's
-	// own gate for the settings write; fall back to the base role on builds
-	// without the granular capability class.
-	$perm_settings_write = function () use ( $perm ) {
-		if ( class_exists( 'Redirection_Capabilities' ) && defined( 'Redirection_Capabilities::CAP_OPTION_MANAGE' ) ) {
-			return Redirection_Capabilities::has_access( Redirection_Capabilities::CAP_OPTION_MANAGE );
-		}
-		return $perm();
-	};
-	// Their settings API reads options behind the same option cap it writes
-	// them with, and the redirect list behind the redirect-manage cap; a
-	// site that hands editors redirect access but nothing else means the
-	// options page (and its counts) to stay out of reach.
-	$perm_settings_read = $perm_settings_write;
-	$perm_redirects     = function () use ( $perm ) {
-		if ( class_exists( 'Redirection_Capabilities' ) && defined( 'Redirection_Capabilities::CAP_REDIRECT_MANAGE' ) ) {
-			return Redirection_Capabilities::has_access( Redirection_Capabilities::CAP_REDIRECT_MANAGE );
-		}
-		return $perm();
-	};
+/** The redirect list's capability. */
+function minn_admin_redirection_can_redirects() {
+	return minn_admin_redirection_has( 'CAP_REDIRECT_MANAGE' );
+}
 
-	// Status card. Counts from Redirection's own tables (SHOW TABLES-gated:
-	// a pre-setup install has none). Log timestamps are current_time('mysql')
-	// site-local; DATE(created) buckets match Redirection's own log view.
-	// Retention is their log_expiry setting (7 days by default), so the
-	// "served" numbers honestly say what the log still holds.
-	register_rest_route( 'minn-admin/v1', '/redirection/status', array(
-		'methods'             => 'GET',
-		'permission_callback' => $perm_redirects,
-		'callback'            => function () {
-			global $wpdb;
-			$has = function ( $suffix ) use ( $wpdb ) {
-				$table = $wpdb->prefix . $suffix;
-				return (bool) $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
-			};
-			$rows = array();
+/**
+ * The options capability, for reading and writing settings alike.
+ * Redirection splits its permissions: the base role lets a non-admin manage
+ * redirects, but options (log retention, IP logging) stay behind a SECOND
+ * cap its own settings API enforces. Writing settings at the base role only
+ * would let an editor stop redirect/404 logging site-wide, an anti-forensics
+ * primitive; their settings API reads options behind the same cap.
+ */
+function minn_admin_redirection_can_settings() {
+	return minn_admin_redirection_has( 'CAP_OPTION_MANAGE' );
+}
 
-			if ( $has( 'redirection_items' ) ) {
-				$items = $wpdb->get_results( "SELECT status, COUNT(*) AS c, SUM(last_count) AS hits FROM {$wpdb->prefix}redirection_items GROUP BY status" ); // phpcs:ignore
-				$enabled  = 0;
-				$disabled = 0;
-				$hits     = 0;
-				foreach ( (array) $items as $r ) {
-					if ( 'enabled' === $r->status ) {
-						$enabled = (int) $r->c;
-					} else {
-						$disabled += (int) $r->c;
-					}
-					$hits += (int) $r->hits;
-				}
+/** The settings tab: { groups, values, adminUrl }. */
+function minn_admin_redirection_settings() {
+	$opts = red_get_options();
+	// Redirection keeps three IP levels: 0 none, 1 the full address, 2
+	// masked (its front end masks only at 2).
+	$ip_level = isset( $opts['ip_logging'] ) ? max( 0, min( 2, (int) $opts['ip_logging'] ) ) : 0;
+	return array(
+		'groups'   => array(
+			array(
+				'title'  => __( 'Permalink monitor', 'minn-admin' ),
+				'fields' => array(
+					array(
+						'key'   => 'monitor',
+						'label' => __( 'Monitor permalink changes', 'minn-admin' ),
+						'type'  => 'toggle',
+						'help'  => __( 'Add a redirect when a post or page slug changes.', 'minn-admin' ),
+					),
+				),
+			),
+			array(
+				'title'  => __( 'Logging', 'minn-admin' ),
+				'fields' => array(
+					// Two retentions, kept apart exactly as Redirection stores
+					// them (expire_redirect / expire_404): a site can keep
+					// redirect hits while the 404 log, which records visitor
+					// addresses, stays off.
+					array(
+						'key'     => 'expire_redirect',
+						'label'   => __( 'Redirect log', 'minn-admin' ),
+						'type'    => 'select',
+						'options' => minn_admin_redirection_retention_options(),
+					),
+					array(
+						'key'     => 'expire_404',
+						'label'   => __( '404 log', 'minn-admin' ),
+						'type'    => 'select',
+						'options' => minn_admin_redirection_retention_options(),
+					),
+					array(
+						'key'     => 'ip_logging',
+						'label'   => __( 'Store IP addresses with logs', 'minn-admin' ),
+						'type'    => 'select',
+						'options' => array(
+							array( '0', __( 'No', 'minn-admin' ) ),
+							array( '1', __( 'Full addresses', 'minn-admin' ) ),
+							array( '2', __( 'Anonymized (last part masked)', 'minn-admin' ) ),
+						),
+						'help'    => __( 'A privacy choice — off by default on fresh installs.', 'minn-admin' ),
+					),
+				),
+			),
+		),
+		'values'   => array(
+			// monitor_post is a group id when on; 0 is off.
+			'monitor'         => ! empty( $opts['monitor_post'] ),
+			'expire_redirect' => (string) ( isset( $opts['expire_redirect'] ) ? (int) $opts['expire_redirect'] : 7 ),
+			'expire_404'      => (string) ( isset( $opts['expire_404'] ) ? (int) $opts['expire_404'] : 7 ),
+			'ip_logging'      => (string) $ip_level,
+		),
+		'adminUrl' => admin_url( 'tools.php?page=redirection.php' ),
+	);
+}
+
+// Their redirect list sends last_access as a date with no time (date_i18n
+// with the date format), so a hit an hour ago read as hours older, counted
+// from midnight. The time is in their table, written by visit() with MySQL
+// NOW(), the database's own clock. Added to each item of that list as
+// last_hit; nothing else about their answer changes. The surface asks with
+// minn_view=1, so their screen and every other client get the list as they
+// ship it.
+add_filter( 'rest_request_after_callbacks', function ( $response, $handler, $request ) {
+	if ( ! minn_admin_redirection_ready() || ! $request instanceof WP_REST_Request || 'GET' !== $request->get_method()
+		|| '/redirection/v1/redirect' !== $request->get_route() || ! $request->get_param( 'minn_view' ) ) {
+		return $response;
+	}
+	$data = $response instanceof WP_REST_Response ? $response->get_data() : $response;
+	if ( ! is_array( $data ) || empty( $data['items'] ) || ! is_array( $data['items'] ) ) {
+		return $response;
+	}
+	$ids = array();
+	foreach ( $data['items'] as $item ) {
+		if ( is_array( $item ) && ! empty( $item['id'] ) ) {
+			$ids[] = (int) $item['id'];
+		}
+	}
+	if ( ! $ids ) {
+		return $response;
+	}
+	// A rule never hit (or reset) holds 1970-01-01 00:00:00, which reads as none.
+	$at   = array();
+	$rows = Minn_Admin_Kernel_SQL::select( 'redirection_items', array( 'id', 'last_access' ), array( 'id' => $ids ) );
+	// The whole page read by the database in one query, each on its own date's offset.
+	Minn_Admin_Kernel_SQL::db_epochs( array_column( $rows, 'last_access' ) );
+	foreach ( $rows as $r ) {
+		$at[ (int) $r['id'] ] = Minn_Admin_Kernel_Fields::datetime( $r['last_access'], 'db', 'iso-utc' );
+	}
+	foreach ( $data['items'] as $i => $item ) {
+		if ( is_array( $item ) && isset( $item['id'] ) ) {
+			$data['items'][ $i ]['last_hit'] = $at[ (int) $item['id'] ] ?? '';
+		}
+	}
+	if ( $response instanceof WP_REST_Response ) {
+		$response->set_data( $data );
+		return $response;
+	}
+	return $data;
+}, 10, 3 );
+
+// Status card. Counts from Redirection's own tables (a pre-setup install has
+// none). Log timestamps are current_time('mysql') site-local; the days match
+// Redirection's own log view. Retention is their log_expiry setting (7 days by
+// default), so the "served" numbers honestly say what the log still holds.
+minn_admin_endpoint( 'redirection/status', array(
+	'active' => 'minn_admin_redirection_ready',
+	'gate'   => 'minn_admin_redirection_can_redirects',
+	'run'    => function () {
+		$rows = array();
+		if ( Minn_Admin_Kernel_SQL::exists( 'redirection_items' ) ) {
+			$enabled  = Minn_Admin_Kernel_SQL::count( 'redirection_items', array( 'status' => 'enabled' ) );
+			$disabled = Minn_Admin_Kernel_SQL::count( 'redirection_items', array( 'status' => array( 'not' => array( 'enabled' ) ) ) );
+			$rows[]   = array(
+				'label' => __( 'Redirect rules', 'minn-admin' ),
+				'value' => (string) $enabled,
+				'hint'  => $disabled
+					/* translators: %d: number of disabled redirect rules. */
+					? sprintf( _n( '%d disabled', '%d disabled', $disabled, 'minn-admin' ), $disabled )
+					: __( 'all enabled', 'minn-admin' ),
+			);
+			$rows[] = array( 'label' => __( 'Hits, all time', 'minn-admin' ), 'value' => number_format_i18n( Minn_Admin_Kernel_SQL::sum( 'redirection_items', 'last_count' ) ) );
+			$top    = Minn_Admin_Kernel_SQL::select( 'redirection_items', array( 'url', 'last_count' ), array( 'last_count' => array( 'op' => '>', 'value' => 0 ) ), array( 'last_count' => 'DESC' ), 1 );
+			if ( $top ) {
 				$rows[] = array(
-					'label' => __( 'Redirect rules', 'minn-admin' ),
-					'value' => (string) $enabled,
-					'hint'  => $disabled
-						/* translators: %d: number of disabled redirect rules. */
-						? sprintf( _n( '%d disabled', '%d disabled', $disabled, 'minn-admin' ), $disabled )
-						: __( 'all enabled', 'minn-admin' ),
-				);
-				$rows[] = array( 'label' => __( 'Hits, all time', 'minn-admin' ), 'value' => number_format_i18n( $hits ) );
-				$top = $wpdb->get_row( "SELECT url, last_count FROM {$wpdb->prefix}redirection_items WHERE last_count > 0 ORDER BY last_count DESC LIMIT 1" ); // phpcs:ignore
-				if ( $top ) {
-					$rows[] = array(
-						'label' => __( 'Top redirect', 'minn-admin' ),
-						'value' => $top->url,
-						'hint'  => number_format_i18n( (int) $top->last_count ) . ' hits',
-					);
-				}
-			}
-
-			// Their log and 404 screens sit behind their own capabilities, not
-			// the base plugin role this route is gated on. has_access() answers
-			// the base role for every name unless a site adds their capability
-			// filter, so on most installs this changes nothing, and on a site
-			// that gave someone redirect management WITHOUT log access it stops
-			// the card reporting log volume they cannot open.
-			$can_cap = function ( $const ) {
-				if ( ! class_exists( 'Redirection_Capabilities' ) || ! defined( 'Redirection_Capabilities::' . $const ) ) {
-					return true;
-				}
-				try {
-					return (bool) Redirection_Capabilities::has_access( constant( 'Redirection_Capabilities::' . $const ) );
-				} catch ( \Throwable $e ) {
-					return false; // an unanswerable gate is not an open one
-				}
-			};
-			$can_log = $can_cap( 'CAP_LOG_MANAGE' );
-			$can_404 = $can_cap( 'CAP_404_MANAGE' );
-
-			$since  = gmdate( 'Y-m-d H:i:s', strtotime( current_time( 'mysql' ) ) - 7 * DAY_IN_SECONDS );
-			$served = ( $can_log && $has( 'redirection_logs' ) )
-				? (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}redirection_logs WHERE created >= %s", $since ) ) // phpcs:ignore
-				: null;
-			$missed = ( $can_404 && $has( 'redirection_404' ) )
-				? (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}redirection_404 WHERE created >= %s", $since ) ) // phpcs:ignore
-				: null;
-			if ( null !== $served ) {
-				$rows[] = array( 'label' => __( 'Served, 7 days', 'minn-admin' ), 'value' => number_format_i18n( $served ) );
-			}
-			if ( null !== $missed ) {
-				$rows[] = array( 'label' => __( '404s, 7 days', 'minn-admin' ), 'value' => number_format_i18n( $missed ) );
-			}
-
-			$out = array( 'rows' => $rows );
-
-			// Dual-series daily chart: redirects served (primary) over 404s
-			// (secondary), the sent/failed idiom. Only when a log table holds
-			// anything in the window — an all-zero chart collapses client-side
-			// anyway, but skipping keeps the card short on log-less sites.
-			if ( ( $served || $missed ) && ( $has( 'redirection_logs' ) || $has( 'redirection_404' ) ) ) {
-				$days   = 14;
-				$start  = strtotime( gmdate( 'Y-m-d', strtotime( current_time( 'mysql' ) ) ) ) - ( $days - 1 ) * DAY_IN_SECONDS;
-				$startd = gmdate( 'Y-m-d 00:00:00', $start );
-				$bucket = function ( $suffix ) use ( $wpdb, $has, $startd, $can_log, $can_404 ) {
-					$allowed = ( 'redirection_logs' === $suffix ) ? $can_log : $can_404;
-					if ( ! $allowed || ! $has( $suffix ) ) {
-						return array();
-					}
-					$out  = array();
-					$rows = $wpdb->get_results( $wpdb->prepare( "SELECT DATE(created) AS d, COUNT(*) AS c FROM {$wpdb->prefix}{$suffix} WHERE created >= %s GROUP BY DATE(created)", $startd ) ); // phpcs:ignore
-					foreach ( (array) $rows as $r ) {
-						$out[ (string) $r->d ] = (int) $r->c;
-					}
-					return $out;
-				};
-				$hitmap = $bucket( 'redirection_logs' );
-				$missmap = $bucket( 'redirection_404' );
-				$points = array();
-				for ( $i = 0; $i < $days; $i++ ) {
-					$day = gmdate( 'Y-m-d', $start + $i * DAY_IN_SECONDS );
-					$points[] = array(
-						'label'     => gmdate( 'M j', strtotime( $day ) ),
-						'value'     => isset( $hitmap[ $day ] ) ? $hitmap[ $day ] : 0,
-						'secondary' => isset( $missmap[ $day ] ) ? $missmap[ $day ] : 0,
-					);
-				}
-				$out['chart'] = array(
-					'title'     => __( 'Last 14 days', 'minn-admin' ),
-					'primary'   => 'Redirects',
-					'secondary' => '404s',
-					'points'    => $points,
+					'label' => __( 'Top redirect', 'minn-admin' ),
+					'value' => $top[0]['url'],
+					'hint'  => number_format_i18n( (int) $top[0]['last_count'] ) . ' hits',
 				);
 			}
+		}
 
-			return rest_ensure_response( $out );
-		},
-	) );
+		// Their log and 404 screens sit behind their own capabilities, not
+		// the base plugin role: on a site that gave someone redirect
+		// management WITHOUT log access, the card does not report log volume
+		// they cannot open. An unanswerable gate is not an open one.
+		$can = function ( $const ) {
+			try {
+				return minn_admin_redirection_has( $const );
+			} catch ( \Throwable $e ) {
+				return false;
+			}
+		};
+		$logs   = $can( 'CAP_LOG_MANAGE' ) && Minn_Admin_Kernel_SQL::exists( 'redirection_logs' );
+		$misses = $can( 'CAP_404_MANAGE' ) && Minn_Admin_Kernel_SQL::exists( 'redirection_404' );
+		$week   = array( 'created' => Minn_Admin_Kernel::since( 'local', 7 * DAY_IN_SECONDS ) );
+		$served = $logs ? Minn_Admin_Kernel_SQL::count( 'redirection_logs', $week ) : null;
+		$missed = $misses ? Minn_Admin_Kernel_SQL::count( 'redirection_404', $week ) : null;
+		if ( null !== $served ) {
+			$rows[] = array( 'label' => __( 'Served, 7 days', 'minn-admin' ), 'value' => number_format_i18n( $served ) );
+		}
+		if ( null !== $missed ) {
+			$rows[] = array( 'label' => __( '404s, 7 days', 'minn-admin' ), 'value' => number_format_i18n( $missed ) );
+		}
+		$out = array( 'rows' => $rows );
 
-	register_rest_route( 'minn-admin/v1', '/redirection/settings/(?P<tab>[a-z0-9_-]+)', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => $perm_settings_read,
-			'callback'            => function () {
-				$opts = red_get_options();
-				// monitor_post is a group id when on; 0 is off.
-				$monitor_on = ! empty( $opts['monitor_post'] );
-				// Redirection keeps three levels: 0 none, 1 the full address,
-				// 2 masked (its front end masks only at 2).
-				$ip_level   = isset( $opts['ip_logging'] ) ? max( 0, min( 2, (int) $opts['ip_logging'] ) ) : 0;
-				return rest_ensure_response( array(
-					'groups' => array(
-						array(
-							'title'  => __( 'Permalink monitor', 'minn-admin' ),
-							'fields' => array(
-								array(
-									'key'   => 'monitor',
-									'label' => __( 'Monitor permalink changes', 'minn-admin' ),
-									'type'  => 'toggle',
-									'help'  => __( 'Add a redirect when a post or page slug changes.', 'minn-admin' ),
-								),
-							),
-						),
-						array(
-							'title'  => __( 'Logging', 'minn-admin' ),
-							'fields' => array(
-								// Two retentions, kept apart exactly as Redirection
-								// stores them (expire_redirect / expire_404): a
-								// site can keep redirect hits while the 404 log,
-								// which records visitor addresses, stays off.
-								array(
-									'key'     => 'expire_redirect',
-									'label'   => __( 'Redirect log', 'minn-admin' ),
-									'type'    => 'select',
-									'options' => minn_admin_redirection_retention_options(),
-								),
-								array(
-									'key'     => 'expire_404',
-									'label'   => __( '404 log', 'minn-admin' ),
-									'type'    => 'select',
-									'options' => minn_admin_redirection_retention_options(),
-								),
-								array(
-									'key'     => 'ip_logging',
-									'label'   => __( 'Store IP addresses with logs', 'minn-admin' ),
-									'type'    => 'select',
-									'options' => array(
-										array( '0', __( 'No', 'minn-admin' ) ),
-										array( '1', __( 'Full addresses', 'minn-admin' ) ),
-										array( '2', __( 'Anonymized (last part masked)', 'minn-admin' ) ),
-									),
-									'help'    => __( 'A privacy choice — off by default on fresh installs.', 'minn-admin' ),
-								),
-							),
-						),
-					),
-					'values'   => array(
-						'monitor'         => $monitor_on,
-						'expire_redirect' => (string) ( isset( $opts['expire_redirect'] ) ? (int) $opts['expire_redirect'] : 7 ),
-						'expire_404'      => (string) ( isset( $opts['expire_404'] ) ? (int) $opts['expire_404'] : 7 ),
-						'ip_logging'      => (string) $ip_level,
-					),
-					'adminUrl' => admin_url( 'tools.php?page=redirection.php' ),
-				) );
-			},
-		),
-		array(
-			'methods'             => 'POST',
-			'permission_callback' => $perm_settings_write,
-			'callback'            => function ( WP_REST_Request $request ) {
-				$vals = $request->get_param( 'values' );
-				if ( ! is_array( $vals ) ) {
-					$vals = array();
-				}
-				$opts    = red_get_options();
-				$payload = array();
+		// Redirects served (primary) over 404s (secondary), the sent/failed
+		// idiom; only when a log holds anything, which keeps the card short
+		// on log-less sites. Their list takes no day, so a bar carries none.
+		if ( $served || $missed ) {
+			$day    = array( 'column' => 'created', 'clock' => 'local', 'label' => 'M j' );
+			$hits   = $logs ? Minn_Admin_Kernel_SQL::chart_days( $day + array( 'table' => 'redirection_logs' ) ) : array();
+			$miss   = $misses ? Minn_Admin_Kernel_SQL::chart_days( $day + array( 'table' => 'redirection_404' ) ) : array();
+			$points = array();
+			foreach ( Minn_Admin_Kernel_SQL::empty_days( false, 'M j' ) as $d => $empty ) {
+				$points[] = array(
+					'label'     => $empty['label'],
+					'value'     => (int) ( $hits[ $d ]['value'] ?? 0 ),
+					'secondary' => (int) ( $miss[ $d ]['value'] ?? 0 ),
+				);
+			}
+			$out['chart'] = array(
+				'title'     => __( 'Last 14 days', 'minn-admin' ),
+				'primary'   => 'Redirects',
+				'secondary' => '404s',
+				'points'    => $points,
+			);
+		}
+		return $out;
+	},
+) );
 
-				if ( array_key_exists( 'monitor', $vals ) ) {
-					$on = ! empty( $vals['monitor'] );
-					// Same shape the setup wizard writes: default group 1 + post/page types.
-					$payload['monitor_post']  = $on ? ( ! empty( $opts['monitor_post'] ) ? (int) $opts['monitor_post'] : 1 ) : 0;
-					$payload['monitor_types'] = $on ? array( 'post', 'page' ) : array();
-				}
-				// Each retention is written only when it was sent: -1 is
-				// Redirection's "no logs", 0 its "forever", any other value
-				// days. A value outside that range is refused, not clamped.
-				foreach ( array( 'expire_redirect', 'expire_404' ) as $key ) {
-					if ( ! array_key_exists( $key, $vals ) ) {
-						continue;
-					}
-					$days = filter_var( $vals[ $key ], FILTER_VALIDATE_INT );
-					if ( false === $days || $days < -1 || $days > 3650 ) {
-						return new WP_Error( 'minn_redirection_retention', __( 'Choose how long to keep the log.', 'minn-admin' ), array( 'status' => 400 ) );
-					}
-					$payload[ $key ] = $days;
-				}
-				if ( array_key_exists( 'ip_logging', $vals ) ) {
-					$level = filter_var( $vals['ip_logging'], FILTER_VALIDATE_INT );
-					if ( false === $level || $level < 0 || $level > 2 ) {
-						return new WP_Error( 'minn_redirection_ip', __( 'Choose how IP addresses are stored.', 'minn-admin' ), array( 'status' => 400 ) );
-					}
-					$payload['ip_logging'] = $level;
-				}
-				if ( $payload ) {
-					red_set_options( $payload );
-				}
+minn_admin_endpoint( 'redirection/settings/(?P<tab>[a-z0-9_-]+)', array(
+	'active' => 'minn_admin_redirection_ready',
+	'gate'   => 'minn_admin_redirection_can_settings',
+	'run'    => 'minn_admin_redirection_settings',
+) );
 
-				// Return a fresh GET so the client repaints.
-				$req = new WP_REST_Request( 'GET', '/minn-admin/v1/redirection/settings/general' );
-				$res = rest_do_request( $req );
-				return $res;
-			},
-		),
-	) );
-} );
+minn_admin_endpoint( 'redirection/settings/(?P<tab>[a-z0-9_-]+)', array(
+	'methods' => 'POST',
+	'active'  => 'minn_admin_redirection_ready',
+	'gate'    => 'minn_admin_redirection_can_settings',
+	'run'     => function ( WP_REST_Request $request ) {
+		$vals = $request->get_param( 'values' );
+		$vals = is_array( $vals ) ? $vals : array();
+		$opts = red_get_options();
+		$save = array();
+		if ( array_key_exists( 'monitor', $vals ) ) {
+			$on = ! empty( $vals['monitor'] );
+			// Same shape the setup wizard writes: default group 1 + post/page types.
+			$save['monitor_post']  = $on ? ( ! empty( $opts['monitor_post'] ) ? (int) $opts['monitor_post'] : 1 ) : 0;
+			$save['monitor_types'] = $on ? array( 'post', 'page' ) : array();
+		}
+		// Each retention is written only when it was sent: -1 is Redirection's
+		// "no logs", 0 its "forever", any other value days. A value outside
+		// that range is refused, not clamped.
+		foreach ( array( 'expire_redirect', 'expire_404' ) as $key ) {
+			if ( ! array_key_exists( $key, $vals ) ) {
+				continue;
+			}
+			$days = filter_var( $vals[ $key ], FILTER_VALIDATE_INT );
+			if ( false === $days || $days < -1 || $days > 3650 ) {
+				return new WP_Error( 'minn_redirection_retention', __( 'Choose how long to keep the log.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
+			$save[ $key ] = $days;
+		}
+		if ( array_key_exists( 'ip_logging', $vals ) ) {
+			$level = filter_var( $vals['ip_logging'], FILTER_VALIDATE_INT );
+			if ( false === $level || $level < 0 || $level > 2 ) {
+				return new WP_Error( 'minn_redirection_ip', __( 'Choose how IP addresses are stored.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
+			$save['ip_logging'] = $level;
+		}
+		if ( $save ) {
+			red_set_options( $save );
+		}
+		// The fresh tab, so the client repaints.
+		return minn_admin_redirection_settings();
+	},
+) );
 
 /**
  * Redirection's own log-retention choices (its settings screen offers

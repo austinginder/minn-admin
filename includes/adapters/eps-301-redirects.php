@@ -14,9 +14,12 @@
  * becomes '//old-page' and never matches. The shim normalizes writes the
  * same way and displays rows with the slash restored.
  *
- * No REST surface upstream, so this is a table shim (prefix-scoped prepared
- * SQL only). Capability honors the plugin's own filter
- * `eps_301_redirects_capability` (default manage_options).
+ * No REST surface upstream, so this is a table shim over the kernel. Every
+ * read and write leaves status 404 rows alone (their 404 log). Capability
+ * honors the plugin's own filter `eps_301_redirects_capability` (default
+ * manage_options).
+ *
+ * @package minn-admin
  */
 
 defined( 'ABSPATH' ) || exit;
@@ -29,8 +32,13 @@ function minn_admin_eps301_cap() {
 	return (string) apply_filters( 'eps_301_redirects_capability', 'manage_options' );
 }
 
+function minn_admin_eps301_can() {
+	return current_user_can( minn_admin_eps301_cap() );
+}
+
 /** Normalize a row for the surface: resolve post-ID targets for display. */
 function minn_admin_eps301_item( $row ) {
+	$row     = (object) $row;
 	$to      = (string) $row->url_to;
 	$is_post = 'post' === (string) $row->type || is_numeric( $to );
 	$target  = $to;
@@ -82,6 +90,118 @@ function minn_admin_eps301_payload( WP_REST_Request $request ) {
 	);
 }
 
+// Status 404 rows are their 404 log, not rules: no read or write here reaches them.
+const MINN_ADMIN_EPS301_RULES = array( 'status' => array( 'not' => array( '404' ) ) );
+
+minn_admin_resource( 'eps301/redirects', function () {
+	return array(
+		'active'  => 'minn_admin_eps301_active',
+		'gates'   => array( 'view' => 'minn_admin_eps301_can' ),
+		'labels'  => array( 'not_found' => __( 'Redirect not found.', 'minn-admin' ) ),
+		'source'  => array(
+			'table'   => 'redirects',
+			'key'     => 'id',
+			'columns' => array( 'id', 'url_from', 'url_to', 'status', 'type', 'count' ),
+			'where'   => MINN_ADMIN_EPS301_RULES,
+		),
+		'list'    => array(
+			'search' => array( 'columns' => array( 'url_from', 'url_to' ) ),
+			'order'  => array( 'column' => 'id' ),
+			'row'    => 'minn_admin_eps301_item',
+			'fields' => array(
+				'id'     => 'int',
+				'from'   => 'text',
+				'to'     => 'text',
+				'target' => 'text',
+				'status' => 'text',
+				'hits'   => 'int',
+			),
+		),
+		'create'  => array(
+			'gate'  => 'view',
+			'run'   => function ( WP_REST_Request $request ) {
+				$data = minn_admin_eps301_payload( $request );
+				return is_wp_error( $data ) ? $data : Minn_Admin_Kernel_SQL::insert( 'redirects', $data + array( 'count' => 0 ) );
+			},
+			'reply' => function ( $id, $fresh ) {
+				return minn_admin_eps301_item( $fresh );
+			},
+		),
+		'actions' => array(
+			'edit'   => array(
+				'method' => 'PUT',
+				'gate'   => 'view',
+				'run'    => function ( $id, array $row, WP_REST_Request $request ) {
+					$data = minn_admin_eps301_payload( $request );
+					if ( is_wp_error( $data ) ) {
+						return $data;
+					}
+					Minn_Admin_Kernel_SQL::update( 'redirects', 'id', $id, $data, MINN_ADMIN_EPS301_RULES );
+					return $data;
+				},
+				// Saved when the stored rule reads as written (an unchanged
+				// rule changes no row, so the count proves nothing).
+				'expect' => function ( $id, $fresh, $data ) {
+					return is_array( $fresh ) && is_array( $data ) && (string) $fresh['url_from'] === $data['url_from'] && (string) $fresh['url_to'] === $data['url_to'] && (string) $fresh['status'] === $data['status'];
+				},
+				'reply'  => function ( $id, $fresh ) {
+					return minn_admin_eps301_item( $fresh );
+				},
+			),
+			'delete' => array(
+				'method' => 'DELETE',
+				'gate'   => 'view',
+				'run'    => function ( $id ) {
+					return Minn_Admin_Kernel_SQL::delete( 'redirects', 'id', $id, MINN_ADMIN_EPS301_RULES );
+				},
+				'expect' => 'gone',
+				'reply'  => function ( $id ) {
+					return array( 'deleted' => $id );
+				},
+			),
+		),
+	);
+} );
+
+// Status card: rule counts + lifetime hits from their `count` column. The
+// 404 log is counted on its own: current versions keep it in the
+// eps_redirects_404_log option (newest first, capped by their
+// eps_301_max_404_logs filter, 50 by default), and older ones wrote it into
+// the table as status 404 rows, which the list leaves out.
+minn_admin_endpoint( 'eps301/status', array(
+	'active' => 'minn_admin_eps301_active',
+	'gate'   => 'minn_admin_eps301_can',
+	'run'    => function () {
+		if ( ! Minn_Admin_Kernel_SQL::exists( 'redirects' ) ) {
+			return array( 'rows' => array() );
+		}
+		$id       = 'eps301/redirects';
+		$live     = array( 'status' => array( '301', '302', '307' ) );
+		$active   = Minn_Admin_Kernel::count( $id, $live );
+		$inactive = Minn_Admin_Kernel::count( $id, array( 'status' => 'inactive' ) );
+		$log      = get_option( 'eps_redirects_404_log', array() );
+		$misses   = is_array( $log ) && $log ? count( $log ) : Minn_Admin_Kernel_SQL::count( 'redirects', array( 'status' => '404' ) );
+		$rows     = array(
+			array(
+				'label' => __( 'Redirect rules', 'minn-admin' ),
+				'value' => (string) $active,
+				'hint'  => $inactive ? $inactive . ' inactive' : __( 'all enabled', 'minn-admin' ),
+			),
+			array( 'label' => __( 'Hits, all time', 'minn-admin' ), 'value' => number_format_i18n( Minn_Admin_Kernel::sum( $id, 'count', array( 'status' => array( '301', '302', '307', 'inactive' ) ) ) ) ),
+		);
+		$top = Minn_Admin_Kernel_SQL::select( 'redirects', array( 'url_from', 'count' ), $live + array( 'count' => array( 'op' => '>', 'value' => 0 ) ), array( 'count' => 'DESC' ), 1 );
+		if ( $top ) {
+			$rows[] = array(
+				'label' => __( 'Top redirect', 'minn-admin' ),
+				'value' => '/' . ltrim( (string) $top[0]['url_from'], '/' ),
+				'hint'  => number_format_i18n( (int) $top[0]['count'] ) . ' hits',
+			);
+		}
+		$rows[] = array( 'label' => __( '404 log', 'minn-admin' ), 'value' => number_format_i18n( $misses ) );
+		return array( 'rows' => $rows );
+	},
+) );
+
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! minn_admin_eps301_active() ) {
 		return $surfaces;
@@ -101,11 +221,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'cap'        => minn_admin_eps301_cap(),
 		// Status card (v0.18.0): family parity with Redirection.
 		'status'     => array( 'route' => 'minn-admin/v1/eps301/status' ),
-		'collection' => array(
-			'route'    => 'minn-admin/v1/eps301/redirects',
-			'itemsKey' => 'items',
-			'totalKey' => 'total',
-			'search'   => 'search={q}',
+		'collection' => Minn_Admin_Kernel::collection( 'eps301/redirects', array(
 			'columns'  => array(
 				array( 'key' => 'from', 'label' => __( 'Source', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.3fr)' ),
 				array( 'key' => 'target', 'label' => __( 'Target', 'minn-admin' ), 'format' => 'mono', 'width' => 'minmax(0,1.3fr)' ),
@@ -152,153 +268,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'danger'  => true,
 				),
 			),
-		),
+		) ),
 	);
 	return $surfaces;
-} );
-
-add_action( 'rest_api_init', function () {
-	if ( ! minn_admin_eps301_active() ) {
-		return;
-	}
-	$perm = function () {
-		return current_user_can( minn_admin_eps301_cap() );
-	};
-	$table = function () {
-		global $wpdb;
-		return $wpdb->prefix . 'redirects';
-	};
-
-	// Status card: rule counts + lifetime hits from their `count` column.
-	// The 404 log is counted on its own: current versions keep it in the
-	// eps_redirects_404_log option (newest first, capped by their
-	// eps_301_max_404_logs filter, 50 by default), and older ones wrote it
-	// into this table as status 404 rows, which the list route leaves out.
-	register_rest_route( 'minn-admin/v1', '/eps301/status', array(
-		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function () use ( $table ) {
-			global $wpdb;
-			$t = $table();
-			if ( ! $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $t ) ) ) {
-				return rest_ensure_response( array( 'rows' => array() ) );
-			}
-			$active   = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$t} WHERE status IN ('301','302','307')" ); // phpcs:ignore
-			$inactive = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$t} WHERE status = 'inactive'" ); // phpcs:ignore
-			$hits     = (int) $wpdb->get_var( "SELECT COALESCE(SUM(count),0) FROM {$t} WHERE status IN ('301','302','307','inactive')" ); // phpcs:ignore
-			$log      = get_option( 'eps_redirects_404_log', array() );
-			$misses   = is_array( $log ) && $log
-				? count( $log )
-				: (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$t} WHERE status = '404'" ); // phpcs:ignore
-			$rows     = array(
-				array(
-					'label' => __( 'Redirect rules', 'minn-admin' ),
-					'value' => (string) $active,
-					'hint'  => $inactive ? $inactive . ' inactive' : __( 'all enabled', 'minn-admin' ),
-				),
-				array( 'label' => __( 'Hits, all time', 'minn-admin' ), 'value' => number_format_i18n( $hits ) ),
-			);
-			$top = $wpdb->get_row( "SELECT url_from, count FROM {$t} WHERE status IN ('301','302','307') AND count > 0 ORDER BY count DESC LIMIT 1" ); // phpcs:ignore
-			if ( $top ) {
-				$rows[] = array(
-					'label' => __( 'Top redirect', 'minn-admin' ),
-					'value' => '/' . ltrim( (string) $top->url_from, '/' ),
-					'hint'  => number_format_i18n( (int) $top->count ) . ' hits',
-				);
-			}
-			$rows[] = array( 'label' => __( '404 log', 'minn-admin' ), 'value' => number_format_i18n( $misses ) );
-			return rest_ensure_response( array( 'rows' => $rows ) );
-		},
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/eps301/redirects', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) use ( $table ) {
-				global $wpdb;
-				$t        = $table();
-				$search   = trim( (string) $request['search'] );
-				$page     = max( 1, (int) ( $request['page'] ?: 1 ) );
-				$per_page = 25;
-				$where    = "status != '404'";
-				$args     = array();
-				if ( '' !== $search ) {
-					$like   = '%' . $wpdb->esc_like( $search ) . '%';
-					$where .= ' AND (url_from LIKE %s OR url_to LIKE %s)';
-					$args   = array( $like, $like );
-				}
-				// phpcs:disable WordPress.DB.PreparedSQL -- table name is prefix-built, where is prepared above
-				$total = (int) $wpdb->get_var( $args ? $wpdb->prepare( "SELECT COUNT(*) FROM {$t} WHERE {$where}", $args ) : "SELECT COUNT(*) FROM {$t} WHERE {$where}" );
-				$sql   = "SELECT * FROM {$t} WHERE {$where} ORDER BY id DESC LIMIT %d OFFSET %d";
-				$rows  = $wpdb->get_results( $wpdb->prepare( $sql, array_merge( $args, array( $per_page, ( $page - 1 ) * $per_page ) ) ) );
-				// phpcs:enable
-				return rest_ensure_response( array(
-					'items' => array_map( 'minn_admin_eps301_item', (array) $rows ),
-					'total' => $total,
-				) );
-			},
-		),
-		array(
-			'methods'             => 'POST',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) use ( $table ) {
-				global $wpdb;
-				$data = minn_admin_eps301_payload( $request );
-				if ( is_wp_error( $data ) ) {
-					return $data;
-				}
-				$wpdb->insert( $table(), $data + array( 'count' => 0 ) );
-				$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . $table() . ' WHERE id = %d', $wpdb->insert_id ) ); // phpcs:ignore WordPress.DB.PreparedSQL
-				return rest_ensure_response( minn_admin_eps301_item( $row ) );
-			},
-		),
-	) );
-
-	register_rest_route( 'minn-admin/v1', '/eps301/redirects/(?P<id>\d+)', array(
-		array(
-			'methods'             => 'PUT',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) use ( $table ) {
-				global $wpdb;
-				$id  = (int) Minn_Admin::path_param( $request );
-				$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . $table() . ' WHERE id = %d', $id ) ); // phpcs:ignore WordPress.DB.PreparedSQL
-				// Confirm the target is a redirect before rewriting it, the
-				// same test the delete route below makes. Status 404 rows are
-				// their 404 log rather than rules, which is why the list, the
-				// counts and the editor all leave them alone. An edit that
-				// skipped the test would turn a recorded miss into a live
-				// redirect through a route that only ever names rules.
-				if ( ! $row || '404' === (string) $row->status ) {
-					return new WP_Error( 'not_found', __( 'Redirect not found.', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				$data = minn_admin_eps301_payload( $request );
-				if ( is_wp_error( $data ) ) {
-					return $data;
-				}
-				$wpdb->update( $table(), $data, array( 'id' => $id ) );
-				$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . $table() . ' WHERE id = %d', $id ) ); // phpcs:ignore WordPress.DB.PreparedSQL
-				return rest_ensure_response( minn_admin_eps301_item( $row ) );
-			},
-		),
-		array(
-			'methods'             => 'DELETE',
-			'permission_callback' => $perm,
-			'callback'            => function ( WP_REST_Request $request ) use ( $table ) {
-				global $wpdb;
-				$id = (int) Minn_Admin::path_param( $request );
-				// Confirm the target is a redirect before removing it. The list
-				// and the editor both leave status 404 rows alone because those
-				// are their 404 log rather than rules, and a delete that skipped
-				// the same test could take one out through a route that only
-				// ever names redirects.
-				$row = $wpdb->get_row( $wpdb->prepare( 'SELECT id, status FROM ' . $table() . ' WHERE id = %d', $id ) ); // phpcs:ignore WordPress.DB.PreparedSQL
-				if ( ! $row || '404' === (string) $row->status ) {
-					return new WP_Error( 'not_found', __( 'Redirect not found.', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				$wpdb->delete( $table(), array( 'id' => $id ) );
-				return rest_ensure_response( array( 'deleted' => $id ) );
-			},
-		),
-	) );
 } );

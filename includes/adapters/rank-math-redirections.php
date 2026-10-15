@@ -86,9 +86,7 @@ function minn_admin_rm_edit_codes() {
 	if ( ! minn_admin_rm_redirects_ready() ) {
 		return $codes;
 	}
-	global $wpdb;
-	$stored = $wpdb->get_col( "SELECT DISTINCT header_code FROM {$wpdb->prefix}rank_math_redirections" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-	foreach ( (array) $stored as $code ) {
+	foreach ( Minn_Admin_Kernel_SQL::distinct( 'rank_math_redirections', 'header_code', array() ) as $code ) {
 		$code = (string) (int) $code;
 		if ( '0' !== $code && ! isset( $codes[ $code ] ) ) {
 			/* translators: %s: an HTTP status code such as 308. */
@@ -168,6 +166,11 @@ function minn_admin_rm_save_redirect( $data ) {
 	}
 	if ( $redirection->is_infinite_loop() ) {
 		return new WP_Error( 'minn_rm_loop', __( 'That redirect would send the address back to itself. Check the source and target.', 'minn-admin' ), array( 'status' => 400 ) );
+	}
+	// Their save is an upsert: a new rule whose sources an active one already
+	// has would rewrite that one (DB::update_iff()). Adding is adding.
+	if ( '' === $settings['id'] && \RankMath\Redirections\DB::match_redirections_source( maybe_serialize( $redirection->sources ) ) ) {
+		return new WP_Error( 'minn_rm_exists', __( 'A redirect from that address already exists. Edit it instead.', 'minn-admin' ), array( 'status' => 400 ) );
 	}
 	$id = $redirection->save();
 	if ( false === $id || ! $id ) {
@@ -322,281 +325,347 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	return $surfaces;
 } );
 
-add_action( 'rest_api_init', function () {
-	if ( ! minn_admin_rm_redirects_ready() && ! minn_admin_rm_404_ready() ) {
-		return;
-	}
-	$can_redirects = 'minn_admin_rm_can_redirects';
-	$can_404       = 'minn_admin_rm_can_404';
-	$can_either    = function () {
-		return minn_admin_rm_can_redirects() || minn_admin_rm_can_404();
-	};
+/** Their sort and direction for a list, from the request: only the columns their reader orders by. */
+function minn_admin_rm_order( array $q, array $allowed, $fallback ) {
+	$by = sanitize_key( (string) ( $q['request']->get_param( 'orderby' ) ?: $fallback ) );
+	return array(
+		'orderby' => $allowed && ! in_array( $by, $allowed, true ) ? $fallback : $by,
+		'order'   => 'asc' === strtolower( (string) $q['request']->get_param( 'order' ) ) ? 'ASC' : 'DESC',
+	);
+}
 
-	register_rest_route( 'minn-admin/v1', '/rankmath/status', array(
-		'methods'             => 'GET',
-		'permission_callback' => $can_either,
-		'callback'            => function () {
-			$rows    = array();
-			$actions = array();
-			if ( minn_admin_rm_can_redirects() ) {
-				$counts = \RankMath\Redirections\DB::get_counts();
-				$stats  = \RankMath\Redirections\DB::get_stats();
-				$hint   = array();
-				if ( ! empty( $counts['inactive'] ) ) {
-					/* translators: %d: number of inactive redirects. */
-					$hint[] = sprintf( _n( '%d inactive', '%d inactive', (int) $counts['inactive'], 'minn-admin' ), (int) $counts['inactive'] );
-				}
-				if ( ! empty( $counts['trashed'] ) ) {
-					/* translators: %d: number of redirects in the trash. */
-					$hint[] = sprintf( _n( '%d in trash', '%d in trash', (int) $counts['trashed'], 'minn-admin' ), (int) $counts['trashed'] );
-				}
-				$rows[]    = array(
-					'label' => __( 'Active redirects', 'minn-admin' ),
-					'value' => number_format_i18n( (int) ( $counts['active'] ?? 0 ) ),
-					'hint'  => $hint ? implode( ', ', $hint ) : '',
-				);
-				$rows[]    = array( 'label' => __( 'Redirect hits, all time', 'minn-admin' ), 'value' => number_format_i18n( (int) ( is_object( $stats ) ? $stats->hits : 0 ) ) );
-				$actions[] = array( 'label' => __( 'Open Rank Math redirections ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=rank-math-redirections' ) );
-			}
-			if ( minn_admin_rm_can_404() ) {
-				$stats = \RankMath\Monitor\DB::get_stats();
-				$total = (int) ( is_object( $stats ) ? $stats->total : 0 );
-				$rows[] = array(
-					'label' => __( '404s logged', 'minn-admin' ),
-					'value' => number_format_i18n( $total ),
-					/* translators: %s: number of times logged 404 addresses were requested. */
-					'hint'  => $total ? sprintf( __( '%s hits', 'minn-admin' ), number_format_i18n( (int) $stats->hits ) ) : '',
-				);
-				$top = \RankMath\Monitor\DB::get_logs( array( 'orderby' => 'times_accessed', 'order' => 'DESC', 'limit' => 1 ) );
-				if ( ! empty( $top['logs'][0] ) ) {
-					$rows[] = array(
-						'label' => __( 'Most-hit 404', 'minn-admin' ),
-						'value' => (string) $top['logs'][0]['uri'],
-						/* translators: %s: hit count. */
-						'hint'  => sprintf( __( '%s hits', 'minn-admin' ), number_format_i18n( (int) $top['logs'][0]['times_accessed'] ) ),
-					);
-				}
-				if ( $total ) {
-					$actions[] = array(
-						'label'   => __( 'Clear 404 log', 'minn-admin' ),
-						'route'   => 'minn-admin/v1/rankmath/404/clear',
-						'method'  => 'POST',
-						'confirm' => __( 'Clear every entry from the 404 log?', 'minn-admin' ),
-						'danger'  => true,
-					);
-				}
-				$actions[] = array( 'label' => __( 'Open 404 Monitor ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=rank-math-404-monitor' ) );
-			}
-			return rest_ensure_response( array( 'rows' => $rows, 'actions' => $actions ) );
-		},
+/** One 404 log entry as the list reads it. */
+function minn_admin_rm_log_item( array $log ) {
+	return array(
+		'id'             => (int) $log['id'],
+		'uri'            => (string) $log['uri'],
+		'times_accessed' => (int) $log['times_accessed'],
+		'referer'        => (string) $log['referer'],
+		'user_agent'     => (string) $log['user_agent'],
+		'accessed'       => minn_admin_rm_date( $log['accessed'] ),
+	);
+}
+
+/** One 404 log entry by id, through their reader, or null. */
+function minn_admin_rm_log( $id ) {
+	$res = \RankMath\Monitor\DB::get_logs( array( 'ids' => array( (int) $id ), 'limit' => 1 ) );
+	return empty( $res['logs'][0] ) ? null : minn_admin_rm_log_item( $res['logs'][0] );
+}
+
+/** One redirect by id, through their reader, as the list reads it, or null. */
+function minn_admin_rm_redirect( $id ) {
+	$row = \RankMath\Redirections\DB::get_redirection_by_id( (int) $id );
+	return $row ? minn_admin_rm_redirect_item( $row ) : null;
+}
+
+/**
+ * The edit form's save: target and type only. Sources (and their
+ * contains/regex comparisons and case flag) are written back exactly as
+ * stored: re-running them through their sanitizer on every save can rewrite
+ * them (percent-decoding, subdirectory stripping) where nobody sees it. A
+ * field the request omits keeps its stored value.
+ *
+ * @return array|WP_Error What was written: url_to and header_code.
+ */
+function minn_admin_rm_edit_redirect( $id, WP_REST_Request $request ) {
+	$row    = \RankMath\Redirections\DB::get_redirection_by_id( (int) $id );
+	$stored = minn_admin_rm_sources( $row['sources'] );
+	if ( ! $stored ) {
+		return new WP_Error( 'minn_rm_source', __( 'This redirect has no source Minn can read. Edit it in Rank Math.', 'minn-admin' ), array( 'status' => 400 ) );
+	}
+	$code = $request->has_param( 'header_code' ) ? (string) $request->get_param( 'header_code' ) : (string) $row['header_code'];
+	// Any of their five, or the code this redirect already has (an imported
+	// 308 stays editable and stays a 308).
+	if ( ! isset( minn_admin_rm_codes()[ $code ] ) && (string) (int) $row['header_code'] !== $code ) {
+		return new WP_Error( 'minn_rm_code', __( 'Pick one of the redirect types Rank Math offers.', 'minn-admin' ), array( 'status' => 400 ) );
+	}
+	$needs_target = ! in_array( $code, array( '410', '451' ), true );
+	$url_to       = $request->has_param( 'url_to' ) ? (string) $request->get_param( 'url_to' ) : (string) $row['url_to'];
+	if ( $needs_target && '' === trim( $url_to ) ) {
+		return new WP_Error( 'minn_rm_target', __( 'Add the address to redirect to.', 'minn-admin' ), array( 'status' => 400 ) );
+	}
+	// Their model normalizes the destination (relative → home URL) and runs
+	// the loop check; its re-sanitized sources are used for nothing else.
+	$probe = \RankMath\Redirections\Redirection::from( array(
+		'id'          => (int) $row['id'],
+		'sources'     => $stored,
+		'url_to'      => $needs_target ? $url_to : '',
+		'header_code' => $code,
+		'status'      => (string) $row['status'],
 	) );
-
-	if ( minn_admin_rm_redirects_ready() ) {
-		register_rest_route( 'minn-admin/v1', '/rankmath/redirects', array(
-			array(
-				'methods'             => 'GET',
-				'permission_callback' => $can_redirects,
-				'callback'            => function ( WP_REST_Request $request ) {
-					$status = sanitize_key( (string) $request->get_param( 'status' ) );
-					$res    = \RankMath\Redirections\DB::get_redirections( array(
-						'status'  => in_array( $status, array( 'active', 'inactive', 'trashed' ), true ) ? $status : 'any',
-						'search'  => sanitize_text_field( (string) $request->get_param( 'search' ) ),
-						'paged'   => max( 1, (int) $request->get_param( 'page' ) ),
-						'limit'   => min( 100, max( 1, (int) ( $request->get_param( 'per_page' ) ?: 25 ) ) ),
-						'orderby' => sanitize_key( (string) ( $request->get_param( 'orderby' ) ?: 'id' ) ),
-						'order'   => 'asc' === strtolower( (string) $request->get_param( 'order' ) ) ? 'ASC' : 'DESC',
-					) );
-					return rest_ensure_response( array(
-						'items' => array_map( 'minn_admin_rm_redirect_item', (array) ( $res['redirections'] ?? array() ) ),
-						'total' => (int) ( $res['count'] ?? 0 ),
-					) );
-				},
-			),
-			array(
-				'methods'             => 'POST',
-				'permission_callback' => $can_redirects,
-				'callback'            => function ( WP_REST_Request $request ) {
-					$source = trim( (string) $request->get_param( 'source' ) );
-					if ( '' === $source ) {
-						return new WP_Error( 'minn_rm_source', __( 'Add the source address to redirect.', 'minn-admin' ), array( 'status' => 400 ) );
-					}
-					$id = minn_admin_rm_save_redirect( array(
-						'sources'     => array( array( 'pattern' => $source, 'comparison' => 'exact' ) ),
-						'url_to'      => (string) $request->get_param( 'url_to' ),
-						'header_code' => (string) ( $request->get_param( 'header_code' ) ?: '301' ),
-					) );
-					if ( is_wp_error( $id ) ) {
-						return $id;
-					}
-					return rest_ensure_response( array( 'id' => $id ) );
-				},
-			),
-		) );
-
-		register_rest_route( 'minn-admin/v1', '/rankmath/redirects/(?P<id>\d+)', array(
-			array(
-				'methods'             => 'POST',
-				'permission_callback' => $can_redirects,
-				'callback'            => function ( WP_REST_Request $request ) {
-					$row = \RankMath\Redirections\DB::get_redirection_by_id( (int) Minn_Admin::path_param( $request, 'id' ) );
-					if ( ! $row ) {
-						return new WP_Error( 'not_found', __( 'Redirect not found', 'minn-admin' ), array( 'status' => 404 ) );
-					}
-					// The edit form carries target and type only. Sources (and
-					// their contains/regex comparisons and case flag) are
-					// written back exactly as stored: re-running them through
-					// their sanitizer on every save can rewrite them (percent-
-					// decoding, subdirectory stripping) where nobody sees it.
-					// A field the request omits keeps its stored value.
-					$stored = minn_admin_rm_sources( $row['sources'] );
-					if ( ! $stored ) {
-						return new WP_Error( 'minn_rm_source', __( 'This redirect has no source Minn can read. Edit it in Rank Math.', 'minn-admin' ), array( 'status' => 400 ) );
-					}
-					$code = $request->has_param( 'header_code' ) ? (string) $request->get_param( 'header_code' ) : (string) $row['header_code'];
-					// Any of their five, or the code this redirect already has
-					// (an imported 308 stays editable and stays a 308).
-					if ( ! isset( minn_admin_rm_codes()[ $code ] ) && (string) (int) $row['header_code'] !== $code ) {
-						return new WP_Error( 'minn_rm_code', __( 'Pick one of the redirect types Rank Math offers.', 'minn-admin' ), array( 'status' => 400 ) );
-					}
-					$needs_target = ! in_array( $code, array( '410', '451' ), true );
-					$url_to       = $request->has_param( 'url_to' ) ? (string) $request->get_param( 'url_to' ) : (string) $row['url_to'];
-					if ( $needs_target && '' === trim( $url_to ) ) {
-						return new WP_Error( 'minn_rm_target', __( 'Add the address to redirect to.', 'minn-admin' ), array( 'status' => 400 ) );
-					}
-					// Their model normalizes the destination (relative → home
-					// URL) and runs the loop check; its re-sanitized sources are
-					// used for nothing but that check.
-					$probe = \RankMath\Redirections\Redirection::from( array(
-						'id'          => (int) $row['id'],
-						'sources'     => $stored,
-						'url_to'      => $needs_target ? $url_to : '',
-						'header_code' => $code,
-						'status'      => (string) $row['status'],
-					) );
-					if ( $probe->has_sources() && $probe->is_infinite_loop() ) {
-						return new WP_Error( 'minn_rm_loop', __( 'That redirect would send the address back to itself. Check the source and target.', 'minn-admin' ), array( 'status' => 400 ) );
-					}
-					$settings = array(
-						'id'          => (int) $row['id'],
-						'sources'     => $stored,
-						'url_to'      => $needs_target ? (string) $probe->url_to : '',
-						'header_code' => $code,
-						'status'      => (string) $row['status'],
-					);
-					\RankMath\Redirections\DB::update( $settings );
-					do_action( 'rank_math/redirection/saved', $probe, $settings );
-					$id = (int) $row['id'];
-					return rest_ensure_response( minn_admin_rm_redirect_item( \RankMath\Redirections\DB::get_redirection_by_id( $id ) ) );
-				},
-			),
-			array(
-				'methods'             => 'DELETE',
-				'permission_callback' => $can_redirects,
-				'callback'            => function ( WP_REST_Request $request ) {
-					$id = (int) Minn_Admin::path_param( $request, 'id' );
-					if ( ! \RankMath\Redirections\DB::get_redirection_by_id( $id ) ) {
-						return new WP_Error( 'not_found', __( 'Redirect not found', 'minn-admin' ), array( 'status' => 404 ) );
-					}
-					\RankMath\Redirections\DB::delete( array( $id ) );
-					return rest_ensure_response( array( 'deleted' => true, 'message' => __( 'Redirect deleted.', 'minn-admin' ) ) );
-				},
-			),
-		) );
-
-		register_rest_route( 'minn-admin/v1', '/rankmath/redirects/(?P<id>\d+)/status', array(
-			'methods'             => 'POST',
-			'permission_callback' => $can_redirects,
-			'callback'            => function ( WP_REST_Request $request ) {
-				$status = sanitize_key( (string) $request->get_param( 'status' ) );
-				if ( ! in_array( $status, array( 'active', 'inactive', 'trashed' ), true ) ) {
-					return new WP_Error( 'minn_rm_status', __( 'Unknown redirect status.', 'minn-admin' ), array( 'status' => 400 ) );
-				}
-				$id = (int) Minn_Admin::path_param( $request, 'id' );
-				if ( ! \RankMath\Redirections\DB::get_redirection_by_id( $id ) ) {
-					return new WP_Error( 'not_found', __( 'Redirect not found', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				\RankMath\Redirections\DB::change_status( array( $id ), $status );
-				return rest_ensure_response( array( 'id' => $id, 'status' => $status ) );
-			},
-		) );
+	if ( $probe->has_sources() && $probe->is_infinite_loop() ) {
+		return new WP_Error( 'minn_rm_loop', __( 'That redirect would send the address back to itself. Check the source and target.', 'minn-admin' ), array( 'status' => 400 ) );
 	}
+	$settings = array(
+		'id'          => (int) $row['id'],
+		'sources'     => $stored,
+		'url_to'      => $needs_target ? (string) $probe->url_to : '',
+		'header_code' => $code,
+		'status'      => (string) $row['status'],
+	);
+	\RankMath\Redirections\DB::update( $settings );
+	do_action( 'rank_math/redirection/saved', $probe, $settings );
+	return array( 'url_to' => $settings['url_to'], 'header_code' => $code );
+}
 
-	if ( minn_admin_rm_404_ready() ) {
-		register_rest_route( 'minn-admin/v1', '/rankmath/404', array(
-			'methods'             => 'GET',
-			'permission_callback' => $can_404,
-			'callback'            => function ( WP_REST_Request $request ) {
-				$orderby = sanitize_key( (string) ( $request->get_param( 'orderby' ) ?: 'accessed' ) );
-				$res     = \RankMath\Monitor\DB::get_logs( array(
-					'search'  => sanitize_text_field( (string) $request->get_param( 'search' ) ),
-					'paged'   => max( 1, (int) $request->get_param( 'page' ) ),
-					'limit'   => min( 100, max( 1, (int) ( $request->get_param( 'per_page' ) ?: 25 ) ) ),
-					'orderby' => in_array( $orderby, array( 'id', 'uri', 'accessed', 'times_accessed' ), true ) ? $orderby : 'accessed',
-					'order'   => 'asc' === strtolower( (string) $request->get_param( 'order' ) ) ? 'ASC' : 'DESC',
-				) );
-				$items = array();
-				foreach ( (array) ( $res['logs'] ?? array() ) as $log ) {
-					$items[] = array(
-						'id'             => (int) $log['id'],
-						'uri'            => (string) $log['uri'],
-						'times_accessed' => (int) $log['times_accessed'],
-						'referer'        => (string) $log['referer'],
-						'user_agent'     => (string) $log['user_agent'],
-						'accessed'       => minn_admin_rm_date( $log['accessed'] ),
-					);
+$minn_rm_item = array(
+	'id'            => 'int',
+	'source'        => 'text',
+	'sources'       => 'text',
+	'url_to'        => 'text',
+	'header_code'   => 'text',
+	'hits'          => 'int',
+	'status'        => 'text',
+	'trashed'       => 'text',
+	'created'       => array( 'type' => 'text', 'nullable' => true ),
+	'last_accessed' => array( 'type' => 'text', 'nullable' => true ),
+);
+
+// Every read and write through their own classes: DB::get_redirections()
+// for the list (their status, search and order semantics), their save path
+// for create and edit, DB::change_status() and DB::delete() as their own
+// list actions make them.
+minn_admin_resource( 'rankmath/redirects', function () use ( $minn_rm_item ) {
+	return array(
+		'active'  => 'minn_admin_rm_redirects_ready',
+		'gates'   => array( 'view' => 'minn_admin_rm_can_redirects' ),
+		'labels'  => array( 'not_found' => __( 'Redirect not found', 'minn-admin' ) ),
+		'source'  => array(
+			'list'   => function ( array $q ) {
+				$res = \RankMath\Redirections\DB::get_redirections( array_merge( array(
+					'status' => $q['facets']['status'] ?? 'any',
+					'search' => sanitize_text_field( $q['search'] ),
+					'paged'  => $q['page'],
+					'limit'  => $q['per_page'],
+				), minn_admin_rm_order( $q, array(), 'id' ) ) );
+				return array( array_map( 'minn_admin_rm_redirect_item', (array) ( $res['redirections'] ?? array() ) ), (int) ( $res['count'] ?? 0 ) );
+			},
+			'get'    => 'minn_admin_rm_redirect',
+			'exists' => function ( $id ) {
+				return (bool) \RankMath\Redirections\DB::get_redirection_by_id( (int) $id );
+			},
+		),
+		'list'    => array(
+			'facets' => array( array( 'param' => 'status', 'values' => array(
+				'active'   => array( 'status' => 'active' ),
+				'inactive' => array( 'status' => 'inactive' ),
+				'trashed'  => array( 'status' => 'trashed' ),
+			) ) ),
+			'search' => array( 'columns' => array( 'source', 'url_to' ) ),
+			'fields' => $minn_rm_item,
+		),
+		// Exact-match source like their quick form; contains/regex and
+		// multi-source rules stay on Rank Math's own screen.
+		'create'  => array(
+			'gate'   => 'view',
+			// The rule they saved reads back; a taken source never got this far.
+			'expect' => function ( $id, $fresh ) {
+				return is_array( $fresh ) && $id === $fresh['id'];
+			},
+			'run'    => function ( WP_REST_Request $request ) {
+				$source = trim( (string) $request->get_param( 'source' ) );
+				if ( '' === $source ) {
+					return new WP_Error( 'minn_rm_source', __( 'Add the source address to redirect.', 'minn-admin' ), array( 'status' => 400 ) );
 				}
-				return rest_ensure_response( array( 'items' => $items, 'total' => (int) ( $res['count'] ?? 0 ) ) );
-			},
-		) );
-
-		register_rest_route( 'minn-admin/v1', '/rankmath/404/(?P<id>\d+)', array(
-			'methods'             => 'DELETE',
-			'permission_callback' => $can_404,
-			'callback'            => function ( WP_REST_Request $request ) {
-				$count = \RankMath\Monitor\DB::delete_log( array( (int) Minn_Admin::path_param( $request, 'id' ) ) );
-				if ( ! $count ) {
-					return new WP_Error( 'not_found', __( 'Log entry not found', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				return rest_ensure_response( array( 'deleted' => true, 'message' => __( 'Log entry deleted.', 'minn-admin' ) ) );
-			},
-		) );
-
-		register_rest_route( 'minn-admin/v1', '/rankmath/404/clear', array(
-			'methods'             => 'POST',
-			'permission_callback' => $can_404,
-			'callback'            => function () {
-				$count = (int) \RankMath\Monitor\DB::get_count();
-				\RankMath\Monitor\DB::clear_logs();
-				/* translators: %d: number of 404 log entries removed. */
-				return rest_ensure_response( array( 'message' => sprintf( _n( 'Cleared %d log entry.', 'Cleared %d log entries.', $count, 'minn-admin' ), $count ) ) );
-			},
-		) );
-
-		// Redirect a logged 404: their 404 screen's Redirect action builds an
-		// exact-match source from the logged URI, and so does this. Needs the
-		// redirections capability too, like creating any redirect.
-		register_rest_route( 'minn-admin/v1', '/rankmath/404/(?P<id>\d+)/redirect', array(
-			'methods'             => 'POST',
-			'permission_callback' => function () {
-				return minn_admin_rm_can_404() && minn_admin_rm_can_redirects();
-			},
-			'callback'            => function ( WP_REST_Request $request ) {
-				$res = \RankMath\Monitor\DB::get_logs( array( 'ids' => array( (int) Minn_Admin::path_param( $request, 'id' ) ), 'limit' => 1 ) );
-				$log = $res['logs'][0] ?? null;
-				if ( ! $log ) {
-					return new WP_Error( 'not_found', __( 'Log entry not found', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				$id = minn_admin_rm_save_redirect( array(
-					'sources'     => array( array( 'pattern' => (string) $log['uri'], 'comparison' => 'exact' ) ),
+				return minn_admin_rm_save_redirect( array(
+					'sources'     => array( array( 'pattern' => $source, 'comparison' => 'exact' ) ),
 					'url_to'      => (string) $request->get_param( 'url_to' ),
 					'header_code' => (string) ( $request->get_param( 'header_code' ) ?: '301' ),
 				) );
-				if ( is_wp_error( $id ) ) {
-					return $id;
-				}
-				/* translators: %s: the address that now redirects. */
-				return rest_ensure_response( array( 'id' => $id, 'message' => sprintf( __( '%s now redirects.', 'minn-admin' ), (string) $log['uri'] ) ) );
 			},
-		) );
-	}
+		),
+		'actions' => array(
+			'edit'   => array(
+				'item'   => true,
+				'gate'   => 'view',
+				'run'    => function ( $id, array $row, WP_REST_Request $request ) {
+					return minn_admin_rm_edit_redirect( $id, $request );
+				},
+				'expect' => function ( $id, $fresh, $saved ) {
+					return is_array( $fresh ) && is_array( $saved ) && $fresh['url_to'] === $saved['url_to'] && $fresh['header_code'] === $saved['header_code'];
+				},
+				'reply'  => function ( $id, $fresh ) {
+					return $fresh;
+				},
+			),
+			'status' => array(
+				'gate'   => 'view',
+				'run'    => function ( $id, array $row, WP_REST_Request $request ) {
+					$status = sanitize_key( (string) $request->get_param( 'status' ) );
+					if ( ! in_array( $status, array( 'active', 'inactive', 'trashed' ), true ) ) {
+						return new WP_Error( 'minn_rm_status', __( 'Unknown redirect status.', 'minn-admin' ), array( 'status' => 400 ) );
+					}
+					\RankMath\Redirections\DB::change_status( array( $id ), $status );
+					return $status;
+				},
+				'expect' => function ( $id, $fresh, $status ) {
+					return is_array( $fresh ) && $status === $fresh['status'];
+				},
+				'reply'  => function ( $id, $fresh, $status ) {
+					return array( 'id' => $id, 'status' => $status );
+				},
+			),
+			'delete' => array(
+				'method' => 'DELETE',
+				'gate'   => 'view',
+				'run'    => function ( $id ) {
+					return \RankMath\Redirections\DB::delete( array( $id ) );
+				},
+				'expect' => 'gone',
+				'reply'  => function () {
+					return array( 'deleted' => true );
+				},
+				'done'   => __( 'Redirect deleted.', 'minn-admin' ),
+			),
+		),
+	);
 } );
+
+minn_admin_resource( 'rankmath/404', function () {
+	return array(
+		'active'  => 'minn_admin_rm_404_ready',
+		'gates'   => array(
+			'view'     => 'minn_admin_rm_can_404',
+			// Redirecting a logged 404 creates a redirect, so it needs the
+			// redirections capability too, like creating any redirect.
+			'redirect' => function () {
+				return minn_admin_rm_can_404() && minn_admin_rm_can_redirects();
+			},
+		),
+		'labels'  => array( 'not_found' => __( 'Log entry not found', 'minn-admin' ) ),
+		'source'  => array(
+			'list'   => function ( array $q ) {
+				$res = \RankMath\Monitor\DB::get_logs( array_merge( array(
+					'search' => sanitize_text_field( $q['search'] ),
+					'paged'  => $q['page'],
+					'limit'  => $q['per_page'],
+				), minn_admin_rm_order( $q, array( 'id', 'uri', 'accessed', 'times_accessed' ), 'accessed' ) ) );
+				return array( array_map( 'minn_admin_rm_log_item', (array) ( $res['logs'] ?? array() ) ), (int) ( $res['count'] ?? 0 ) );
+			},
+			'get'    => 'minn_admin_rm_log',
+			'exists' => function ( $id ) {
+				return null !== minn_admin_rm_log( $id );
+			},
+		),
+		'list'    => array(
+			'search' => array( 'columns' => array( 'uri' ) ),
+			'fields' => array(
+				'id'             => 'int',
+				'uri'            => 'text',
+				'times_accessed' => 'int',
+				'referer'        => 'text',
+				'user_agent'     => 'text',
+				'accessed'       => array( 'type' => 'text', 'nullable' => true ),
+			),
+		),
+		'actions' => array(
+			'delete'   => array(
+				'method' => 'DELETE',
+				'gate'   => 'view',
+				'run'    => function ( $id ) {
+					return \RankMath\Monitor\DB::delete_log( array( $id ) );
+				},
+				'expect' => 'gone',
+				'reply'  => function () {
+					return array( 'deleted' => true );
+				},
+				'done'   => __( 'Log entry deleted.', 'minn-admin' ),
+			),
+			// Their 404 screen's Redirect action builds an exact-match source
+			// from the logged URI, and so does this.
+			'redirect' => array(
+				'gate'   => 'redirect',
+				'run'    => function ( $id, array $log, WP_REST_Request $request ) {
+					return minn_admin_rm_save_redirect( array(
+						'sources'     => array( array( 'pattern' => (string) $log['uri'], 'comparison' => 'exact' ) ),
+						'url_to'      => (string) $request->get_param( 'url_to' ),
+						'header_code' => (string) ( $request->get_param( 'header_code' ) ?: '301' ),
+					) );
+				},
+				'expect' => function ( $id, $fresh, $redirect ) {
+					return is_int( $redirect ) && null !== minn_admin_rm_redirect( $redirect );
+				},
+				'reply'  => function ( $id, $fresh, $redirect ) {
+					/* translators: %s: the address that now redirects. */
+					return array( 'id' => $redirect, 'message' => sprintf( __( '%s now redirects.', 'minn-admin' ), (string) $fresh['uri'] ) );
+				},
+			),
+		),
+	);
+} );
+
+minn_admin_endpoint( 'rankmath/404/clear', array(
+	'methods' => 'POST',
+	'active'  => 'minn_admin_rm_404_ready',
+	'gate'    => 'minn_admin_rm_can_404',
+	'run'     => function () {
+		$count = (int) \RankMath\Monitor\DB::get_count();
+		\RankMath\Monitor\DB::clear_logs();
+		/* translators: %d: number of 404 log entries removed. */
+		return array( 'message' => sprintf( _n( 'Cleared %d log entry.', 'Cleared %d log entries.', $count, 'minn-admin' ), $count ) );
+	},
+) );
+
+minn_admin_endpoint( 'rankmath/status', array(
+	'active' => function () {
+		return minn_admin_rm_redirects_ready() || minn_admin_rm_404_ready();
+	},
+	'gate'   => function () {
+		return minn_admin_rm_can_redirects() || minn_admin_rm_can_404();
+	},
+	'run'    => function () {
+		$rows    = array();
+		$actions = array();
+		if ( minn_admin_rm_can_redirects() ) {
+			$counts = \RankMath\Redirections\DB::get_counts();
+			$stats  = \RankMath\Redirections\DB::get_stats();
+			$hint   = array();
+			if ( ! empty( $counts['inactive'] ) ) {
+				/* translators: %d: number of inactive redirects. */
+				$hint[] = sprintf( _n( '%d inactive', '%d inactive', (int) $counts['inactive'], 'minn-admin' ), (int) $counts['inactive'] );
+			}
+			if ( ! empty( $counts['trashed'] ) ) {
+				/* translators: %d: number of redirects in the trash. */
+				$hint[] = sprintf( _n( '%d in trash', '%d in trash', (int) $counts['trashed'], 'minn-admin' ), (int) $counts['trashed'] );
+			}
+			$rows[]    = array(
+				'label' => __( 'Active redirects', 'minn-admin' ),
+				'value' => number_format_i18n( (int) ( $counts['active'] ?? 0 ) ),
+				'hint'  => $hint ? implode( ', ', $hint ) : '',
+			);
+			$rows[]    = array( 'label' => __( 'Redirect hits, all time', 'minn-admin' ), 'value' => number_format_i18n( (int) ( is_object( $stats ) ? $stats->hits : 0 ) ) );
+			$actions[] = array( 'label' => __( 'Open Rank Math redirections ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=rank-math-redirections' ) );
+		}
+		if ( minn_admin_rm_can_404() ) {
+			$stats  = \RankMath\Monitor\DB::get_stats();
+			$total  = (int) ( is_object( $stats ) ? $stats->total : 0 );
+			$rows[] = array(
+				'label' => __( '404s logged', 'minn-admin' ),
+				'value' => number_format_i18n( $total ),
+				/* translators: %s: number of times logged 404 addresses were requested. */
+				'hint'  => $total ? sprintf( __( '%s hits', 'minn-admin' ), number_format_i18n( (int) $stats->hits ) ) : '',
+			);
+			$top = \RankMath\Monitor\DB::get_logs( array( 'orderby' => 'times_accessed', 'order' => 'DESC', 'limit' => 1 ) );
+			if ( ! empty( $top['logs'][0] ) ) {
+				$rows[] = array(
+					'label' => __( 'Most-hit 404', 'minn-admin' ),
+					'value' => (string) $top['logs'][0]['uri'],
+					/* translators: %s: hit count. */
+					'hint'  => sprintf( __( '%s hits', 'minn-admin' ), number_format_i18n( (int) $top['logs'][0]['times_accessed'] ) ),
+				);
+			}
+			if ( $total ) {
+				$actions[] = array(
+					'label'   => __( 'Clear 404 log', 'minn-admin' ),
+					'route'   => 'minn-admin/v1/rankmath/404/clear',
+					'method'  => 'POST',
+					'confirm' => __( 'Clear every entry from the 404 log?', 'minn-admin' ),
+					'danger'  => true,
+				);
+			}
+			$actions[] = array( 'label' => __( 'Open 404 Monitor ↗', 'minn-admin' ), 'href' => admin_url( 'admin.php?page=rank-math-404-monitor' ) );
+		}
+		return array( 'rows' => $rows, 'actions' => $actions );
+	},
+) );
+unset( $minn_rm_item );

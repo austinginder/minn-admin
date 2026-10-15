@@ -292,221 +292,224 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	return $surfaces;
 } );
 
-add_action( 'rest_api_init', function () {
-	if ( ! minn_admin_blc_active() ) {
-		return;
+/** One link's detail: where it points, how it last checked, where it is found, their check log. */
+function minn_admin_blc_view( array $item ) {
+	$link = minn_admin_blc_link( $item['id'] );
+	if ( is_wp_error( $link ) ) {
+		return $link;
 	}
-	$perm = 'minn_admin_blc_can';
+	$status = array_values( array_filter( array(
+		array( 'label' => __( 'URL', 'minn-admin' ), 'value' => (string) $link->url, 'type' => 'code' ),
+		array( 'label' => __( 'Status', 'minn-admin' ), 'value' => $item['status'] ),
+		'' !== $item['http_code'] ? array( 'label' => __( 'HTTP code', 'minn-admin' ), 'value' => $item['http_code'] ) : null,
+		(int) $link->redirect_count > 0 && $link->final_url ? array( 'label' => __( 'Redirects to', 'minn-admin' ), 'value' => (string) $link->final_url, 'type' => 'code' ) : null,
+		minn_admin_blc_when( $link->last_check ) ? array( 'label' => __( 'Last checked', 'minn-admin' ), 'value' => minn_admin_blc_when( $link->last_check ) ) : null,
+		minn_admin_blc_when( $link->first_failure ) ? array( 'label' => __( 'Failing since', 'minn-admin' ), 'value' => minn_admin_blc_when( $link->first_failure ) ) : null,
+		minn_admin_blc_when( $link->last_success ) ? array( 'label' => __( 'Last worked', 'minn-admin' ), 'value' => minn_admin_blc_when( $link->last_success ) ) : null,
+	) ) );
+	$where = array();
+	foreach ( array_slice( (array) $link->get_instances(), 0, 25 ) as $inst ) {
+		$w       = minn_admin_blc_where( $inst );
+		$text    = trim( wp_strip_all_tags( (string) $inst->link_text ) );
+		$where[] = array(
+			'label' => $w['title'],
+			'value' => '' !== $text ? '“' . $text . '”' : '—',
+		);
+	}
+	$sections = array( array( 'title' => __( 'Link', 'minn-admin' ), 'rows' => $status ) );
+	if ( $where ) {
+		$sections[] = array( 'title' => __( 'Found in', 'minn-admin' ), 'rows' => $where );
+	}
+	$log = trim( wp_strip_all_tags( (string) $link->log ) );
+	if ( '' !== $log ) {
+		$sections[] = array( 'title' => __( 'Check log', 'minn-admin' ), 'rows' => array( array( 'label' => __( 'Log', 'minn-admin' ), 'value' => $log, 'type' => 'code' ) ) );
+	}
+	return array( 'sections' => $sections, 'adminUrl' => minn_admin_blc_admin_url() );
+}
 
-	register_rest_route( 'minn-admin/v1', '/blc/links', array(
-		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) {
-			$filter = sanitize_key( (string) ( $request->get_param( 'filter' ) ?: 'broken' ) );
-			if ( ! in_array( $filter, array( 'broken', 'warnings', 'redirects', 'dismissed', 'all' ), true ) ) {
-				$filter = 'broken';
-			}
-			$params = array( 's_filter' => $filter );
-			$q      = trim( (string) $request->get_param( 'search' ) );
-			if ( '' !== $q ) {
-				// Their URL search ("*" is their wildcard, so strip it from input).
-				$params['s_link_url'] = str_replace( '*', '', $q );
-			}
-			$per_page = min( 100, max( 1, (int) ( $request->get_param( 'per_page' ) ?: 25 ) ) );
-			$page     = max( 1, (int) $request->get_param( 'page' ) );
-			$total    = (int) blc_get_links( array_merge( $params, array( 'count_only' => true ) ) );
-			$links    = blc_get_links( array_merge( $params, array(
-				'offset'         => ( $page - 1 ) * $per_page,
-				'max_results'    => $per_page,
-				'load_instances' => true,
-				'orderby'        => 'url',
-				'order'          => 'asc',
-			) ) );
-			$items = array();
-			foreach ( (array) $links as $link ) {
-				$items[] = minn_admin_blc_item( $link );
-			}
-			return rest_ensure_response( array( 'items' => $items, 'total' => $total ) );
-		},
-	) );
+/** A model write's answer: their result, or why it did not happen. */
+function minn_admin_blc_saved( $link, $code ) {
+	return minn_admin_blc_save( $link ) ? true : new WP_Error( $code, __( 'Broken Link Checker could not update that link.', 'minn-admin' ), array( 'status' => 500 ) );
+}
 
-	register_rest_route( 'minn-admin/v1', '/blc/links/(?P<id>\d+)', array(
-		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) {
-			$link = minn_admin_blc_link( (int) Minn_Admin::path_param( $request, 'id' ) );
-			if ( is_wp_error( $link ) ) {
-				return $link;
-			}
-			$item   = minn_admin_blc_item( $link );
-			$status = array_values( array_filter( array(
-				array( 'label' => __( 'URL', 'minn-admin' ), 'value' => (string) $link->url, 'type' => 'code' ),
-				array( 'label' => __( 'Status', 'minn-admin' ), 'value' => $item['status'] ),
-				'' !== $item['http_code'] ? array( 'label' => __( 'HTTP code', 'minn-admin' ), 'value' => $item['http_code'] ) : null,
-				(int) $link->redirect_count > 0 && $link->final_url ? array( 'label' => __( 'Redirects to', 'minn-admin' ), 'value' => (string) $link->final_url, 'type' => 'code' ) : null,
-				minn_admin_blc_when( $link->last_check ) ? array( 'label' => __( 'Last checked', 'minn-admin' ), 'value' => minn_admin_blc_when( $link->last_check ) ) : null,
-				minn_admin_blc_when( $link->first_failure ) ? array( 'label' => __( 'Failing since', 'minn-admin' ), 'value' => minn_admin_blc_when( $link->first_failure ) ) : null,
-				minn_admin_blc_when( $link->last_success ) ? array( 'label' => __( 'Last worked', 'minn-admin' ), 'value' => minn_admin_blc_when( $link->last_success ) ) : null,
-			) ) );
-			$where = array();
-			foreach ( array_slice( (array) $link->get_instances(), 0, 25 ) as $inst ) {
-				$w       = minn_admin_blc_where( $inst );
-				$text    = trim( wp_strip_all_tags( (string) $inst->link_text ) );
-				$where[] = array(
-					'label' => $w['title'],
-					'value' => '' !== $text ? '“' . $text . '”' : '—',
-				);
-			}
-			$sections = array( array( 'title' => __( 'Link', 'minn-admin' ), 'rows' => $status ) );
-			if ( $where ) {
-				$sections[] = array( 'title' => __( 'Found in', 'minn-admin' ), 'rows' => $where );
-			}
-			$log = trim( wp_strip_all_tags( (string) $link->log ) );
-			if ( '' !== $log ) {
-				$sections[] = array( 'title' => __( 'Check log', 'minn-admin' ), 'rows' => array( array( 'label' => __( 'Log', 'minn-admin' ), 'value' => $log, 'type' => 'code' ) ) );
-			}
-			return rest_ensure_response( array( 'sections' => $sections, 'adminUrl' => minn_admin_blc_admin_url() ) );
-		},
-	) );
-
-	// Recheck: their ajax_recheck — queue it (last_check_attempt 0), then
-	// check now and save, inside their transaction.
-	register_rest_route( 'minn-admin/v1', '/blc/links/(?P<id>\d+)/recheck', array(
-		'methods'             => 'POST',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) {
-			$link = minn_admin_blc_link( (int) Minn_Admin::path_param( $request, 'id' ) );
-			if ( is_wp_error( $link ) ) {
-				return $link;
-			}
-			$tm = class_exists( 'TransactionManager' ) ? TransactionManager::getInstance() : null;
-			if ( $tm ) {
-				$tm->start();
-			}
-			$link->last_check_attempt  = 0;
-			$link->isOptionLinkChanged = true;
-			$link->save();
-			$link->check( true );
-			if ( $tm ) {
-				$tm->commit();
-			}
-			$status = $link->analyse_status();
-			/* translators: %s: the link's status after the check, like "Not Found". */
-			return rest_ensure_response( array( 'message' => sprintf( __( 'Rechecked: %s', 'minn-admin' ), wp_strip_all_tags( (string) $status['text'] ) ) ) );
-		},
-	) );
-
-	// Edit URL: their ajax_edit — same URL checks, then blcLink::edit(), which
-	// rewrites the link in every post and comment and returns counts.
-	register_rest_route( 'minn-admin/v1', '/blc/links/(?P<id>\d+)/edit', array(
-		'methods'             => 'POST',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) {
-			$link = minn_admin_blc_link( (int) Minn_Admin::path_param( $request, 'id' ) );
-			if ( is_wp_error( $link ) ) {
-				return $link;
-			}
-			$new_url = trim( (string) $request->get_param( 'new_url' ) );
-			if ( '' === $new_url || ! wp_parse_url( $new_url ) ) {
-				return new WP_Error( 'minn_blc_url', __( 'That URL is not valid.', 'minn-admin' ), array( 'status' => 400 ) );
-			}
-			if ( ! current_user_can( 'unfiltered_html' ) && wp_kses_bad_protocol( $new_url, wp_allowed_protocols() ) !== $new_url ) {
-				return new WP_Error( 'minn_blc_url', __( 'That URL is not valid.', 'minn-admin' ), array( 'status' => 400 ) );
-			}
-			$rez = $link->edit( $new_url, null );
-			if ( false === $rez ) {
-				return new WP_Error( 'minn_blc_edit', __( 'Broken Link Checker could not change that link.', 'minn-admin' ), array( 'status' => 500 ) );
-			}
-			$msgs = array();
-			foreach ( (array) $rez['errors'] as $err ) {
-				if ( is_wp_error( $err ) ) {
-					$msgs[] = implode( ', ', $err->get_error_messages() );
+// Every read and action through their own code: blc_get_links() with their
+// built-in filters for the list, their blcLink model for one link, the calls
+// their admin-ajax handlers make.
+minn_admin_resource( 'blc/links', function () {
+	$fields = array(
+		'id'         => 'int',
+		'url'        => 'text',
+		'state'      => 'text',
+		'broken'     => 'text',
+		'dismissed'  => 'text',
+		'status'     => 'text',
+		'http_code'  => 'text',
+		'found'      => 'text',
+		'last_check' => 'text',
+	);
+	return array(
+		'active'  => 'minn_admin_blc_active',
+		'gates'   => array( 'view' => 'minn_admin_blc_can' ),
+		'labels'  => array( 'not_found' => __( 'Link not found', 'minn-admin' ) ),
+		'source'  => array(
+			'list' => function ( array $q ) {
+				$params = array( 's_filter' => $q['filter'] );
+				if ( '' !== $q['search'] ) {
+					// Their URL search ("*" is their wildcard, so strip it from input).
+					$params['s_link_url'] = str_replace( '*', '', $q['search'] );
 				}
-			}
-			$ok = (int) $rez['cnt_okay'];
-			/* translators: %d: number of places the link was changed. */
-			$message = sprintf( _n( 'Changed in %d place.', 'Changed in %d places.', $ok, 'minn-admin' ), $ok );
-			if ( $msgs ) {
-				$message .= ' ' . implode( ' ', $msgs );
-			}
-			return rest_ensure_response( array( 'message' => $message, 'id' => (int) $rez['new_link_id'] ) );
-		},
-	) );
-
-	// Unlink: their ajax_unlink — blcLink::unlink() removes the <a> from every
-	// instance and keeps the text.
-	register_rest_route( 'minn-admin/v1', '/blc/links/(?P<id>\d+)/unlink', array(
-		'methods'             => 'POST',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) {
-			$link = minn_admin_blc_link( (int) Minn_Admin::path_param( $request, 'id' ) );
-			if ( is_wp_error( $link ) ) {
-				return $link;
-			}
-			$rez = $link->unlink();
-			if ( false === $rez ) {
-				return new WP_Error( 'minn_blc_unlink', __( 'Broken Link Checker could not remove that link.', 'minn-admin' ), array( 'status' => 500 ) );
-			}
-			$ok = (int) $rez['cnt_okay'];
-			/* translators: %d: number of places the link was removed from. */
-			return rest_ensure_response( array( 'message' => sprintf( _n( 'Removed from %d place.', 'Removed from %d places.', $ok, 'minn-admin' ), $ok ) ) );
-		},
-	) );
-
-	// Not broken: their ajax_discard (false positive).
-	register_rest_route( 'minn-admin/v1', '/blc/links/(?P<id>\d+)/not-broken', array(
-		'methods'             => 'POST',
-		'permission_callback' => $perm,
-		'callback'            => function ( WP_REST_Request $request ) {
-			$link = minn_admin_blc_link( (int) Minn_Admin::path_param( $request, 'id' ) );
-			if ( is_wp_error( $link ) ) {
-				return $link;
-			}
-			$link->broken             = false;
-			$link->warning            = false;
-			$link->false_positive     = true;
-			$link->last_check_attempt = time();
-			$link->log                = __( 'This link was manually marked as working by the user.', 'broken-link-checker' ); // phpcs:ignore WordPress.WP.I18n.TextDomainMismatch -- their own log string, stored in their row.
-			if ( ! minn_admin_blc_save( $link ) ) {
-				return new WP_Error( 'minn_blc_save', __( 'Broken Link Checker could not update that link.', 'minn-admin' ), array( 'status' => 500 ) );
-			}
-			return rest_ensure_response( array( 'message' => __( 'Marked as not broken.', 'minn-admin' ) ) );
-		},
-	) );
-
-	// Dismiss / undismiss: their ajax_set_link_dismissed.
-	register_rest_route( 'minn-admin/v1', '/blc/links/(?P<id>\d+)/dismiss', array(
-		'methods'             => 'POST',
-		'permission_callback' => $perm,
-		'args'                => array(
-			'dismissed' => array(
-				'required'          => true,
-				'type'              => 'boolean',
-				'sanitize_callback' => 'rest_sanitize_boolean',
+				$items = array();
+				foreach ( (array) blc_get_links( array_merge( $params, array(
+					'offset'         => ( $q['page'] - 1 ) * $q['per_page'],
+					'max_results'    => $q['per_page'],
+					'load_instances' => true,
+					'orderby'        => 'url',
+					'order'          => 'asc',
+				) ) ) as $link ) {
+					$items[] = minn_admin_blc_item( $link );
+				}
+				return array( $items, (int) blc_get_links( array_merge( $params, array( 'count_only' => true ) ) ) );
+			},
+			'get'  => function ( $id ) {
+				$link = minn_admin_blc_link( $id );
+				return is_wp_error( $link ) ? null : minn_admin_blc_item( $link );
+			},
+		),
+		'list'    => array(
+			'filter' => array( 'param' => 'filter', 'column' => 's_filter', 'values' => array( 'broken', 'warnings', 'redirects', 'dismissed', 'all' ), 'default' => 'broken' ),
+			'search' => array( 'columns' => array( 'url' ) ),
+			'fields' => $fields,
+		),
+		'item'    => array(
+			'view'   => 'minn_admin_blc_view',
+			'fields' => array( 'sections' => 'raw', 'adminUrl' => 'text' ),
+		),
+		'actions' => array(
+			// Their ajax_recheck: queue it (last_check_attempt 0), then check
+			// now and save, inside their transaction.
+			'recheck'    => array(
+				'gate'   => 'view',
+				'run'    => function ( $id ) {
+					$link  = minn_admin_blc_link( $id );
+					$start = time();
+					$tm    = class_exists( 'TransactionManager' ) ? TransactionManager::getInstance() : null;
+					if ( $tm ) {
+						$tm->start();
+					}
+					$link->last_check_attempt  = 0;
+					$link->isOptionLinkChanged = true;
+					$link->save();
+					$link->check( true );
+					if ( $tm ) {
+						$tm->commit();
+					}
+					return $start;
+				},
+				'expect' => function ( $id, $fresh, $start ) {
+					return is_array( $fresh ) && '' !== $fresh['last_check'] && strtotime( $fresh['last_check'] ) >= (int) $start - 1;
+				},
+				'reply'  => function ( $id, $fresh ) {
+					/* translators: %s: the link's status after the check, like "Not Found". */
+					return array( 'message' => sprintf( __( 'Rechecked: %s', 'minn-admin' ), $fresh['status'] ) );
+				},
+			),
+			// Their ajax_edit: the same URL checks, then blcLink::edit(), which
+			// rewrites the link in every post and comment and answers counts.
+			'edit'       => array(
+				'gate'   => 'view',
+				'run'    => function ( $id, array $row, WP_REST_Request $request ) {
+					$new_url = trim( (string) $request->get_param( 'new_url' ) );
+					if ( '' === $new_url || ! wp_parse_url( $new_url ) || ( ! current_user_can( 'unfiltered_html' ) && wp_kses_bad_protocol( $new_url, wp_allowed_protocols() ) !== $new_url ) ) {
+						return new WP_Error( 'minn_blc_url', __( 'That URL is not valid.', 'minn-admin' ), array( 'status' => 400 ) );
+					}
+					$rez = minn_admin_blc_link( $id )->edit( $new_url, null );
+					return false === $rez ? new WP_Error( 'minn_blc_edit', __( 'Broken Link Checker could not change that link.', 'minn-admin' ), array( 'status' => 500 ) ) : $rez;
+				},
+				// Their own count of the places it changed is the proof.
+				'expect' => function ( $id, $fresh, $rez ) {
+					return is_array( $rez ) && isset( $rez['cnt_okay'] );
+				},
+				'reply'  => function ( $id, $fresh, $rez ) {
+					$msgs = array();
+					foreach ( (array) $rez['errors'] as $err ) {
+						if ( is_wp_error( $err ) ) {
+							$msgs[] = implode( ', ', $err->get_error_messages() );
+						}
+					}
+					$ok = (int) $rez['cnt_okay'];
+					/* translators: %d: number of places the link was changed. */
+					$message = sprintf( _n( 'Changed in %d place.', 'Changed in %d places.', $ok, 'minn-admin' ), $ok );
+					return array( 'message' => $msgs ? $message . ' ' . implode( ' ', $msgs ) : $message, 'id' => (int) $rez['new_link_id'] );
+				},
+			),
+			// Their ajax_unlink: blcLink::unlink() removes the <a> from every
+			// instance and keeps the text.
+			'unlink'     => array(
+				'gate'   => 'view',
+				'run'    => function ( $id ) {
+					$rez = minn_admin_blc_link( $id )->unlink();
+					return false === $rez ? new WP_Error( 'minn_blc_unlink', __( 'Broken Link Checker could not remove that link.', 'minn-admin' ), array( 'status' => 500 ) ) : $rez;
+				},
+				'expect' => function ( $id, $fresh, $rez ) {
+					return is_array( $rez ) && isset( $rez['cnt_okay'] );
+				},
+				'reply'  => function ( $id, $fresh, $rez ) {
+					$ok = (int) $rez['cnt_okay'];
+					/* translators: %d: number of places the link was removed from. */
+					return array( 'message' => sprintf( _n( 'Removed from %d place.', 'Removed from %d places.', $ok, 'minn-admin' ), $ok ) );
+				},
+			),
+			// Their ajax_discard (a false positive).
+			'not-broken' => array(
+				'gate'   => 'view',
+				'run'    => function ( $id ) {
+					$link                     = minn_admin_blc_link( $id );
+					$link->broken             = false;
+					$link->warning            = false;
+					$link->false_positive     = true;
+					$link->last_check_attempt = time();
+					$link->log                = __( 'This link was manually marked as working by the user.', 'broken-link-checker' ); // phpcs:ignore WordPress.WP.I18n.TextDomainMismatch -- their own log string, stored in their row.
+					return minn_admin_blc_saved( $link, 'minn_blc_save' );
+				},
+				'expect' => array( 'broken' => '0' ),
+				'done'   => __( 'Marked as not broken.', 'minn-admin' ),
+			),
+			// Their ajax_set_link_dismissed.
+			'dismiss'    => array(
+				'gate'   => 'view',
+				'args'   => array(
+					'dismissed' => array(
+						'required' => true,
+						'type'     => 'boolean',
+					),
+				),
+				'run'    => function ( $id, array $row, WP_REST_Request $request ) {
+					$link            = minn_admin_blc_link( $id );
+					$link->dismissed = (bool) $request->get_param( 'dismissed' );
+					$saved           = minn_admin_blc_saved( $link, 'minn_blc_save' );
+					return is_wp_error( $saved ) ? $saved : ( $link->dismissed ? '1' : '0' );
+				},
+				'expect' => function ( $id, $fresh, $want ) {
+					return is_array( $fresh ) && $want === $fresh['dismissed'];
+				},
+				'reply'  => function ( $id, $fresh, $want ) {
+					return array( 'message' => '1' === $want ? __( 'Dismissed.', 'minn-admin' ) : __( 'Restored to the list.', 'minn-admin' ) );
+				},
 			),
 		),
-		'callback'            => function ( WP_REST_Request $request ) {
-			$link = minn_admin_blc_link( (int) Minn_Admin::path_param( $request, 'id' ) );
-			if ( is_wp_error( $link ) ) {
-				return $link;
-			}
-			$link->dismissed = (bool) $request->get_param( 'dismissed' );
-			if ( ! minn_admin_blc_save( $link ) ) {
-				return new WP_Error( 'minn_blc_save', __( 'Broken Link Checker could not update that link.', 'minn-admin' ), array( 'status' => 500 ) );
-			}
-			return rest_ensure_response( array( 'message' => $link->dismissed ? __( 'Dismissed.', 'minn-admin' ) : __( 'Restored to the list.', 'minn-admin' ) ) );
-		},
-	) );
+	);
+} );
 
-	register_rest_route( 'minn-admin/v1', '/blc/status', array(
-		'methods'             => 'GET',
-		'permission_callback' => $perm,
-		'callback'            => function () {
-			$count = function ( $filter ) {
-				return (int) blc_get_links( array( 's_filter' => $filter, 'count_only' => true ) );
-			};
-			$broken = $count( 'broken' );
-			$rows   = array(
+minn_admin_endpoint( 'blc/status', array(
+	'active' => 'minn_admin_blc_active',
+	'gate'   => 'minn_admin_blc_can',
+	'run'    => function () {
+		$count  = function ( $filter ) {
+			return (int) blc_get_links( array( 's_filter' => $filter, 'count_only' => true ) );
+		};
+		$broken = $count( 'broken' );
+		return array(
+			'rows'    => array(
 				array(
 					'label' => __( 'Broken links', 'minn-admin' ),
 					'value' => number_format_i18n( $broken ),
@@ -515,13 +518,10 @@ add_action( 'rest_api_init', function () {
 				array( 'label' => __( 'Warnings', 'minn-admin' ), 'value' => number_format_i18n( $count( 'warnings' ) ) ),
 				array( 'label' => __( 'Redirects', 'minn-admin' ), 'value' => number_format_i18n( $count( 'redirects' ) ) ),
 				array( 'label' => __( 'Links checked', 'minn-admin' ), 'value' => number_format_i18n( $count( 'all' ) ) ),
-			);
-			return rest_ensure_response( array(
-				'rows'    => $rows,
-				'actions' => array(
-					array( 'label' => __( 'Open Broken Link Checker ↗', 'minn-admin' ), 'href' => minn_admin_blc_admin_url() ),
-				),
-			) );
-		},
-	) );
-} );
+			),
+			'actions' => array(
+				array( 'label' => __( 'Open Broken Link Checker ↗', 'minn-admin' ), 'href' => minn_admin_blc_admin_url() ),
+			),
+		);
+	},
+) );
