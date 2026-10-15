@@ -22,7 +22,9 @@
  *    delete that needs a condition, a send's own answer as its proof and a
  *    chart's rule-split and labels; then the redirect shapes: a create on the
  *    collection route that reads its row back, edits on the item route,
- *    card sums and counts, key-bound writes and the database's own clock.
+ *    card sums and counts, key-bound writes and the database's own clock;
+ *    then the gift card shapes: a filter taking several values at once,
+ *    groups of conditions ('#any') in SQL and PHP, and money sums.
  * 2. Every real declaration: each action has a declared gate and a
  *    post-condition, each descriptor action that points at a kernel route
  *    names a declared action with its method and a state the action accepts,
@@ -1385,6 +1387,144 @@ $w_iso  = Minn_Admin_Kernel_Fields::datetime( $winter, 'db', 'iso-utc' );
 $w_want = gmdate( 'c', (int) $wpdb->get_var( $wpdb->prepare( 'SELECT UNIX_TIMESTAMP(%s)', $winter ) ) );
 $check( "a datetime on the database's own clock reads as the instant the database reads, on that date's offset; a never-set one, or none at all, as none", '' !== $db_iso && abs( strtotime( $db_iso ) - time() ) <= 120 && $w_want === $w_iso && '' === Minn_Admin_Kernel_Fields::datetime( '1970-01-01 00:00:00', 'db', 'iso-utc' ) && '' === Minn_Admin_Kernel_Fields::datetime( 'now', 'db', 'iso-utc' ) && '' === Minn_Admin_Kernel_Fields::datetime( '2026-02-30 00:00:00', 'db', 'iso-utc' ), $db_now . ' → ' . $db_iso . '; ' . $winter . ' → ' . $w_iso . ' want ' . $w_want );
 
+// --- 1f. Gift card shapes: several statuses at once, groups, money sums -----
+$gc = $wpdb->prefix . 'minn_conf_cards';
+$wpdb->query( "CREATE TEMPORARY TABLE {$gc} ( id BIGINT UNSIGNED NOT NULL PRIMARY KEY, owner BIGINT NOT NULL, active TINYINT NOT NULL, expires BIGINT NOT NULL, amount DECIMAL(15,6) NOT NULL, kind VARCHAR(20) NOT NULL, note VARCHAR(20) NOT NULL ) ENGINE=InnoDB" ); // phpcs:ignore
+$gc_now  = time();
+$gc_seed = array(
+	array( 1, 10, 1, 0, '10.004000', 'a', '5.005' ),
+	array( 2, 10, 1, 1000, '5.005000', 'b', '0.125' ),
+	array( 3, 10, 0, 0, '2.500000', 'a', '2.5' ),
+	array( 4, 10, 1, $gc_now + 30 * DAY_IN_SECONDS, '1.115000', 'b', '1.000' ),
+	array( 5, 20, 1, 0, '99.000000', 'a', '99' ),
+	// In none of the declared views: never listed, whatever is asked.
+	array( 6, 10, 2, 0, '0.000000', 'a', '0' ),
+);
+foreach ( $gc_seed as $s ) {
+	$wpdb->insert( $gc, array( 'id' => $s[0], 'owner' => $s[1], 'active' => $s[2], 'expires' => $s[3], 'amount' => $s[4], 'kind' => $s[5], 'note' => $s[6] ) );
+}
+$gc_values = array(
+	'active'   => function () {
+		return array( 'active' => 1, 'expires' => array( 'any' => array( 0, array( 'op' => '>', 'value' => time() ) ) ) );
+	},
+	'expired'  => function () {
+		return array( 'active' => 1, 'expires' => array( 'op' => '!=', 'value' => 0 ), "expires\0to" => array( 'op' => '<=', 'value' => time() ) );
+	},
+	'disabled' => array( 'active' => 0 ),
+	'broken'   => function () {
+		return 'not conditions';
+	},
+);
+$gc_rows = function () use ( $gc_seed ) {
+	$out = array();
+	foreach ( $gc_seed as $s ) {
+		if ( 10 === $s[1] ) {
+			$out[] = array( 'id' => $s[0], 'active' => $s[2], 'expires' => $s[3], 'amount' => $s[4], 'kind' => $s[5], 'note' => $s[6] );
+		}
+	}
+	return $out;
+};
+$gc_seen = null;
+Minn_Admin_Kernel::resource( 'minn-conformance/cards', array(
+	'gates'  => array( 'view' => '__return_true' ),
+	'source' => array( 'table' => 'minn_conf_cards', 'key' => 'id', 'columns' => array( 'id', 'active', 'expires', 'amount', 'kind' ), 'where' => array( 'owner' => 10 ) ),
+	'list'   => array( 'filter' => array( 'param' => 'status', 'many' => true, 'values' => $gc_values ), 'facets' => array( array( 'param' => 'kind', 'column' => 'kind', 'type' => 'key' ) ), 'order' => array( 'column' => 'id', 'dir' => 'ASC' ), 'fields' => array( 'id' => 'int' ) ),
+) );
+Minn_Admin_Kernel::resource( 'minn-conformance/cards-rows', array(
+	'gates'  => array( 'view' => '__return_true' ),
+	'source' => array( 'rows' => $gc_rows ),
+	'list'   => array( 'filter' => array( 'param' => 'status', 'many' => true, 'values' => $gc_values ), 'fields' => array( 'id' => 'int' ) ),
+) );
+Minn_Admin_Kernel::resource( 'minn-conformance/cards-kinds', array(
+	'gates'  => array( 'view' => '__return_true' ),
+	'source' => array(
+		// Reads only the values asked for, never $q['where']: a value it was
+		// not asked for, or none it knows, must still never list everything.
+		'list' => function ( array $q ) use ( $gc_rows, &$gc_seen ) {
+			$gc_seen = $q['filter'];
+			$rows    = array_values( array_filter( $gc_rows(), function ( $row ) use ( $q ) {
+				return ! $q['filter'] || in_array( $row['kind'], $q['filter'], true );
+			} ) );
+			return array( $rows, count( $rows ) );
+		},
+		'get'  => function () {
+			return null;
+		},
+	),
+	'list'   => array( 'filter' => array( 'param' => 'kind', 'column' => 'kind', 'many' => true, 'values' => array( 'a', 'b' ) ), 'fields' => array( 'id' => 'int' ) ),
+) );
+$gc_ids = function ( $route, $params ) use ( $call ) {
+	list( $st, $d ) = $call( 'GET', '/minn-admin/v1/minn-conformance/' . $route, $params );
+	return 200 === $st ? array_column( (array) ( $d['items'] ?? array() ), 'id' ) : $st;
+};
+$gc_cases = array(
+	array( array(), array( 1, 2, 3, 4 ) ),
+	array( array( 'status' => 'any' ), array( 1, 2, 3, 4 ) ),
+	array( array( 'status' => 'active' ), array( 1, 4 ) ),
+	array( array( 'status' => array( 'active', 'disabled' ) ), array( 1, 3, 4 ) ),
+	array( array( 'status' => array( 'expired', 'any' ) ), array( 2 ) ),
+	array( array( 'status' => array( 'active', 'nope' ) ), array( 1, 4 ) ),
+	array( array( 'status' => 'nope' ), array() ),
+	array( array( 'status' => array( 'nope' ) ), array() ),
+	array( array( 'status' => array( array( 'active' ) ) ), array() ),
+	array( array( 'status' => array( 'broken' ) ), array() ),
+	array( array( 'status' => array( 'broken', 'disabled' ) ), array( 3 ) ),
+);
+$gc_got = array();
+$gc_ok  = true;
+foreach ( $gc_cases as $c ) {
+	$sql_ids       = $gc_ids( 'cards', $c[0] );
+	$row_ids       = $gc_ids( 'cards-rows', $c[0] );
+	$gc_got[]      = array( $c[0], $sql_ids, $row_ids );
+	$gc_ok         = $gc_ok && $c[1] === $sql_ids && $c[1] === $row_ids;
+}
+$check( "a filter that takes several values lists the rows in any of them (status[]=a&status[]=b), every row for none or 'any', and nothing for a value it does not know, one that is not text or one whose conditions cannot be said, in SQL and in PHP alike", $gc_ok, wp_json_encode( $gc_got ) );
+list( $st, $d ) = $call( 'GET', '/minn-admin/v1/minn-conformance/cards', array( 'status' => array( 'active', 'disabled' ), 'per_page' => 2 ) );
+$check( "several values page and count as one list", 200 === $st && 3 === ( $d['total'] ?? 0 ) && array( 1, 3 ) === array_column( (array) ( $d['items'] ?? array() ), 'id' ), $st . ' ' . wp_json_encode( $d ) );
+$k_ids   = $gc_ids( 'cards-kinds', array( 'kind' => array( 'b', 'nope' ) ) );
+$k_seen  = $gc_seen;
+$gc_seen = 'not asked';
+$k_none  = $gc_ids( 'cards-kinds', array( 'kind' => array( 'nope', array( 'b' ) ) ) );
+$check( "a callable source reads the values asked for that it knows in \$q['filter'], and is never asked at all when none is known", array( 2, 4 ) === $k_ids && array( 'b' ) === $k_seen && array() === $k_none && 'not asked' === $gc_seen, wp_json_encode( array( $k_ids, $k_seen, $k_none, $gc_seen ) ) );
+$f_ids = $gc_ids( 'cards', array( 'status' => array( 'active', 'disabled' ), 'kind' => 'b' ) );
+$check( 'several values narrow alongside a facet, each still applying', array( 4 ) === $f_ids, wp_json_encode( $f_ids ) );
+$g_rows  = $gc_rows();
+$g_where = array(
+	'#any' => array(
+		array( 'active' => 0 ),
+		array( 'kind' => 'b', '#any' => array( array( 'expires' => 1000 ), array( 'expires' => array( 'op' => '>', 'value' => $gc_now ) ) ) ),
+	),
+);
+$g_sql = array_map( 'intval', array_column( Minn_Admin_Kernel_SQL::select( 'minn_conf_cards', array( 'id' ), array_merge( array( 'owner' => 10 ), $g_where ), array( 'id' => 'ASC' ) ), 'id' ) );
+$g_php = array_values( array_map( function ( $r ) {
+	return $r['id'];
+}, array_filter( $g_rows, function ( $r ) use ( $g_where ) {
+	return Minn_Admin_Kernel_SQL::matches( $r, $g_where );
+} ) ) );
+$check( "'#any' holds a row that meets any of its groups, each an AND of conditions that may hold its own '#any', alike in SQL and PHP", array( 2, 3, 4 ) === $g_sql && array( 2, 3, 4 ) === $g_php, wp_json_encode( array( $g_sql, $g_php ) ) );
+$g_none = Minn_Admin_Kernel_SQL::select( 'minn_conf_cards', array( 'id' ), array( 'owner' => 10, '#any' => array() ) );
+$g_all  = Minn_Admin_Kernel_SQL::select( 'minn_conf_cards', array( 'id' ), array( 'owner' => 10, "#any\0x" => array( array() ) ) );
+$check( "an empty '#any' matches nothing, and a group with no conditions every row", array() === $g_none && 5 === count( $g_all ) && ! Minn_Admin_Kernel_SQL::matches( $g_rows[0], array( '#any' => array() ) ) && Minn_Admin_Kernel_SQL::matches( $g_rows[0], array( '#any' => array( array() ) ) ), wp_json_encode( array( $g_none, count( $g_all ) ) ) );
+$g_bad = array();
+foreach ( array( 'x', array( array( 1, 2 ) ), array( 'a' => array( 'active' => 1 ) ), array( 'nope' ) ) as $bad ) {
+	foreach ( array( 'select', 'matches' ) as $how ) {
+		try {
+			'select' === $how ? Minn_Admin_Kernel_SQL::select( 'minn_conf_cards', array( 'id' ), array( '#any' => $bad ) ) : Minn_Admin_Kernel_SQL::matches( $g_rows[0], array( '#any' => $bad ) );
+			$g_bad[] = 'ran';
+		} catch ( InvalidArgumentException $e ) {
+			$g_bad[] = 'minn_kernel_rule=#any' === $e->getMessage() ? 'refused' : $e->getMessage();
+		}
+	}
+}
+$check( "an '#any' that is not a list of condition groups is refused in SQL and in PHP", array_fill( 0, 8, 'refused' ) === $g_bad, wp_json_encode( $g_bad ) );
+$s_money = Minn_Admin_Kernel::sum( 'minn-conformance/cards', 'amount', array(), 2 );
+$s_whole = Minn_Admin_Kernel::sum( 'minn-conformance/cards', 'amount' );
+$s_where = Minn_Admin_Kernel_SQL::sum( 'minn_conf_cards', 'amount', array( 'owner' => 10, 'active' => 1 ), 2 );
+$s_gone  = Minn_Admin_Kernel_SQL::sum( 'minn_conf_no_table', 'amount', array(), 2 );
+$s_text  = Minn_Admin_Kernel_SQL::sum( 'minn_conf_cards', 'note', array( 'owner' => 10 ), 2 );
+$check( "a money sum rounds each row to the store's decimals before adding them (10.00 + 5.01 + 2.50 + 1.12), held to the source's conditions; a whole sum stays a whole number", is_float( $s_money ) && abs( $s_money - 18.63 ) < 0.0001 && 19 === $s_whole && abs( $s_where - 16.13 ) < 0.0001 && 0.0 === $s_gone, wp_json_encode( array( $s_money, $s_whole, $s_where, $s_gone ) ) );
+$check( 'a money sum over a text column rounds each value as an exact decimal (5.005 to 5.01, 0.125 to 0.13), as PHP and the store do', abs( $s_text - 8.64 ) < 0.0001, wp_json_encode( $s_text ) );
+
 // --- 2. Every real declaration ----------------------------------------------
 $real = array_filter( Minn_Admin_Kernel::resources(), function ( $r ) {
 	return 0 !== strpos( $r['id'], 'minn-conformance/' );
@@ -1445,6 +1585,15 @@ $walk = function ( $node, $where, $sid ) use ( &$walk, $check, $kernel_actions, 
 				$vals = array_keys( $vals ) === range( 0, count( $vals ) - 1 ) ? $vals : array_keys( $vals );
 				foreach ( (array) ( $node['filter']['options'] ?? array() ) as $opt ) {
 					$check( "{$sid}{$where} filter option " . ( $opt[0] ?? '?' ) . " is one {$rid} accepts", in_array( (string) ( $opt[0] ?? '' ), array_map( 'strval', $vals ), true ) );
+				}
+			}
+			// A filter bar's statuses are values the resource's filter knows:
+			// one it did not would list nothing.
+			if ( isset( $node['filterBar']['statuses'] ) && ! empty( $real[ $rid ]['list']['filter'] ) ) {
+				$vals = (array) $real[ $rid ]['list']['filter']['values'];
+				$vals = array_keys( $vals ) === range( 0, count( $vals ) - 1 ) ? $vals : array_keys( $vals );
+				foreach ( (array) $node['filterBar']['statuses'] as $opt ) {
+					$check( "{$sid}{$where} filter bar status " . ( $opt[0] ?? '?' ) . " is one {$rid} accepts", in_array( (string) ( $opt[0] ?? '' ), array_map( 'strval', $vals ), true ) );
 				}
 			}
 		}

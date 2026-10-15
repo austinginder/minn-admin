@@ -15,6 +15,12 @@
  *                                               NOT any of them, in SQL only (matches() refuses it:
  *                                               negating PHP's narrower tests would widen them)
  *   'blog_id' => null                           column IS NULL
+ *   '#any' => array( array( 'active' => 0 ), array( 'active' => 1, 'expires' => null ) )
+ *                                               any of these groups of conditions (OR of ANDs),
+ *                                               for a state that spans columns; an empty list
+ *                                               matches nothing, and a group may hold its own '#any'
+ *                                               (tag each one, "#any\0why", before joining two
+ *                                               condition arrays: an untagged pair would collide)
  * A list (integer keys) is always an IN list and a keyed array always a rule
  * of exactly one kind ('op' with its 'value'), anything else being refused.
  * An empty IN list matches nothing, and an empty NOT IN list everything, so a
@@ -132,11 +138,46 @@ class Minn_Admin_Kernel_SQL {
 		$sql  = array();
 		$args = array();
 		foreach ( $where as $col => $rule ) {
-			list( $s, $a ) = self::rule( self::col( $col, $alias ), $rule );
+			list( $s, $a ) = self::is_groups( $col ) ? self::groups( $rule, $alias ) : self::rule( self::col( $col, $alias ), $rule );
 			$sql[]         = $s;
 			$args          = array_merge( $args, $a );
 		}
 		return array( $sql, $args );
+	}
+
+	/** Whether a condition's key is '#any' (its tag after a NUL aside): groups, not a column. */
+	private static function is_groups( $key ) {
+		return '#any' === explode( "\0", (string) $key, 2 )[0];
+	}
+
+	/**
+	 * The groups of an '#any', checked: a list of condition arrays, or a refusal.
+	 *
+	 * @param mixed $groups Groups.
+	 * @return array[]
+	 */
+	private static function group_list( $groups ) {
+		if ( ! is_array( $groups ) || ! self::is_list( $groups ) ) {
+			throw new InvalidArgumentException( 'minn_kernel_rule=#any' );
+		}
+		foreach ( $groups as $g ) {
+			if ( ! is_array( $g ) || ( $g && self::is_list( $g ) ) ) {
+				throw new InvalidArgumentException( 'minn_kernel_rule=#any' );
+			}
+		}
+		return $groups;
+	}
+
+	/** An '#any' as SQL: ( ( a AND b ) OR ( c ) ), or 1 = 0 for no groups. */
+	private static function groups( $groups, $alias ) {
+		$parts = array();
+		$args  = array();
+		foreach ( self::group_list( $groups ) as $g ) {
+			list( $s, $a ) = self::where( $g, $alias );
+			$parts[]       = $s ? '( ' . implode( ' AND ', $s ) . ' )' : '1 = 1';
+			$args          = array_merge( $args, $a );
+		}
+		return array( $parts ? '( ' . implode( ' OR ', $parts ) . ' )' : '1 = 0', $args );
 	}
 
 	/**
@@ -304,7 +345,7 @@ class Minn_Admin_Kernel_SQL {
 	/**
 	 * Whether an in-memory row meets conditions, by the same rules as
 	 * where(): equality as strings (a boolean as a boolean), lists, NOT,
-	 * operators, LIKE (case-insensitive), any, IS NULL.
+	 * operators, LIKE (case-insensitive), any, IS NULL, '#any' groups.
 	 *
 	 * @param array $row   Row.
 	 * @param array $where Conditions (keys may carry a tag after a NUL).
@@ -312,6 +353,16 @@ class Minn_Admin_Kernel_SQL {
 	 */
 	public static function matches( array $row, array $where ) {
 		foreach ( $where as $col => $rule ) {
+			if ( self::is_groups( $col ) ) {
+				$any = false;
+				foreach ( self::group_list( $rule ) as $g ) {
+					$any = $any || self::matches( $row, $g );
+				}
+				if ( ! $any ) {
+					return false;
+				}
+				continue;
+			}
 			$col = explode( "\0", (string) $col, 2 )[0];
 			if ( ! self::holds( array_key_exists( $col, $row ) ? $row[ $col ] : null, $rule ) ) {
 				return false;
@@ -584,21 +635,29 @@ class Minn_Admin_Kernel_SQL {
 	}
 
 	/**
-	 * The sum of a column under conditions; 0 for none.
+	 * The sum of a column under conditions; 0 for none. A count is summed
+	 * whole; money is summed with $decimals, each row rounded to them first,
+	 * as a store shows each one: read as an exact decimal, so a text column
+	 * (postmeta's) rounds 5.005 to 5.01 as PHP does, not as a double would.
 	 *
-	 * @param string|array $table  Table spec.
-	 * @param string       $column Column.
-	 * @param array        $where  Conditions.
-	 * @return int
+	 * @param string|array $table    Table spec.
+	 * @param string       $column   Column.
+	 * @param array        $where    Conditions.
+	 * @param int|null     $decimals Decimal places (0 to 8), or null for a whole number.
+	 * @return int|float
 	 */
-	public static function sum( $table, $column, array $where = array() ) {
+	public static function sum( $table, $column, array $where = array(), $decimals = null ) {
 		global $wpdb;
+		$money = null !== $decimals;
+		$d     = $money ? max( 0, min( 8, (int) $decimals ) ) : 0;
 		if ( ! self::exists( $table ) ) {
-			return 0;
+			return $money ? 0.0 : 0;
 		}
 		list( $sql, $args ) = self::where( $where, 'e' );
-		$q                  = 'SELECT COALESCE(SUM(' . self::col( $column ) . '),0) FROM ' . self::from( $table ) . ( $sql ? ' WHERE ' . implode( ' AND ', $sql ) : '' );
-		return (int) round( (float) $wpdb->get_var( self::prepare( $q, $args ) ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$col                = self::col( $column );
+		$q                  = 'SELECT COALESCE(SUM(' . ( $money ? "ROUND(CAST({$col} AS DECIMAL(65,30)), {$d})" : $col ) . '),0) FROM ' . self::from( $table ) . ( $sql ? ' WHERE ' . implode( ' AND ', $sql ) : '' );
+		$v                  = (float) $wpdb->get_var( self::prepare( $q, $args ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		return $money ? round( $v, $d ) : (int) round( $v );
 	}
 
 	/**

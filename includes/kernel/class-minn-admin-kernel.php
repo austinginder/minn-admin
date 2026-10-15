@@ -48,7 +48,12 @@
  *       'filter'   => array( 'param' => 'status', 'column' => 'status', 'values' => [ … ], 'default' => … ),
  *                  // values may map each value to conditions instead: array( 'unread' => array( 'viewed' => 0 ) ),
  *                  // or to a callable answering them when the request runs (an upcoming view's "now");
- *                  // 'order' => array( 'upcoming' => 'ASC' ) sorts a value its own way
+ *                  // 'order' => array( 'upcoming' => 'ASC' ) sorts a value its own way;
+ *                  // 'many' => true takes several at once (status[]=a&status[]=b, as the
+ *                  // filter bar sends them): rows in any of them, rows in any declared
+ *                  // value for none or 'any', no row when every value asked for is
+ *                  // unknown; no 'default' or 'order'; a callable source reads the values
+ *                  // asked for in $q['filter'] (empty for none)
  *       'tab'      => array( 'param' => 'form_id', 'column' => 'form_id', 'gate' => callable( int $tab ): bool, 'refuse' => … ),
  *                  // the gate, when declared, is asked before the scope (a per-form capability)
  *       'scope'    => array( 'column' => 'form_id', 'allowed' => callable(): ?int[], 'refuse' => … ),
@@ -319,6 +324,9 @@ class Minn_Admin_Kernel {
 		if ( ! empty( $res['list']['filter'] ) && empty( $res['list']['filter']['values'] ) ) {
 			_doing_it_wrong( 'minn_admin_resource', esc_html( "{$res['id']} declares a filter with no values, so it has no list route." ), 'Minn Admin 0.46.0' );
 			$res['list'] = array();
+		}
+		if ( ! empty( $res['list']['filter']['many'] ) && ( isset( $res['list']['filter']['default'] ) || isset( $res['list']['filter']['order'] ) ) ) {
+			_doing_it_wrong( 'minn_admin_resource', esc_html( "{$res['id']} declares a default or an order on a filter taking several values, which it never applies." ), 'Minn Admin 0.46.0' );
 		}
 		$base_eps = array();
 		if ( ! empty( $res['list'] ) ) {
@@ -691,7 +699,9 @@ class Minn_Admin_Kernel {
 			'search'   => '',
 			'request'  => $r,
 		);
-		if ( ! empty( $l['filter'] ) ) {
+		if ( ! empty( $l['filter'] ) && ! empty( $l['filter']['many'] ) ) {
+			$q = self::many( $l['filter'], $r, $q );
+		} elseif ( ! empty( $l['filter'] ) ) {
 			$f      = $l['filter'];
 			$values = (array) $f['values'];
 			$mapped = array_keys( $values ) !== range( 0, count( $values ) - 1 );
@@ -778,6 +788,57 @@ class Minn_Admin_Kernel {
 			$own[ $col . "\0fixed" ] = $rule;
 		}
 		$q['where'] = array_merge( $own, $q['where'] );
+		return $q;
+	}
+
+	/**
+	 * A filter that takes several values: each one named is a group of
+	 * conditions, and a row in any group is listed ('#any'); none named, or
+	 * 'any', is every declared value, so a row in none of them never lists.
+	 * An unknown name narrows to nothing rather than widening, so asking only
+	 * for unknown ones lists nothing, whatever the source; a value whose
+	 * conditions cannot be said drops out.
+	 *
+	 * @param array           $f The filter declaration.
+	 * @param WP_REST_Request $r Request.
+	 * @param array           $q The list query so far.
+	 * @return array
+	 */
+	private static function many( array $f, WP_REST_Request $r, array $q ) {
+		$values = (array) $f['values'];
+		$mapped = array_keys( $values ) !== range( 0, count( $values ) - 1 );
+		$names  = $mapped ? array_map( 'strval', array_keys( $values ) ) : array_map( 'strval', $values );
+		$raw    = $r->get_param( (string) ( $f['param'] ?? 'status' ) );
+		$asked  = array();
+		foreach ( is_array( $raw ) ? $raw : array( $raw ) as $one ) {
+			// A value that is not text names no view: it asks for nothing known.
+			$one = is_scalar( $one ) || null === $one ? trim( (string) $one ) : "\0";
+			if ( '' !== $one && 'any' !== $one ) {
+				$asked[] = $one;
+			}
+		}
+		$known       = array_values( array_unique( array_intersect( $asked, $names ) ) );
+		$q['filter'] = $known;
+		if ( $asked && ! $known ) {
+			$q['none'] = true;
+			return $q;
+		}
+		$use = $asked ? $known : $names;
+		if ( ! $mapped ) {
+			$q['where'][ $f['column'] ] = $use;
+			return $q;
+		}
+		$groups = array();
+		foreach ( $use as $v ) {
+			$conds = is_callable( $values[ $v ] ) && ! is_array( $values[ $v ] ) ? call_user_func( $values[ $v ] ) : $values[ $v ];
+			if ( is_array( $conds ) ) {
+				$groups[] = $conds;
+			}
+		}
+		if ( ! $groups ) {
+			$q['none'] = true;
+		}
+		$q['where'][ "#any\0filter" ] = $groups;
 		return $q;
 	}
 
@@ -1544,14 +1605,18 @@ class Minn_Admin_Kernel {
 	 * The sum of a column over the rows the caller may see that meet
 	 * conditions (a redirect list's hits, all time).
 	 *
-	 * @param string $id     Resource id.
-	 * @param string $column Column.
-	 * @param array  $where  Conditions.
-	 * @return int
+	 * @param string   $id       Resource id.
+	 * @param string   $column   Column.
+	 * @param array    $where    Conditions.
+	 * @param int|null $decimals Decimal places for money (Minn_Admin_Kernel_SQL::sum()).
+	 * @return int|float
 	 */
-	public static function sum( $id, $column, array $where = array() ) {
+	public static function sum( $id, $column, array $where = array(), $decimals = null ) {
 		$c = self::card_rows( $id, $where );
-		return $c ? Minn_Admin_Kernel_SQL::sum( $c[0], $column, $c[1] ) : 0;
+		if ( ! $c ) {
+			return null === $decimals ? 0 : 0.0;
+		}
+		return Minn_Admin_Kernel_SQL::sum( $c[0], $column, $c[1], $decimals );
 	}
 
 	/**
