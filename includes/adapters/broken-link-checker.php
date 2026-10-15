@@ -192,11 +192,8 @@ function minn_admin_blc_save( $link ) {
 	return (bool) $ok;
 }
 
-add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
-	if ( ! minn_admin_blc_can() ) {
-		return $surfaces;
-	}
-	$surfaces['broken-links'] = array(
+minn_admin_add_surface( 'broken-links', 'minn_admin_blc_can', function () {
+	return array(
 		'label'      => __( 'Broken links', 'minn-admin' ),
 		'family'     => 'link-health',
 		'group'      => 'tools',
@@ -289,7 +286,6 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 		),
 	);
-	return $surfaces;
 } );
 
 /** One link's detail: where it points, how it last checked, where it is found, their check log. */

@@ -266,6 +266,7 @@ require_once MINN_ADMIN_DIR . 'includes/adapters/wordfence.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/limit-login-attempts.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/solid-security.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/wps-hide-login.php';
+require_once MINN_ADMIN_DIR . 'includes/adapters/redirects-kit.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/rank-math-redirections.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/elementor-mcp.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/sucuri.php';

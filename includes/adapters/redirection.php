@@ -39,18 +39,16 @@ function minn_admin_redirection_db_classes() {
 	return null;
 }
 
-add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
-	if ( ! defined( 'REDIRECTION_VERSION' ) ) {
-		return $surfaces;
-	}
-
-	$surfaces['redirection'] = array(
-		'label'      => __( 'Redirects', 'minn-admin' ),
-		'family'     => 'redirects',
+minn_admin_add_surface( 'redirection', function () {
+	return defined( 'REDIRECTION_VERSION' );
+}, function () {
+	return minn_admin_redirects_surface( array(
 		'sub'        => 'Redirection',
 		'plugin'     => 'redirection',
-		'icon'       => 'shuffle',
 		'cap'        => apply_filters( 'redirection_role', 'manage_options' ),
+		// Status card (v0.18.0): rule counts, served/404 traffic and a
+		// dual-series 14-day chart from Redirection's own log tables.
+		'status'     => 'redirection/status',
 		// Fresh installs have no tables or default group until Redirection's
 		// setup wizard runs, so every write fails ("Invalid group"). The gate
 		// runs THEIR installer (Red_Latest_Database::install() is the same
@@ -138,11 +136,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'group_id'    => 1,
 					'regex'       => false,
 				),
-				'fields'   => array(
-					array( 'key' => 'url', 'label' => __( 'Source URL', 'minn-admin' ), 'mono' => true, 'placeholder' => __( '/old-page', 'minn-admin' ) ),
-					array( 'key' => 'action_data.url', 'label' => __( 'Target URL', 'minn-admin' ), 'mono' => true, 'placeholder' => __( '/new-page or https://…', 'minn-admin' ) ),
-					array( 'key' => 'action_code', 'label' => __( 'HTTP status', 'minn-admin' ), 'type' => 'number', 'value' => 301 ),
-				),
+				'fields'   => array( minn_admin_redirects_source( 'url' ), minn_admin_redirects_target( 'action_data.url' ), minn_admin_redirects_code( 'action_code' ) ),
 			),
 			'columns'   => array(
 				array( 'key' => 'url', 'label' => __( 'Source', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.4fr)', 'sort' => 'source' ),
@@ -167,11 +161,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 					'route'    => 'redirection/v1/redirect/{id}',
 					'method'   => 'POST',
 					'preserve' => array( 'match_type', 'action_type', 'group_id', 'title', 'regex', 'match_data', 'position', 'action_data' ),
-					'fields'   => array(
-						array( 'key' => 'url', 'label' => __( 'Source URL', 'minn-admin' ), 'mono' => true ),
-						array( 'key' => 'action_data.url', 'label' => __( 'Target URL', 'minn-admin' ), 'mono' => true ),
-						array( 'key' => 'action_code', 'label' => __( 'HTTP status', 'minn-admin' ), 'type' => 'number' ),
-					),
+					'fields'   => array( minn_admin_redirects_source( 'url', false ), minn_admin_redirects_target( 'action_data.url', false ), minn_admin_redirects_code( 'action_code', false ) ),
 				),
 			),
 			'actions'   => array(
@@ -215,9 +205,6 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				),
 			),
 		),
-		// Status card (v0.18.0): rule counts, served/404 traffic and a
-		// dual-series 14-day chart from Redirection's own log tables.
-		'status'     => array( 'route' => 'minn-admin/v1/redirection/status' ),
 		// Daily options only (monitor + logging + IP). Schema served at
 		// request time; writes go through red_set_options (their sanitizer).
 		'settings'   => array(
@@ -228,8 +215,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			),
 			'route' => 'minn-admin/v1/redirection/settings/{tab}',
 		),
-	);
-	return $surfaces;
+	) );
 } );
 
 function minn_admin_redirection_ready() {

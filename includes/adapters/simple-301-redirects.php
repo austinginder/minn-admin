@@ -27,19 +27,13 @@ function minn_admin_s301_decode_id( $id ) {
 	return (string) base64_decode( strtr( (string) $id, '-_', '+/' ) );
 }
 
-add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
-	if ( ! minn_admin_s301_active() ) {
-		return $surfaces;
-	}
-	$surfaces['simple-301-redirects'] = array(
-		'label'      => __( 'Redirects', 'minn-admin' ),
-		'family'     => 'redirects',
+minn_admin_add_surface( 'simple-301-redirects', 'minn_admin_s301_active', function () {
+	list( $delete, $bulk ) = minn_admin_redirects_delete( 'minn-admin/v1/s301/redirects/{id}' );
+	return minn_admin_redirects_surface( array(
 		'sub'        => 'Simple 301 Redirects',
 		'plugin'     => 'simple-301-redirects',
-		'icon'       => 'shuffle',
 		'cap'        => 'manage_options',
-		// Status card (v0.18.0): family parity with Redirection.
-		'status'     => array( 'route' => 'minn-admin/v1/s301/status' ),
+		'status'     => 's301/status',
 		'collection' => array(
 			'route'    => 'minn-admin/v1/s301/redirects',
 			'itemsKey' => 'items',
@@ -53,43 +47,20 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'label'  => __( 'Add redirect', 'minn-admin' ),
 				'route'  => 'minn-admin/v1/s301/redirects',
 				'method' => 'POST',
-				'fields' => array(
-					array( 'key' => 'from', 'label' => __( 'Source URL', 'minn-admin' ), 'mono' => true, 'placeholder' => __( '/old-page', 'minn-admin' ) ),
-					array( 'key' => 'to', 'label' => __( 'Target URL', 'minn-admin' ), 'mono' => true, 'placeholder' => __( '/new-page or https://…', 'minn-admin' ) ),
-				),
+				'fields' => array( minn_admin_redirects_source( 'from' ), minn_admin_redirects_target( 'to' ) ),
 			),
 			'detail'   => array(
 				'skip' => array( 'id' ),
 				'edit' => array(
 					'route'  => 'minn-admin/v1/s301/redirects/{id}',
 					'method' => 'PUT',
-					'fields' => array(
-						array( 'key' => 'from', 'label' => __( 'Source URL', 'minn-admin' ), 'mono' => true ),
-						array( 'key' => 'to', 'label' => __( 'Target URL', 'minn-admin' ), 'mono' => true ),
-					),
+					'fields' => array( minn_admin_redirects_source( 'from', false ), minn_admin_redirects_target( 'to', false ) ),
 				),
 			),
-			'actions'  => array(
-				array(
-					'label'   => __( 'Delete redirect', 'minn-admin' ),
-					'method'  => 'DELETE',
-					'route'   => 'minn-admin/v1/s301/redirects/{id}',
-					'confirm' => __( 'Delete this redirect permanently?', 'minn-admin' ),
-					'danger'  => true,
-				),
-			),
-			'bulk'     => array(
-				array(
-					'label'   => __( 'Delete', 'minn-admin' ),
-					'method'  => 'DELETE',
-					'route'   => 'minn-admin/v1/s301/redirects/{id}',
-					'confirm' => __( 'Delete the selected redirects permanently?', 'minn-admin' ),
-					'danger'  => true,
-				),
-			),
+			'actions'  => array( $delete ),
+			'bulk'     => array( $bulk ),
 		),
-	);
-	return $surfaces;
+	) );
 } );
 
 function minn_admin_s301_can() {

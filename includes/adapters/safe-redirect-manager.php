@@ -107,71 +107,41 @@ const MINN_ADMIN_SRM_META = array(
 	'joins' => array( 'pm' => array( 'core' => 'postmeta', 'on' => array( 'post_id' => 'e.ID' ) ) ),
 );
 
-add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
-	if ( ! minn_admin_srm_active() ) {
-		return $surfaces;
-	}
-	$surfaces['safe-redirect-manager'] = array(
-		'label'      => __( 'Redirects', 'minn-admin' ),
-		'family'     => 'redirects',
+minn_admin_add_surface( 'safe-redirect-manager', 'minn_admin_srm_active', function () {
+	$res = 'srm/redirects';
+	list( $delete, $bulk ) = minn_admin_redirects_delete( $res );
+	return minn_admin_redirects_surface( array(
 		'sub'        => 'Safe Redirect Manager',
 		'plugin'     => 'safe-redirect-manager',
-		'icon'       => 'shuffle',
 		// Same cap the routes use, so the nav and the routes cannot drift.
 		'cap'        => minn_admin_srm_cap(),
-		// Status card (v0.18.0): family parity with Redirection.
-		'status'     => array( 'route' => 'minn-admin/v1/srm/status' ),
-		'collection' => Minn_Admin_Kernel::collection( 'srm/redirects', array(
-			'columns'  => array(
+		'status'     => 'srm/status',
+		'collection' => Minn_Admin_Kernel::collection( $res, array(
+			'columns' => array(
 				array( 'key' => 'from', 'label' => __( 'Source', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.4fr)' ),
 				array( 'key' => 'to', 'label' => __( 'Target', 'minn-admin' ), 'format' => 'mono', 'width' => 'minmax(0,1.4fr)' ),
 				array( 'key' => 'status_code', 'label' => __( 'Code', 'minn-admin' ), 'format' => 'mono', 'width' => '64px' ),
 				array( 'key' => 'regex', 'label' => __( 'Regex', 'minn-admin' ), 'width' => '64px' ),
 			),
-			'create'   => array(
+			'create'  => array(
 				'label'    => __( 'Add redirect', 'minn-admin' ),
-				'route'    => 'minn-admin/v1/srm/redirects',
+				'route'    => 'minn-admin/v1/' . $res,
 				'method'   => 'POST',
 				'defaults' => array( 'status_code' => 301 ),
-				'fields'   => array(
-					array( 'key' => 'from', 'label' => __( 'Source URL', 'minn-admin' ), 'mono' => true, 'placeholder' => __( '/old-page', 'minn-admin' ) ),
-					array( 'key' => 'to', 'label' => __( 'Target URL', 'minn-admin' ), 'mono' => true, 'placeholder' => __( '/new-page or https://…', 'minn-admin' ) ),
-					array( 'key' => 'status_code', 'label' => __( 'HTTP status', 'minn-admin' ), 'type' => 'number', 'value' => 301 ),
-				),
+				'fields'   => array( minn_admin_redirects_source( 'from' ), minn_admin_redirects_target( 'to' ), minn_admin_redirects_code( 'status_code' ) ),
 			),
-			'detail'   => array(
+			'detail'  => array(
 				'skip' => array( 'id', 'regex' ),
 				'edit' => array(
-					'route'  => 'minn-admin/v1/srm/redirects/{id}',
+					'route'  => Minn_Admin_Kernel::action_path( $res, 'edit' ),
 					'method' => 'PUT',
-					'fields' => array(
-						array( 'key' => 'from', 'label' => __( 'Source URL', 'minn-admin' ), 'mono' => true ),
-						array( 'key' => 'to', 'label' => __( 'Target URL', 'minn-admin' ), 'mono' => true ),
-						array( 'key' => 'status_code', 'label' => __( 'HTTP status', 'minn-admin' ), 'type' => 'number' ),
-					),
+					'fields' => array( minn_admin_redirects_source( 'from', false ), minn_admin_redirects_target( 'to', false ), minn_admin_redirects_code( 'status_code', false ) ),
 				),
 			),
-			'actions'  => array(
-				array(
-					'label'   => __( 'Delete redirect', 'minn-admin' ),
-					'method'  => 'DELETE',
-					'route'   => 'minn-admin/v1/srm/redirects/{id}',
-					'confirm' => __( 'Delete this redirect permanently?', 'minn-admin' ),
-					'danger'  => true,
-				),
-			),
-			'bulk'     => array(
-				array(
-					'label'   => __( 'Delete', 'minn-admin' ),
-					'method'  => 'DELETE',
-					'route'   => 'minn-admin/v1/srm/redirects/{id}',
-					'confirm' => __( 'Delete the selected redirects permanently?', 'minn-admin' ),
-					'danger'  => true,
-				),
-			),
+			'actions' => array( $delete ),
+			'bulk'    => array( $bulk ),
 		) ),
-	);
-	return $surfaces;
+	) );
 } );
 
 minn_admin_resource( 'srm/redirects', function () {

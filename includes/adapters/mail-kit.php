@@ -15,23 +15,6 @@
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Add a surface while its plugin is active: how a kit's adapter registers
- * one (tests/catalog.test.js reads the id here as it reads $surfaces['id']).
- *
- * @param string   $id     Surface id.
- * @param callable $active Whether the plugin is active and the reader may see its log.
- * @param callable $build  The surface (minn_admin_mail_surface()), built when surfaces are.
- */
-function minn_admin_add_surface( $id, callable $active, callable $build ) {
-	add_filter( 'minn_admin_surfaces', function ( $surfaces ) use ( $id, $active, $build ) {
-		if ( true === call_user_func( $active ) ) {
-			$surfaces[ $id ] = call_user_func( $build );
-		}
-		return $surfaces;
-	} );
-}
-
-/**
  * An email log's surface over its kernel resource.
  *
  * @param string $res Resource id ("post-smtp/emails").

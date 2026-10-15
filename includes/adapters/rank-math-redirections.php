@@ -180,12 +180,10 @@ function minn_admin_rm_save_redirect( $data ) {
 	return (int) $id;
 }
 
-add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
-	$redirects = minn_admin_rm_can_redirects();
-	$monitor   = minn_admin_rm_can_404();
-	if ( ! $redirects && ! $monitor ) {
-		return $surfaces;
-	}
+minn_admin_add_surface( 'rank-math-redirections', function () {
+	return minn_admin_rm_can_redirects() || minn_admin_rm_can_404();
+}, function () {
+	$redirects    = minn_admin_rm_can_redirects();
 	$code_options = array();
 	foreach ( minn_admin_rm_codes() as $value => $label ) {
 		$code_options[] = array( $value, $label );
@@ -195,18 +193,19 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		$edit_code_options[] = array( (string) $value, $label );
 	}
 	$redirect_fields = array(
-		array( 'key' => 'url_to', 'label' => __( 'Target URL', 'minn-admin' ), 'mono' => true, 'placeholder' => __( '/new-page or https://…', 'minn-admin' ), 'required' => false ),
+		minn_admin_redirects_target( 'url_to' ) + array( 'required' => false ),
 		array( 'key' => 'header_code', 'label' => __( 'Type', 'minn-admin' ), 'type' => 'select', 'options' => $code_options, 'value' => '301' ),
 	);
-
-	$log_view = array(
+	$ui   = function ( $res, $slug, array $o ) {
+		return Minn_Admin_Kernel::ui( $res, $slug, $o );
+	};
+	$rr   = 'rankmath/redirects';
+	$set  = function ( $label, $status, array $o = array() ) use ( $ui, $rr ) {
+		return $ui( $rr, 'status', array( 'label' => $label, 'body' => array( 'status' => $status ) ) + $o );
+	};
+	$log_view = Minn_Admin_Kernel::collection( 'rankmath/404', array(
 		'viewLabel' => __( '404 log', 'minn-admin' ),
-		'route'     => 'minn-admin/v1/rankmath/404',
-		'pageQuery' => 'per_page=25&page={page}',
 		'sortQuery' => 'orderby={by}&order={dir}',
-		'itemsKey'  => 'items',
-		'totalKey'  => 'total',
-		'search'    => 'search={q}',
 		'columns'   => array(
 			array( 'key' => 'uri', 'label' => __( 'Address', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.6fr)', 'sort' => 'uri' ),
 			array( 'key' => 'times_accessed', 'label' => __( 'Hits', 'minn-admin' ), 'format' => 'num', 'width' => '72px', 'sort' => 'times_accessed' ),
@@ -215,39 +214,15 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		),
 		'detail'    => array(),
 		'actions'   => array_values( array_filter( array(
-			$redirects ? array(
-				'label'  => __( 'Redirect…', 'minn-admin' ),
-				'route'  => 'minn-admin/v1/rankmath/404/{id}/redirect',
-				'method' => 'POST',
-				'list'   => true,
-				'fields' => $redirect_fields,
-			) : null,
-			array(
-				'label'   => __( 'Delete log entry', 'minn-admin' ),
-				'route'   => 'minn-admin/v1/rankmath/404/{id}',
-				'method'  => 'DELETE',
-				'confirm' => __( 'Delete this 404 log entry?', 'minn-admin' ),
-				'danger'  => true,
-			),
+			$redirects ? $ui( 'rankmath/404', 'redirect', array( 'label' => __( 'Redirect…', 'minn-admin' ) ) ) + array( 'list' => true, 'fields' => $redirect_fields ) : null,
+			$ui( 'rankmath/404', 'delete', array( 'label' => __( 'Delete log entry', 'minn-admin' ), 'confirm' => __( 'Delete this 404 log entry?', 'minn-admin' ), 'danger' => true ) ),
 		) ) ),
 		'bulk'      => array(
-			array(
-				'label'   => __( 'Delete', 'minn-admin' ),
-				'route'   => 'minn-admin/v1/rankmath/404/{id}',
-				'method'  => 'DELETE',
-				'confirm' => __( 'Delete the selected 404 log entries?', 'minn-admin' ),
-				'danger'  => true,
-			),
+			$ui( 'rankmath/404', 'delete', array( 'label' => __( 'Delete', 'minn-admin' ), 'confirm' => __( 'Delete the selected 404 log entries?', 'minn-admin' ), 'danger' => true ) ),
 		),
-	);
-
-	$redirect_coll = array(
-		'route'     => 'minn-admin/v1/rankmath/redirects',
-		'pageQuery' => 'per_page=25&page={page}',
+	) );
+	$redirect_coll = Minn_Admin_Kernel::collection( $rr, array(
 		'sortQuery' => 'orderby={by}&order={dir}',
-		'itemsKey'  => 'items',
-		'totalKey'  => 'total',
-		'search'    => 'search={q}',
 		'tabs'      => array(
 			'param'    => 'status',
 			'static'   => array(
@@ -258,15 +233,12 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'allLabel' => __( 'All', 'minn-admin' ),
 		),
 		'create'    => array(
-			'label'    => __( 'Add redirect', 'minn-admin' ),
-			'route'    => 'minn-admin/v1/rankmath/redirects',
-			'method'   => 'POST',
+			'label'  => __( 'Add redirect', 'minn-admin' ),
+			'route'  => 'minn-admin/v1/' . $rr,
+			'method' => 'POST',
 			// Exact-match source like their quick form; contains/regex and
 			// multi-source rules stay on Rank Math's own screen.
-			'fields'   => array_merge(
-				array( array( 'key' => 'source', 'label' => __( 'Source URL', 'minn-admin' ), 'mono' => true, 'placeholder' => __( '/old-page', 'minn-admin' ) ) ),
-				$redirect_fields
-			),
+			'fields' => array_merge( array( minn_admin_redirects_source( 'source' ) ), $redirect_fields ),
 		),
 		'columns'   => array(
 			array( 'key' => 'source', 'label' => __( 'Source', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.4fr)' ),
@@ -279,50 +251,39 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		'detail'    => array(
 			'skip' => array( 'trashed', 'source' ),
 			'edit' => array(
-				'route'  => 'minn-admin/v1/rankmath/redirects/{id}',
+				'route'  => Minn_Admin_Kernel::action_path( $rr, 'edit' ),
 				'method' => 'POST',
 				'fields' => array(
-					array( 'key' => 'url_to', 'label' => __( 'Target URL', 'minn-admin' ), 'mono' => true ),
+					minn_admin_redirects_target( 'url_to', false ),
 					array( 'key' => 'header_code', 'label' => __( 'Type', 'minn-admin' ), 'type' => 'select', 'options' => $edit_code_options ),
 				),
 			),
 		),
 		'actions'   => array(
-			array( 'label' => __( 'Activate', 'minn-admin' ), 'route' => 'minn-admin/v1/rankmath/redirects/{id}/status', 'method' => 'POST', 'body' => array( 'status' => 'active' ), 'when' => array( 'key' => 'status', 'equals' => 'inactive' ) ),
-			array( 'label' => __( 'Deactivate', 'minn-admin' ), 'route' => 'minn-admin/v1/rankmath/redirects/{id}/status', 'method' => 'POST', 'body' => array( 'status' => 'inactive' ), 'when' => array( 'key' => 'status', 'equals' => 'active' ) ),
-			array( 'label' => __( 'Move to Trash', 'minn-admin' ), 'route' => 'minn-admin/v1/rankmath/redirects/{id}/status', 'method' => 'POST', 'body' => array( 'status' => 'trashed' ), 'when' => array( 'key' => 'trashed', 'equals' => '0' ) ),
-			array( 'label' => __( 'Restore', 'minn-admin' ), 'route' => 'minn-admin/v1/rankmath/redirects/{id}/status', 'method' => 'POST', 'body' => array( 'status' => 'active' ), 'when' => array( 'key' => 'trashed', 'equals' => '1' ) ),
-			array(
-				'label'   => __( 'Delete permanently', 'minn-admin' ),
-				'route'   => 'minn-admin/v1/rankmath/redirects/{id}',
-				'method'  => 'DELETE',
-				'confirm' => __( 'Delete this redirect permanently?', 'minn-admin' ),
-				'danger'  => true,
-				'when'    => array( 'key' => 'trashed', 'equals' => '1' ),
-			),
+			$set( __( 'Activate', 'minn-admin' ), 'active', array( 'key' => 'status', 'when' => 'inactive' ) ),
+			$set( __( 'Deactivate', 'minn-admin' ), 'inactive', array( 'key' => 'status', 'when' => 'active' ) ),
+			$set( __( 'Move to Trash', 'minn-admin' ), 'trashed', array( 'key' => 'trashed', 'when' => '0' ) ),
+			$set( __( 'Restore', 'minn-admin' ), 'active', array( 'key' => 'trashed', 'when' => '1' ) ),
+			$ui( $rr, 'delete', array( 'label' => __( 'Delete permanently', 'minn-admin' ), 'confirm' => __( 'Delete this redirect permanently?', 'minn-admin' ), 'danger' => true, 'key' => 'trashed', 'when' => '1' ) ),
 		),
 		'bulk'      => array(
-			array( 'label' => __( 'Activate', 'minn-admin' ), 'route' => 'minn-admin/v1/rankmath/redirects/{id}/status', 'method' => 'POST', 'body' => array( 'status' => 'active' ) ),
-			array( 'label' => __( 'Deactivate', 'minn-admin' ), 'route' => 'minn-admin/v1/rankmath/redirects/{id}/status', 'method' => 'POST', 'body' => array( 'status' => 'inactive' ) ),
-			array( 'label' => __( 'Move to Trash', 'minn-admin' ), 'route' => 'minn-admin/v1/rankmath/redirects/{id}/status', 'method' => 'POST', 'body' => array( 'status' => 'trashed' ) ),
+			$set( __( 'Activate', 'minn-admin' ), 'active' ),
+			$set( __( 'Deactivate', 'minn-admin' ), 'inactive' ),
+			$set( __( 'Move to Trash', 'minn-admin' ), 'trashed' ),
 		),
-	);
-
-	$surfaces['rank-math-redirections'] = array(
-		'label'      => __( 'Redirects', 'minn-admin' ),
-		'family'     => 'redirects',
+	) );
+	$surface = minn_admin_redirects_surface( array(
 		'sub'        => 'Rank Math',
 		'plugin'     => 'seo-by-rank-math',
-		'icon'       => 'shuffle',
 		// Each view and route gates on its own Rank Math capability.
 		'cap'        => 'read',
-		'status'     => array( 'route' => 'minn-admin/v1/rankmath/status' ),
+		'status'     => 'rankmath/status',
 		'collection' => $redirects ? $redirect_coll : $log_view,
-	);
-	if ( $redirects && $monitor ) {
-		$surfaces['rank-math-redirections']['views'] = array( $log_view );
+	) );
+	if ( $redirects && minn_admin_rm_can_404() ) {
+		$surface['views'] = array( $log_view );
 	}
-	return $surfaces;
+	return $surface;
 } );
 
 /** Their sort and direction for a list, from the request: only the columns their reader orders by. */

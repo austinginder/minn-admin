@@ -181,94 +181,63 @@ minn_admin_endpoint( 'eps301/status', array(
 		$inactive = Minn_Admin_Kernel::count( $id, array( 'status' => 'inactive' ) );
 		$log      = get_option( 'eps_redirects_404_log', array() );
 		$misses   = is_array( $log ) && $log ? count( $log ) : Minn_Admin_Kernel_SQL::count( 'redirects', array( 'status' => '404' ) );
-		$rows     = array(
+		$top  = Minn_Admin_Kernel_SQL::select( 'redirects', array( 'url_from', 'count' ), $live + array( 'count' => array( 'op' => '>', 'value' => 0 ) ), array( 'count' => 'DESC' ), 1 );
+		$rows = array_merge(
 			array(
-				'label' => __( 'Redirect rules', 'minn-admin' ),
-				'value' => (string) $active,
-				'hint'  => $inactive ? $inactive . ' inactive' : __( 'all enabled', 'minn-admin' ),
+				array(
+					'label' => __( 'Redirect rules', 'minn-admin' ),
+					'value' => (string) $active,
+					'hint'  => $inactive ? $inactive . ' inactive' : __( 'all enabled', 'minn-admin' ),
+				),
 			),
-			array( 'label' => __( 'Hits, all time', 'minn-admin' ), 'value' => number_format_i18n( Minn_Admin_Kernel::sum( $id, 'count', array( 'status' => array( '301', '302', '307', 'inactive' ) ) ) ) ),
+			minn_admin_redirects_hits(
+				Minn_Admin_Kernel::sum( $id, 'count', array( 'status' => array( '301', '302', '307', 'inactive' ) ) ),
+				$top ? '/' . ltrim( (string) $top[0]['url_from'], '/' ) : null,
+				$top ? $top[0]['count'] : 0
+			)
 		);
-		$top = Minn_Admin_Kernel_SQL::select( 'redirects', array( 'url_from', 'count' ), $live + array( 'count' => array( 'op' => '>', 'value' => 0 ) ), array( 'count' => 'DESC' ), 1 );
-		if ( $top ) {
-			$rows[] = array(
-				'label' => __( 'Top redirect', 'minn-admin' ),
-				'value' => '/' . ltrim( (string) $top[0]['url_from'], '/' ),
-				'hint'  => number_format_i18n( (int) $top[0]['count'] ) . ' hits',
-			);
-		}
 		$rows[] = array( 'label' => __( '404 log', 'minn-admin' ), 'value' => number_format_i18n( $misses ) );
 		return array( 'rows' => $rows );
 	},
 ) );
 
-add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
-	if ( ! minn_admin_eps301_active() ) {
-		return $surfaces;
-	}
-	$status_options = array(
+minn_admin_add_surface( 'eps-301-redirects', 'minn_admin_eps301_active', function () {
+	$res    = 'eps301/redirects';
+	$status = array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'type' => 'select', 'options' => array(
 		array( '301', '301 permanent' ),
 		array( '302', '302 temporary' ),
 		array( '307', '307 temporary' ),
 		array( 'inactive', 'Inactive' ),
-	);
-	$surfaces['eps-301-redirects'] = array(
-		'label'      => __( 'Redirects', 'minn-admin' ),
-		'family'     => 'redirects',
+	) );
+	list( $delete, $bulk ) = minn_admin_redirects_delete( $res );
+	return minn_admin_redirects_surface( array(
 		'sub'        => '301 Redirects',
 		'plugin'     => 'eps-301-redirects',
-		'icon'       => 'shuffle',
 		'cap'        => minn_admin_eps301_cap(),
-		// Status card (v0.18.0): family parity with Redirection.
-		'status'     => array( 'route' => 'minn-admin/v1/eps301/status' ),
-		'collection' => Minn_Admin_Kernel::collection( 'eps301/redirects', array(
-			'columns'  => array(
+		'status'     => 'eps301/status',
+		'collection' => Minn_Admin_Kernel::collection( $res, array(
+			'columns' => array(
 				array( 'key' => 'from', 'label' => __( 'Source', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.3fr)' ),
 				array( 'key' => 'target', 'label' => __( 'Target', 'minn-admin' ), 'format' => 'mono', 'width' => 'minmax(0,1.3fr)' ),
 				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '110px' ),
 				array( 'key' => 'hits', 'label' => __( 'Hits', 'minn-admin' ), 'format' => 'num', 'width' => '70px' ),
 			),
-			'create'   => array(
+			'create'  => array(
 				'label'  => __( 'Add redirect', 'minn-admin' ),
-				'route'  => 'minn-admin/v1/eps301/redirects',
+				'route'  => 'minn-admin/v1/' . $res,
 				'method' => 'POST',
-				'fields' => array(
-					array( 'key' => 'from', 'label' => __( 'Source URL', 'minn-admin' ), 'mono' => true, 'placeholder' => __( '/old-page', 'minn-admin' ) ),
-					array( 'key' => 'to', 'label' => __( 'Target URL', 'minn-admin' ), 'mono' => true, 'placeholder' => __( '/new-page, https://… or a post ID', 'minn-admin' ) ),
-					array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'type' => 'select', 'options' => $status_options ),
-				),
+				'fields' => array( minn_admin_redirects_source( 'from' ), minn_admin_redirects_target( 'to', true, __( '/new-page, https://… or a post ID', 'minn-admin' ) ), $status ),
 			),
-			'detail'   => array(
+			'detail'  => array(
 				'skip' => array( 'id', 'target' ),
 				'edit' => array(
-					'route'  => 'minn-admin/v1/eps301/redirects/{id}',
+					'route'  => Minn_Admin_Kernel::action_path( $res, 'edit' ),
 					'method' => 'PUT',
-					'fields' => array(
-						array( 'key' => 'from', 'label' => __( 'Source URL', 'minn-admin' ), 'mono' => true ),
-						array( 'key' => 'to', 'label' => __( 'Target URL', 'minn-admin' ), 'mono' => true ),
-						array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'type' => 'select', 'options' => $status_options ),
-					),
+					'fields' => array( minn_admin_redirects_source( 'from', false ), minn_admin_redirects_target( 'to', false ), $status ),
 				),
 			),
-			'actions'  => array(
-				array(
-					'label'   => __( 'Delete redirect', 'minn-admin' ),
-					'method'  => 'DELETE',
-					'route'   => 'minn-admin/v1/eps301/redirects/{id}',
-					'confirm' => __( 'Delete this redirect permanently?', 'minn-admin' ),
-					'danger'  => true,
-				),
-			),
-			'bulk'     => array(
-				array(
-					'label'   => __( 'Delete', 'minn-admin' ),
-					'method'  => 'DELETE',
-					'route'   => 'minn-admin/v1/eps301/redirects/{id}',
-					'confirm' => __( 'Delete the selected redirects permanently?', 'minn-admin' ),
-					'danger'  => true,
-				),
-			),
+			'actions' => array( $delete ),
+			'bulk'    => array( $bulk ),
 		) ),
-	);
-	return $surfaces;
+	) );
 } );
