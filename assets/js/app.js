@@ -27937,6 +27937,196 @@
 		return lines.join( '\n' );
 	}
 
+	// Running the site on Minn Engine from here: experimental, so the card
+	// stays hidden until seven quick clicks on the System screen's footer
+	// unlock it in this browser (Minn_Admin_Switch on the server, which
+	// also answers `wp minn install`). WordPress only, for someone who may
+	// update core; the engine has no such card.
+	const MINN_LABS_KEY = 'minn-labs-switch';
+	function minnLabsOn() {
+		try {
+			return ! ENGINE && !! B.caps.core && '1' === localStorage.getItem( MINN_LABS_KEY );
+		} catch ( e ) {
+			return false;
+		}
+	}
+	function setMinnLabs( on ) {
+		try {
+			if ( on ) localStorage.setItem( MINN_LABS_KEY, '1' );
+			else localStorage.removeItem( MINN_LABS_KEY );
+		} catch ( e ) { /* private mode: the card shows for this visit only */ }
+		state.minnSwitch = on ? state.minnSwitch || { phase: 'idle' } : null;
+	}
+
+	function minnSwitchCardHtml() {
+		if ( ! minnLabsOn() && ! state.minnSwitch ) return '';
+		const sw = state.minnSwitch || ( state.minnSwitch = { phase: 'idle' } );
+		const r = sw.report;
+		const light = ( line ) => /\[RED\]/.test( line ) ? 'red' : /\[AMBER\]/.test( line ) ? 'amber' : /\[GREEN\]/.test( line ) ? 'green' : '';
+		const lines = ( list ) => `<div class="minn-labs-report mono">${ list.map( ( l ) => `<div class="minn-labs-line ${ light( l ) }">${ esc( l ) }</div>` ).join( '' ) }</div>`;
+		let body = '';
+		if ( 'idle' === sw.phase ) {
+			body = `
+				<p class="minn-labs-text">${ esc( __( 'Minn Engine runs this site without WordPress: the same database, wp-content, theme and plugins, served by a new engine. It is early and has not been tried on many sites, so take a backup first.' ) ) }</p>
+				<p class="minn-labs-text">${ esc( __( 'Checking downloads Minn from the Minn update service, verifies its signature and reports what this site will and will not get. Nothing changes until you switch, and `wp minn eject` brings WordPress back.' ) ) }</p>
+				<div class="minn-labs-actions">
+					<button class="minn-btn-primary" data-minnswitch="check">${ esc( __( 'Check this site' ) ) }</button>
+					<button class="minn-btn-soft" data-minnswitch="hide">${ esc( __( 'Hide' ) ) }</button>
+				</div>`;
+		} else if ( 'checking' === sw.phase ) {
+			body = `<p class="minn-labs-text">${ esc( __( 'Downloading Minn and checking this site…' ) ) }</p>`;
+		} else if ( 'checked' === sw.phase && r ) {
+			const ready = 'RED' !== r.light && r.park && r.park.ready;
+			body = `
+				<p class="minn-labs-text">${ esc( sprintf(
+					/* translators: 1: Minn's version, 2: the WordPress version Minn speaks, 3: the WordPress version this site runs. */
+					__( 'Minn %1$s (speaks WordPress %2$s), signature verified. This site runs WordPress %3$s.' ),
+					r.version, r.speaks || '?', r.site
+				) ) }</p>
+				${ lines( r.lines || [] ) }
+				<p class="minn-labs-text">${ r.park && r.park.ready
+					? esc( sprintf( /* translators: %s: a folder path. */ __( "WordPress's own files will move to %s." ), r.park.path ) )
+					: esc( sprintf( /* translators: 1: a folder path, 2: a command. */ __( 'The web server cannot create %1$s for WordPress\'s own files. Switch from the command line instead: %2$s' ), r.park ? r.park.path : '', 'wp minn install --park=<folder>' ) ) }</p>
+				<div class="minn-labs-actions">
+					<button class="minn-btn-soft danger" data-minnswitch="switch"${ ready ? '' : ' disabled' }>${ esc( __( 'Switch to Minn…' ) ) }</button>
+					<button class="minn-btn-soft" data-minnswitch="check">${ esc( __( 'Check again' ) ) }</button>
+				</div>`;
+		} else if ( 'switching' === sw.phase ) {
+			body = `<p class="minn-labs-text">${ esc( __( 'Switching. The site will answer as Minn in a moment; this page reloads when it does.' ) ) }</p>`;
+		} else if ( 'failed' === sw.phase ) {
+			body = `
+				<p class="minn-labs-text">${ esc( sw.error || __( 'Minn was not installed; the site is still WordPress.' ) ) }</p>
+				${ sw.lines && sw.lines.length ? lines( sw.lines ) : '' }
+				<div class="minn-labs-actions">
+					<button class="minn-btn-soft" data-minnswitch="check">${ esc( __( 'Check again' ) ) }</button>
+					<button class="minn-btn-soft" data-minnswitch="hide">${ esc( __( 'Hide' ) ) }</button>
+				</div>`;
+		}
+		return `
+			<div class="minn-card minn-labs" id="minn-labs">
+				<div class="minn-sys-card-head">${ icon( 'activity' ) }<span>${ esc( __( 'Run this site on Minn' ) ) }</span>
+					<span class="minn-labs-badge">${ esc( __( 'Experimental' ) ) }</span>
+				</div>
+				<div class="minn-labs-body">${ body }</div>
+			</div>`;
+	}
+
+	function bindMinnSwitch( view ) {
+		// The unlock: seven clicks on the footer within a few seconds.
+		const foot = $( '.minn-sys-foot', view );
+		if ( foot && ! ENGINE && B.caps.core ) {
+			let clicks = [];
+			foot.addEventListener( 'click', () => {
+				const now = Date.now();
+				clicks = [ ...clicks.filter( ( t ) => now - t < 4000 ), now ];
+				if ( clicks.length < 7 || minnLabsOn() ) return;
+				clicks = [];
+				setMinnLabs( true );
+				toast( __( 'Minn Labs unlocked: Run this site on Minn' ) );
+				renderSystem();
+			} );
+		}
+		const card = $( '#minn-labs', view );
+		if ( card ) bindMinnSwitchCard( card );
+	}
+
+	// The card's buttons; each repaint swaps the card and binds the new one.
+	function bindMinnSwitchCard( card ) {
+		const repaint = () => {
+			const fresh = document.createElement( 'div' );
+			fresh.innerHTML = minnSwitchCardHtml();
+			const next = fresh.firstElementChild;
+			const cur = document.getElementById( 'minn-labs' );
+			if ( cur && next ) {
+				cur.replaceWith( next );
+				bindMinnSwitchCard( next );
+			}
+		};
+		const sw = state.minnSwitch;
+		$$( '[data-minnswitch]', card ).forEach( ( b ) => b.addEventListener( 'click', async () => {
+			const act = b.dataset.minnswitch;
+			if ( 'hide' === act ) {
+				setMinnLabs( false );
+				renderSystem();
+				return;
+			}
+			if ( 'check' === act ) {
+				sw.phase = 'checking';
+				sw.report = null;
+				repaint();
+				try {
+					sw.report = await api( 'minn-admin/v1/minn-switch/check', { method: 'POST', body: '{}' } );
+					sw.phase = 'checked';
+				} catch ( e ) {
+					sw.phase = 'failed';
+					sw.error = e.message || String( e );
+					sw.lines = [];
+				}
+				repaint();
+				return;
+			}
+			if ( 'switch' === act && sw.report ) {
+				const host = sw.report.host;
+				const ok = await minnConfirm( {
+					title: __( 'Switch this site to Minn?' ),
+					body: __( 'Minn Engine is experimental. Make sure you have a backup you can restore before you go on.' ),
+					changes: [
+						__( "WordPress's own files move to a folder beside the site" ),
+						__( 'Minn Engine runs the site from the next request' ),
+					],
+					keeps: [ __( 'The database, wp-config.php, wp-content and Minn Admin' ) ],
+					typeToConfirm: host,
+					danger: true,
+					confirmLabel: __( 'Switch to Minn' ),
+				} );
+				if ( ! ok ) return;
+				try {
+					await api( 'minn-admin/v1/minn-switch/run', { method: 'POST', body: JSON.stringify( { token: sw.report.token, confirm: host } ) } );
+				} catch ( e ) {
+					sw.phase = 'failed';
+					sw.error = e.message || String( e );
+					sw.lines = [];
+					repaint();
+					return;
+				}
+				sw.phase = 'switching';
+				repaint();
+				minnSwitchWait( sw.report.token, repaint );
+			}
+		} ) );
+	}
+
+	// Waits for the site to answer as Minn. While WordPress still answers,
+	// the status route says how the switch stands; once the engine answers,
+	// that route is gone (rest_no_route) and the page reloads into Minn
+	// Admin on Minn. A 500 while the opcode cache catches up is waited out.
+	async function minnSwitchWait( token, repaint ) {
+		const sw = state.minnSwitch;
+		for ( let i = 0; i < 60; i++ ) {
+			await new Promise( ( r ) => setTimeout( r, 2000 ) );
+			try {
+				const st = await api( 'minn-admin/v1/minn-switch/status?token=' + encodeURIComponent( token ) );
+				if ( 'failed' === st.state ) {
+					sw.phase = 'failed';
+					sw.error = __( 'Minn was not installed; the site is still WordPress.' );
+					sw.lines = st.lines || [];
+					repaint();
+					return;
+				}
+			} catch ( e ) {
+				if ( 'rest_no_route' === e.code ) {
+					setMinnLabs( false );
+					location.reload();
+					return;
+				}
+			}
+		}
+		sw.phase = 'failed';
+		sw.error = __( 'The site has not answered as Minn yet. Reload the page in a minute; if it is still WordPress, run wp minn install from the command line to see why.' );
+		sw.lines = [];
+		repaint();
+	}
+
 	function renderSystem() {
 		const view = $( '#minn-view' );
 		const s = state.cache.system;
@@ -28160,6 +28350,7 @@
 					</div>`;
 				} ).join( '' ) }
 			</div>
+			${ minnSwitchCardHtml() }
 				${ debugCard }
 			<div class="minn-sys-grid" id="minn-sys-grid">
 				${ s.groups.map( groupCard ).join( '' ) }
@@ -28284,6 +28475,8 @@
 					window.open( href, '_blank', 'noopener' );
 				}
 			} ) );
+
+		bindMinnSwitch( view );
 
 		$( '#minn-sys-copy', view ).addEventListener( 'click', async () => {
 			const text = systemReportText( s );

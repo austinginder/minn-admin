@@ -181,6 +181,7 @@ require_once MINN_ADMIN_DIR . 'includes/class-minn-admin-db.php';
 require_once MINN_ADMIN_DIR . 'includes/class-minn-admin-fences.php';
 require_once MINN_ADMIN_DIR . 'includes/class-minn-admin-egress.php';
 require_once MINN_ADMIN_DIR . 'includes/class-minn-admin-preview.php';
+require_once MINN_ADMIN_DIR . 'includes/class-minn-admin-switch.php';
 require_once MINN_ADMIN_DIR . 'includes/kernel/class-minn-admin-kernel-sql.php';
 require_once MINN_ADMIN_DIR . 'includes/kernel/class-minn-admin-kernel-fields.php';
 require_once MINN_ADMIN_DIR . 'includes/kernel/class-minn-admin-kernel.php';
@@ -350,6 +351,7 @@ Minn_Admin_Notices::init();
 Minn_Admin_Plugin_Links::init();
 Minn_Admin_CPT::init();
 Minn_Admin_Bar::init();
+Minn_Admin_Switch::init();
 new Minn_Admin_Updater();
 
 register_activation_hook( __FILE__, function ( $network_wide ) {
