@@ -139,10 +139,7 @@ function minn_admin_simple_history_status_model() {
 	$open    = array( array( 'label' => __( 'Open Simple History ↗', 'minn-admin' ), 'href' => minn_admin_simple_history_admin_url() ) );
 	$loggers = minn_admin_simple_history_loggers();
 	if ( null === $loggers ) {
-		return array(
-			'rows'    => array( array( 'label' => __( 'Events', 'minn-admin' ), 'value' => '—', 'hint' => __( 'Cannot determine which loggers you may read', 'minn-admin' ) ) ),
-			'actions' => $open,
-		);
+		return minn_admin_activity_none( $open, __( 'Cannot determine which loggers you may read', 'minn-admin' ) );
 	}
 	// Count only what this caller is allowed to read, exactly as their own
 	// Log_Query does. Without it an Editor gets a live failed-login counter
@@ -167,10 +164,7 @@ function minn_admin_simple_history_status_model() {
 		'chart'  => array( 'split' => 'level', 'secondary' => $errors ),
 	) );
 	if ( null === $n ) {
-		return array(
-			'rows'    => array( array( 'label' => __( 'Events', 'minn-admin' ), 'value' => '—', 'hint' => __( 'History table not found', 'minn-admin' ) ) ),
-			'actions' => $open,
-		);
+		return minn_admin_activity_none( $open, __( 'History table not found', 'minn-admin' ) );
 	}
 	$mix = array();
 	if ( $n['counts']['errors'] ) {
@@ -179,16 +173,8 @@ function minn_admin_simple_history_status_model() {
 	if ( $n['counts']['warns'] ) {
 		$mix[] = number_format_i18n( $n['counts']['warns'] ) . ' warning' . ( 1 === $n['counts']['warns'] ? '' : 's' );
 	}
-	$rows   = Minn_Admin_Kernel::event_rows( $n );
-	$rows[] = array(
-		'label' => __( 'Severity (7d)', 'minn-admin' ),
-		'value' => $mix ? implode( ' · ', $mix ) : __( 'No errors or warnings', 'minn-admin' ),
-	);
-	return array(
-		'rows'    => array_values( $rows ),
-		'chart'   => minn_admin_chart_build( $n['days'], __( 'Events', 'minn-admin' ), __( 'Errors', 'minn-admin' ) ),
-		'actions' => $open,
-	);
+	$severity = $mix ? implode( ' · ', $mix ) : __( 'No errors or warnings', 'minn-admin' );
+	return minn_admin_activity_card( $n, $open, __( 'Severity (7d)', 'minn-admin' ), $severity, __( 'Errors', 'minn-admin' ) );
 }
 
 /**
@@ -326,24 +312,20 @@ add_filter( 'rest_request_after_callbacks', function ( $response, $handler, $req
 	return $response;
 }, 10, 3 );
 
-add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
+minn_admin_add_surface( 'simple-history', function () {
 	// Ask the same question the routes ask. Stealth mode hides the plugin by
 	// removing its own pages, so registering the surface anyway put the name
 	// back in the nav for exactly the people it is hidden from, which is what
 	// the gate exists to prevent.
-	if ( ! defined( 'SIMPLE_HISTORY_VERSION' ) || ! minn_admin_simple_history_can() ) {
-		return $surfaces;
-	}
-
-	$surfaces['simple-history'] = array(
-		'label'      => __( 'Activity Log', 'minn-admin' ),
-		'family'     => 'activity-log',
-		'sub'        => 'Simple History',
-		'plugin'     => 'simple-history',
-		'icon'       => 'clock',
-		'cap'        => minn_admin_simple_history_view_cap(),
-		'status'     => array( 'route' => 'minn-admin/v1/simple-history/status' ),
-		'collection' => array(
+	return defined( 'SIMPLE_HISTORY_VERSION' ) && minn_admin_simple_history_can();
+}, function () {
+	return minn_admin_activity_surface( null, array(
+		'sub'     => 'Simple History',
+		'plugin'  => 'simple-history',
+		'icon'    => 'clock',
+		'cap'     => minn_admin_simple_history_view_cap(),
+		'status'  => 'simple-history/status',
+		'head'    => array(
 			'route'     => 'simple-history/v1/events',
 			// Asks for the readable rows (the rest_request_after_callbacks filter above).
 			'query'     => 'minn_view=1',
@@ -358,35 +340,25 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			// datetime strings, which it parses in the site's zone; the bounds
 			// a bar sends are site-local, so they ride through verbatim.
 			'dateQuery' => 'date_from={from}&date_to={to}',
-			'tabs'      => array(
-				'param'    => 'loglevels',
-				'static'   => array(
-					array( 'error', 'Errors' ),
-					array( 'warning', 'Warnings' ),
-					array( 'notice', 'Notices' ),
-					array( 'info', 'Info' ),
-				),
-				'allLabel' => 'All',
-			),
-			'columns'   => array(
-				array( 'key' => 'message', 'label' => __( 'Event', 'minn-admin' ), 'format' => 'title', 'sort' => 'message' ),
-				array( 'key' => 'initiator_data.user_login', 'altKey' => 'who', 'label' => __( 'Who', 'minn-admin' ) ),
-				array( 'key' => 'loglevel', 'label' => __( 'Level', 'minn-admin' ), 'format' => 'pill', 'sort' => 'level' ),
-				// date_local is site-local (matches parseWpDate). date_gmt
-				// without a zone suffix used to render "in 4h" on EDT.
-				array( 'key' => 'date_local', 'altKey' => 'date_gmt', 'label' => __( 'When', 'minn-admin' ), 'format' => 'ago', 'sort' => 'date' ),
-			),
-			'detail'    => array(
-				'skip' => array(
-					'message_html', 'message_uninterpolated', 'details_html', 'details_data',
-					'context', 'ip_addresses', 'action_links', 'occasions_id', 'sticky',
-					'sticky_appended', 'backfilled', 'ai_origin', 'via', 'link', 'permalink',
-					'message_key', 'date_local', 'subsequent_occasions_count',
-				),
+		),
+		'tabs'    => array( 'loglevels', array( 'error' => 'Errors', 'warning' => 'Warnings', 'notice' => 'Notices', 'info' => 'Info' ), 'All' ),
+		'event'   => array( 'sort' => 'message' ),
+		'columns' => array(
+			array( 'key' => 'initiator_data.user_login', 'altKey' => 'who', 'label' => __( 'Who', 'minn-admin' ) ),
+			array( 'key' => 'loglevel', 'label' => __( 'Level', 'minn-admin' ), 'format' => 'pill', 'sort' => 'level' ),
+		),
+		// date_local is site-local (matches parseWpDate). date_gmt
+		// without a zone suffix used to render "in 4h" on EDT.
+		'when'    => array( 'key' => 'date_local', 'altKey' => 'date_gmt', 'sort' => 'date' ),
+		'detail'  => array(
+			'skip' => array(
+				'message_html', 'message_uninterpolated', 'details_html', 'details_data',
+				'context', 'ip_addresses', 'action_links', 'occasions_id', 'sticky',
+				'sticky_appended', 'backfilled', 'ai_origin', 'via', 'link', 'permalink',
+				'message_key', 'date_local', 'subsequent_occasions_count',
 			),
 		),
-	);
-	return $surfaces;
+	) );
 } );
 
 minn_admin_endpoint( 'simple-history/status', array(
@@ -394,7 +366,5 @@ minn_admin_endpoint( 'simple-history/status', array(
 		return defined( 'SIMPLE_HISTORY_VERSION' );
 	},
 	'gate'   => 'minn_admin_simple_history_can',
-	'run'    => function () {
-		return minn_admin_simple_history_status_model();
-	},
+	'run'    => 'minn_admin_simple_history_status_model',
 ) );

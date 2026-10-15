@@ -221,21 +221,10 @@ function minn_admin_stream_status_model() {
 		'top' => array( 'column' => 'connector', 'where' => array( 'connector' => array( 'op' => '!=', 'value' => '' ) ) ),
 	) );
 	if ( null === $n ) {
-		return array(
-			'rows'    => array( array( 'label' => __( 'Events', 'minn-admin' ), 'value' => '—', 'hint' => __( 'Stream table not found', 'minn-admin' ) ) ),
-			'actions' => $open,
-		);
+		return minn_admin_activity_none( $open, __( 'Stream table not found', 'minn-admin' ) );
 	}
-	$rows   = Minn_Admin_Kernel::event_rows( $n );
-	$rows[] = array(
-		'label' => __( 'Top source (7d)', 'minn-admin' ),
-		'value' => $n['top'] ? ucwords( str_replace( array( '-', '_' ), ' ', $n['top']['value'] ) ) . ' (' . number_format_i18n( $n['top']['count'] ) . ')' : '—',
-	);
-	return array(
-		'rows'    => array_values( $rows ),
-		'chart'   => minn_admin_chart_build( $n['days'], __( 'Events', 'minn-admin' ) ),
-		'actions' => $open,
-	);
+	$top = $n['top'] ? ucwords( str_replace( array( '-', '_' ), ' ', $n['top']['value'] ) ) . ' (' . number_format_i18n( $n['top']['count'] ) . ')' : '—';
+	return minn_admin_activity_card( $n, $open, __( 'Top source (7d)', 'minn-admin' ), $top );
 }
 
 minn_admin_endpoint( 'stream/status', array(
@@ -243,9 +232,7 @@ minn_admin_endpoint( 'stream/status', array(
 		return function_exists( 'wp_stream_get_instance' );
 	},
 	'gate'   => 'minn_admin_stream_can',
-	'run'    => function () {
-		return minn_admin_stream_status_model();
-	},
+	'run'    => 'minn_admin_stream_status_model',
 ) );
 
 minn_admin_endpoint( 'stream/connectors', array(
@@ -262,40 +249,21 @@ minn_admin_endpoint( 'stream/connectors', array(
 	},
 ) );
 
-add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
-	if ( ! function_exists( 'wp_stream_get_instance' ) ) {
-		return $surfaces;
-	}
-	if ( ! minn_admin_stream_can() ) {
-		return $surfaces;
-	}
-
-	$surfaces['stream'] = array(
-		'label'      => __( 'Activity Log', 'minn-admin' ),
-		'family'     => 'activity-log',
-		'sub'        => 'Stream',
-		'plugin'     => 'stream',
-		'icon'       => 'clock',
-		'cap'        => 'read', // real gating above + in the shim.
-		'status'     => array( 'route' => 'minn-admin/v1/stream/status' ),
-		'collection' => Minn_Admin_Kernel::collection( 'stream/records', array(
-			'tabs'    => array(
-				'route'    => 'minn-admin/v1/stream/connectors',
-				'valueKey' => 'id',
-				'labelKey' => 'title',
-				'param'    => 'connector',
-				'allLabel' => __( 'All sources', 'minn-admin' ),
-			),
-			'columns' => array(
-				array( 'key' => 'summary', 'label' => __( 'Event', 'minn-admin' ), 'format' => 'title' ),
-				array( 'key' => 'who', 'label' => __( 'Who', 'minn-admin' ) ),
-				array( 'key' => 'connector', 'label' => __( 'Source', 'minn-admin' ), 'format' => 'pill' ),
-				array( 'key' => 'date', 'label' => __( 'When', 'minn-admin' ), 'format' => 'ago' ),
-			),
-			'detail'  => array(
-				'skip' => array( 'summary' ),
-			),
-		) ),
-	);
-	return $surfaces;
+minn_admin_add_surface( 'stream', function () {
+	return function_exists( 'wp_stream_get_instance' ) && minn_admin_stream_can();
+}, function () {
+	return minn_admin_activity_surface( 'stream/records', array(
+		'cap'     => 'read', // the active check above, in the vendor's own model, is the gate
+		'sub'     => 'Stream',
+		'plugin'  => 'stream',
+		'icon'    => 'clock',
+		'status'  => 'stream/status',
+		'tabs'    => array( 'connector', 'stream/connectors', __( 'All sources', 'minn-admin' ) ),
+		'event'   => array( 'key' => 'summary' ),
+		'columns' => array(
+			array( 'key' => 'who', 'label' => __( 'Who', 'minn-admin' ) ),
+			array( 'key' => 'connector', 'label' => __( 'Source', 'minn-admin' ), 'format' => 'pill' ),
+		),
+		'detail'  => array( 'skip' => array( 'summary' ) ),
+	) );
 } );

@@ -246,49 +246,32 @@ minn_admin_endpoint( 'llar/log/(?P<id>[a-f0-9]{32})/unlock', array(
 	},
 ) );
 
-add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
-	if ( ! minn_admin_llar_active() || ! minn_admin_llar_can() ) {
-		return $surfaces;
-	}
-
-	$surfaces['limit-login-attempts'] = array(
-		'label'      => __( 'Activity Log', 'minn-admin' ),
-		'family'     => 'activity-log',
-		'sub'        => 'Limit Login Attempts',
-		'plugin'     => 'limit-login-attempts-reloaded',
-		'icon'       => 'shield',
-		// llar_admin holders lack manage_options; the filter above is the
-		// real gate (the Gravity Forms cap-model precedent).
-		'cap'        => 'read',
-		'status'     => array( 'route' => 'minn-admin/v1/llar/status' ),
-		'collection' => Minn_Admin_Kernel::collection( 'llar/log', array(
-			'tabs'      => array(
-				'param'    => 'kind',
-				'static'   => array(
-					array( 'locked', __( 'Locked out now', 'minn-admin' ) ),
-				),
-				'allLabel' => __( 'All lockouts', 'minn-admin' ),
+minn_admin_add_surface( 'limit-login-attempts', function () {
+	return minn_admin_llar_active() && minn_admin_llar_can();
+}, function () {
+	// llar_admin holders lack manage_options; the active check above is the
+	// real gate (the Gravity Forms cap-model precedent).
+	return minn_admin_activity_surface( 'llar/log', array(
+		'cap'     => 'read', // the active check above, in the vendor's own model, is the gate
+		'sub'     => 'Limit Login Attempts',
+		'plugin'  => 'limit-login-attempts-reloaded',
+		'status'  => 'llar/status',
+		'tabs'    => array( 'kind', array( 'locked' => __( 'Locked out now', 'minn-admin' ) ), __( 'All lockouts', 'minn-admin' ) ),
+		'columns' => array(
+			array( 'key' => 'ip', 'label' => 'IP' ),
+			array( 'key' => 'attempts', 'label' => __( 'Attempts', 'minn-admin' ), 'format' => 'num' ),
+			array( 'key' => 'gateway', 'label' => __( 'Via', 'minn-admin' ) ),
+			array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill' ),
+		),
+		'when'    => array( 'utc' => true ),
+		'detail'  => array( 'skip' => array( 'message', 'locked' ) ),
+		'actions' => array(
+			array(
+				'label'  => __( 'Unlock IP', 'minn-admin' ),
+				'method' => 'POST',
+				'route'  => 'minn-admin/v1/llar/log/{id}/unlock',
+				'when'   => array( 'key' => 'locked', 'equals' => true ),
 			),
-			'columns'   => array(
-				array( 'key' => 'message', 'label' => __( 'Event', 'minn-admin' ), 'format' => 'title' ),
-				array( 'key' => 'ip', 'label' => 'IP' ),
-				array( 'key' => 'attempts', 'label' => __( 'Attempts', 'minn-admin' ), 'format' => 'num' ),
-				array( 'key' => 'gateway', 'label' => __( 'Via', 'minn-admin' ) ),
-				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill' ),
-				array( 'key' => 'date', 'label' => __( 'When', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
-			),
-			'detail'    => array(
-				'skip' => array( 'message', 'locked' ),
-			),
-			'actions'   => array(
-				array(
-					'label'  => __( 'Unlock IP', 'minn-admin' ),
-					'method' => 'POST',
-					'route'  => 'minn-admin/v1/llar/log/{id}/unlock',
-					'when'   => array( 'key' => 'locked', 'equals' => true ),
-				),
-			),
-		) ),
-	);
-	return $surfaces;
+		),
+	) );
 } );

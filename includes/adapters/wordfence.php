@@ -81,44 +81,26 @@ function minn_admin_wordfence_action_label( $action, $fail ) {
 	return $fail ? __( 'Failed login', 'minn-admin' ) : __( 'Signed in', 'minn-admin' );
 }
 
-add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
-	if ( ! minn_admin_wordfence_active() || ! minn_admin_wordfence_can() ) {
-		return $surfaces;
-	}
-
-	$surfaces['wordfence'] = array(
-		'label'      => __( 'Activity Log', 'minn-admin' ),
-		'family'     => 'activity-log',
-		'sub'        => 'Wordfence',
-		'plugin'     => 'wordfence',
-		'icon'       => 'shield',
-		// Their answer is a resolver, not a capability name; the guard
-		// above is the real gate (the UpdraftPlus precedent).
-		'cap'        => 'read',
+minn_admin_add_surface( 'wordfence', function () {
+	return minn_admin_wordfence_active() && minn_admin_wordfence_can();
+}, function () {
+	// Their answer is a resolver, not a capability name; the active check
+	// above is the real gate (the UpdraftPlus precedent).
+	return minn_admin_activity_surface( 'wordfence/logins', array(
+		'cap'     => 'read', // the active check above, in the vendor's own model, is the gate
+		'sub'     => 'Wordfence',
+		'plugin'  => 'wordfence',
 		// Status card reuses the System posture rows (firewall + last scan).
-		'status'     => array( 'route' => 'minn-admin/v1/wordfence/status' ),
-		'collection' => Minn_Admin_Kernel::collection( 'wordfence/logins', array(
-			'tabs'      => array(
-				'param'  => 'kind',
-				'static' => array(
-					array( 'failed', 'Failed' ),
-					array( 'success', 'Successful' ),
-				),
-				'allLabel' => __( 'All logins', 'minn-admin' ),
-			),
-			'columns'   => array(
-				array( 'key' => 'message', 'label' => __( 'Event', 'minn-admin' ), 'format' => 'title' ),
-				array( 'key' => 'who', 'label' => __( 'User', 'minn-admin' ) ),
-				array( 'key' => 'ip', 'label' => 'IP' ),
-				array( 'key' => 'result', 'label' => __( 'Result', 'minn-admin' ), 'format' => 'pill' ),
-				array( 'key' => 'date', 'label' => __( 'When', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
-			),
-			'detail'    => array(
-				'skip' => array( 'message' ),
-			),
-		) ),
-	);
-	return $surfaces;
+		'status'  => 'wordfence/status',
+		'tabs'    => array( 'kind', array( 'failed' => 'Failed', 'success' => 'Successful' ), __( 'All logins', 'minn-admin' ) ),
+		'columns' => array(
+			array( 'key' => 'who', 'label' => __( 'User', 'minn-admin' ) ),
+			array( 'key' => 'ip', 'label' => 'IP' ),
+			array( 'key' => 'result', 'label' => __( 'Result', 'minn-admin' ), 'format' => 'pill' ),
+		),
+		'when'    => array( 'utc' => true ),
+		'detail'  => array( 'skip' => array( 'message' ) ),
+	) );
 } );
 
 minn_admin_resource( 'wordfence/logins', array(
@@ -228,9 +210,7 @@ function minn_admin_wordfence_status_model() {
 minn_admin_endpoint( 'wordfence/status', array(
 	'active' => 'minn_admin_wordfence_active',
 	'gate'   => 'minn_admin_wordfence_can_read_log',
-	'run'    => function () {
-		return minn_admin_wordfence_status_model();
-	},
+	'run'    => 'minn_admin_wordfence_status_model',
 ) );
 
 /**

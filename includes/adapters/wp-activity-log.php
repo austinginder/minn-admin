@@ -250,21 +250,9 @@ function minn_admin_wsal_status_model() {
 		'chart'  => array( 'split' => 'severity', 'secondary' => array( 500, 400 ) ),
 	) );
 	if ( null === $n ) {
-		return array(
-			'rows'    => array( array( 'label' => __( 'Events', 'minn-admin' ), 'value' => '—', 'hint' => __( 'Log table not found', 'minn-admin' ) ) ),
-			'actions' => $open,
-		);
+		return minn_admin_activity_none( $open, __( 'Log table not found', 'minn-admin' ) );
 	}
-	$rows   = Minn_Admin_Kernel::event_rows( $n );
-	$rows[] = array(
-		'label' => __( 'High + critical (7d)', 'minn-admin' ),
-		'value' => number_format_i18n( $n['counts']['hot'] ),
-	);
-	return array(
-		'rows'    => array_values( $rows ),
-		'chart'   => minn_admin_chart_build( $n['days'], __( 'Events', 'minn-admin' ), __( 'High + critical', 'minn-admin' ) ),
-		'actions' => $open,
-	);
+	return minn_admin_activity_card( $n, $open, __( 'High + critical (7d)', 'minn-admin' ), number_format_i18n( $n['counts']['hot'] ), __( 'High + critical', 'minn-admin' ) );
 }
 
 minn_admin_endpoint( 'wsal/status', array(
@@ -272,49 +260,23 @@ minn_admin_endpoint( 'wsal/status', array(
 		return defined( 'WSAL_VERSION' );
 	},
 	'gate'   => 'minn_admin_wsal_can_view',
-	'run'    => function () {
-		return minn_admin_wsal_status_model();
-	},
+	'run'    => 'minn_admin_wsal_status_model',
 ) );
 
-add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
-	if ( ! defined( 'WSAL_VERSION' ) ) {
-		return $surfaces;
-	}
-	if ( ! minn_admin_wsal_can_view() ) {
-		return $surfaces;
-	}
-
-	$surfaces['wp-activity-log'] = array(
-		'label'      => __( 'Activity Log', 'minn-admin' ),
-		'family'     => 'activity-log',
-		'sub'        => 'WP Activity Log',
-		'plugin'     => array( 'wp-security-audit-log', 'wp-security-audit-log-premium' ),
-		'icon'       => 'clock',
-		'cap'        => 'read', // real gating happens above + in the shim.
-		'status'     => array( 'route' => 'minn-admin/v1/wsal/status' ),
-		'collection' => Minn_Admin_Kernel::collection( 'wsal/events', array(
-			'tabs'    => array(
-				'param'    => 'severity',
-				'static'   => array(
-					array( 'critical', 'Critical' ),
-					array( 'high', 'High' ),
-					array( 'medium', 'Medium' ),
-					array( 'low', 'Low' ),
-					array( 'info', 'Info' ),
-				),
-				'allLabel' => 'All',
-			),
-			'columns' => array(
-				array( 'key' => 'message', 'label' => __( 'Event', 'minn-admin' ), 'format' => 'title' ),
-				array( 'key' => 'username', 'label' => __( 'Who', 'minn-admin' ) ),
-				array( 'key' => 'severity', 'label' => __( 'Severity', 'minn-admin' ), 'format' => 'pill' ),
-				array( 'key' => 'date', 'label' => __( 'When', 'minn-admin' ), 'format' => 'ago' ),
-			),
-			'detail'  => array(
-				'sectionsRoute' => 'minn-admin/v1/wsal/events/{id}',
-			),
-		) ),
-	);
-	return $surfaces;
+minn_admin_add_surface( 'wp-activity-log', function () {
+	return defined( 'WSAL_VERSION' ) && minn_admin_wsal_can_view();
+}, function () {
+	return minn_admin_activity_surface( 'wsal/events', array(
+		'cap'     => 'read', // the active check above, in the vendor's own model, is the gate
+		'sub'     => 'WP Activity Log',
+		'plugin'  => array( 'wp-security-audit-log', 'wp-security-audit-log-premium' ),
+		'icon'    => 'clock',
+		'status'  => 'wsal/status',
+		'tabs'    => array( 'severity', array( 'critical' => 'Critical', 'high' => 'High', 'medium' => 'Medium', 'low' => 'Low', 'info' => 'Info' ), 'All' ),
+		'columns' => array(
+			array( 'key' => 'username', 'label' => __( 'Who', 'minn-admin' ) ),
+			array( 'key' => 'severity', 'label' => __( 'Severity', 'minn-admin' ), 'format' => 'pill' ),
+		),
+		'detail'  => array( 'sectionsRoute' => 'minn-admin/v1/wsal/events/{id}' ),
+	) );
 } );

@@ -290,10 +290,7 @@ minn_admin_endpoint( 'aios/status', array(
 			'chart'  => array( 'split' => 'level', 'secondary' => $warn ),
 		) );
 		if ( null === $n ) {
-			return array(
-				'rows'    => array( array( 'label' => __( 'Events', 'minn-admin' ), 'value' => '—', 'hint' => __( 'Audit log table not found', 'minn-admin' ) ) ),
-				'actions' => $open,
-			);
+			return minn_admin_activity_none( $open, __( 'Audit log table not found', 'minn-admin' ) );
 		}
 		$posture = minn_admin_aios_login_posture();
 		$events  = Minn_Admin_Kernel::event_rows( $n );
@@ -336,42 +333,20 @@ minn_admin_endpoint( 'aios/status', array(
 	},
 ) );
 
-add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
-	// Enforce what the 'cap' => 'read' comment claims, the way
-	// solid-security.php and limit-login-attempts.php already do.
-	if ( ! minn_admin_aios_active() || ! minn_admin_aios_can() ) {
-		return $surfaces;
-	}
-
-	$surfaces['all-in-one-security'] = array(
-		'label'      => __( 'Activity Log', 'minn-admin' ),
-		'family'     => 'activity-log',
-		'sub'        => 'All-In-One Security',
-		'plugin'     => 'all-in-one-wp-security-and-firewall',
-		'icon'       => 'shield',
-		'cap'        => 'read', // real gate is adapter-side minn_admin_aios_can().
-		'status'     => array( 'route' => 'minn-admin/v1/aios/status' ),
-		'collection' => Minn_Admin_Kernel::collection( 'aios/events', array(
-			'tabs'      => array(
-				'param'    => 'level',
-				'static'   => array(
-					array( 'warning', 'Warnings' ),
-					array( 'error', 'Errors' ),
-					array( 'info', 'Info' ),
-				),
-				'allLabel' => 'All',
-			),
-			'columns'   => array(
-				array( 'key' => 'message', 'label' => __( 'Event', 'minn-admin' ), 'format' => 'title' ),
-				array( 'key' => 'username', 'label' => __( 'Who', 'minn-admin' ) ),
-				array( 'key' => 'ip', 'label' => 'IP', 'format' => 'mono', 'width' => '130px' ),
-				array( 'key' => 'level', 'label' => __( 'Level', 'minn-admin' ), 'format' => 'pill', 'width' => '96px' ),
-				array( 'key' => 'date', 'label' => __( 'When', 'minn-admin' ), 'format' => 'ago' ),
-			),
-			'detail'    => array(
-				'sectionsRoute' => 'minn-admin/v1/aios/events/{id}',
-			),
-		) ),
-	);
-	return $surfaces;
+minn_admin_add_surface( 'all-in-one-security', function () {
+	return minn_admin_aios_active() && minn_admin_aios_can();
+}, function () {
+	return minn_admin_activity_surface( 'aios/events', array(
+		'sub'     => 'All-In-One Security',
+		'cap'     => 'read', // the active check above, in the vendor's own model, is the gate
+		'plugin'  => 'all-in-one-wp-security-and-firewall',
+		'status'  => 'aios/status',
+		'tabs'    => array( 'level', array( 'warning' => 'Warnings', 'error' => 'Errors', 'info' => 'Info' ), 'All' ),
+		'columns' => array(
+			array( 'key' => 'username', 'label' => __( 'Who', 'minn-admin' ) ),
+			array( 'key' => 'ip', 'label' => 'IP', 'format' => 'mono', 'width' => '130px' ),
+			array( 'key' => 'level', 'label' => __( 'Level', 'minn-admin' ), 'format' => 'pill', 'width' => '96px' ),
+		),
+		'detail'  => array( 'sectionsRoute' => 'minn-admin/v1/aios/events/{id}' ),
+	) );
 } );

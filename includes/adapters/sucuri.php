@@ -157,39 +157,26 @@ minn_admin_endpoint( 'sucuri/status', array(
 	},
 ) );
 
-add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
-	if ( ! minn_admin_sucuri_can() ) {
-		return $surfaces;
-	}
-	$surfaces['sucuri'] = array(
-		'label'      => __( 'Activity Log', 'minn-admin' ),
-		'family'     => 'activity-log',
-		'sub'        => 'Sucuri',
-		'plugin'     => 'sucuri-scanner',
-		'icon'       => 'shield',
-		'cap'        => 'manage_options',
-		'status'     => array( 'route' => 'minn-admin/v1/sucuri/status' ),
-		'collection' => Minn_Admin_Kernel::collection( 'sucuri/events', array(
-			'tabs'      => array(
-				'param'    => 'level',
-				'static'   => array(
-					array( 'critical', __( 'Critical', 'minn-admin' ) ),
-					array( 'error', __( 'Errors', 'minn-admin' ) ),
-					array( 'warning', __( 'Warnings', 'minn-admin' ) ),
-					array( 'notice', __( 'Notices', 'minn-admin' ) ),
-					array( 'info', __( 'Info', 'minn-admin' ) ),
-				),
-				'allLabel' => __( 'All', 'minn-admin' ),
-			),
-			'columns'   => array(
-				array( 'key' => 'message', 'label' => __( 'Event', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,2fr)' ),
-				array( 'key' => 'username', 'label' => __( 'Who', 'minn-admin' ) ),
-				array( 'key' => 'remote_addr', 'label' => __( 'IP', 'minn-admin' ), 'format' => 'mono' ),
-				array( 'key' => 'event', 'label' => __( 'Level', 'minn-admin' ), 'format' => 'pill', 'width' => '96px' ),
-				array( 'key' => 'when', 'label' => __( 'When', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
-			),
-			'detail'    => array(),
-		) ),
-	);
-	return $surfaces;
+minn_admin_add_surface( 'sucuri', 'minn_admin_sucuri_can', function () {
+	return minn_admin_activity_surface( 'sucuri/events', array(
+		'sub'     => 'Sucuri',
+		'plugin'  => 'sucuri-scanner',
+		'cap'     => 'manage_options',
+		'status'  => 'sucuri/status',
+		'tabs'    => array( 'level', array(
+			'critical' => __( 'Critical', 'minn-admin' ),
+			'error'    => __( 'Errors', 'minn-admin' ),
+			'warning'  => __( 'Warnings', 'minn-admin' ),
+			'notice'   => __( 'Notices', 'minn-admin' ),
+			'info'     => __( 'Info', 'minn-admin' ),
+		), __( 'All', 'minn-admin' ) ),
+		'event'   => array( 'width' => 'minmax(0,2fr)' ),
+		'columns' => array(
+			array( 'key' => 'username', 'label' => __( 'Who', 'minn-admin' ) ),
+			array( 'key' => 'remote_addr', 'label' => __( 'IP', 'minn-admin' ), 'format' => 'mono' ),
+			array( 'key' => 'event', 'label' => __( 'Level', 'minn-admin' ), 'format' => 'pill', 'width' => '96px' ),
+		),
+		'when'    => array( 'key' => 'when', 'utc' => true ),
+		'detail'  => array(),
+	) );
 } );

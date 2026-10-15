@@ -351,21 +351,10 @@ function minn_admin_aryo_status_model() {
 		'top' => array( 'column' => 'action', 'where' => array( 'action' => array( 'op' => '!=', 'value' => '' ) ) ),
 	) );
 	if ( null === $n ) {
-		return array(
-			'rows'    => array( array( 'label' => __( 'Events', 'minn-admin' ), 'value' => '—', 'hint' => __( 'Log table not found', 'minn-admin' ) ) ),
-			'actions' => $open,
-		);
+		return minn_admin_activity_none( $open, __( 'Log table not found', 'minn-admin' ) );
 	}
-	$rows   = Minn_Admin_Kernel::event_rows( $n );
-	$rows[] = array(
-		'label' => __( 'Top action (7d)', 'minn-admin' ),
-		'value' => $n['top'] ? minn_admin_aryo_action_label( $n['top']['value'] ) . ' (' . number_format_i18n( $n['top']['count'] ) . ')' : '—',
-	);
-	return array(
-		'rows'    => array_values( $rows ),
-		'chart'   => minn_admin_chart_build( $n['days'], __( 'Events', 'minn-admin' ) ),
-		'actions' => $open,
-	);
+	$top = $n['top'] ? minn_admin_aryo_action_label( $n['top']['value'] ) . ' (' . number_format_i18n( $n['top']['count'] ) . ')' : '—';
+	return minn_admin_activity_card( $n, $open, __( 'Top action (7d)', 'minn-admin' ), $top );
 }
 
 minn_admin_endpoint( 'aryo/status', array(
@@ -373,9 +362,7 @@ minn_admin_endpoint( 'aryo/status', array(
 		return class_exists( 'AAL_Main' );
 	},
 	'gate'   => 'minn_admin_aryo_can_view',
-	'run'    => function () {
-		return minn_admin_aryo_status_model();
-	},
+	'run'    => 'minn_admin_aryo_status_model',
 ) );
 
 minn_admin_endpoint( 'aryo/actions', array(
@@ -392,58 +379,39 @@ minn_admin_endpoint( 'aryo/actions', array(
 	},
 ) );
 
-add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
-	if ( ! class_exists( 'AAL_Main' ) ) {
-		return $surfaces;
-	}
-	if ( ! minn_admin_aryo_can_view() ) {
-		return $surfaces;
-	}
-
-	$surfaces['aryo-activity-log'] = array(
-		'label'      => __( 'Activity Log', 'minn-admin' ),
-		'family'     => 'activity-log',
+minn_admin_add_surface( 'aryo-activity-log', function () {
+	return class_exists( 'AAL_Main' ) && minn_admin_aryo_can_view();
+}, function () {
+	$surface = minn_admin_activity_surface( 'aryo/events', array(
+		'cap'     => 'read', // the active check above, in the vendor's own model, is the gate
 		// Plugin product name is just "Activity Log"; use Aryo so the
 		// family switcher can tell it apart from Simple History / Stream.
-		'sub'        => 'Aryo',
-		'plugin'     => 'aryo-activity-log',
-		'icon'       => 'clock',
-		'cap'        => 'read', // real gating above + in the shim.
-		'status'     => array( 'route' => 'minn-admin/v1/aryo/status' ),
-		'collection' => Minn_Admin_Kernel::collection( 'aryo/events', array(
-			// Action is Aryo's first-class verb (logged_in / updated / installed…).
-			'tabs'    => array(
-				'route'    => 'minn-admin/v1/aryo/actions',
-				'valueKey' => 'id',
-				'labelKey' => 'title',
-				'param'    => 'action',
-				'allLabel' => __( 'All actions', 'minn-admin' ),
-			),
-			'columns' => array(
-				array( 'key' => 'message', 'label' => __( 'Event', 'minn-admin' ), 'format' => 'title' ),
-				array( 'key' => 'who', 'label' => __( 'Who', 'minn-admin' ) ),
-				array( 'key' => 'action', 'label' => __( 'Action', 'minn-admin' ), 'format' => 'pill' ),
-				array( 'key' => 'date', 'label' => __( 'When', 'minn-admin' ), 'format' => 'ago' ),
-			),
-			'detail'  => array(
-				'skip' => array( 'message' ),
-			),
-		) ),
-	);
+		'sub'     => 'Aryo',
+		'plugin'  => 'aryo-activity-log',
+		'icon'    => 'clock',
+		'status'  => 'aryo/status',
+		// Action is Aryo's first-class verb (logged_in / updated / installed…).
+		'tabs'    => array( 'action', 'aryo/actions', __( 'All actions', 'minn-admin' ) ),
+		'columns' => array(
+			array( 'key' => 'who', 'label' => __( 'Who', 'minn-admin' ) ),
+			array( 'key' => 'action', 'label' => __( 'Action', 'minn-admin' ), 'format' => 'pill' ),
+		),
+		'detail'  => array( 'skip' => array( 'message' ) ),
+	) );
 	if ( minn_admin_aryo_source_ready() ) {
 		// Where the change came from: the daily audit question, and the
 		// column their 2.14 release added. Rendered only once the column
 		// exists, so a site whose migration has not run sees the old list.
-		$surfaces['aryo-activity-log']['collection']['filter']    = array(
+		$surface['collection']['filter']    = array(
 			'label'   => __( 'Source', 'minn-admin' ),
 			'options' => minn_admin_aryo_source_options(),
 			'query'   => 'source={v}',
 		);
-		$surfaces['aryo-activity-log']['collection']['columns'][] = array(
+		$surface['collection']['columns'][] = array(
 			'key'   => 'source',
 			'label' => __( 'Source', 'minn-admin' ),
 			'width' => '128px',
 		);
 	}
-	return $surfaces;
+	return $surface;
 } );

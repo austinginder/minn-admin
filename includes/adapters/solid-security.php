@@ -206,49 +206,32 @@ minn_admin_endpoint( 'solid-security/status', array(
 	},
 ) );
 
-add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
-	if ( ! minn_admin_solid_security_active() || ! minn_admin_solid_security_can() ) {
-		return $surfaces;
-	}
-
-	$surfaces['solid-security'] = array(
-		'label'      => __( 'Activity Log', 'minn-admin' ),
-		'family'     => 'activity-log',
-		'sub'        => 'Solid Security',
-		'plugin'     => array( 'better-wp-security', 'ithemes-security-pro' ),
-		'icon'       => 'shield',
-		// itsec_manage is dynamically granted; the filter above is the
-		// real gate (the LLA-R / Gravity Forms cap-model precedent).
-		'cap'        => 'read',
-		'status'     => array( 'route' => 'minn-admin/v1/solid-security/status' ),
-		'collection' => Minn_Admin_Kernel::collection( 'solid-security/lockouts', array(
-			'tabs'      => array(
-				'param'    => 'kind',
-				'static'   => array(
-					array( 'locked', __( 'Locked out now', 'minn-admin' ) ),
-				),
-				'allLabel' => __( 'All lockouts', 'minn-admin' ),
-			),
-			'columns'   => array(
-				array( 'key' => 'message', 'label' => __( 'Event', 'minn-admin' ), 'format' => 'title' ),
-				array( 'key' => 'ip', 'label' => 'IP' ),
-				array( 'key' => 'type', 'label' => __( 'Type', 'minn-admin' ) ),
-				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill' ),
-				array( 'key' => 'date', 'label' => __( 'When', 'minn-admin' ), 'format' => 'ago', 'utc' => true ),
-			),
-			'detail'    => array(
-				'skip' => array( 'message', 'locked' ),
-			),
-			'actions'   => array(
-				Minn_Admin_Kernel::ui( 'solid-security/lockouts', 'release', array(
-					'label' => __( 'Release lockout', 'minn-admin' ),
-					'key'   => 'locked',
-					'when'  => true,
-				) ),
-			),
-		) ),
-	);
-	return $surfaces;
+minn_admin_add_surface( 'solid-security', function () {
+	return minn_admin_solid_security_active() && minn_admin_solid_security_can();
+}, function () {
+	// itsec_manage is dynamically granted, so the active check above is the
+	// real gate (the LLA-R / Gravity Forms cap-model precedent).
+	return minn_admin_activity_surface( 'solid-security/lockouts', array(
+		'cap'     => 'read', // the active check above, in the vendor's own model, is the gate
+		'sub'     => 'Solid Security',
+		'plugin'  => array( 'better-wp-security', 'ithemes-security-pro' ),
+		'status'  => 'solid-security/status',
+		'tabs'    => array( 'kind', array( 'locked' => __( 'Locked out now', 'minn-admin' ) ), __( 'All lockouts', 'minn-admin' ) ),
+		'columns' => array(
+			array( 'key' => 'ip', 'label' => 'IP' ),
+			array( 'key' => 'type', 'label' => __( 'Type', 'minn-admin' ) ),
+			array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill' ),
+		),
+		'when'    => array( 'utc' => true ),
+		'detail'  => array( 'skip' => array( 'message', 'locked' ) ),
+		'actions' => array(
+			Minn_Admin_Kernel::ui( 'solid-security/lockouts', 'release', array(
+				'label' => __( 'Release lockout', 'minn-admin' ),
+				'key'   => 'locked',
+				'when'  => true,
+			) ),
+		),
+	) );
 } );
 
 /**
