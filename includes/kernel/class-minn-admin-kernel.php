@@ -425,11 +425,11 @@ class Minn_Admin_Kernel {
 			if ( ! in_array( $method, array( 'POST', 'PUT', 'PATCH', 'DELETE' ), true ) ) {
 				$why = "method {$method} is not one of POST, PUT, PATCH, DELETE";
 			} elseif ( '' === (string) $slug || sanitize_key( (string) $slug ) !== (string) $slug ) {
-				$why = 'its slug is not a key';
+				$why = __( 'its slug is not a key', 'minn-admin' );
 			} elseif ( ! empty( $taken[ $method . ' ' . $path ] ) ) {
 				$why = "{$method} on its route is taken";
 			} elseif ( isset( $action['args'] ) && ! self::args_ok( $action['args'], $item ) ) {
-				$why = 'its args are not schemas (no callbacks, no default, a boolean required, no name the route captures)';
+				$why = __( 'its args are not schemas (no callbacks, no default, a boolean required, no name the route captures)', 'minn-admin' );
 			}
 			if ( '' !== $why ) {
 				_doing_it_wrong( 'minn_admin_resource', esc_html( "{$res['id']} action {$slug}: {$why}, so it has no route." ), 'Minn Admin 0.46.0' );
