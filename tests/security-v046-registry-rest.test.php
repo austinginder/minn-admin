@@ -78,6 +78,16 @@ $make_user = static function ( $role, $blog = 0 ) use ( &$undo ) {
 	}
 	return $id;
 };
+// Code outside WordPress and Minn, for the checks that need some: a class
+// named like an Otter resolver, and a callback for the locale filter.
+$probe_file = trailingslashit( sys_get_temp_dir() ) . 'minn-v046-probe-' . wp_rand( 10000, 99999 ) . '.php';
+file_put_contents( $probe_file, "<?php\nnamespace ThemeIsle\\MinnV046Probe;\nclass Dynamic_Probe {\n\tpublic function cb( \$content, \$block = null, \$instance = null ) {\n\t\treturn \$content;\n\t}\n}\nfunction keep_locale( \$locale ) {\n\treturn \$locale;\n}\n" );
+require $probe_file;
+$undo[] = static function () use ( $probe_file ) {
+	if ( is_file( $probe_file ) ) {
+		unlink( $probe_file );
+	}
+};
 // No update check, translation fetch or loopback leaves this process.
 add_filter( 'pre_http_request', static function () {
 	return new WP_Error( 'minn_test_offline', 'blocked by the test' );
@@ -204,6 +214,59 @@ add_filter( 'pre_http_request', static function () {
 	list( $status, $out ) = $render( array( '<!-- wp:paragraph --><p class="minn-v046-plain"><o-dynamic data-type="postTitle" data-context="' . $id . '">Post Title</o-dynamic></p><!-- /wp:paragraph -->' ) );
 	$check( "#1 control: an administrator's preview of an <o-dynamic> element renders", 200 === $status && '' !== trim( (string) ( $out[0] ?? '' ) ), $status . ' ' . wp_json_encode( $out ) );
 	$check( "#1 control: Otter's resolvers stay on for an administrator's preview", isset( $seen['minn-v046-plain'] ) && $seen['minn-v046-plain'] === $before, wp_json_encode( $seen['minn-v046-plain'] ?? null ) );
+
+	// Round-two I5: a block that throws mid-render still gets the resolvers
+	// and the preview clamps back, each resolver with its own accepted args
+	// (the probe resolver takes three).
+	$probe = new \ThemeIsle\MinnV046Probe\Dynamic_Probe();
+	add_filter( 'render_block', array( $probe, 'cb' ), 10, 3 );
+	$undo[]  = static function () use ( $probe ) {
+		remove_filter( 'render_block', array( $probe, 'cb' ), 10 );
+	};
+	$args_of = static function () use ( $probe ) {
+		global $wp_filter;
+		foreach ( $wp_filter['render_block']->callbacks as $prio => $cbs ) {
+			foreach ( $cbs as $cb ) {
+				if ( is_array( $cb['function'] ) && $cb['function'][0] === $probe ) {
+					return $prio . '/' . $cb['accepted_args'];
+				}
+			}
+		}
+		return 'gone';
+	};
+	$count   = static function ( $hook ) {
+		global $wp_filter;
+		return isset( $wp_filter[ $hook ] ) ? array_sum( array_map( 'count', $wp_filter[ $hook ]->callbacks ) ) : 0;
+	};
+	$thrower = static function ( $content ) {
+		if ( false !== strpos( (string) $content, 'minn-v046-throw' ) ) {
+			throw new RuntimeException( 'minn-v046 probe throw' );
+		}
+		return $content;
+	};
+	add_filter( 'render_block', $thrower, 5 );
+	$before_on = $on();
+	$hooks_n   = array( $count( 'render_block_data' ), $count( 'pre_get_posts' ) );
+	$thrown    = false;
+	wp_set_current_user( $contrib );
+	try {
+		$render( array( '<!-- wp:paragraph --><p>minn-v046-throw</p><!-- /wp:paragraph -->' ) );
+	} catch ( \Throwable $e ) {
+		$thrown = true;
+	} finally {
+		wp_set_current_user( $admin );
+		remove_filter( 'render_block', $thrower, 5 );
+	}
+	$check( '#1 (I5) fixture: the block threw', $thrown );
+	$check( "#1 (I5) after a block throws, Otter's resolvers are back", $on() === $before_on, wp_json_encode( array_values( array_diff( $before_on, $on() ) ) ) );
+	$check( '#1 (I5) and the preview clamps are off again', array( $count( 'render_block_data' ), $count( 'pre_get_posts' ) ) === $hooks_n, wp_json_encode( array( $hooks_n, array( $count( 'render_block_data' ), $count( 'pre_get_posts' ) ) ) ) );
+	wp_set_current_user( $contrib );
+	try {
+		$render( array( '<!-- wp:paragraph --><p>minn-v046-plain</p><!-- /wp:paragraph -->' ) );
+	} finally {
+		wp_set_current_user( $admin );
+	}
+	$check( '#1 (I5) a resolver comes back with its own accepted args', '10/3' === $args_of(), $args_of() );
 } )();
 
 /*
@@ -290,7 +353,7 @@ add_filter( 'pre_http_request', static function () {
  * serves. Fake core catalogs (a .po and .mo pair, all core reads) stand in
  * for installed languages the lab does not use.
  */
-( static function () use ( $check, $skip, &$undo ) {
+( static function () use ( $check, $skip, $probe_file, &$undo ) {
 	if ( ! current_user_can( 'update_languages' ) ) {
 		$skip( '#5/#11 this account may not manage languages here' );
 		return;
@@ -387,6 +450,58 @@ add_filter( 'pre_http_request', static function () {
 	$r = $row( 'zz_ZZ' );
 	$check( '#11 control: with no multilingual plugin the language is offered again', $r && $r['removable'], wp_json_encode( $r ) );
 
+	// Round-two L4: a multilingual plugin Minn has no list for.
+	$glob = $active( array( 'wpglobus/wpglobus.php' ) );
+	$r    = $row( 'zz_ZZ' );
+	remove_filter( 'option_active_plugins', $glob );
+	$check( '#11 (L4) WPGlobus active keeps every language', $kept( $r, 'multilingual', 'WPGlobus' ), wp_json_encode( $r ) );
+
+	// Anything outside WordPress and Minn on the locale filter is how such a
+	// plugin switches languages; it keeps every language, named by its file.
+	add_filter( 'locale', 'ThemeIsle\\MinnV046Probe\\keep_locale' );
+	$r = $row( 'zz_ZZ' );
+	remove_filter( 'locale', 'ThemeIsle\\MinnV046Probe\\keep_locale' );
+	$check( '#11 (L4) code outside WordPress on the locale filter keeps every language, and is named', $kept( $r, 'multilingual', basename( $probe_file ) ), wp_json_encode( $r ) );
+	// Control: Minn hooks determine_locale itself (its own UI language),
+	// and that keeps nothing.
+	global $wp_filter;
+	$minn_hooked = false;
+	foreach ( isset( $wp_filter['determine_locale'] ) ? $wp_filter['determine_locale']->callbacks : array() as $cbs ) {
+		foreach ( $cbs as $cb ) {
+			$fn = $cb['function'];
+			try {
+				$ref = is_array( $fn ) ? new ReflectionMethod( $fn[0], $fn[1] ) : ( is_string( $fn ) && false !== strpos( $fn, '::' ) ? new ReflectionMethod( $fn ) : new ReflectionFunction( $fn ) );
+				$minn_hooked = $minn_hooked || false !== strpos( (string) $ref->getFileName(), 'minn-admin/includes/' );
+			} catch ( \Throwable $e ) {
+				continue;
+			}
+		}
+	}
+	$r = $row( 'zz_ZZ' );
+	$check( "#11 (L4) control: Minn's own callback on determine_locale keeps nothing", $minn_hooked && $r && $r['removable'], ( $minn_hooked ? '' : 'Minn is not hooked; ' ) . wp_json_encode( $r ) );
+
+	// WPML's hidden languages are active rows of its own table, which its
+	// API leaves out; the table is read.
+	global $wpdb;
+	$icl = $wpdb->prefix . 'icl_languages';
+	if ( $icl === $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $icl ) ) ) {
+		$skip( '#11 (L4) WPML is really installed here' );
+	} else {
+		$wpdb->query( "CREATE TABLE `{$icl}` ( id INT AUTO_INCREMENT PRIMARY KEY, code VARCHAR(7), english_name VARCHAR(128), major TINYINT DEFAULT 0, active TINYINT DEFAULT 0, default_locale VARCHAR(35), tag VARCHAR(35), encode_url TINYINT DEFAULT 0 )" );
+		$undo[] = static function () use ( $icl ) {
+			$GLOBALS['wpdb']->query( "DROP TABLE IF EXISTS `{$icl}`" );
+		};
+		$wpdb->insert( $icl, array( 'code' => 'en', 'english_name' => 'English', 'active' => 1, 'default_locale' => 'en_US' ) );
+		$wpdb->insert( $icl, array( 'code' => 'zz', 'english_name' => 'Hidden probe', 'active' => 1, 'default_locale' => 'zz_ZZ' ) );
+		$wpdb->insert( $icl, array( 'code' => 'zy', 'english_name' => 'Inactive probe', 'active' => 0, 'default_locale' => 'zy_ZY' ) );
+		$wpml = $active( array( 'sitepress-multilingual-cms/sitepress.php' ) );
+		$r    = $row( 'zz_ZZ' );
+		$r2   = $row( 'zy_ZY' );
+		remove_filter( 'option_active_plugins', $wpml );
+		$check( "#11 (L4) a language WPML keeps (hidden ones included) is kept as WPML's", $kept( $r, 'plugin', 'WPML' ), wp_json_encode( $r ) );
+		$check( '#11 (L4) control: a language WPML has switched off is still offered', $r2 && $r2['removable'], wp_json_encode( $r2 ) );
+	}
+
 	if ( ! is_multisite() ) {
 		$skip( '#5 and the network halves of #11 run on a network' );
 		return;
@@ -433,8 +548,44 @@ add_filter( 'pre_http_request', static function () {
 	};
 	update_blog_option( $other, 'active_plugins', array_merge( (array) $had, array( 'polylang/polylang.php' ) ) );
 	$r = $row( 'zz_ZZ' );
+	$check( '#11 Polylang on another site, its languages unreadable there, keeps every language here', $kept( $r, 'multilingual', 'Polylang' ), wp_json_encode( $r ) );
+
+	// Round-two I6: where that site's own list can be read, it is, and every
+	// other language stays removable. Polylang keeps each language as a
+	// 'language' term whose description holds its locale.
+	switch_to_blog( $other );
+	$wpdb->insert( $wpdb->terms, array( 'name' => 'Zz probe', 'slug' => 'minn-v046-zz', 'term_group' => 0 ) );
+	$term_id = (int) $wpdb->insert_id;
+	$wpdb->insert( $wpdb->term_taxonomy, array( 'term_id' => $term_id, 'taxonomy' => 'language', 'description' => serialize( array( 'locale' => 'zz_ZZ', 'rtl' => 0, 'flag_code' => 'zz' ) ), 'parent' => 0, 'count' => 0 ) );
+	$tt_id  = (int) $wpdb->insert_id;
+	$terms  = $wpdb->terms;
+	$tts    = $wpdb->term_taxonomy;
+	restore_current_blog();
+	$undo[] = static function () use ( $terms, $tts, $term_id, $tt_id ) {
+		$GLOBALS['wpdb']->delete( $tts, array( 'term_taxonomy_id' => $tt_id ) );
+		$GLOBALS['wpdb']->delete( $terms, array( 'term_id' => $term_id ) );
+	};
+	$r  = $row( 'zz_ZZ' );
+	$r2 = $row( 'zy_ZY' );
 	update_blog_option( $other, 'active_plugins', $had );
-	$check( '#11 Polylang on another site of the network keeps every language here', $kept( $r, 'multilingual', 'Polylang' ), wp_json_encode( $r ) );
+	$check( "#11 (I6) a language Polylang serves on another site is kept, as Polylang's", $kept( $r, 'plugin', 'Polylang' ), wp_json_encode( $r ) );
+	$check( '#11 (I6) and a language it does not serve there is still offered', $r2 && $r2['removable'], wp_json_encode( $r2 ) );
+	$wpdb->delete( $tts, array( 'term_taxonomy_id' => $tt_id ) );
+	$wpdb->delete( $terms, array( 'term_id' => $term_id ) );
+
+	// TranslatePress on another site, its settings read from that site.
+	$trp_had = get_blog_option( $other, 'trp_settings', null );
+	$undo[]  = static function () use ( $other, $trp_had ) {
+		null === $trp_had ? delete_blog_option( $other, 'trp_settings' ) : update_blog_option( $other, 'trp_settings', $trp_had );
+	};
+	update_blog_option( $other, 'trp_settings', array( 'default-language' => 'en_US', 'translation-languages' => array( 'en_US', 'zz_ZZ' ) ) );
+	update_blog_option( $other, 'active_plugins', array_merge( (array) $had, array( 'translatepress-multilingual/index.php' ) ) );
+	$r  = $row( 'zz_ZZ' );
+	$r2 = $row( 'zy_ZY' );
+	update_blog_option( $other, 'active_plugins', $had );
+	null === $trp_had ? delete_blog_option( $other, 'trp_settings' ) : update_blog_option( $other, 'trp_settings', $trp_had );
+	$check( "#11 (I6) a language TranslatePress serves on another site is kept, as TranslatePress's", $kept( $r, 'plugin', 'TranslatePress' ), wp_json_encode( $r ) );
+	$check( '#11 (I6) and a language it does not serve there is still offered', $r2 && $r2['removable'], wp_json_encode( $r2 ) );
 
 	// Network-active: every other site of the network runs it with its own
 	// list, even where this site's own list is readable.
@@ -446,7 +597,7 @@ add_filter( 'pre_http_request', static function () {
 	$r = $row( 'zy_ZY' );
 	remove_filter( 'pre_option_trp_settings', $settings );
 	remove_filter( 'pre_site_option_active_sitewide_plugins', $sitewide );
-	$check( '#11 a network-active multilingual plugin keeps every language', $kept( $r, 'multilingual', 'TranslatePress' ), wp_json_encode( $r ) );
+	$check( '#11 a network-active multilingual plugin whose list on the other sites cannot be read keeps every language', $kept( $r, 'multilingual', 'TranslatePress' ), wp_json_encode( $r ) );
 	$r = $row( 'zy_ZY' );
 	$check( '#11 control: with it gone the language is offered again', $r && $r['removable'], wp_json_encode( $r ) );
 } )();
@@ -554,6 +705,21 @@ add_filter( 'pre_http_request', static function () {
 		}
 	}
 	$check( '#12 only one literal define PHP runs is a switch', ! $bad, implode( '; ', $bad ) );
+
+	// Round-two L7: a lone literal is a switch only when it is the value
+	// WordPress runs with. WP_DEBUG is defined in this process.
+	$has_switch = method_exists( 'Minn_Admin_REST', 'config_switch' );
+	$check( '#12 (L7) each switch is judged against the running value (config_switch)', $has_switch );
+	if ( $has_switch ) {
+		$now  = defined( 'WP_DEBUG' ) && WP_DEBUG ? 'true' : 'false';
+		$flip = 'true' === $now ? 'false' : 'true';
+		$live = Minn_Admin_REST::config_switch( 'WP_DEBUG', $php . "define( 'WP_DEBUG', {$now} );\n" );
+		$dead = Minn_Admin_REST::config_switch( 'WP_DEBUG', $php . "if ( getenv( 'MINN_V046_STAGING' ) ) {\n\tdefine( 'WP_DEBUG', {$flip} );\n}\n" );
+		$none = Minn_Admin_REST::config_switch( 'MINN_V046_NEVER_DEFINED', $php . "if ( getenv( 'MINN_V046_STAGING' ) ) {\n\tdefine( 'MINN_V046_NEVER_DEFINED', true );\n}\n" );
+		$check( '#12 (L7) control: the literal WordPress runs with is a live switch', false === $live['locked'], wp_json_encode( $live ) );
+		$check( '#12 (L7) a literal that does not run (another value holds) is locked as elsewhere', true === $dead['locked'] && 'elsewhere' === $dead['lock'], wp_json_encode( $dead ) );
+		$check( '#12 (L7) a literal under a branch that did not run is locked as elsewhere', true === $none['locked'] && 'elsewhere' === $none['lock'], wp_json_encode( $none ) );
+	}
 
 	$has = method_exists( 'Minn_Admin_REST', 'config_rewrite' );
 	$check( '#12 the write is judged by the same reading (config_rewrite)', $has );

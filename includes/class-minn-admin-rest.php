@@ -2706,9 +2706,9 @@ class Minn_Admin_REST {
 
 	/**
 	 * Take every one of Otter's dynamic-content resolvers off the hooks they
-	 * run on, and say which came off: [ hook, callback, priority ] each. A
-	 * resolver is any callback of an Otter (ThemeIsle) class named Dynamic,
-	 * so one a later Otter adds comes off too.
+	 * run on, and say which came off: [ hook, callback, priority, accepted
+	 * args ] each. A resolver is any callback of an Otter (ThemeIsle) class
+	 * named Dynamic, so one a later Otter adds comes off too.
 	 *
 	 * @return array[]
 	 */
@@ -2725,7 +2725,7 @@ class Minn_Admin_REST {
 					$owner = is_array( $fn ) && isset( $fn[0] ) ? $fn[0] : ( is_string( $fn ) && false !== strpos( $fn, '::' ) ? strstr( $fn, '::', true ) : null );
 					$class = is_object( $owner ) ? get_class( $owner ) : ( is_string( $owner ) ? ltrim( $owner, '\\' ) : '' );
 					if ( 0 === stripos( $class, 'ThemeIsle\\' ) && false !== stripos( $class, 'Dynamic' ) ) {
-						$parked[] = array( $hook, $fn, $priority );
+						$parked[] = array( $hook, $fn, $priority, (int) $cb['accepted_args'] );
 					}
 				}
 			}
@@ -2890,67 +2890,72 @@ class Minn_Admin_REST {
 
 		$queue_before = wp_styles()->queue;
 		$rendered     = array();
-		foreach ( array_slice( $blocks, 0, 100 ) as $raw ) {
-			$raw = (string) $raw;
-			if ( $gb_untrusted ) {
-				// GenerateBlocks' first blocks (headline, button, image,
-				// container) read dynamic data from their attributes, with no
-				// tag to strip, and GenerateBlocks blanks them only on core's
-				// block renderer. A block its own save gate would flag
-				// previews empty here.
-				$gb_marked = method_exists( 'GenerateBlocks_Dynamic_Content', 'content_has_dynamic_attribute_markers' )
-					? GenerateBlocks_Dynamic_Content::content_has_dynamic_attribute_markers( $raw )
-					: false !== stripos( $raw, 'useDynamicData' );
-				$gb_strip  = class_exists( 'GenerateBlocks_Dynamic_Tag_Security' )
-					&& method_exists( 'GenerateBlocks_Dynamic_Tag_Security', 'replace_dynamic_tags_with_empty' );
-				if ( $gb_marked || ( ! $gb_strip && false !== strpos( $raw, '{{' ) ) ) {
+		// The resolvers and the preview clamps come back off however the
+		// render ends, a block that throws included.
+		try {
+			foreach ( array_slice( $blocks, 0, 100 ) as $raw ) {
+				$raw = (string) $raw;
+				if ( $gb_untrusted ) {
+					// GenerateBlocks' first blocks (headline, button, image,
+					// container) read dynamic data from their attributes, with no
+					// tag to strip, and GenerateBlocks blanks them only on core's
+					// block renderer. A block its own save gate would flag
+					// previews empty here.
+					$gb_marked = method_exists( 'GenerateBlocks_Dynamic_Content', 'content_has_dynamic_attribute_markers' )
+						? GenerateBlocks_Dynamic_Content::content_has_dynamic_attribute_markers( $raw )
+						: false !== stripos( $raw, 'useDynamicData' );
+					$gb_strip  = class_exists( 'GenerateBlocks_Dynamic_Tag_Security' )
+						&& method_exists( 'GenerateBlocks_Dynamic_Tag_Security', 'replace_dynamic_tags_with_empty' );
+					if ( $gb_marked || ( ! $gb_strip && false !== strpos( $raw, '{{' ) ) ) {
+						$rendered[] = '';
+						continue;
+					}
+					if ( $gb_strip ) {
+						$raw = GenerateBlocks_Dynamic_Tag_Security::replace_dynamic_tags_with_empty( $raw );
+					}
+				}
+				if ( $otter_untrusted && self::otter_marked( $raw ) ) {
 					$rendered[] = '';
 					continue;
 				}
-				if ( $gb_strip ) {
-					$raw = GenerateBlocks_Dynamic_Tag_Security::replace_dynamic_tags_with_empty( $raw );
+				$html = do_blocks( $raw );
+				// A resolver something put back while this block rendered (Otter's
+				// own excerpt reader does exactly that) may have run on part of
+				// it: that block previews empty, and the resolver comes off again
+				// before the next one.
+				if ( $otter_untrusted && self::park_otter_resolvers() ) {
+					$rendered[] = '';
+					continue;
 				}
+				// Embed blocks keep a bare URL in their saved HTML; the front end
+				// converts it via WP_Embed::autoembed on the_content — run the same
+				// pass here so island previews show the real embed.
+				if ( isset( $GLOBALS['wp_embed'] ) && false !== strpos( $html, 'wp-block-embed__wrapper' ) ) {
+					$html = $GLOBALS['wp_embed']->autoembed( $html );
+				}
+				/**
+				 * Per-block HTML post-process for island previews. Used by the
+				 * Otter adapter to swap JS-only Leaflet maps for an OSM embed.
+				 *
+				 * @param string $html    Rendered HTML from do_blocks.
+				 * @param string $raw     Original block markup string.
+				 * @param int    $post_id Post being edited (0 when unknown).
+				 */
+				$html       = apply_filters( 'minn_admin_rendered_html', $html, $raw, $post_id );
+				$rendered[] = $html;
 			}
-			if ( $otter_untrusted && self::otter_marked( $raw ) ) {
-				$rendered[] = '';
-				continue;
+		} finally {
+			// Back exactly as they were: whatever came back mid-render is
+			// taken off first, so nothing is left on twice.
+			if ( $otter_untrusted ) {
+				self::park_otter_resolvers();
 			}
-			$html = do_blocks( $raw );
-			// A resolver something put back while this block rendered (Otter's
-			// own excerpt reader does exactly that) may have run on part of
-			// it: that block previews empty, and the resolver comes off again
-			// before the next one.
-			if ( $otter_untrusted && self::park_otter_resolvers() ) {
-				$rendered[] = '';
-				continue;
+			foreach ( $otter_parked as $parked ) {
+				add_filter( $parked[0], $parked[1], $parked[2], $parked[3] );
 			}
-			// Embed blocks keep a bare URL in their saved HTML; the front end
-			// converts it via WP_Embed::autoembed on the_content — run the same
-			// pass here so island previews show the real embed.
-			if ( isset( $GLOBALS['wp_embed'] ) && false !== strpos( $html, 'wp-block-embed__wrapper' ) ) {
-				$html = $GLOBALS['wp_embed']->autoembed( $html );
-			}
-			/**
-			 * Per-block HTML post-process for island previews. Used by the
-			 * Otter adapter to swap JS-only Leaflet maps for an OSM embed.
-			 *
-			 * @param string $html    Rendered HTML from do_blocks.
-			 * @param string $raw     Original block markup string.
-			 * @param int    $post_id Post being edited (0 when unknown).
-			 */
-			$html       = apply_filters( 'minn_admin_rendered_html', $html, $raw, $post_id );
-			$rendered[] = $html;
+			remove_filter( 'render_block_data', $clamp_preview_query );
+			remove_action( 'pre_get_posts', $cap_preview_posts, PHP_INT_MAX );
 		}
-		// Back exactly as they were: whatever came back mid-render is taken
-		// off first, so nothing is left on twice.
-		if ( $otter_untrusted ) {
-			self::park_otter_resolvers();
-		}
-		foreach ( $otter_parked as $parked ) {
-			add_filter( $parked[0], $parked[1], $parked[2] );
-		}
-		remove_filter( 'render_block_data', $clamp_preview_query );
-		remove_action( 'pre_get_posts', $cap_preview_posts, PHP_INT_MAX );
 		$out         = array( 'rendered' => $rendered );
 		$new_handles = array_values( array_diff( wp_styles()->queue, $queue_before ) );
 		$styles      = $new_handles ? self::collect_style_urls( $new_handles ) : array(
