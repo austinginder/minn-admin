@@ -76,9 +76,44 @@ function minn_admin_network_can_add_site() {
 	return minn_admin_network_can( 'create_sites' ) && Minn_Admin::network_owner();
 }
 
-/** Whether the current user may delete sites (the route, and the Delete site action). */
+/**
+ * Whether the current user may delete sites (the route, and the Delete site
+ * action). Deleting a site removes each member's role on it first, and the
+ * write fence keeps that removal for whoever may promote on that site, which
+ * only a super admin may once it is going; core then drops the site anyway.
+ * Anyone else would delete the site, keep its members' role rows for a reused
+ * id and get a 403, so they are refused before anything runs, as for Add site.
+ *
+ * @return bool
+ */
 function minn_admin_network_can_delete_sites() {
-	return minn_admin_network_can( 'delete_sites' );
+	return minn_admin_network_can( 'delete_sites' ) && Minn_Admin::network_owner();
+}
+
+/**
+ * Whether the current user may turn a plugin on or off for the whole
+ * network. Activation runs the plugin's own network-wide setup (often on
+ * every site) and deactivation its teardown, both before core stores the
+ * network's plugin list, which the write fence keeps for the network's
+ * owner: anyone else is refused before either runs. The route and the
+ * Extensions card's network switch both ask this.
+ *
+ * @return bool
+ */
+function minn_admin_network_can_activate_plugins() {
+	return minn_admin_network_can( 'manage_network_plugins' ) && Minn_Admin::network_owner();
+}
+
+/**
+ * Whether the current user may make a theme available to every site, or
+ * stop that. The network's theme list is a write the fence keeps for the
+ * network's owner, so anyone else is refused up front. The route and the
+ * Extensions card's network switch both ask this.
+ *
+ * @return bool
+ */
+function minn_admin_network_can_enable_themes() {
+	return minn_admin_network_can( 'manage_network_themes' ) && Minn_Admin::network_owner();
 }
 
 /**
@@ -89,12 +124,15 @@ function minn_admin_network_can_delete_sites() {
  * and role plugins do split them to make a "network user manager" who
  * administers accounts without changing network configuration. That
  * principal must not be able to POST their own id and become super admin,
- * nor be offered the switch.
+ * nor be offered the switch. The network's administrator list is a write
+ * the fence keeps for the network's owner, and core announces a grant or a
+ * revoke to listeners before it stores one, so anyone else is refused before
+ * that.
  *
  * @return bool
  */
 function minn_admin_network_can_grant_super() {
-	return minn_admin_network_can( 'manage_network_options' );
+	return minn_admin_network_can( 'manage_network_options' ) && Minn_Admin::network_owner();
 }
 
 /**
@@ -744,9 +782,7 @@ add_action( 'rest_api_init', function () {
 	// against the installed set before anything runs.
 	register_rest_route( 'minn-admin/v1', '/network/plugins/activate', array(
 		'methods'             => 'POST',
-		'permission_callback' => function () {
-			return minn_admin_network_can( 'manage_network_plugins' );
-		},
+		'permission_callback' => 'minn_admin_network_can_activate_plugins',
 		'callback'            => 'minn_admin_network_plugin_activate',
 		'args'                => array(
 			'plugin' => array( 'type' => 'string', 'required' => true ),
@@ -772,9 +808,7 @@ add_action( 'rest_api_init', function () {
 
 	register_rest_route( 'minn-admin/v1', '/network/themes/enable', array(
 		'methods'             => 'POST',
-		'permission_callback' => function () {
-			return minn_admin_network_can( 'manage_network_themes' );
-		},
+		'permission_callback' => 'minn_admin_network_can_enable_themes',
 		'callback'            => 'minn_admin_network_theme_enable',
 		'args'                => array(
 			'theme' => array( 'type' => 'string', 'required' => true ),
