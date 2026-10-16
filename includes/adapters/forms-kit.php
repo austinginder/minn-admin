@@ -17,6 +17,32 @@
 defined( 'ABSPATH' ) || exit;
 
 /**
+ * A multi-choice field's choices with every stored pick the list no longer
+ * offers added after them, so the entry page draws a ticked box for it and
+ * a save that does not untick it keeps it. Every entry editor's multi-choice
+ * fields go through it (Gravity Forms, WPForms, Ninja Forms, Elementor): a
+ * choice renamed or removed after the visitor answered is still their
+ * answer, and dropping it on the next edit of that field would record one
+ * they never gave.
+ *
+ * @param array $choices [value, label] pairs the form offers.
+ * @param array $stored  The answer's stored values.
+ * @return array
+ */
+function minn_admin_forms_keep_choices( array $choices, array $stored ) {
+	$offered = array_map( 'strval', wp_list_pluck( $choices, 0 ) );
+	foreach ( $stored as $v ) {
+		$v = (string) $v;
+		if ( '' !== $v && ! in_array( $v, $offered, true ) ) {
+			/* translators: %s: an answer the visitor picked that the form no longer offers. */
+			$choices[] = array( $v, sprintf( __( '%s (no longer on the form)', 'minn-admin' ), $v ) );
+			$offered[] = $v;
+		}
+	}
+	return $choices;
+}
+
+/**
  * An entry list's surface over its kernel resource.
  *
  * @param string $res Resource id ("formidable/entries").

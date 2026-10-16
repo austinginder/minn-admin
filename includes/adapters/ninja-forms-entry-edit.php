@@ -79,31 +79,6 @@ function minn_admin_ninja_forms_edit_options( $field ) {
 	return $out;
 }
 
-/**
- * A multi-choice field's choices with every stored pick the list no longer
- * offers added after them, so the entry page draws a ticked box for it and
- * a save that does not untick it keeps it. Shared by the entry editors: a
- * choice renamed or removed after the visitor answered is still their
- * answer, and dropping it on the next edit of that field would record one
- * they never gave.
- *
- * @param array $choices [value, label] pairs the form offers.
- * @param array $stored  The answer's stored values.
- * @return array
- */
-function minn_admin_entry_edit_keep_choices( array $choices, array $stored ) {
-	$offered = array_map( 'strval', wp_list_pluck( $choices, 0 ) );
-	foreach ( $stored as $v ) {
-		$v = (string) $v;
-		if ( '' !== $v && ! in_array( $v, $offered, true ) ) {
-			/* translators: %s: an answer the visitor picked that the form no longer offers. */
-			$choices[] = array( $v, sprintf( __( '%s (no longer on the form)', 'minn-admin' ), $v ) );
-			$offered[] = $v;
-		}
-	}
-	return $choices;
-}
-
 /** A submission's stored answer, read back the way Ninja Forms reads it. */
 function minn_admin_ninja_forms_edit_value( $post_id, $field_id, $kind ) {
 	$v = minn_admin_ninja_forms_decode( get_post_meta( $post_id, '_field_' . (int) $field_id, true ) );
@@ -152,7 +127,7 @@ function minn_admin_ninja_forms_edit_block( $post, $form_id ) {
 			if ( 'choice' === $kind ) {
 				$row['choices'] = minn_admin_ninja_forms_edit_options( $field );
 			} elseif ( 'multi' === $kind ) {
-				$row['choices'] = minn_admin_entry_edit_keep_choices( minn_admin_ninja_forms_edit_options( $field ), $row['inputs'][0]['value'] );
+				$row['choices'] = minn_admin_forms_keep_choices( minn_admin_ninja_forms_edit_options( $field ), $row['inputs'][0]['value'] );
 			}
 			$fields[] = $row;
 		}
@@ -208,7 +183,7 @@ add_action( 'rest_api_init', function () {
 				}
 				$allowed = isset( $row['choices'] ) ? wp_list_pluck( $row['choices'], 0 ) : array();
 				if ( 'multi' === $row['kind'] ) {
-					// The choices hold every stored pick (keep_choices), so only
+					// The choices hold every stored pick (forms-kit.php), so only
 					// a box the person unticks leaves the answer.
 					$picked = array();
 					foreach ( (array) $value as $v ) {

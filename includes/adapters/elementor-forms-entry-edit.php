@@ -139,8 +139,8 @@ function minn_admin_elementor_edit_block( $sub ) {
 			$picked         = minn_admin_elementor_edit_split( $value, array_map( 'strval', wp_list_pluck( $options, 0 ) ) );
 			$row['inputs']  = array( array( 'id' => $key, 'value' => $picked ) );
 			// A pick the form no longer offers (an option renamed or removed
-			// since) keeps a ticked box (ninja-forms-entry-edit.php).
-			$row['choices'] = minn_admin_entry_edit_keep_choices( $options, $picked );
+			// since) keeps a ticked box (forms-kit.php).
+			$row['choices'] = minn_admin_forms_keep_choices( $options, $picked );
 		} else {
 			$row['inputs'] = array( array( 'id' => $key, 'value' => $value ) );
 			if ( 'choice' === $kind ) {

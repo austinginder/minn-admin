@@ -156,8 +156,10 @@ function minn_admin_gf_entry_edit_block( $form, $entry ) {
 				$row['inputs'][] = array( 'id' => $c['id'], 'label' => $c['label'], 'value' => (string) rgar( $entry, $c['id'] ), 'choice' => $c['value'] );
 			}
 		} elseif ( 'multi' === $kind ) {
-			$row['inputs'][] = array( 'id' => (string) $field->id, 'value' => array_values( array_map( 'strval', (array) $field->to_array( rgar( $entry, (string) $field->id ) ) ) ) );
-			$row['choices']  = minn_admin_gfe_choices( $field );
+			$picked          = array_values( array_map( 'strval', (array) $field->to_array( rgar( $entry, (string) $field->id ) ) ) );
+			$row['inputs'][] = array( 'id' => (string) $field->id, 'value' => $picked );
+			// A pick the form no longer offers keeps a ticked box (forms-kit.php).
+			$row['choices']  = minn_admin_forms_keep_choices( minn_admin_gfe_choices( $field ), $picked );
 		} else {
 			$row['inputs'][] = array( 'id' => (string) $field->id, 'value' => (string) rgar( $entry, (string) $field->id ) );
 			if ( 'choice' === $kind ) {
@@ -191,7 +193,9 @@ function minn_admin_gfe_prepare( $form, $field, $kind, $input, $value, $entry ) 
 	};
 	$name = 'input_' . str_replace( '.', '_', (string) $input['id'] );
 	if ( 'multi' === $kind ) {
-		$allowed = wp_list_pluck( minn_admin_gfe_choices( $field ), 0 );
+		// The choices the page drew: the form's, then the entry's own stored
+		// picks it no longer offers, so only a box the person unticks leaves.
+		$allowed = wp_list_pluck( minn_admin_forms_keep_choices( minn_admin_gfe_choices( $field ), (array) $input['value'] ), 0 );
 		$picked  = array();
 		foreach ( (array) $value as $v ) {
 			if ( is_scalar( $v ) && in_array( (string) $v, $allowed, true ) ) {
