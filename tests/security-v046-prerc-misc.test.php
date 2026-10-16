@@ -268,5 +268,53 @@ rest_get_server();
 	}
 } )();
 
+/*
+ * Rank Math redirections: a target-and-type edit writes the sources back as
+ * their column holds them and a target sent back as stored keeps its bytes.
+ * The save rebuilt the sources from the reader's entity-decoded copy in Minn's
+ * key order, so their lookup by serialized sources (their save of every new
+ * rule, their settings import) no longer found the rule, and their model made
+ * a relative target absolute.
+ */
+( function () use ( $check, $skip, $call, $wpdb ) {
+	if ( ! function_exists( 'minn_admin_rm_redirects_ready' ) || ! minn_admin_rm_redirects_ready() ) {
+		$skip( 'Rank Math redirections inactive (pass this file to --require as well, see the header)' );
+		return;
+	}
+	$table   = $wpdb->prefix . 'rank_math_redirections';
+	$sources = serialize( array( array( 'ignore' => '', 'pattern' => 'minn-prerc/a&#38;b', 'comparison' => 'contains' ) ) ); // phpcs:ignore -- their storage format
+	$wpdb->query( 'START TRANSACTION' );
+	try {
+		$wpdb->insert( $table, array( 'sources' => $sources, 'url_to' => '/minn-prerc-target', 'header_code' => '301', 'hits' => 0, 'status' => 'active', 'created' => current_time( 'mysql' ), 'updated' => current_time( 'mysql' ) ) );
+		$id = (int) $wpdb->insert_id;
+		if ( $id <= 0 ) {
+			$check( 'Rank Math: a redirect is seeded for the check', false, $wpdb->last_error );
+			return;
+		}
+		$route = '/' . str_replace( '{id}', (string) $id, Minn_Admin_Kernel::action_path( 'rankmath/redirects', 'edit' ) );
+		$item = null;
+		list( , $list ) = $call( 'GET', '/minn-admin/v1/rankmath/redirects', null, array( 'search' => 'minn-prerc', 'per_page' => 50 ) );
+		foreach ( (array) ( $list['items'] ?? array() ) as $r ) {
+			if ( (int) ( $r['id'] ?? 0 ) === $id ) {
+				$item = $r;
+			}
+		}
+		$check( 'Rank Math: the list serves the stored target', '/minn-prerc-target' === ( $item['url_to'] ?? null ), wp_json_encode( $item ?? $list ) );
+		list( $st, $d ) = $call( 'POST', $route, array( 'url_to' => $item['url_to'] ?? '/minn-prerc-target', 'header_code' => '302' ) );
+		$now = $wpdb->get_row( $wpdb->prepare( "SELECT sources, url_to, header_code FROM {$table} WHERE id = %d", $id ), ARRAY_A ); // phpcs:ignore
+		$check( 'Rank Math: a type-only edit answers 200 and writes the type (control)', 200 === $st && '302' === (string) $now['header_code'], $st . ' ' . wp_json_encode( $d ) );
+		$check( 'Rank Math: and keeps the sources column byte for byte', $sources === $now['sources'], wp_json_encode( $now['sources'] ) );
+		$found = \RankMath\Redirections\DB::match_redirections_source( $sources );
+		$check( 'Rank Math: so their lookup by serialized sources still finds the rule', $found && (int) ( $found[0]['id'] ?? 0 ) === $id, wp_json_encode( $found ) );
+		$check( 'Rank Math: and keeps the relative target as stored', '/minn-prerc-target' === $now['url_to'], wp_json_encode( $now['url_to'] ) );
+		list( $st ) = $call( 'POST', $route, array( 'url_to' => '/minn-prerc-moved', 'header_code' => '302' ) );
+		$moved = (string) $wpdb->get_var( $wpdb->prepare( "SELECT url_to FROM {$table} WHERE id = %d", $id ) ); // phpcs:ignore
+		$check( 'Rank Math: a changed target goes through their model, made absolute (control)', 200 === $st && home_url( '/minn-prerc-moved' ) === $moved, $st . ' ' . wp_json_encode( $moved ) );
+	} finally {
+		$wpdb->query( 'ROLLBACK' );
+		wp_cache_flush();
+	}
+} )();
+
 printf( "\nsecurity-v046-prerc-misc: %d/%d passed\n", count( array_filter( $results ) ), count( $results ) );
 exit( count( array_filter( $results ) ) === count( $results ) ? 0 : 1 );

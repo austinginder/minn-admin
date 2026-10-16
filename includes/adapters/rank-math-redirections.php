@@ -323,11 +323,20 @@ function minn_admin_rm_redirect( $id ) {
  * them (percent-decoding, subdirectory stripping) where nobody sees it. A
  * field the request omits keeps its stored value.
  *
+ * "As stored" means the column's own bytes. Their reader entity-decodes
+ * every pattern ('a&#38;b' reads 'a&b'), and sources rebuilt from that copy
+ * in Minn's key order serialize differently. Their save (DB::update_iff(),
+ * behind every rule their form, slug watcher and metabox add) and their
+ * settings import find a rule by its serialized sources, so the edited rule
+ * stopped matching and the same source got a second rule.
+ *
  * @return array|WP_Error What was written: url_to and header_code.
  */
 function minn_admin_rm_edit_redirect( $id, WP_REST_Request $request ) {
 	$row    = \RankMath\Redirections\DB::get_redirection_by_id( (int) $id );
 	$stored = minn_admin_rm_sources( $row['sources'] );
+	$column = Minn_Admin_Kernel_SQL::row( 'rank_math_redirections', 'id', (int) $id, array( 'sources' ) );
+	$raw    = Minn_Admin::decode_serialized( (string) ( $column['sources'] ?? '' ) );
 	if ( ! $stored ) {
 		return new WP_Error( 'minn_rm_source', __( 'This redirect has no source Minn can read. Edit it in Rank Math.', 'minn-admin' ), array( 'status' => 400 ) );
 	}
@@ -339,6 +348,9 @@ function minn_admin_rm_edit_redirect( $id, WP_REST_Request $request ) {
 	}
 	$needs_target = ! in_array( $code, array( '410', '451' ), true );
 	$url_to       = $request->has_param( 'url_to' ) ? (string) $request->get_param( 'url_to' ) : (string) $row['url_to'];
+	// A target sent back as stored keeps its bytes (their model would make a
+	// relative '/new' absolute).
+	$same_target  = (string) $row['url_to'] === $url_to;
 	if ( $needs_target && '' === trim( $url_to ) ) {
 		return new WP_Error( 'minn_rm_target', __( 'Add the address to redirect to.', 'minn-admin' ), array( 'status' => 400 ) );
 	}
@@ -356,8 +368,8 @@ function minn_admin_rm_edit_redirect( $id, WP_REST_Request $request ) {
 	}
 	$settings = array(
 		'id'          => (int) $row['id'],
-		'sources'     => $stored,
-		'url_to'      => $needs_target ? (string) $probe->url_to : '',
+		'sources'     => is_array( $raw ) && $raw ? $raw : $stored,
+		'url_to'      => $needs_target ? ( $same_target ? $url_to : (string) $probe->url_to ) : '',
 		'header_code' => $code,
 		'status'      => (string) $row['status'],
 	);
