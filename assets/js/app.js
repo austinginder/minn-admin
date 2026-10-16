@@ -2408,69 +2408,21 @@
 		rtEl = null;
 	}
 
-	// Stored wysiwyg markup → the same markup, minus the parts that would run.
-	//
-	// Deliberately NOT sanitizePastedHtml(): that one normalises foreign
-	// clipboard markup down to the vocabulary the block serializers store, so
-	// running it over a value someone already saved would quietly drop tables,
-	// embeds and images, and the next Apply would write the stripped version
-	// back. A field's stored content has to survive being opened.
-	//
-	// So parse inertly (no resource loads, no handlers during the parse) and
-	// scrub only what executes: script/style elements, every on* attribute,
-	// and href/src pointing at a scheme that runs. Everything else is imported
-	// as it was.
-	// Elements that run, navigate, or re-root the document. srcdoc on an iframe
-	// inherits this origin and its content is a fresh navigation, so a plain
-	// <script> inside one DOES run; <base> rewrites every relative URL on the
-	// page; SVG <animate>/<set> can retarget an href after the scrub. None of
-	// these survive wp_kses_post on the way in either, so dropping them costs
-	// no fidelity.
-	const RT_DROP_TAGS = 'script,style,noscript,iframe,object,embed,frame,frameset,form,base,meta,link,applet,portal,template,animate,animatetransform,animatemotion,set';
-	// Attributes that take a URL. Anything not http(s) or a same-origin path is
-	// dropped rather than trusted.
+	// Attributes that take a URL. One whose scheme can reach execution is
+	// parked (rtParkName), never trusted.
 	const RT_URL_ATTRS = [ 'href', 'src', 'xlink:href', 'action', 'formaction', 'data', 'poster', 'background', 'cite', 'longdesc', 'ping' ];
 	// Never useful in stored content and each one is a way back to execution.
 	const RT_KILL_ATTRS = [ 'srcdoc', 'sandbox', 'attributename', 'values', 'from', 'to', 'by', 'begin', 'http-equiv' ];
 
-	function rtScrub( root ) {
-		$$( RT_DROP_TAGS, root ).forEach( ( el ) => el.remove() );
-		$$( '*', root ).forEach( ( el ) => {
-			Array.from( el.attributes ).forEach( ( at ) => {
-				const name = at.name.toLowerCase();
-				if ( 0 === name.indexOf( 'on' ) || RT_KILL_ATTRS.includes( name ) ) {
-					el.removeAttribute( at.name );
-					return;
-				}
-				// A field value never legitimately names Minn's chrome or one of
-				// the page's own members (see rtIdHazard): a <label for> into
-				// the editor behind this modal clicked its Publish button.
-				if ( rtIdHazard( at.name, at.value, el ) ) {
-					el.removeAttribute( at.name );
-					return;
-				}
-				// A relative or http(s) target is fine; anything else (javascript:,
-				// data:, vbscript:) is not, and safeHref already draws that line.
-				if ( RT_URL_ATTRS.includes( name ) && ! safeHref( at.value ) ) {
-					el.removeAttribute( at.name );
-				}
-			} );
-			// querySelectorAll does not descend into a template's content, so an
-			// on* attribute would ride through untouched inside one.
-			if ( el.content && el.content.nodeType === 11 ) rtScrub( el.content );
-		} );
-		return root;
-	}
-
-	// Stored POST content is a different problem from a stored field value.
-	// It reaches the editor body, the locked preview, island previews and the
+	// Stored content (a post's, or a wysiwyg field's in the rich-text modal)
+	// reaches the editor body, the locked preview, island previews and the
 	// revision viewer, and assigning it to a live innerHTML parses it for real
 	// and fires whatever onload/onerror it carries. Anyone holding
 	// unfiltered_html can put that there, and the reader is usually an
 	// administrator, so the plant and the fire are different people.
 	//
-	// rtScrub is the wrong instrument here: it DELETES. Post content round
-	// trips — an html block and a details body are read back out of the DOM at
+	// Deleting is the wrong instrument here. Content round trips — an html
+	// block, a details body and a field value are read back out of the DOM at
 	// save — so deleting an attribute on the way in silently rewrites markup
 	// the writer never touched. Instead PARK what executes under a data-
 	// prefix, which the parser treats as inert, and let the serializers put it
@@ -2488,6 +2440,25 @@
 		( window.crypto || window.msCrypto ).getRandomValues( a );
 		return 'p' + a[ 0 ].toString( 36 ) + a[ 1 ].toString( 36 );
 	} )() + '-';
+
+	// An image upload's placeholder figure, keyed with a per-page random token
+	// for the same reason: content can wear data-minn-upload (kses keeps
+	// data-*), and with a guessable key ("u1") a planted figure took the
+	// editor's first upload while the real placeholder was dropped from every
+	// save. Only this page's keys are placeholders, looked up in the editor
+	// body; a figure that merely wears the attribute is content, saved as
+	// written.
+	const PAGE_TOKEN = RT_PARK_PREFIX.slice( 'data-minn-inert-'.length, -1 );
+	const UPLOAD_KEY = 'u' + PAGE_TOKEN + '-';
+	const isUploadPlaceholder = ( el ) => !! el && 1 === el.nodeType
+		&& 0 === String( el.getAttribute( 'data-minn-upload' ) || '' ).indexOf( UPLOAD_KEY );
+	// The paste brackets (pasteBlocksInsert) carry the token too, so content's
+	// own data-minn-bkt is neither removed nor stripped.
+	const isPasteBracket = ( el ) => !! el && 1 === el.nodeType && PAGE_TOKEN === el.getAttribute( 'data-minn-bkt' );
+	const uploadPlaceholder = ( key ) => {
+		const host = document.getElementById( 'minn-editor-body' );
+		return host ? $$( 'figure[data-minn-upload]', host ).find( ( f ) => f.getAttribute( 'data-minn-upload' ) === key ) || null : null;
+	};
 
 	// Attribute renames are applied by rebuilding the whole set IN ORDER.
 	// Removing one and appending its parked twin would move it to the end, and
@@ -2614,8 +2585,8 @@
 		el.removeAttribute( RT_PARK_CSS );
 	}
 
-	// Keeps every TAG. Dropping tags is what rtScrub does for field values, and
-	// doing it here would delete core/embed output and raw-HTML blocks. An
+	// Keeps every TAG. Dropping tags would delete core/embed output, raw-HTML
+	// blocks and a field's embeds. An
 	// iframe with an https src is legitimate embed output; the same iframe with
 	// srcdoc has its srcdoc parked, which is what actually stops it.
 	function rtNeutralize( root ) {
@@ -2627,9 +2598,13 @@
 		return root;
 	}
 
-	// Put the parked attributes back. Runs on the SERIALIZER'S CLONE, never on
+	// Put the parked attributes back. Runs on the SERIALIZER'S COPY, never on
 	// the live DOM: the document keeps the inert copy, the database gets the
-	// writer's bytes.
+	// writer's bytes. The copy is made in the inert document (rtInertCopy):
+	// a cloneNode clone still belongs to this page, so putting a parked src and
+	// onerror back on it loaded the image and ran the handler here, on every
+	// save and autosave, for markup the editor had kept inert on screen.
+	const rtInertCopy = ( node ) => stripTagsDoc.importNode( node, true );
 	function rtUnpark( root ) {
 		// The root too: the block serializer hands over each top-level block
 		// element, and a descendant query alone left THAT element's parked
@@ -2675,9 +2650,10 @@
 	}
 
 	// The one way stored post content should ever reach a live element. Parse
-	// inertly, park what runs, then IMPORT the nodes — the same reasoning as
-	// rtSeedInto, including why the tree is never re-serialised to a string on
-	// the way in.
+	// inertly, park what runs, then IMPORT the nodes: re-serialising the tree
+	// into innerHTML on a live element would parse it for real, the step the
+	// inert parse exists to avoid, and re-open every mutation-XSS shape a
+	// string round trip carries.
 	function rtNeutralizeInto( el, html ) {
 		el.textContent = '';
 		const s = String( html == null ? '' : html );
@@ -2689,26 +2665,29 @@
 		return el;
 	}
 
-	// Seed the editable body from stored markup. Parse inertly, scrub, then
-	// IMPORT the nodes: re-serialising a scrubbed tree back into innerHTML on a
-	// live element re-parses it for real, which is exactly the step the inert
-	// parse existed to avoid, and it re-opens every mutation-XSS shape a string
-	// round trip carries.
-	function rtSeedInto( body, s ) {
-		body.textContent = '';
-		if ( s.indexOf( '<' ) === -1 ) {
-			// No markup: still needs paragraphs to edit as blocks. miniAutop's
-			// output is built from this text, so parse it inertly too.
-			s = miniAutop( s );
-		}
-		const holder = rtScrub( inertParse( s ) );
-		if ( ! holder.firstChild ) {
-			body.innerHTML = '<p><br></p>';
-			return;
-		}
-		Array.from( holder.childNodes ).forEach( ( node ) => {
-			body.appendChild( document.importNode( node, true ) );
-		} );
+	// A wysiwyg field's stored value, opened in the rich-text modal. It is
+	// stored content like a post's, so it takes the post editor's path: parse
+	// inertly, park what runs (rtNeutralizeInto), keep every tag and URL as
+	// written. Deleting on the way in rewrote the field at the next Apply:
+	// mailto:, tel:, #anchor and relative links, inline images and an
+	// unfiltered_html writer's embeds were gone though nobody touched them.
+	function rtFieldSeedInto( body, s ) {
+		// No markup: still needs paragraphs to edit as blocks.
+		rtNeutralizeInto( body, s.indexOf( '<' ) === -1 ? miniAutop( s ) : s );
+		if ( ! body.firstChild ) body.innerHTML = '<p><br></p>';
+	}
+
+	// The edited body as a field value, built on a clone: Minn's own clean-ups,
+	// then the writer's parked attributes put back, as the post serializers do.
+	function rtFieldHtml( body ) {
+		const out = rtInertCopy( body );
+		modernizeStrikes( out );
+		cleanBoundaryNbsp( out );
+		// Drop a purely-empty trailing affordance paragraph.
+		const last = out.lastElementChild;
+		if ( last && last.tagName === 'P' && ! last.textContent.trim() && ! last.querySelector( 'img,iframe' ) ) last.remove();
+		rtUnpark( out );
+		return out.innerHTML.trim();
 	}
 
 	function openRichTextModal( html, onApply, opts = {} ) {
@@ -2747,15 +2726,20 @@
 		document.body.appendChild( overlay );
 		rtEl = overlay;
 		const body = $( '.minn-rt-body', overlay );
-		const s = String( html == null ? '' : html ).trim();
+		const stored = String( html == null ? '' : html );
+		const s = stored.trim();
 		// `body` is already in the live document, so assigning stored markup
 		// straight in parses it for real and fires any onload/onerror it
-		// carries. Seed by inert parse, scrub, then import the nodes.
+		// carries. Seed by inert parse, park, then import the nodes.
 		if ( s ) {
-			rtSeedInto( body, s );
+			rtFieldSeedInto( body, s );
 		} else {
 			body.innerHTML = '<p><br></p>';
 		}
+		// Opening a field never rewrites it: Apply with no edit hands back the
+		// stored value byte for byte.
+		let edited = false;
+		body.addEventListener( 'input', () => { edited = true; } );
 
 		const linkRow = $( '.minn-rt-linkrow', overlay );
 		const linkInput = linkRow.querySelector( 'input' );
@@ -2801,12 +2785,7 @@
 				return;
 			}
 			if ( e.target.closest( '#minn-rt-apply' ) ) {
-				modernizeStrikes( body );
-				cleanBoundaryNbsp( body );
-				// Drop a purely-empty trailing affordance paragraph.
-				const last = body.lastElementChild;
-				if ( last && last.tagName === 'P' && ! last.textContent.trim() && ! last.querySelector( 'img,iframe' ) ) last.remove();
-				const out = body.innerHTML.trim();
+				const out = edited ? rtFieldHtml( body ) : stored;
 				closeRichText();
 				// onApply lands the value in state BEFORE done() reopens a
 				// hosting dialog, so the reopened render shows the new value.
@@ -5397,22 +5376,38 @@
 	// so flipping schemes never waits on the network.
 	let appearanceSaveTimer = null;
 	let appearanceSaveSeq = 0;
+	let appearancePending = new Set();
 
-	function queueAppearanceSave( norm ) {
+	// Only the named keys of an appearance record. A save sends what the click
+	// changed and the route keeps every key a body leaves out, so a choice
+	// made meanwhile in another session (or by an administrator on the user's
+	// page) is never put back by an unrelated click.
+	function appearancePick( ap, keys ) {
+		const norm = appearanceOf( ap );
+		const out = {};
+		keys.forEach( ( k ) => { if ( k in norm ) out[ k ] = norm[ k ]; } );
+		return out;
+	}
+
+	function queueAppearanceSave( norm, keys ) {
 		if ( B.user ) B.user.appearance = norm;
+		keys.forEach( ( k ) => appearancePending.add( k ) );
 		clearTimeout( appearanceSaveTimer );
 		const seq = ++appearanceSaveSeq;
-		const payload = appearanceOf( norm );
 		appearanceSaveTimer = setTimeout( async () => {
+			const sent = Array.from( appearancePending );
+			appearancePending = new Set();
 			try {
 				const saved = await api( 'minn-admin/v1/me/appearance', {
 					method: 'POST',
-					body: JSON.stringify( payload ),
+					body: JSON.stringify( appearancePick( norm, sent ) ),
 				} );
 				// A newer click superseded this write — don't clobber state.
 				if ( seq !== appearanceSaveSeq ) return;
 				if ( B.user ) B.user.appearance = appearanceOf( saved );
 			} catch ( e ) {
+				// What did not save goes with the next save.
+				sent.forEach( ( k ) => appearancePending.add( k ) );
 				if ( seq !== appearanceSaveSeq ) return;
 				// Keep the painted scheme; only warn. Next successful pick re-saves.
 				toast( e.message || __( 'Could not save scheme to your profile' ), true );
@@ -5432,7 +5427,7 @@
 		};
 		const norm = appearanceOf( merged );
 		applyAppearance( norm );
-		queueAppearanceSave( norm );
+		queueAppearanceSave( norm, Object.keys( merged ).filter( ( k ) => next[ k ] != null ) );
 		// The appearance UI lives on Your profile (a route since 2026-07-17).
 		if ( opts.rebuild && 'profile' === state.route ) {
 			renderProfile();
@@ -5600,8 +5595,12 @@
 				const willCustom = id === 'custom';
 				// Paint first; meta save is background. Only rebuild when the
 				// custom slot editors need to appear/disappear.
+				// A preset pick sends the scheme alone; the custom palette rides
+				// along only when it is the one being picked.
 				commitAppearance(
-					{ scheme: id, custom: willCustom && prev.scheme === 'site' ? resolvedAppearance( prev ).custom : prev.custom },
+					willCustom
+						? { scheme: id, custom: prev.scheme === 'site' ? resolvedAppearance( prev ).custom : prev.custom }
+						: { scheme: id },
 					{ rebuild: wasCustom !== willCustom }
 				);
 				if ( wasCustom === willCustom ) markSchemeSwatchSelected( wrap, id );
@@ -5642,7 +5641,7 @@
 					light: mode === 'light' ? nextMode : prev.custom.light,
 				};
 				applyAppearance( { ...prev, scheme: 'custom', custom } );
-				queueAppearanceSave( { ...prev, scheme: 'custom', custom } );
+				queueAppearanceSave( { ...prev, scheme: 'custom', custom }, [ 'scheme', 'custom' ] );
 			} );
 			input.addEventListener( 'change', flushSlots );
 		} );
@@ -27293,6 +27292,16 @@
 
 	// Why a language cannot be removed. Both cases mean a real reader depends
 	// on it, so the row says which one rather than just disabling a button.
+	// Why a wp-config switch is shown locked: the constant is defined outside
+	// wp-config.php, or wp-config.php sets it to something other than true or
+	// false (a log path), or sets it more than once. A switch would rewrite
+	// the last two, so they stay as the file has them.
+	function configLockLabel( c ) {
+		if ( c.lock === 'custom' ) return __( 'set in wp-config.php' );
+		if ( c.lock === 'multiple' ) return __( 'set more than once in wp-config.php' );
+		return __( 'defined elsewhere' );
+	}
+
 	function languageLockNote( lang ) {
 		if ( lang.reason === 'site' ) return __( 'Site language' );
 		/* translators: %d is a number of users who chose this language. */
@@ -27300,6 +27309,10 @@
 		/* translators: %d is a number of sites on the network that use this language. */
 		if ( lang.reason === 'sites' ) return sprintf( _n( 'Used by %d site on the network', 'Used by %d sites on the network', lang.sites ), lang.sites );
 		if ( lang.reason === 'network' ) return __( 'Kept: too many sites to check' );
+		/* translators: %s: a multilingual plugin's name. */
+		if ( lang.reason === 'plugin' ) return sprintf( __( 'Served by %s' ), lang.plugin );
+		/* translators: %s: a multilingual plugin's name. */
+		if ( lang.reason === 'multilingual' ) return sprintf( __( 'Kept: %s may serve it' ), lang.plugin );
 		return '';
 	}
 
@@ -27850,6 +27863,9 @@
 	// changed.
 	function changedDefinition( payload, orig, shown ) {
 		const out = {};
+		// The form sends its text trimmed, and a textarea reads line breaks
+		// back as \n: an untouched value compares as unchanged either way.
+		const textOf = ( x ) => String( x == null ? '' : x ).replace( /\r\n?/g, '\n' ).trim();
 		const sorted = ( a ) => JSON.stringify( [ ...( a || [] ) ].map( String ).sort() );
 		for ( const [ k, v ] of Object.entries( payload ) ) {
 			if ( k === 'slug' || k === 'backend' ) continue;
@@ -27858,7 +27874,7 @@
 				if ( sorted( v ) !== sorted( was ) ) out[ k ] = v;
 			} else if ( typeof v === 'number' ) {
 				if ( v !== ( orig[ k ] ? 1 : 0 ) ) out[ k ] = v;
-			} else if ( String( v ) !== String( orig[ k ] == null ? '' : orig[ k ] ) ) {
+			} else if ( textOf( v ) !== textOf( orig[ k ] ) ) {
 				out[ k ] = v;
 			}
 		}
@@ -28223,7 +28239,7 @@
 								<div class="minn-sys-toggle-desc">${ esc( c.desc ) }</div>
 							</div>
 							${ c.locked
-		? `<span class="minn-sys-locked">${ esc( __( 'defined elsewhere' ) ) }</span>`
+		? `<span class="minn-sys-locked">${ esc( configLockLabel( c ) ) }</span>`
 		: `<button class="minn-switch${ c.value ? ' on' : '' }" data-const="${ esc( c.name ) }" role="switch" aria-checked="${ c.value }" aria-label="${ sprintf( /* translators: %s: setting label. */ esc( __( 'Toggle %s' ) ), esc( c.label ) ) }"><span class="minn-switch-knob"></span></button>` }
 						</div>` ).join( '' ) }
 				</div>` : '' }
@@ -32939,10 +32955,11 @@
 			&& 'false' === el.getAttribute( 'contenteditable' )
 			&& ! ( el.parentElement && el.parentElement.closest( '.minn-island-preview' ) );
 	}
-	// The nearest real island around el, skipping look-alikes in between.
-	function islandOf( el ) {
-		let n = el && el.closest ? el.closest( '.minn-block-island' ) : null;
-		while ( n && ! isRealIsland( n ) ) n = n.parentElement ? n.parentElement.closest( '.minn-block-island' ) : null;
+	// The nearest real island around el, skipping look-alikes in between;
+	// sel narrows it to one kind ('.minn-details-island').
+	function islandOf( el, sel = '.minn-block-island' ) {
+		let n = el && el.closest ? el.closest( sel ) : null;
+		while ( n && ! isRealIsland( n ) ) n = n.parentElement ? n.parentElement.closest( sel ) : null;
 		return n;
 	}
 	// The real island rendered for block idx under root.
@@ -33017,7 +33034,9 @@
 	 * there is none) and 'remove'. */
 	function columnOp( island, op, refCol ) {
 		const ed = state.editor;
-		if ( ! ed || ! ed.islands || ! island ) return null;
+		// A look-alike in content names a block by its data-island; only a
+		// real island may rewrite one.
+		if ( ! ed || ! ed.islands || ! isRealIsland( island ) ) return null;
 		// Structural ops write core wp:column markup — inside a vendor
 		// container that would corrupt the block. Add/remove columns for
 		// those live in their own editor, one honest link away.
@@ -33046,7 +33065,7 @@
 		} );
 		if ( ! cols.length ) return null;
 		const domCols = $$( '.minn-slot', island )
-			.filter( ( sl ) => sl.closest( '.minn-slot-island' ) === island )
+			.filter( ( sl ) => 'true' === sl.getAttribute( 'contenteditable' ) && sl.closest( '.minn-slot-island' ) === island )
 			.map( ( sl ) => sl.parentElement );
 		if ( domCols.length !== cols.length ) return null; // never guess when they disagree
 		let i = refCol ? domCols.indexOf( refCol ) : -1;
@@ -33620,7 +33639,7 @@
 	function commitShortcodeInput( input, opts ) {
 		const ed = state.editor;
 		if ( ! ed || ! ed.islands || ! islandField( input ) ) return;
-		const island = input.closest( '.minn-shortcode-island' );
+		const island = islandOf( input, '.minn-shortcode-island' );
 		if ( ! island || island.dataset.island !== input.dataset.shortcode ) return;
 		const idx = parseInt( input.dataset.shortcode, 10 );
 		if ( ! Number.isFinite( idx ) || ed.islands[ idx ] == null ) return;
@@ -33634,17 +33653,19 @@
 
 	function commitDetailsIsland( islandEl, opts ) {
 		const ed = state.editor;
-		if ( ! ed || ! ed.islands || ! islandEl ) return;
+		if ( ! ed || ! ed.islands || ! isRealIsland( islandEl ) ) return;
 		const idx = parseInt( islandEl.dataset.island, 10 );
 		if ( ! Number.isFinite( idx ) || ed.islands[ idx ] == null ) return;
+		// Its own fields only: a real Details island a planted wrapper holds
+		// is not this one's summary and body.
 		const sum = islandEl.querySelector( '.minn-details-summary' );
 		const body = islandEl.querySelector( '.minn-details-body' );
-		if ( ! islandField( sum ) || ! body ) return;
+		if ( ! islandField( sum ) || ! body || islandOf( sum ) !== islandEl || islandOf( body ) !== islandEl ) return;
 		const prev = parseDetailsRaw( ed.islands[ idx ] );
 		// Read the body back through a clone with the parked attributes put
 		// back, or an untouched details block would be rewritten inert on the
 		// first commit after load.
-		const next = buildDetailsRaw( sum.value, rtUnpark( body.cloneNode( true ) ).innerHTML, prev.attrs );
+		const next = buildDetailsRaw( sum.value, rtUnpark( rtInertCopy( body ) ).innerHTML, prev.attrs );
 		if ( ed.islands[ idx ] === next ) return;
 		ed.islands[ idx ] = next;
 		stampSlotDirtyFor( islandEl );
@@ -33821,12 +33842,13 @@
 
 	function commitButtonsIsland( islandEl, opts ) {
 		const ed = state.editor;
-		if ( ! ed || ! ed.islands || ! islandEl ) return;
+		if ( ! ed || ! ed.islands || ! isRealIsland( islandEl ) ) return;
 		const idx = parseInt( islandEl.dataset.island, 10 );
 		if ( ! Number.isFinite( idx ) || ed.islands[ idx ] == null ) return;
-		// A real island always keeps one row, each with its two fields.
+		// A real island always keeps one row, each with its two fields, and
+		// every row is its own.
 		const rows = $$( '.minn-btn-row', islandEl );
-		if ( ! rows.length || ! rows.every( ( row ) => islandField( row.querySelector( '.minn-btn-label' ) ) && islandField( row.querySelector( '.minn-btn-url' ) ) ) ) return;
+		if ( ! rows.length || ! rows.every( ( row ) => islandOf( row ) === islandEl && islandField( row.querySelector( '.minn-btn-label' ) ) && islandField( row.querySelector( '.minn-btn-url' ) ) ) ) return;
 		let wrapAttrs = null;
 		try {
 			if ( islandEl.dataset.btnWrapAttrs ) wrapAttrs = JSON.parse( islandEl.dataset.btnWrapAttrs );
@@ -33856,8 +33878,8 @@
 	}
 
 	function addButtonsRow( islandEl ) {
-		const box = islandEl && islandEl.querySelector( '.minn-buttons-rows' );
-		if ( ! box ) return;
+		const box = isRealIsland( islandEl ) ? islandEl.querySelector( '.minn-buttons-rows' ) : null;
+		if ( ! box || islandOf( box ) !== islandEl ) return;
 		const i = box.children.length;
 		box.insertAdjacentHTML( 'beforeend', buttonsRowHtml( i, {
 			attrs: {}, text: 'Button', url: '', newTab: false, outline: false,
@@ -33873,8 +33895,8 @@
 	}
 
 	function removeButtonsRow( row ) {
-		const island = row && row.closest( '.minn-buttons-island' );
-		if ( ! island || ! row ) return;
+		const island = islandOf( row );
+		if ( ! island || ! island.classList.contains( 'minn-buttons-island' ) ) return;
 		const box = island.querySelector( '.minn-buttons-rows' );
 		if ( ! box ) return;
 		// Keep at least one row so the island never goes empty mid-edit.
@@ -34488,10 +34510,13 @@
 	// The island's sibling slots when its root is a COLUMN slot: the other
 	// columns of the same columns island, in document order. Empty otherwise.
 	function islandSiblingSlots( islandEl ) {
+		// Minn's own slots only (rendered editable; a .minn-slot in content is
+		// not), in a real Columns island.
+		const realSlot = ( s ) => 'true' === s.getAttribute( 'contenteditable' );
 		const slot = islandEl.parentElement && islandEl.parentElement.closest( '.minn-slot' );
-		const colsIsland = slot && slot.closest( '.minn-cols-island' );
-		if ( ! colsIsland || slot.closest( '.minn-slot-island' ) !== colsIsland ) return { slot: null, slots: [] };
-		return { slot, slots: $$( '.minn-slot', colsIsland ).filter( ( s ) => s.closest( '.minn-slot-island' ) === colsIsland ) };
+		const colsIsland = slot && realSlot( slot ) ? islandOf( slot ) : null;
+		if ( ! colsIsland || ! colsIsland.classList.contains( 'minn-cols-island' ) || slot.closest( '.minn-slot-island' ) !== colsIsland ) return { slot: null, slots: [] };
+		return { slot, slots: $$( '.minn-slot', colsIsland ).filter( ( s ) => realSlot( s ) && s.closest( '.minn-slot-island' ) === colsIsland ) };
 	}
 
 	// Move an island: up/down swap with the previous/next sibling in its
@@ -34666,41 +34691,85 @@
 	// editor-styles sweep can't see those, so render-blocks reports what the
 	// render enqueued and this injects it, scoped, exactly once per source.
 	const injectedPreviewCss = new Set();
-	// Some preview CSS only exists after the PAGE runs in a browser (Otter's
-	// atomic-wind compiles Tailwind client-side, and clears its cache on
-	// every save). When the server says so (styles.warm), load the page in a
-	// hidden iframe — the plugin's own compiler runs and persists — then
-	// re-fetch the styles. One attempt per URL per session.
+	/* Some preview CSS exists only after a post's front end RUNS (Otter's
+	 * atomic-wind compiles Tailwind in the browser; Gutenslider's grid sheet is
+	 * a script-loaded chunk, below). Those scripts are the post's: an
+	 * unfiltered_html author's <script>, or a front-end gadget the content
+	 * reaches. In a same-origin frame they ran as whoever opened the editor,
+	 * with parent.MINN.nonce in reach, though opening a post in an editor runs
+	 * nothing anywhere else. So the page's HTML is fetched here and run in a
+	 * sandboxed frame (allow-scripts without allow-same-origin: an opaque
+	 * origin with no cookies, no storage and no reach into this document), and
+	 * a reporter Minn puts first in its <head> posts back what the page built.
+	 * Only that frame's messages carrying this run's token are read, and only
+	 * stylesheet URLs and CSS text are taken from them; the page's own errors
+	 * stay in the frame. */
+	function runPageIsolated( url, onReport, ms ) {
+		const src = safeHref( url );
+		if ( ! src ) return;
+		const a = new Uint32Array( 2 );
+		( window.crypto || window.msCrypto ).getRandomValues( a );
+		const token = 'r' + a[ 0 ].toString( 36 ) + a[ 1 ].toString( 36 );
+		const frame = document.createElement( 'iframe' );
+		frame.setAttribute( 'sandbox', 'allow-scripts' );
+		frame.setAttribute( 'aria-hidden', 'true' );
+		frame.tabIndex = -1;
+		frame.style.cssText = 'position:fixed;width:10px;height:10px;left:-9999px;top:-9999px;visibility:hidden;';
+		let settled = false;
+		const done = () => {
+			if ( settled ) return;
+			settled = true;
+			clearTimeout( bail );
+			window.removeEventListener( 'message', onMessage );
+			frame.remove();
+		};
+		const onMessage = ( e ) => {
+			if ( settled || e.source !== frame.contentWindow || ! e.data || e.data.minnRun !== token ) return;
+			onReport( e.data, done );
+		};
+		const bail = setTimeout( done, ms );
+		window.addEventListener( 'message', onMessage );
+		fetch( src, { credentials: 'same-origin' } )
+			.then( ( r ) => ( r.ok ? r.text().then( ( html ) => ( { html, base: r.url || src } ) ) : null ) )
+			.then( ( page ) => {
+				if ( settled || ! page || ! page.html ) { done(); return; }
+				// Scripts and stylesheets are all the run needs. Nothing else
+				// loads (images, fonts, nested frames), and the page's own
+				// fetch, XHR and beacons are stubbed before its scripts run: an
+				// opaque origin would only have been refused them.
+				const head = `<base href="${ esc( page.base ) }"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src * 'unsafe-inline' 'unsafe-eval' data: blob:; style-src * 'unsafe-inline' data: blob:">`
+					+ `<script>(function(){var T=${ JSON.stringify( token ) };`
+					+ 'function post(m){try{m.minnRun=T;parent.postMessage(m,"*");}catch(e){}}'
+					+ 'window.fetch=function(){return new Promise(function(){});};'
+					+ '["open","send","setRequestHeader","abort","overrideMimeType"].forEach(function(k){XMLHttpRequest.prototype[k]=function(){};});'
+					+ 'if(navigator.sendBeacon)navigator.sendBeacon=function(){return true;};'
+					+ 'addEventListener("error",function(e){e.preventDefault();},true);'
+					+ 'addEventListener("unhandledrejection",function(e){e.preventDefault();});'
+					+ 'addEventListener("load",function(){setTimeout(function(){var u=[],l=document.querySelectorAll(\'link[rel="stylesheet"][href]\');for(var i=0;i<l.length;i++)u.push(l[i].href);post({links:u});},2500);});'
+					+ 'document.addEventListener("atomic-wind:css-ready",function(){var n=document.getElementById("atomic-wind-tailwind");post({css:n?n.textContent:""});});'
+					+ '})();</' + 'script>';
+				const html = /<head(?:\s[^>]*)?>/i.test( page.html )
+					? page.html.replace( /<head(?:\s[^>]*)?>/i, ( m ) => m + head )
+					: head + page.html;
+				frame.srcdoc = html;
+				document.body.appendChild( frame );
+			} )
+			.catch( done );
+	}
+
+	// Otter's atomic-wind clears its cache on every save, so a post being
+	// edited is usually cold. When the server says so (styles.warm), run the
+	// page isolated and take the CSS Otter's compiler builds. One attempt per
+	// URL per session.
 	const warmedPreviewUrls = new Set();
 	function warmPreviewStyles( url ) {
 		if ( warmedPreviewUrls.has( url ) ) return;
 		warmedPreviewUrls.add( url );
-		const frame = document.createElement( 'iframe' );
-		frame.style.cssText = 'position:fixed;width:10px;height:10px;left:-9999px;top:-9999px;visibility:hidden;';
-		// Same scheme guard as every other navigation here. An iframe source
-		// runs in this page's origin, so a javascript: value would run with
-		// the signed-in session.
-		const safeFrameSrc = safeHref( url );
-		if ( ! safeFrameSrc ) return;
-		frame.src = safeFrameSrc;
-		document.body.appendChild( frame );
-		let tries = 0;
-		const poll = () => {
-			tries++;
-			api( 'minn-admin/v1/render-blocks', { method: 'POST', body: JSON.stringify( { blocks: [], post: ( state.editor && state.editor.id ) || 0 } ) } )
-				.then( ( r ) => {
-					if ( r && r.styles && r.styles.inline ) {
-						frame.remove();
-						injectPreviewStyles( { urls: r.styles.urls, inline: r.styles.inline } );
-					} else if ( tries < 8 ) {
-						setTimeout( poll, 1500 );
-					} else {
-						frame.remove();
-					}
-				} )
-				.catch( () => frame.remove() );
-		};
-		setTimeout( poll, 3500 );
+		runPageIsolated( url, ( m, done ) => {
+			if ( typeof m.css !== 'string' ) return;
+			done();
+			if ( m.css.trim() ) injectPreviewStyles( { inline: m.css.slice( 0, 2000000 ) } );
+		}, 30000 );
 	}
 	async function injectPreviewStyles( styles ) {
 		await addPreviewStyles( styles ).catch( () => {} );
@@ -34745,10 +34814,11 @@
 	 * frame and was clipped away, so a working block previewed as an empty box.
 	 *
 	 * The only place that stylesheet exists is a real front-end load, so take
-	 * it from one. The same hidden same-origin iframe the Otter warm-up uses
+	 * it from one. The isolated run the Otter warm-up uses (runPageIsolated)
 	 * runs the page's scripts, and whatever they pull in lands in its document
-	 * as a <link>; harvest those, drop the ones already injected, and send the
-	 * rest through the same scoper as every other preview stylesheet. Runtime
+	 * as a <link>; its reporter sends those back, the ones already injected are
+	 * dropped, and the rest go through the same scoper as every other preview
+	 * stylesheet. Runtime
 	 * <style> ELEMENTS are deliberately left alone: a page's inline CSS is
 	 * mostly what the server already reported, and re-injecting it wholesale
 	 * would double a payload that is already hundreds of KB. Preview chrome
@@ -34760,52 +34830,23 @@
 		if ( ! ed || ! ed.id || ! ed.link ) return;
 		runtimeCssHarvested = true;
 		// minn_warm marks the load as ours, the same hint the Otter warm-up
-		// carries — this IS a real front-end render, third-party scripts and
-		// all, so anything counting pageviews has a way to tell.
+		// carries — the page's own scripts run (isolated, runPageIsolated), so
+		// anything counting pageviews has a way to tell.
 		let url = ed.status === 'publish' ? ed.link
 			: ed.link + ( ed.link.includes( '?' ) ? '&' : '?' ) + 'preview=true';
 		url += ( url.includes( '?' ) ? '&' : '?' ) + 'minn_warm=1';
-		const frame = document.createElement( 'iframe' );
-		frame.style.cssText = 'position:fixed;width:10px;height:10px;left:-9999px;top:-9999px;visibility:hidden;';
-		let settled = false;
-		const finish = ( urls ) => {
-			if ( settled ) return;
-			settled = true;
-			clearTimeout( bail );
-			frame.remove();
-			if ( ! urls || ! urls.length ) return;
+		runPageIsolated( url, ( m, done ) => {
+			if ( ! Array.isArray( m.links ) ) return;
+			done();
+			const urls = m.links.filter( ( u ) => 'string' === typeof u && safeHref( u ) && ! injectedPreviewCss.has( u ) ).slice( 0, 100 );
+			if ( ! urls.length ) return;
 			addPreviewStyles( { urls } )
 				.then( () => {
 					resetPreviewPolish();
 					schedulePreviewReveal();
 				} )
 				.catch( () => {} );
-		};
-		const bail = setTimeout( () => finish( null ), 20000 );
-		frame.addEventListener( 'load', () => {
-			// The chunks are requested by the page's own scripts, so they land
-			// after load rather than with it.
-			setTimeout( () => {
-				let urls = [];
-				try {
-					urls = Array.from( frame.contentDocument.querySelectorAll( 'link[rel="stylesheet"][href]' ) )
-						.map( ( l ) => l.href )
-						.filter( ( u ) => u && ! injectedPreviewCss.has( u ) );
-				} catch ( e ) { /* cross-origin document: nothing to take */ }
-				finish( urls );
-			}, 2500 );
-		} );
-		// Same scheme guard as every other navigation here. An iframe source
-		// runs in this page's origin, so a javascript: value would run with
-		// the signed-in session. Settle through finish() rather than returning
-		// bare, so the bail timer and the frame are cleaned up now.
-		const safeFrameSrc = safeHref( url );
-		if ( ! safeFrameSrc ) {
-			finish( null );
-			return;
-		}
-		frame.src = safeFrameSrc;
-		document.body.appendChild( frame );
+		}, 20000 );
 	}
 
 	/* New CSS invalidates every measurement the polish passes made — a slider
@@ -35351,8 +35392,8 @@
 		// input event lands) still persists what the writer sees.
 		if ( root ) {
 			$$( '.minn-shortcode-input', root ).forEach( ( el ) => commitShortcodeInput( el, { silent: true } ) );
-			$$( '.minn-details-island', root ).forEach( ( el ) => commitDetailsIsland( el, { silent: true } ) );
-			$$( '.minn-buttons-island', root ).forEach( ( el ) => commitButtonsIsland( el, { silent: true } ) );
+			$$( '.minn-details-island', root ).filter( isRealIsland ).forEach( ( el ) => commitDetailsIsland( el, { silent: true } ) );
+			$$( '.minn-buttons-island', root ).filter( isRealIsland ).forEach( ( el ) => commitButtonsIsland( el, { silent: true } ) );
 			$$( '.minn-block-island', root ).filter( isRealIsland ).forEach( ( el ) => { if ( el._minnRuns ) commitIslandRuns( el, { silent: true } ); } );
 		}
 		const out = [];
@@ -35481,16 +35522,17 @@
 			// A figure whose upload hasn't landed only holds a blob: URL —
 			// meaningless outside this tab. Skip it; the post-upload swap
 			// triggers another save that includes the real attachment.
-			if ( n.nodeType === Node.ELEMENT_NODE && n.dataset && n.dataset.minnUpload ) return;
+			if ( isUploadPlaceholder( n ) ) return;
 			const tag = n.tagName.toLowerCase();
-			const el = n.cloneNode( true );
+			// The inert document's copy: rtUnpark runs on it below.
+			const el = rtInertCopy( n );
 			// Editor chrome styles (table hot-border) are stripped — but a
 			// marker element's inline style is SAVED content (Gutenberg style
 			// attrs paint through it) and must survive.
 			if ( ! ( el.dataset && el.dataset.minnAttrs ) ) el.removeAttribute( 'style' );
 			// A redo can resurrect an empty paste-bracket paragraph (see
 			// pasteBlocksInsert) — typed-into, it must not leak its marker.
-			el.removeAttribute( 'data-minn-bkt' );
+			if ( isPasteBracket( el ) ) el.removeAttribute( 'data-minn-bkt' );
 			// The inline-caption affordance is editor chrome until it has text.
 			$$( 'figcaption', el ).forEach( ( fc ) => {
 				if ( ! fc.textContent.trim() ) fc.remove();
@@ -35930,7 +35972,7 @@
 			isTemplate: true,
 			tplSource: p.source || 'theme',
 			tplHasFile: !! p.has_theme_file,
-			title: decodeEntities( ( p.title && ( p.title.raw != null ? p.title.raw : p.title.rendered ) ) || '' ) || p.slug,
+			title: titleForBox( ( p.title && ( p.title.raw != null ? p.title.raw : p.title.rendered ) ) || '' ) || p.slug,
 			content: '',
 			islands: [],
 			mode,
@@ -35955,6 +35997,7 @@
 			syncedPattern: false,
 			noAutosave: true,
 		};
+		seedEditorTitle( state.editor, p.title && p.title.raw != null ? p.title.raw : '' );
 		state.editor.content = mode === 'blocks' ? buildEditableContent( state.editor, raw )
 			: mode === 'classic' ? miniAutop( raw )
 			: stripBlockComments( raw );
@@ -36032,7 +36075,7 @@
 			state.editor = {
 				id: p.id,
 				type: type,
-				title: decodeEntities( ( p.title && ( p.title.raw != null ? p.title.raw : p.title.rendered ) ) || '' ),
+				title: titleForBox( ( p.title && ( p.title.raw != null ? p.title.raw : p.title.rendered ) ) || '' ),
 				content: '',
 				islands: [],
 				mode,
@@ -36089,6 +36132,7 @@
 				// edits here change every post that references it.
 				syncedPattern: 'wp_pattern_sync_status' in p && p.wp_pattern_sync_status !== 'unsynced',
 			};
+			seedEditorTitle( state.editor, p.title && p.title.raw != null ? p.title.raw : '' );
 			if ( type === 'posts' && ( p.tags || [] ).length ) {
 				api( `wp/v2/tags?include=${ p.tags.join( ',' ) }&per_page=100&_fields=id,name` )
 					.then( ( t ) => {
@@ -36293,13 +36337,45 @@
 		return saveChain;
 	}
 
+	// The title box shows the stored title (title.raw) as it was typed: a tag
+	// stays a tag and an escaped "<" stays escaped, so the box can never turn
+	// text into markup on its way back. Only a character reference that cannot
+	// spell markup is shown as its character (&amp; &#8217; &quot; …), so a
+	// title reads the way people wrote it; "&amp;" stays as written where the
+	// "&" alone would start another reference ("&amp;copy").
+	function titleForBox( raw ) {
+		const s = String( raw == null ? '' : raw );
+		return s.replace( /&(?:#[0-9]+|#[xX][0-9a-fA-F]+|[A-Za-z][A-Za-z0-9]*);/g, ( ref, at ) => {
+			const ch = stripTags( ref );
+			if ( ch === ref || ch === '' || /[<>\u0000-\u001f\ufffd]/.test( ch ) ) return ref;
+			if ( ch === '&' ) {
+				const next = '&' + ( s.slice( at + ref.length ).match( /^[A-Za-z0-9#;]{0,32}/ ) || [ '' ] )[ 0 ];
+				if ( stripTags( next ) !== next ) return ref;
+			}
+			return ch;
+		} );
+	}
+
+	// The title an editor save sends: only one the person changed, compared
+	// with what the box was seeded with. A title nobody touched is never
+	// rewritten, whatever the box shows of it.
+	function editorTitleChange( ed ) {
+		const box = $( '#minn-editor-title' ) ? $( '#minn-editor-title' ).value : ed.title;
+		return ! ed.id || undefined === ed.titleSeed || box !== ed.titleSeed ? { title: box } : {};
+	}
+
+	function seedEditorTitle( ed, raw ) {
+		ed.titleRaw = String( raw == null ? '' : raw );
+		ed.titleSeed = ed.title;
+	}
+
 	function buildSavePayload( ed, extra = {} ) {
 		// _explicit marks a user-initiated save (Publish / Update / ⌘S / Save
 		// draft) vs. an autosave — it gates the private-publish below and must
 		// never reach REST.
 		const { _explicit, ...rest } = extra;
 		const payload = {
-			title: $( '#minn-editor-title' ) ? $( '#minn-editor-title' ).value : ed.title,
+			...editorTitleChange( ed ),
 			...rest,
 		};
 		// Locked mode never touches the body — complex block markup stays intact.
@@ -36414,6 +36490,11 @@
 				}
 			}
 			ed.status = p.status;
+			// The title this save sent is what the box is compared with next.
+			if ( 'title' in payload ) {
+				ed.titleSeed = payload.title;
+				ed.titleRaw = p.title && typeof p.title.raw === 'string' ? p.title.raw : payload.title;
+			}
 			// The first save of a theme template creates the site's copy —
 			// reflect it so the sidebar flips From theme → Customized.
 			if ( 'source' in p ) ed.tplSource = p.source;
@@ -36689,15 +36770,15 @@
 	// Classic-mode save: innerHTML, but with highlight spans stripped from code
 	// blocks so decoration never reaches the database.
 	function classicHtml( body ) {
-		const clone = body.cloneNode( true );
+		const clone = rtInertCopy( body );
 		cleanBoundaryNbsp( clone );
 		Array.from( clone.children ).forEach( cleanLeadingNbsp );
 		modernizeStrikes( clone );
 		// Parked executable attributes go back on the clone — see serializeToBlocks.
 		rtUnpark( clone );
-		$$( '[data-minn-bkt]', clone ).forEach( ( el ) => el.removeAttribute( 'data-minn-bkt' ) );
+		$$( '[data-minn-bkt]', clone ).filter( isPasteBracket ).forEach( ( el ) => el.removeAttribute( 'data-minn-bkt' ) );
 		// In-flight uploads hold only a blob: URL; empty captions are chrome.
-		$$( '[data-minn-upload]', clone ).forEach( ( el ) => el.remove() );
+		$$( '[data-minn-upload]', clone ).filter( isUploadPlaceholder ).forEach( ( el ) => el.remove() );
 		$$( 'figcaption', clone ).forEach( ( fc ) => {
 			if ( ! fc.textContent.trim() ) fc.remove();
 		} );
@@ -36771,7 +36852,11 @@
 		// Locked bodies are never serialized, and a title-only autosave revision
 		// would read as empty content if ever restored — skip; Update covers it.
 		if ( ed.noAutosave || ed.mode === 'locked' ) return;
-		const payload = { title: $( '#minn-editor-title' ) ? $( '#minn-editor-title' ).value : ed.title };
+		// An autosave is a whole snapshot (core stores only the fields sent),
+		// so it always carries a title: the stored one, byte for byte, unless
+		// the person changed it.
+		const sentTitle = editorTitleChange( ed );
+		const payload = { title: 'title' in sentTitle ? sentTitle.title : ed.titleRaw };
 		const capturedAt = Date.now();
 		const body = $( '#minn-editor-body' );
 		if ( body ) payload.content = ed.mode === 'blocks' ? serializeToBlocks( body, ed.islands ) : classicHtml( body );
@@ -39201,7 +39286,9 @@
 			const a = await api( `wp/v2/${ ed.type }/${ ed.id }/autosaves/${ ed.backup.id }?context=edit&_fields=title,content` );
 			if ( state.editor !== ed || state.route !== 'editor' ) return;
 			const raw = ( a.content && a.content.raw ) || '';
-			ed.title = decodeEntities( ( a.title && ( a.title.raw != null ? a.title.raw : a.title.rendered ) ) || ed.title );
+			// The backup's title goes into the box; the stored title stays the
+			// seed, so a different one is sent with the next save.
+			ed.title = titleForBox( ( a.title && ( a.title.raw != null ? a.title.raw : a.title.rendered ) ) || '' ) || ed.title;
 			ed.mode = editorModeFor( raw );
 			ed.islands = [];
 			ed.content = ed.mode === 'blocks' ? buildEditableContent( ed, raw )
@@ -39393,7 +39480,8 @@
 			return;
 		}
 		const raw = ( p.content && p.content.raw ) || '';
-		ed.title = decodeEntities( ( p.title && ( p.title.raw != null ? p.title.raw : p.title.rendered ) ) || ed.title );
+		ed.title = titleForBox( ( p.title && ( p.title.raw != null ? p.title.raw : p.title.rendered ) ) || '' );
+		seedEditorTitle( ed, p.title && p.title.raw != null ? p.title.raw : '' );
 		ed.mode = editorModeFor( raw );
 		ed.islands = [];
 		ed.content = ed.mode === 'blocks' ? buildEditableContent( ed, raw )
@@ -39948,7 +40036,7 @@
 		if ( ! locked ) {
 			// Stamp buttons-row attrs once the body is live so commits preserve
 			// colors/width from the original markup.
-			$$( '.minn-buttons-island', body ).forEach( ( island ) => {
+			$$( '.minn-buttons-island', body ).filter( isRealIsland ).forEach( ( island ) => {
 				const idx = parseInt( island.dataset.island, 10 );
 				const raw = ed.islands && ed.islands[ idx ];
 				if ( raw == null || island.dataset.btnStamped ) return;
@@ -39973,13 +40061,13 @@
 				}
 				const detField = e.target.closest && e.target.closest( '.minn-details-summary, .minn-details-body' );
 				if ( detField ) {
-					const island = detField.closest( '.minn-details-island' );
+					const island = islandOf( detField, '.minn-details-island' );
 					if ( island ) commitDetailsIsland( island );
 					return;
 				}
 				const btnField = e.target.closest && e.target.closest( '.minn-btn-label, .minn-btn-url' );
 				if ( btnField ) {
-					const island = btnField.closest( '.minn-buttons-island' );
+					const island = islandOf( btnField, '.minn-buttons-island' );
 					if ( island ) commitButtonsIsland( island );
 				}
 			} );
@@ -39988,13 +40076,13 @@
 				if ( sc ) { commitShortcodeInput( sc ); return; }
 				const detField = e.target.closest && e.target.closest( '.minn-details-summary, .minn-details-body' );
 				if ( detField ) {
-					const island = detField.closest( '.minn-details-island' );
+					const island = islandOf( detField, '.minn-details-island' );
 					if ( island ) commitDetailsIsland( island );
 					return;
 				}
 				const btnField = e.target.closest && e.target.closest( '.minn-btn-label, .minn-btn-url, .minn-btn-newtab, .minn-btn-outline' );
 				if ( btnField ) {
-					const island = btnField.closest( '.minn-buttons-island' );
+					const island = islandOf( btnField, '.minn-buttons-island' );
 					if ( island ) commitButtonsIsland( island );
 				}
 			} );
@@ -40075,7 +40163,7 @@
 					// Enter in summary jumps into the body (and keeps details open).
 					if ( e.key === 'Enter' && ! appShortcut ) {
 						e.preventDefault();
-						const island = detSum.closest( '.minn-details-island' );
+						const island = islandOf( detSum, '.minn-details-island' );
 						const det = island && island.querySelector( 'details.minn-details-edit' );
 						const bodyEl = island && island.querySelector( '.minn-details-body' );
 						if ( det ) det.open = true;
@@ -40108,7 +40196,7 @@
 						} else {
 							const row = btnField.closest( '.minn-btn-row' );
 							const next = row && row.nextElementSibling;
-							const island = btnField.closest( '.minn-buttons-island' );
+							const island = islandOf( btnField, '.minn-buttons-island' );
 							if ( next ) {
 								const lab = next.querySelector( '.minn-btn-label' );
 								if ( lab ) lab.focus();
@@ -40202,7 +40290,7 @@
 				const addBtn = e.target.closest && e.target.closest( '.minn-buttons-add' );
 				if ( addBtn ) {
 					e.preventDefault();
-					const island = addBtn.closest( '.minn-buttons-island' );
+					const island = islandOf( addBtn, '.minn-buttons-island' );
 					if ( island ) addButtonsRow( island );
 					return;
 				}
@@ -40310,7 +40398,7 @@
 			if ( e.target.closest && e.target.closest( 'td, th' ) ) return; // the table menu owns cells
 			const slot = e.target.closest ? e.target.closest( '.minn-slot' ) : null;
 			const col = slot && slot.parentElement;
-			const island = col && col.parentElement && col.parentElement.closest( '.minn-cols-island' );
+			const island = col && col.parentElement ? islandOf( col.parentElement, '.minn-cols-island' ) : null;
 			if ( ! island || ! body.contains( island ) ) return;
 			// Vendor containers: no core column ops (columnOp would refuse
 			// anyway — no menu beats a menu of refusals).
@@ -44464,7 +44552,7 @@
 		// SLOT islands have no preview element at all (their content is live
 		// editable DOM) — rendering them server-side is pure waste that grows
 		// with exactly the grouped content slots exist for, so send '' too.
-		const slotIdx = new Set( $$( '.minn-slot-island', body ).map( ( el ) => parseInt( el.dataset.island, 10 ) ) );
+		const slotIdx = new Set( $$( '.minn-slot-island', body ).filter( isRealIsland ).map( ( el ) => parseInt( el.dataset.island, 10 ) ) );
 		const blocks = ed.islands.map( ( r, i ) => ( r == null || slotIdx.has( i ) ? '' : r ) );
 		if ( ! blocks.some( ( b ) => b !== '' ) ) return;
 		api( 'minn-admin/v1/render-blocks', { method: 'POST', body: JSON.stringify( { blocks, post: ( state.editor && state.editor.id ) || 0 } ) } )
@@ -44992,7 +45080,8 @@
 			toast( __( 'Table deleted. ⌘Z restores it' ) );
 		} else {
 			// Figure shell stays; swap its inner HTML. Bare table swaps outer.
-			const marker = 'minn-tbl-' + Date.now().toString( 36 );
+			// One-shot marker with this page's token: content cannot wear it.
+			const marker = 'minn-tbl-' + PAGE_TOKEN + Date.now().toString( 36 );
 			let ok;
 			if ( isFigure ) {
 				ok = commandOnBlock( fig, { contentsOnly: true, html: cloneRoot.innerHTML } );
@@ -46526,21 +46615,15 @@
 			} else if ( tag === 'IMG' ) {
 				emit( pasteImage( n ) );
 			} else if ( n.classList && n.classList.contains( 'minn-block-island' ) ) {
-				// Copy-paste within this post: rebuild the island from its
-				// registered raw markup (fresh chip, same index → same bytes on
-				// save). Foreign islands fall back to their visible preview.
-				const idx = parseInt( n.dataset.island, 10 );
-				const ed = state.editor;
-				if ( ed && ed.islands && ed.islands[ idx ] != null ) {
-					// Everything else this function emits was rebuilt from an
-					// allowlist; the island is stored markup, so it takes the
-					// inert path before it reaches insertHTML.
-					emit( rtNeutralizedHtml( islandHtml( idx, n.dataset.block || 'block', ed.islands[ idx ] ) ) );
-				} else {
-					flush();
-					const prev = n.querySelector( '.minn-island-preview' );
-					if ( prev ) collectPasteBlocks( prev, out, ctx );
-				}
+				// An island on the clipboard's HTML is never rebuilt as one: its
+				// class and data-island are whatever the copied page said (kses
+				// keeps both, and any web page can put them there), so trusting
+				// them let a paste duplicate or retype another block of the
+				// post. Minn's own island copy travels on text/x-minn-blocks;
+				// this element pastes as what it shows.
+				flush();
+				const prev = n.querySelector( '.minn-island-preview' );
+				if ( prev ) collectPasteBlocks( prev, out, ctx );
 			} else if ( tag === 'FIGURE' ) {
 				const media = n.querySelector( 'table' ) ? pasteTable( n.querySelector( 'table' ), innerCtx )
 					: n.querySelector( 'img' ) ? pasteImage( n.querySelector( 'img' ), innerCtx, n ) : '';
@@ -46825,10 +46908,10 @@
 	// rtParkName leaves an already-parked attribute alone, so a payload that
 	// was parked upstream is not double-prefixed.
 	function pasteBlocksInsert( root, blocksHtml ) {
-		const BKT = '<p data-minn-bkt="1"><br></p>';
+		const BKT = `<p data-minn-bkt="${ PAGE_TOKEN }"><br></p>`;
 		document.execCommand( 'insertHTML', false, BKT + rtNeutralizedHtml( blocksHtml ) + BKT );
 		const sel = window.getSelection();
-		$$( 'p[data-minn-bkt]', root ).forEach( ( p ) => {
+		$$( 'p[data-minn-bkt]', root ).filter( isPasteBracket ).forEach( ( p ) => {
 			p.removeAttribute( 'data-minn-bkt' );
 			if ( p.textContent.trim() ) return; // absorbed real text — it's a paragraph now
 			const holdsCaret = sel.rangeCount && p.contains( sel.anchorNode );
@@ -46928,14 +47011,14 @@
 		}
 		files.forEach( ( file ) => {
 			if ( ! /^image\//.test( file.type ) ) return;
-			const key = 'u' + ( ++uploadSeq );
+			const key = UPLOAD_KEY + ( ++uploadSeq );
 			const blobUrl = URL.createObjectURL( file );
 			document.execCommand( 'insertHTML', false,
 				`<figure class="wp-block-image" data-minn-upload="${ key }"><img src="${ blobUrl }" alt=""><figcaption class="wp-element-caption"></figcaption></figure><p><br></p>` );
 			scheduleAutosave();
 			uploadImageFile( file ).then( ( it ) => {
 				URL.revokeObjectURL( blobUrl );
-				const fig = document.querySelector( `figure[data-minn-upload="${ key }"]` );
+				const fig = uploadPlaceholder( key );
 				if ( ! fig ) return; // undone or navigated away — the upload stays in the library
 				const img = fig.querySelector( 'img' );
 				img.src = it.url;
@@ -46947,7 +47030,7 @@
 				scheduleAutosave();
 			} ).catch( ( err ) => {
 				URL.revokeObjectURL( blobUrl );
-				const fig = document.querySelector( `figure[data-minn-upload="${ key }"]` );
+				const fig = uploadPlaceholder( key );
 				if ( fig ) fig.remove();
 				/* translators: %s: the error message. */
 				toast( sprintf( __( 'Upload failed: %s' ), err.message ), true );
@@ -47455,7 +47538,7 @@
 		// offers this there). The "/column" line stays as that column's first
 		// empty paragraph; the caret moves into the new one.
 		if ( action && action.addColumn ) {
-			const cols = target && target.closest && target.closest( '.minn-cols-island' );
+			const cols = islandOf( target, '.minn-cols-island' );
 			if ( ! cols ) return;
 			target.innerHTML = '<br>';
 			const here = target.closest( '.minn-slot' );
@@ -47728,7 +47811,7 @@
 		// Only inside a Columns block, where it is the one structural thing the
 		// slash menu could not do: item[6] is a predicate over the caret block.
 		items.unshift( [ icon( 'columns' ), __( 'Column' ), { addColumn: true }, false, '', [ 'columns', 'add column' ],
-			( el ) => !! ( el && el.closest && el.closest( '.minn-cols-island' ) ) ] );
+			( el ) => !! islandOf( el, '.minn-cols-island' ) ] );
 		liveSlashItems = items; // per-user hide prunes this array in place
 		// Attention budget (v1.0 gate G3): a namespace holds at most 3 slots
 		// in the DEFAULT slash menu (commands first, insert templates after —
@@ -49723,7 +49806,7 @@
 						<div><div class="minn-field-label">${ esc( __( 'Slug' ) ) }</div>
 						<input class="minn-input mono" data-cptfield="slug" value="${ esc( t ? t.slug : '' ) }" placeholder="${ esc( __( 'book' ) ) }" maxlength="20"${ isNew ? '' : ' disabled' }></div>
 						<div><div class="minn-field-label">${ esc( __( 'Description (optional)' ) ) }</div>
-						<input class="minn-input" data-cptfield="description" value="${ esc( t ? t.description : '' ) }"${ dis }></div>
+						<textarea class="minn-input" data-cptfield="description" rows="3"${ dis }>${ esc( t ? t.description : '' ) }</textarea></div>
 						${ isNew && m.backends.length > 1 ? `<div><div class="minn-field-label">${ esc( __( 'Store definition in' ) ) }</div>
 						${ formControlHtml( { key: 'backend', type: 'combobox' }, m.backends[ 0 ], 'data-cptbackend' ) }</div>` : '' }
 						<div><div class="minn-field-label">${ esc( __( 'Visibility' ) ) }</div>
@@ -53663,11 +53746,13 @@
 	function bindUserEditAppearance( ue, view ) {
 		const wrap = $( '#minn-ue-appearance', view );
 		if ( ! wrap ) return;
-		const save = async ( next, rebuild ) => {
+		// Each control sends only its own keys (appearancePick); this page has
+		// no Minn bar control, so it never sends frontBar.
+		const save = async ( keys, rebuild ) => {
 			try {
 				const saved = await api( `minn-admin/v1/users/${ ue.id }/appearance`, {
 					method: 'POST',
-					body: JSON.stringify( appearanceOf( next ) ),
+					body: JSON.stringify( appearancePick( ue.appearance, keys ) ),
 				} );
 				ue.appearance = appearanceOf( saved );
 				if ( rebuild && state.route === 'useredit' ) renderUserEdit();
@@ -53684,7 +53769,7 @@
 				const flips = ( prev.scheme === 'custom' ) !== ( id === 'custom' );
 				ue.appearance = appearanceOf( { ...prev, scheme: id } );
 				if ( ! flips ) markSchemeSwatchSelected( wrap, id );
-				save( ue.appearance, flips );
+				save( id === 'custom' ? [ 'scheme', 'custom' ] : [ 'scheme' ], flips );
 			} );
 		} );
 		$$( '[data-scheme-slot]', wrap ).forEach( ( input ) => {
@@ -53705,7 +53790,7 @@
 					},
 				} );
 				clearTimeout( ueAppearanceSaveTimer );
-				ueAppearanceSaveTimer = setTimeout( () => save( ue.appearance, false ), 250 );
+				ueAppearanceSaveTimer = setTimeout( () => save( [ 'scheme', 'custom' ], false ), 250 );
 			} );
 		} );
 		const defBtn = $( '#minn-ue-default-admin', view );
@@ -53714,7 +53799,7 @@
 			defBtn.classList.toggle( 'on', on );
 			defBtn.setAttribute( 'aria-checked', on ? 'true' : 'false' );
 			ue.appearance = appearanceOf( { ...appearanceOf( ue.appearance ), defaultAdmin: on } );
-			save( ue.appearance, false );
+			save( [ 'defaultAdmin' ], false );
 		} );
 		const fontBtn = $( '#minn-ue-wp-fonts', view );
 		if ( fontBtn ) fontBtn.addEventListener( 'click', () => {
@@ -53722,7 +53807,7 @@
 			fontBtn.classList.toggle( 'on', on );
 			fontBtn.setAttribute( 'aria-checked', on ? 'true' : 'false' );
 			ue.appearance = appearanceOf( { ...appearanceOf( ue.appearance ), font: on ? 'wordpress' : 'minn' } );
-			save( ue.appearance, false );
+			save( [ 'font' ], false );
 		} );
 	}
 
@@ -59765,12 +59850,12 @@
 					else {
 						const det = t.closest( '.minn-details-summary, .minn-details-body' );
 						if ( det ) {
-							const island = det.closest( '.minn-details-island' );
+							const island = islandOf( det, '.minn-details-island' );
 							if ( island ) commitDetailsIsland( island );
 						} else {
 							const btn = t.closest( '.minn-btn-label, .minn-btn-url, .minn-btn-newtab, .minn-btn-outline' );
 							if ( btn ) {
-								const island = btn.closest( '.minn-buttons-island' );
+								const island = islandOf( btn, '.minn-buttons-island' );
 								if ( island ) commitButtonsIsland( island );
 							}
 						}

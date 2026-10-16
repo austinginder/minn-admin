@@ -13,9 +13,14 @@
  * `querySelectorAll` never descends into), and `<object data>`.
  *
  * The checks that matter, in order: nothing executes and no dangerous
- * attribute or element survives, and the content people actually store still
- * arrives intact (over-scrubbing a wysiwyg field is a regression, and the
- * release note promises tables, images and links come through as saved).
+ * attribute stays live, and the content people actually store still arrives
+ * intact (over-scrubbing a wysiwyg field is a regression, and the release
+ * note promises tables, images and links come through as saved). Since the
+ * v0.45.0 registry review (#17) the field takes the post editor's path: what
+ * runs is PARKED under this page's inert prefix rather than deleted, so a
+ * field opened and applied keeps every byte its writer stored, mailto:,
+ * tel:, #anchor and relative links included, and the value read back out
+ * (rtFieldHtml) is the writer's markup again.
  *
  * The seeder is module-scoped, and a permanent test hook in shipped code costs
  * more than it is worth, so the suite lifts the real functions OUT OF THE
@@ -41,15 +46,18 @@ function extract( src, startsWith, endsBefore ) {
 	return src.slice( i, j );
 }
 
+// live: a selector that matches when the dangerous part is still live in the
+// seeded box (a parked attribute carries the inert prefix, so it does not).
 const VECTORS = [
-	{ name: 'iframe srcdoc executes same-origin', html: `<iframe srcdoc="&lt;img src=x onerror=window.__rtHit('srcdoc')&gt;"></iframe>`, bad: /srcdoc=|<iframe/i },
-	{ name: 'base href re-roots the document', html: `<base href="https://evil.example/">`, bad: /<base/i },
-	{ name: 'formaction javascript:', html: `<form><button formaction="javascript:window.__rtHit('fa')">go</button></form>`, bad: /formaction|<form/i },
-	{ name: 'svg animate retargets href', html: `<svg><a><animate attributeName="href" values="javascript:window.__rtHit('an')"/><text>x</text></a></svg>`, bad: /attributeName|<animate/i },
-	{ name: 'on* inside template', html: `<template><img src=x onerror="window.__rtHit('tpl')"></template>`, bad: /onerror|<template/i },
-	{ name: 'object data javascript:', html: `<object data="javascript:window.__rtHit('obj')"></object>`, bad: /<object/i },
-	{ name: 'protocol-relative src', html: `<img src="//evil.example/beacon.png">`, bad: /\/\/evil\.example/i },
-	{ name: 'plain img onerror', html: `<img src=x onerror="window.__rtHit('img')">`, bad: /onerror/i },
+	{ name: 'iframe srcdoc executes same-origin', html: `<iframe srcdoc="&lt;img src=x onerror=window.__rtHit('srcdoc')&gt;"></iframe>`, live: '[srcdoc]' },
+	{ name: 'base href re-roots the document', html: `<base href="https://evil.example/">`, live: 'base[href]' },
+	{ name: 'formaction javascript:', html: `<form><button formaction="javascript:window.__rtHit('fa')">go</button></form>`, live: '[formaction]' },
+	{ name: 'svg animate retargets href', html: `<svg><a><animate attributeName="href" values="javascript:window.__rtHit('an')"/><text>x</text></a></svg>`, live: 'animate[attributeName], animate[values]' },
+	{ name: 'on* inside template', html: `<template><img src=x onerror="window.__rtHit('tpl')"></template>`, live: '[onerror]', template: true },
+	{ name: 'object data javascript:', html: `<object data="javascript:window.__rtHit('obj')"></object>`, live: 'object[data]' },
+	{ name: 'plain img onerror', html: `<img src=x onerror="window.__rtHit('img')">`, live: '[onerror]' },
+	{ name: 'javascript: link', html: `<a href="javascript:window.__rtHit('a')">x</a>`, live: 'a[href]' },
+	{ name: 'id naming Minn chrome', html: `<p id="minn-editor-body">x</p>`, live: '[id]' },
 ];
 
 const KEEP = [
@@ -58,14 +66,23 @@ const KEEP = [
 	{ name: 'image keeps src and caption', html: `<figure><img src="/uploads/a.png" alt="A"><figcaption>Cap</figcaption></figure>`, want: /<img src="\/uploads\/a\.png" alt="A">[\s\S]*Cap/i },
 	{ name: 'inline formatting survives', html: `<p><strong>b</strong> <em>i</em> <s>s</s> <code>c</code></p>`, want: /<strong>b<\/strong>[\s\S]*<code>c<\/code>/i },
 	{ name: 'list survives', html: `<ul><li>one</li><li>two</li></ul>`, want: /<li>one<\/li>\s*<li>two<\/li>/i },
+	{ name: 'mailto: link', html: `<p><a href="mailto:hello@example.com">us</a></p>`, want: /<a href="mailto:hello@example\.com">/i },
+	{ name: 'tel: link', html: `<p><a href="tel:+15551234567">call</a></p>`, want: /<a href="tel:\+15551234567">/i },
+	{ name: '#anchor link', html: `<p><a href="#faq">FAQ</a></p>`, want: /<a href="#faq">/i },
+	{ name: 'relative link', html: `<p><a href="../docs/">docs</a></p>`, want: /<a href="\.\.\/docs\/">/i },
+	{ name: 'protocol-relative image (as an https one)', html: `<img src="//cdn.example/a.png" alt="">`, want: /<img src="\/\/cdn\.example\/a\.png"/i },
+	{ name: 'inline image', html: `<img src="data:image/png;base64,iVBORw0KGgo=" alt="">`, want: /<img src="data:image\/png;base64,/i },
+	{ name: 'https embed iframe', html: `<iframe src="https://www.youtube.com/embed/x"></iframe>`, want: /<iframe src="https:\/\/www\.youtube\.com\/embed\/x">/i },
 ];
 
 ( async () => {
 	const t = reporter( 'rich-text-sanitize' );
 	const src = fs.readFileSync( APP, 'utf8' );
 
-	const seeder = extract( src, 'const RT_DROP_TAGS', '\tfunction openRichTextModal' );
-	const safeHrefLine = ( src.match( /\n\tconst safeHref = [^\n]+\n/ ) || [] )[ 0 ];
+	const seeder = extract( src, 'const RT_URL_ATTRS', '\tfunction openRichTextModal' );
+	// safeHref spans several lines; take it to the close of its arrow body.
+	const safeHrefBody = extract( src, '\tconst safeHref = ', '\n\t};\n' );
+	const safeHrefLine = safeHrefBody ? safeHrefBody + '\n\t};\n' : null;
 	const inertParseFn = extract( src, '\tconst inertParse = ', '\n\n' );
 
 	const { browser, page, errors } = await launch();
@@ -89,36 +106,51 @@ const KEEP = [
 			const stripTagsDoc = document.implementation.createHTMLDocument('');
 			const $$ = (sel, root) => Array.from((root || document).querySelectorAll(sel));
 			const miniAutop = (s) => '<p>' + s + '</p>';
+			const scopeCssToPreviews = () => '';
+			const modernizeStrikes = () => {};
+			const cleanBoundaryNbsp = () => {};
 		`;
 		// eslint-disable-next-line no-new-func
-		new Function( preamble + parts.safeHref + parts.inertParse + parts.seeder + '; window.__rtSeedInto = rtSeedInto;' )();
+		new Function( preamble + parts.safeHref + parts.inertParse + parts.seeder + '; window.__rtSeedInto = rtFieldSeedInto; window.__rtFieldHtml = rtFieldHtml;' )();
 	}, { seeder, safeHref: safeHrefLine, inertParse: inertParseFn } );
 
-	t.check( 'rtSeedInto is callable', await page.evaluate( () => typeof window.__rtSeedInto === 'function' ) );
+	t.check( 'rtFieldSeedInto and rtFieldHtml are callable', await page.evaluate( () => typeof window.__rtSeedInto === 'function' && typeof window.__rtFieldHtml === 'function' ) );
 
-	const seed = ( html ) => page.evaluate( ( markup ) => {
+	const seed = ( html, live ) => page.evaluate( ( a ) => {
 		window.__rtHits = [];
 		const box = document.createElement( 'div' );
 		document.getElementById( 'live' ).appendChild( box );
-		window.__rtSeedInto( box, markup );
-		return { html: box.innerHTML, hits: window.__rtHits.slice() };
-	}, html );
+		window.__rtSeedInto( box, a.markup );
+		const roots = [ box, ...Array.from( box.querySelectorAll( 'template' ) ).map( ( tp ) => tp.content ) ];
+		return {
+			html: box.innerHTML,
+			live: a.live ? roots.some( ( r ) => !! r.querySelector( a.live ) ) : false,
+			back: window.__rtFieldHtml( box ),
+			hits: window.__rtHits.slice(),
+		};
+	}, { markup: html, live } );
 
 	for ( const v of VECTORS ) {
-		const r = await seed( v.html );
+		const r = await seed( v.html, v.live );
 		await page.waitForTimeout( 120 );
 		const fired = ( await page.evaluate( () => window.__rtHits.slice() ) ).concat( r.hits );
-		const left = v.bad.test( r.html || '' );
 		t.check(
 			`blocked: ${ v.name }`,
-			! fired.length && ! left,
-			fired.length ? `handler fired: ${ fired.join( ',' ) }` : ( left ? `left in DOM: ${ ( r.html || '' ).slice( 0, 90 ) }` : '' )
+			! fired.length && ! r.live,
+			fired.length ? `handler fired: ${ fired.join( ',' ) }` : ( r.live ? `live in DOM: ${ ( r.html || '' ).slice( 0, 90 ) }` : '' )
 		);
+		// Parked, not deleted: the value read back is the writer's again.
+		const want = await page.evaluate( ( m ) => {
+			const d = document.implementation.createHTMLDocument( '' );
+			d.body.innerHTML = m;
+			return d.body.innerHTML.trim();
+		}, v.html );
+		t.check( `round-trips: ${ v.name }`, r.back === want, r.back.slice( 0, 120 ) );
 	}
 
 	for ( const k of KEEP ) {
 		const r = await seed( k.html );
-		t.check( `preserved: ${ k.name }`, k.want.test( r.html || '' ), ( r.html || '' ).slice( 0, 90 ) );
+		t.check( `preserved: ${ k.name }`, k.want.test( r.html || '' ) && k.want.test( r.back || '' ), ( r.html || '' ).slice( 0, 90 ) );
 	}
 
 	// Plain text still becomes editable blocks.
