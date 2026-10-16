@@ -237,6 +237,8 @@ minn_admin_resource( 'jet-reviews/reviews', function () {
 			// Every column, as their own reads take a review (the rating
 			// sync reads source and post_type from it).
 			'detail'  => array(),
+			// The reviews' comments, guest reviewers, meta, reactions and media.
+			'tables'  => array_map( 'minn_admin_jet_reviews_spec', array( 'review_comments', 'review_guests', 'review_meta', 'review_reactions', 'review_media' ) ),
 		),
 		'list'    => array(
 			'facets' => array( array( 'param' => 'status', 'values' => array( 'pending' => array( 'approved' => 0 ), 'approved' => array( 'approved' => 1 ) ) ) ),

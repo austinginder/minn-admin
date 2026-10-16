@@ -188,6 +188,8 @@ minn_admin_resource( 'post-smtp/emails', function () {
 			'key'     => 'id',
 			'columns' => array( 'id', 'original_subject', 'original_to', 'to_header', 'success', 'time' ),
 			'detail'  => array( 'id', 'original_subject', 'original_to', 'to_header', 'from_header', 'original_message', 'success', 'solution', 'transport_uri', 'time' ),
+			// Each message's headers and session transcript.
+			'tables'  => array( 'post_smtp_logmeta' ),
 		),
 		'list'    => array(
 			'facets' => array(

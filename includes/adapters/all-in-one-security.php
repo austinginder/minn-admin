@@ -244,6 +244,9 @@ minn_admin_resource( 'aios/events', function () {
 				return array_merge( $columns, array( 'details' ), Minn_Admin_Kernel_SQL::has_column( $audit, 'country_code' ) ? array( 'country_code' ) : array() );
 			},
 			'where'   => 'minn_admin_aios_site_scope',
+			// Its other logs of who signed in, from where, and who was locked
+			// out or blocked.
+			'tables'  => array( 'aiowps_events', 'aiowps_debug_log', 'aiowps_logged_in_users', 'aiowps_login_lockdown', 'aiowps_permanent_block' ),
 		),
 		'list'   => array(
 			// Their own vocabulary: a level they do not log reads as info.

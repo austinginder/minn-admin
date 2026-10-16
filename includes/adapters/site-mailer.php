@@ -128,6 +128,8 @@ minn_admin_resource( 'site-mailer/emails', function () {
 			'key'     => 'id',
 			'columns' => array( 'id', 'to', 'subject', 'status', 'created_at' ),
 			'detail'  => array( '*' ),
+			// Each message's delivery statuses, and the addresses it stopped sending to.
+			'tables'  => array( 'site_mail_statuses', 'site_mail_suppressions' ),
 		),
 		'list'    => array(
 			'facets' => array(

@@ -191,6 +191,10 @@ minn_admin_resource( 'bookly/appointments', function () use ( $minn_bookly_list,
 			'detail'  => array_merge( $minn_bookly_list, array( 'notes' => 'customer_notes', 'a.internal_note', 'c.phone' => 'customer_phone' ) ),
 			// Staff see the bookings of the staff rows linked to their account.
 			'where'   => 'minn_admin_bookly_scope',
+			'viewer'  => true,
+			// The orders and payments behind the bookings, and what was sent
+			// to the customers and what their booking forms kept.
+			'tables'  => array( 'bookly_orders', 'bookly_payments', 'bookly_sent_notifications', 'bookly_sms_log', 'bookly_form_sessions', 'bookly_log' ),
 		),
 		'list'    => array(
 			'filter' => minn_admin_booking_filter( $minn_bookly_views ),

@@ -111,6 +111,10 @@ minn_admin_resource( 'wordfence/logins', array(
 		'network' => true,
 		'key'     => 'id',
 		'columns' => array( 'id', 'ctime', 'fail', 'action', 'username', 'userID', 'IP' ),
+		// Its other records of visitors and accounts: live traffic, blocks
+		// and the addresses they stopped, security and audit events, and
+		// each account's second-factor secrets and passkeys.
+		'tables'  => array( 'wfHits', 'wfLiveTrafficHuman', 'wfBlocks7', 'wfBlockedIPLog', 'wfSecurityEvents', 'wfAuditEvents', 'wfls_2fa_secrets', 'wfls_passkeys' ),
 	),
 	'list'   => array(
 		// A sign-out is logged with fail = 0 but is no sign-in: their own

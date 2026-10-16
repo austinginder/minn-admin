@@ -290,6 +290,8 @@ minn_admin_resource( 'wcgc/gift-cards', function () {
 			'table'   => 'woocommerce_gc_cards',
 			'key'     => 'id',
 			'columns' => array( 'id', 'is_active', 'remaining' ),
+			// Every card's redemptions and its meta.
+			'tables'  => array( 'woocommerce_gc_activity', 'woocommerce_gc_cardsmeta' ),
 		),
 		'list'    => array(
 			'filter' => array( 'param' => 'status', 'many' => true, 'values' => $states ),

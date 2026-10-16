@@ -337,6 +337,8 @@ minn_admin_resource( 'jet-booking/bookings', function () use ( $minn_jet_booking
 			// A booking vendor sees only their own bookings.
 			'where'   => 'minn_admin_jet_booking_scope',
 			'viewer'  => true,
+			// Each booking's meta (the guest's details, a site's own fields).
+			'tables'  => array( 'jet_bookings_meta' ),
 		),
 		'list'    => array(
 			'filter' => minn_admin_booking_filter( $minn_jet_booking_views ),

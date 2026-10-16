@@ -263,6 +263,18 @@ minn_admin_resource( 'amelia/appointments', function () use ( $minn_amelia_list,
 			// A provider without read_others sees only their own bookings.
 			'where'   => 'minn_admin_amelia_scope',
 			'viewer'  => true,
+			// The payments, extras, event bookings and packages behind the
+			// bookings, and the notifications sent to their customers.
+			'tables'  => array(
+				'amelia_payments',
+				'amelia_customer_bookings_to_extras',
+				'amelia_customer_bookings_to_events_periods',
+				'amelia_customer_bookings_to_events_tickets',
+				'amelia_packages_to_customers',
+				'amelia_packages_customers_to_services',
+				'amelia_notifications_log',
+				'amelia_notifications_sms_history',
+			),
 		),
 		'list'      => array(
 			'filter' => minn_admin_booking_filter( $minn_amelia_views ),

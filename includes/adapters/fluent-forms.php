@@ -358,6 +358,9 @@ minn_admin_resource( 'fluent-forms/entries', function () {
 			'key'     => 'id',
 			'columns' => array( 'id', 'form_id', 'response', 'status', 'created_at' ),
 			'detail'  => array(),
+			// Every answer field by field, each entry's meta, and the log of
+			// what happened to it.
+			'tables'  => array( 'fluentform_entry_details', 'fluentform_submission_meta', 'fluentform_logs' ),
 		),
 		'list'      => array(
 			// Their status column: unread/read/spam/trashed (favorites is a

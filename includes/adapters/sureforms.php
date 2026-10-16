@@ -310,6 +310,8 @@ minn_admin_resource( 'sureforms/entries', function () {
 			'key'    => 'ID',
 			'detail' => array(),
 			'list'   => 'minn_admin_sureforms_list',
+			// The payments its forms took.
+			'tables' => array( 'srfm_payments' ),
 		),
 		'list'    => array(
 			// The default view hides trash (their inbox behaviour).

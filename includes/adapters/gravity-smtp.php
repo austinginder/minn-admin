@@ -641,6 +641,8 @@ minn_admin_resource( 'gravity-smtp/events', function () {
 			'key'     => 'id',
 			'columns' => array( 'id', 'date_created', 'status', 'service', 'subject', 'extra' ),
 			'detail'  => array( 'id', 'date_created', 'status', 'service', 'subject', 'message', 'extra' ),
+			// Each send's log lines.
+			'tables'  => array( 'gravitysmtp_event_logs' ),
 		),
 		'list'    => array(
 			'facets' => array(

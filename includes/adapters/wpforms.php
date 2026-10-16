@@ -349,6 +349,9 @@ minn_admin_resource( 'wpforms/entries', function () use ( $minn_admin_wpforms_in
 			'key'     => 'entry_id',
 			'columns' => array( 'entry_id', 'form_id', 'status', 'viewed', 'starred', 'fields', 'date' ),
 			'detail'  => array(),
+			// Every answer field by field, the entries' notes and log, and the
+			// payments they took.
+			'tables'  => array( 'wpforms_entry_fields', 'wpforms_entry_meta', 'wpforms_payments', 'wpforms_payment_meta' ),
 		),
 		'list'      => array(
 			// Inbox behaviour: spam and trash stay in their buckets, and the

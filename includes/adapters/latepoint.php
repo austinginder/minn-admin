@@ -363,6 +363,27 @@ minn_admin_resource( 'latepoint/bookings', function () use ( $minn_latepoint_lis
 				return minn_admin_latepoint_scope_where( minn_admin_latepoint_scope() );
 			},
 			'viewer'  => true,
+			// The bookings' meta, the orders, carts, invoices and payments
+			// behind them, the customers' own meta and sign-in codes, and the
+			// activity log of all of it.
+			'tables'  => array(
+				'latepoint_booking_meta',
+				'latepoint_orders',
+				'latepoint_order_items',
+				'latepoint_order_meta',
+				'latepoint_order_intents',
+				'latepoint_order_invoices',
+				'latepoint_transactions',
+				'latepoint_transaction_intents',
+				'latepoint_transaction_refunds',
+				'latepoint_payment_requests',
+				'latepoint_carts',
+				'latepoint_cart_items',
+				'latepoint_cart_meta',
+				'latepoint_customer_meta',
+				'latepoint_customer_otp_codes',
+				'latepoint_activities',
+			),
 		),
 		'list'    => array(
 			'filter' => minn_admin_booking_filter( $minn_latepoint_views ),
