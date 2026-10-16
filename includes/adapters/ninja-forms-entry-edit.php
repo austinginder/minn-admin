@@ -58,15 +58,50 @@ function minn_admin_ninja_forms_edit_kind( $field ) {
 	return '';
 }
 
-/** A list field's options as [value, label] pairs. */
+/**
+ * A list field's options as [value, label] pairs: the ones their own entry
+ * editor draws. Sites fill list fields when the form renders (posts, terms,
+ * a CRM's list) through ninja_forms_render_options, and their editor runs
+ * the same filters before drawing the boxes (Fields/ListCheckbox.php,
+ * Abstracts/List.php admin_form_element), so a visitor's pick from such a
+ * list is a choice here too.
+ */
 function minn_admin_ninja_forms_edit_options( $field ) {
-	$out = array();
-	foreach ( (array) $field->get_setting( 'options' ) as $o ) {
+	$settings = (array) $field->get_settings();
+	$options  = apply_filters( 'ninja_forms_render_options', $field->get_setting( 'options' ), $settings );
+	$options  = apply_filters( 'ninja_forms_render_options_' . (string) $field->get_setting( 'type' ), $options, $settings );
+	$out      = array();
+	foreach ( (array) $options as $o ) {
 		if ( is_array( $o ) && isset( $o['value'] ) ) {
 			$out[] = array( (string) $o['value'], wp_strip_all_tags( (string) ( $o['label'] ?? $o['value'] ) ) );
 		}
 	}
 	return $out;
+}
+
+/**
+ * A multi-choice field's choices with every stored pick the list no longer
+ * offers added after them, so the entry page draws a ticked box for it and
+ * a save that does not untick it keeps it. Shared by the entry editors: a
+ * choice renamed or removed after the visitor answered is still their
+ * answer, and dropping it on the next edit of that field would record one
+ * they never gave.
+ *
+ * @param array $choices [value, label] pairs the form offers.
+ * @param array $stored  The answer's stored values.
+ * @return array
+ */
+function minn_admin_entry_edit_keep_choices( array $choices, array $stored ) {
+	$offered = array_map( 'strval', wp_list_pluck( $choices, 0 ) );
+	foreach ( $stored as $v ) {
+		$v = (string) $v;
+		if ( '' !== $v && ! in_array( $v, $offered, true ) ) {
+			/* translators: %s: an answer the visitor picked that the form no longer offers. */
+			$choices[] = array( $v, sprintf( __( '%s (no longer on the form)', 'minn-admin' ), $v ) );
+			$offered[] = $v;
+		}
+	}
+	return $choices;
 }
 
 /** A submission's stored answer, read back the way Ninja Forms reads it. */
@@ -114,8 +149,10 @@ function minn_admin_ninja_forms_edit_block( $post, $form_id ) {
 				'kind'   => $kind,
 				'inputs' => array( array( 'id' => (string) $id, 'value' => minn_admin_ninja_forms_edit_value( $post->ID, $id, $kind ) ) ),
 			);
-			if ( 'choice' === $kind || 'multi' === $kind ) {
+			if ( 'choice' === $kind ) {
 				$row['choices'] = minn_admin_ninja_forms_edit_options( $field );
+			} elseif ( 'multi' === $kind ) {
+				$row['choices'] = minn_admin_entry_edit_keep_choices( minn_admin_ninja_forms_edit_options( $field ), $row['inputs'][0]['value'] );
 			}
 			$fields[] = $row;
 		}
@@ -171,6 +208,8 @@ add_action( 'rest_api_init', function () {
 				}
 				$allowed = isset( $row['choices'] ) ? wp_list_pluck( $row['choices'], 0 ) : array();
 				if ( 'multi' === $row['kind'] ) {
+					// The choices hold every stored pick (keep_choices), so only
+					// a box the person unticks leaves the answer.
 					$picked = array();
 					foreach ( (array) $value as $v ) {
 						if ( is_scalar( $v ) && in_array( (string) $v, $allowed, true ) ) {

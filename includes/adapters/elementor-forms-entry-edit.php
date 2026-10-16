@@ -38,6 +38,36 @@ function minn_admin_elementor_edit_options( $field ) {
 	return $out;
 }
 
+/**
+ * A stored multi-choice answer as the choices it holds. Elementor joins the
+ * picks with ', ', so an option whose own text holds ', ' is matched whole
+ * before what is left is split.
+ *
+ * @param string $value  The stored answer.
+ * @param array  $values The option values the form offers.
+ * @return string[]
+ */
+function minn_admin_elementor_edit_split( $value, array $values ) {
+	if ( '' === trim( $value ) ) {
+		return array();
+	}
+	$parts = array_map( 'trim', explode( ', ', $value ) );
+	$n     = count( $parts );
+	$out   = array();
+	for ( $i = 0; $i < $n; ) {
+		$take = 1;
+		for ( $j = $n; $j > $i + 1; $j-- ) {
+			if ( in_array( implode( ', ', array_slice( $parts, $i, $j - $i ) ), $values, true ) ) {
+				$take = $j - $i;
+				break;
+			}
+		}
+		$out[] = implode( ', ', array_slice( $parts, $i, $take ) );
+		$i    += $take;
+	}
+	return $out;
+}
+
 /** The page's control for an answer, from its snapshot field (or its content). */
 function minn_admin_elementor_edit_kind( $field, $key, $value ) {
 	if ( ! $field ) {
@@ -105,8 +135,12 @@ function minn_admin_elementor_edit_block( $sub ) {
 		}
 		$row = array( 'id' => $key, 'label' => $label, 'kind' => $kind );
 		if ( 'multi' === $kind ) {
-			$row['inputs']  = array( array( 'id' => $key, 'value' => '' === trim( $value ) ? array() : array_map( 'trim', explode( ', ', $value ) ) ) );
-			$row['choices'] = minn_admin_elementor_edit_options( $field );
+			$options        = minn_admin_elementor_edit_options( $field );
+			$picked         = minn_admin_elementor_edit_split( $value, array_map( 'strval', wp_list_pluck( $options, 0 ) ) );
+			$row['inputs']  = array( array( 'id' => $key, 'value' => $picked ) );
+			// A pick the form no longer offers (an option renamed or removed
+			// since) keeps a ticked box (ninja-forms-entry-edit.php).
+			$row['choices'] = minn_admin_entry_edit_keep_choices( $options, $picked );
 		} else {
 			$row['inputs'] = array( array( 'id' => $key, 'value' => $value ) );
 			if ( 'choice' === $kind ) {
@@ -165,10 +199,13 @@ add_action( 'rest_api_init', function () {
 				}
 				$allowed = isset( $row['choices'] ) ? wp_list_pluck( $row['choices'], 0 ) : array();
 				if ( 'multi' === $row['kind'] ) {
+					// Each pick is one of the served choices exactly (the form's
+					// options and the answer's stored picks), so it is written
+					// as it is: cleaning a stored pick would rewrite it.
 					$picked = array();
 					foreach ( (array) $value as $v ) {
 						if ( is_scalar( $v ) && in_array( (string) $v, $allowed, true ) ) {
-							$picked[] = sanitize_text_field( (string) $v );
+							$picked[] = (string) $v;
 						}
 					}
 					// Stored the way their form stores several choices.
