@@ -140,10 +140,11 @@ $in_tx = function ( $fn ) use ( $wpdb ) {
 };
 // A page's Save may send several requests (CF7 saves, then previews); they
 // replay in order, the first carrying the body under test.
-$replay = function ( $c, $body ) use ( $call ) {
+$replay = function ( $c, $body ) use ( $call, $cover ) {
 	$writes = ! empty( $c['writes'] ) ? $c['writes'] : array( array( 'method' => $c['method'], 'path' => $c['path'], 'query' => array(), 'body' => $c['body'] ) );
 	$worst  = array( 0, '' );
 	foreach ( $writes as $i => $w ) {
+		$cover( $w['method'], $w['path'] );
 		list( $st, $d ) = $call( $w['method'], '/' . ltrim( $w['path'], '/' ), 0 === $i ? $body : $w['body'], (array) ( $w['query'] ?? array() ) );
 		if ( $st >= $worst[0] ) {
 			$worst = array( $st, is_array( $d ) && isset( $d['message'] ) ? $d['message'] : '' );
@@ -333,13 +334,18 @@ $detail_of = function ( $c, $id ) use ( $get ) {
 };
 
 foreach ( (array) $captures as $c ) {
-	$label = $c['surface'];
+	// A seeded run (lib/roundtrip-seed.php) is its own ratchet line.
+	$label = $c['surface'] . ( ! empty( $c['seeded']['set'] ) ? " [{$c['seeded']['set']}]" : '' );
 	if ( ! empty( $c['skip'] ) || empty( $c['path'] ) ) {
 		printf( "SKIP  %s: %s\n", $label, $c['skip'] ?? 'no capture' );
 		continue;
 	}
 	$body = (array) $c['body'];
 	$id   = $item_id( $c );
+	if ( ! empty( $c['seeded'] ) && (string) $id !== (string) $c['seeded']['id'] ) {
+		$check( "{$label}: the capture saved the seeded item", false, 'saved ' . wp_json_encode( $id ) . ', seeded ' . $c['seeded']['id'] );
+		continue;
+	}
 
 	// No-op.
 	list( $moved, $st ) = $changes_of( $c, $body );
@@ -445,7 +451,7 @@ foreach ( (array) $captures as $c ) {
 			continue;
 		}
 		foreach ( $was as $field => $old ) {
-			if ( $field === $k || ! array_key_exists( $field, $body ) || ! array_key_exists( $field, $now ) || in_array( $field, $coupled[ "{$label}:{$k}" ] ?? array(), true ) ) {
+			if ( $field === $k || ! array_key_exists( $field, $body ) || ! array_key_exists( $field, $now ) || in_array( $field, $coupled[ "{$c['surface']}:{$k}" ] ?? array(), true ) ) {
 				continue;
 			}
 			if ( ! $same( 'text', $old, $now[ $field ] ) ) {

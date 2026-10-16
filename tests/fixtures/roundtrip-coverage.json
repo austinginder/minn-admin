@@ -1,0 +1,1146 @@
+{
+    "routes": {
+        "DELETE /minn-admin/v1/acf/schema/fields/(?P<key>[a-zA-Z0-9_\\-]+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/acf/schema/groups/(?P<key>[a-zA-Z0-9_\\-]+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/acpt/schema/groups/(?P<id>[A-Za-z0-9_\\-]+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/ai1wm/export/(?P<job>[a-f0-9]{13,40})": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/ai1wm/exports/(?P<id>[A-Za-z0-9_-]+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/backwpup/backups/(?P<id>.+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/backwpup/job/(?P<token>[A-Za-z0-9]{12})": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/cf7/messages/(?P<id>\\d+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/cfdb7/entries/(?P<id>\\d+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/crontrol/events/(?P<id>[A-Za-z0-9_-]+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/duplicator/build/(?P<token>[A-Za-z0-9]{12})": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/duplicator/packages/(?P<id>\\d+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/elementor/submissions/(?P<id>\\d+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/elementor/templates/(?P<id>\\d+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/everest/entries/(?P<id>\\d+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/fluent-forms/entries/(?P<id>\\d+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/fluent-smtp/emails/(?P<id>\\d+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/fluent-snippets/(?P<file>[^/]+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/formidable/entries/(?P<id>\\d+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/forminator/entries/(?P<id>\\d+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/gf/confirmations/(?P<form>\\d+):(?P<cid>[a-zA-Z0-9_.-]+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/gf/entries/(?P<id>\\d+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/gf/feeds/(?P<id>\\d+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/gf/notifications/(?P<form>\\d+):(?P<nid>[a-zA-Z0-9_.-]+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/gravity-smtp/events/(?P<id>\\d+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/gravity-smtp/routing/(?P<id>\\d+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/hfcm/snippets/(?P<id>\\d+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/jet-appointments/appointments/(?P<id>\\d+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/jet-booking/bookings/(?P<id>\\d+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/jet-cct/(?P<slug>[a-z0-9_]+)/items/(?P<id>\\d+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/jet-reviews/reviews/(?P<id>\\d+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/jet-search/suggestions/(?P<id>\\d+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/jet-smart-filters/filters/(?P<id>\\d+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/jet-smart-filters/reindex/(?P<token>[A-Za-z0-9]{12})": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/jet-theme-core/templates/(?P<id>\\d+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/ninja-forms/entries/(?P<id>\\d+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/post-types/(?P<slug>[a-z0-9_-]+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/scrutoscope/profiles/(?P<id>\\d+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/system/debug-log": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/system/logs/(?P<id>[a-zA-Z0-9:_.\\-]+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/taxonomies/(?P<slug>[a-z0-9_-]+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/transients/(?P<id>\\d+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/updraft/backups/(?P<id>\\d+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/updraft/job/(?P<token>[A-Za-z0-9]{12})": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/users/(?P<id>\\d+)/sessions": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/users/(?P<id>\\d+)/sessions/(?P<verifier>[a-f0-9]{40,64})": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/wc/api-keys/(?P<id>\\d+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/wc/shipping/zones/(?P<zone>\\d+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/wc/shipping/zones/(?P<zone>\\d+)/methods/(?P<instance>\\d+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/wcm/members/(?P<id>\\d+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/wcm/members/(?P<id>\\d+)/notes/(?P<note>\\d+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/wcm/plans/(?P<id>\\d+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/wcpdf/orders/(?P<id>\\d+)/documents/(?P<type>[a-z0-9_-]+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/wpcode/snippets/(?P<id>\\d+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/wpforms/entries/(?P<id>\\d+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/wpml/emails/(?P<id>\\d+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/wpvivid/backups/(?P<id>[A-Za-z0-9_-]+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "DELETE /minn-admin/v1/wpvivid/task/(?P<task>[A-Za-z0-9_-]+)": {
+            "kind": "delete",
+            "why": "A delete: it sends no loaded values back."
+        },
+        "POST /minn-admin/v1/acf/options/(?P<page>[A-Za-z0-9_%.\\-]+)/(?P<tab>tab-\\d+)": {
+            "kind": "edit",
+            "why": "ACF options page tab: saves the values the tab loaded. No round-trip pass opens options pages yet."
+        },
+        "POST /minn-admin/v1/acf/schema/fields/(?P<key>[a-zA-Z0-9_\\-]+)/move": {
+            "kind": "action",
+            "why": "A one-shot action (moves a field in its group): it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/acf/schema/groups": {
+            "kind": "create",
+            "why": "Makes a new item: there is no stored value it could rewrite."
+        },
+        "POST /minn-admin/v1/acf/schema/groups/(?P<key>[a-zA-Z0-9_\\-]+)/(?P<verb>activate|deactivate|rename|duplicate)": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/acf/schema/groups/(?P<key>[a-zA-Z0-9_\\-]+)/fields": {
+            "kind": "create",
+            "why": "Makes a new item: there is no stored value it could rewrite."
+        },
+        "POST /minn-admin/v1/acf/schema/import": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/acpt/options/(?P<page>[A-Za-z0-9_%.\\-]+)/(?P<tab>tab-\\d+)": {
+            "kind": "edit",
+            "why": "ACPT options page tab: saves the values the tab loaded. No round-trip pass opens options pages yet."
+        },
+        "POST /minn-admin/v1/acpt/schema/groups": {
+            "kind": "create",
+            "why": "Makes a new item: there is no stored value it could rewrite."
+        },
+        "POST /minn-admin/v1/acpt/schema/groups/(?P<id>[A-Za-z0-9_\\-]+)/duplicate": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/acpt/schema/groups/(?P<id>[A-Za-z0-9_\\-]+)/full": {
+            "kind": "edit",
+            "why": "ACPT field group builder: saves the whole group. No round-trip pass opens it yet."
+        },
+        "POST /minn-admin/v1/acpt/schema/import": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/ai1wm/export": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/amelia/appointments/(?P<id>\\d+)/status": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/auto-updates": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/backwpup/run": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/bookly/appointments/(?P<id>\\d+)/status": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/builders/new": {
+            "kind": "create",
+            "why": "Makes a new item: there is no stored value it could rewrite."
+        },
+        "POST /minn-admin/v1/cache/purge": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/cf7/messages/(?P<id>\\d+)/restore": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/cf7/messages/(?P<id>\\d+)/spam": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/cf7/messages/(?P<id>\\d+)/trash": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/cf7/messages/(?P<id>\\d+)/unspam": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/cfdb7/entries/(?P<id>\\d+)/unread": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/check-updates": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/code-snippets/(?P<id>(?:network:)?\\d+)/deactivate": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/core/network-upgrade": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/core/update": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/crontrol/events/(?P<id>[A-Za-z0-9_-]+)/pause": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/crontrol/events/(?P<id>[A-Za-z0-9_-]+)/resume": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/crontrol/events/(?P<id>[A-Za-z0-9_-]+)/run": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/custom-css": {
+            "kind": "edit",
+            "why": "Additional CSS: saves the stylesheet the editor loaded. No round-trip pass reaches it yet."
+        },
+        "POST /minn-admin/v1/disembark/cleanup": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/disembark/regenerate-token": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/disembark/sessions/(?P<id>[A-Za-z0-9]{4,64})/delete": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/duplicator/build": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/duplicator/build/(?P<token>[A-Za-z0-9]{12})": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/elementor-mcp/connections/(?P<uid>\\d+):(?P<uuid>[0-9a-fA-F-]{36})/revoke": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/elementor-mcp/toggle": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/elementor/submissions/(?P<id>\\d+)/answers": {
+            "kind": "edit",
+            "why": "Entry answers editor (the registry #13/#15 class). No round-trip pass opens entry pages yet."
+        },
+        "POST /minn-admin/v1/elementor/submissions/(?P<id>\\d+)/read": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/elementor/submissions/(?P<id>\\d+)/restore": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/elementor/submissions/(?P<id>\\d+)/trash": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/elementor/templates": {
+            "kind": "create",
+            "why": "Makes a new item: there is no stored value it could rewrite."
+        },
+        "POST /minn-admin/v1/elementor/templates/(?P<id>\\d+)/duplicate": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/entries/reply": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/everest/entries/(?P<id>\\d+)/restore": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/everest/entries/(?P<id>\\d+)/spam": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/everest/entries/(?P<id>\\d+)/trash": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/everest/entries/(?P<id>\\d+)/unspam": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/fluent-forms/entries/(?P<id>\\d+)/status": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/fluent-forms/forms/(?P<id>\\d+)/emails/preview": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/fluent-smtp/emails/(?P<id>\\d+)/resend": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/fluent-smtp/test": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/fluent-snippets": {
+            "kind": "create",
+            "why": "Makes a new item: there is no stored value it could rewrite."
+        },
+        "POST /minn-admin/v1/fluent-snippets/(?P<file>[^/]+)/active": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/forminator/entries/(?P<id>\\d+)/spam": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/forminator/entries/(?P<id>\\d+)/unspam": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/generateblocks/designs/(?P<id>[^/]+)": {
+            "kind": "edit",
+            "why": "Design token editor: saves the tokens the editor loaded. No round-trip pass opens it yet."
+        },
+        "POST /minn-admin/v1/gf/confirmations/(?P<form>\\d+):(?P<cid>[a-zA-Z0-9_.-]+)/active": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/gf/confirmations/(?P<form>\\d+):(?P<cid>[a-zA-Z0-9_.-]+)/duplicate": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/gf/confirmations/(?P<form>\\d+):(?P<cid>[a-zA-Z0-9_.-]+)/preview": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/gf/confirmations/new": {
+            "kind": "create",
+            "why": "Makes a new item: there is no stored value it could rewrite."
+        },
+        "POST /minn-admin/v1/gf/entries/(?P<id>\\d+)/answers": {
+            "kind": "edit",
+            "why": "Entry answers editor (the registry #13/#15 class). No round-trip pass opens entry pages yet."
+        },
+        "POST /minn-admin/v1/gf/entries/(?P<id>\\d+)/notes": {
+            "kind": "create",
+            "why": "Makes a new record: there is no stored value it could rewrite."
+        },
+        "POST /minn-admin/v1/gf/entries/(?P<id>\\d+)/notifications": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/gf/feeds/(?P<id>\\d+)/active": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/gf/forms": {
+            "kind": "create",
+            "why": "Makes a new item: there is no stored value it could rewrite."
+        },
+        "POST /minn-admin/v1/gf/forms/(?P<id>\\d+)/active": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/gf/forms/(?P<id>\\d+)/builder": {
+            "kind": "edit",
+            "why": "Gravity Forms builder: sends the whole form with a stamp (409 when stale).",
+            "pass": "pages (gf-builder)"
+        },
+        "POST /minn-admin/v1/gf/notifications/(?P<form>\\d+):(?P<nid>[a-zA-Z0-9_.-]+)/active": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/gf/notifications/(?P<form>\\d+):(?P<nid>[a-zA-Z0-9_.-]+)/duplicate": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/gf/notifications/(?P<form>\\d+):(?P<nid>[a-zA-Z0-9_.-]+)/preview": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/gf/notifications/(?P<form>\\d+):(?P<nid>[a-zA-Z0-9_.-]+)/test": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/gf/notifications/new": {
+            "kind": "create",
+            "why": "Makes a new item: there is no stored value it could rewrite."
+        },
+        "POST /minn-admin/v1/gravity-smtp/events/(?P<id>\\d+)/resend": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/gravity-smtp/routing/(?P<id>\\d+)/disable": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/gravity-smtp/routing/(?P<id>\\d+)/enable": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/gravity-smtp/send-test": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/gravity-smtp/suppressed": {
+            "kind": "create",
+            "why": "Makes a new record: there is no stored value it could rewrite."
+        },
+        "POST /minn-admin/v1/gravity-smtp/suppressed/(?P<id>\\d+)/reactivate": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/hfcm/snippets": {
+            "kind": "create",
+            "why": "Makes a new item: there is no stored value it could rewrite."
+        },
+        "POST /minn-admin/v1/hfcm/snippets/(?P<id>\\d+)/active": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/image-block": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/integrations/hide": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/integrations/unhide": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/jet-appointments/appointments/(?P<id>\\d+)/status": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/jet-booking/bookings/(?P<id>\\d+)/status": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/jet-cct/(?P<slug>[a-z0-9_]+)/items": {
+            "kind": "create",
+            "why": "Makes a new item: there is no stored value it could rewrite."
+        },
+        "POST /minn-admin/v1/jet-cct/(?P<slug>[a-z0-9_]+)/items/(?P<id>\\d+)/status": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/jet-engine/options/(?P<page>[A-Za-z0-9_%.\\-]+)/(?P<tab>tab-0)": {
+            "kind": "edit",
+            "why": "JetEngine options page tab: saves the values the tab loaded. No round-trip pass opens options pages yet."
+        },
+        "POST /minn-admin/v1/jet-reviews/reviews/(?P<id>\\d+)/approve": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/jet-search/dedupe": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/jet-search/suggestions": {
+            "kind": "create",
+            "why": "Makes a new item: there is no stored value it could rewrite."
+        },
+        "POST /minn-admin/v1/jet-smart-filters/reindex": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/jet-theme-core/templates": {
+            "kind": "create",
+            "why": "Makes a new item: there is no stored value it could rewrite."
+        },
+        "POST /minn-admin/v1/kadence/designs/(?P<id>\\d+)": {
+            "kind": "edit",
+            "why": "Design token editor: saves the tokens the editor loaded. No round-trip pass opens it yet."
+        },
+        "POST /minn-admin/v1/latepoint/bookings/(?P<id>\\d+)/status": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/latepoint/event-registrations/(?P<id>\\d+)/cancel": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/licenses/action": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/llar/log/(?P<id>[a-f0-9]{32})/unlock": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/me/appearance": {
+            "kind": "edit",
+            "why": "Appearance: a click sends only its own keys since 35759eed. No round-trip pass reaches it yet."
+        },
+        "POST /minn-admin/v1/me/language": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/media/(?P<id>\\d+)/regenerate": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/media/(?P<id>\\d+)/replace": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/media/folders/move": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/minn-fold/settings/(?P<tab>tab-\\d+)": {
+            "kind": "edit",
+            "why": "A settings tab of the dev-fixture plugin minn-fold, which the settings pass does not list on this lab."
+        },
+        "POST /minn-admin/v1/minn-switch/check": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/minn-switch/run": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/minn-test/license-seed": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/minn-test/seed-sessions": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/minn-test/wpm-license": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/ninja-forms/entries/(?P<id>\\d+)/answers": {
+            "kind": "edit",
+            "why": "Entry answers editor (the registry #13/#15 class). No round-trip pass opens entry pages yet."
+        },
+        "POST /minn-admin/v1/ninja-forms/entries/(?P<id>\\d+)/restore": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/ninja-forms/entries/(?P<id>\\d+)/trash": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/notices/ajax": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/notices/hide": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/notices/unhide": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/notifications/read": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/novamira/connections/(?P<id>[a-z]+:[A-Za-z0-9_\\-]+)/revoke": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/novamira/enabled/(?P<state>on|off)": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/orders/(?P<id>\\d+)/email": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/orders/(?P<id>\\d+)/emails": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/otl/(?P<id>\\d+)": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/overview/metric-defaults": {
+            "kind": "edit",
+            "why": "Overview metric picks: a preference list saved whole. No round-trip pass reaches it yet."
+        },
+        "POST /minn-admin/v1/overview/metrics": {
+            "kind": "edit",
+            "why": "Overview metric picks: a preference list saved whole. No round-trip pass reaches it yet."
+        },
+        "POST /minn-admin/v1/performance-lab/features/(?P<id>[a-z0-9_-]+)/activate": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/performance-lab/features/(?P<id>[a-z0-9_-]+)/deactivate": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/permalinks": {
+            "kind": "clean",
+            "why": "The pages pass checks that a clean Settings save sends nothing at all, which is stricter than a replay: this route is reached only by a real edit."
+        },
+        "POST /minn-admin/v1/plugins/install-url": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/plugins/update": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/plugins/update-all": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/plugins/upload": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/post-types": {
+            "kind": "create",
+            "why": "Makes a new item: there is no stored value it could rewrite."
+        },
+        "POST /minn-admin/v1/post-types/(?P<slug>[a-z0-9_-]+)": {
+            "kind": "edit",
+            "why": "Post type / taxonomy modal: sends changed fields and a base stamp. No round-trip pass opens it yet."
+        },
+        "POST /minn-admin/v1/posts/(?P<id>\\d+)/duplicate": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/posts/(?P<id>\\d+)/lock": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/posts/(?P<id>\\d+)/restore": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/posts/(?P<id>\\d+)/unlock": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/ppp/(?P<id>\\d+)": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/pwgc/gift-cards": {
+            "kind": "create",
+            "why": "Makes a new item: there is no stored value it could rewrite."
+        },
+        "POST /minn-admin/v1/pwgc/gift-cards/(?P<id>\\d+)/balance": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/pwgc/gift-cards/(?P<id>\\d+)/resend": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/pwgc/gift-cards/(?P<id>\\d+)/status": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/render-blocks": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/rewrite-rules/flush": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/rewrite-rules/test": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/role-defaults": {
+            "kind": "edit",
+            "why": "Role defaults: saves the defaults the page loaded. No round-trip pass reaches it yet."
+        },
+        "POST /minn-admin/v1/scrutoscope/cron/(?P<id>[a-f0-9]{32})/profile": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/site-appearance": {
+            "kind": "edit",
+            "why": "Appearance: a click sends only its own keys since 35759eed. No round-trip pass reaches it yet."
+        },
+        "POST /minn-admin/v1/site-logo": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/site/language": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/spam": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/stackable/designs/(?P<id>[\\w-]+)": {
+            "kind": "edit",
+            "why": "Design token editor: saves the tokens the editor loaded. No round-trip pass opens it yet."
+        },
+        "POST /minn-admin/v1/styles/mix": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/styles/restore": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/styles/update": {
+            "kind": "edit",
+            "why": "Site look: sends only the changed keys by design. No round-trip pass reaches it yet."
+        },
+        "POST /minn-admin/v1/surfaces/(?P<id>[a-z0-9_-]+)/setup": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/system/config": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/taxonomies": {
+            "kind": "create",
+            "why": "Makes a new item: there is no stored value it could rewrite."
+        },
+        "POST /minn-admin/v1/taxonomies/(?P<slug>[a-z0-9_-]+)": {
+            "kind": "edit",
+            "why": "Post type / taxonomy modal: sends changed fields and a base stamp. No round-trip pass opens it yet."
+        },
+        "POST /minn-admin/v1/terms/merge": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/themes/activate": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/themes/delete": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/themes/install": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/themes/update": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/themes/upload": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/transients/delete-expired": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/translations/remove": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/translations/update": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/updates/all": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/updraft/backup-now": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/users/(?P<id>\\d+)/appearance": {
+            "kind": "edit",
+            "why": "Appearance: a click sends only its own keys since 35759eed. No round-trip pass reaches it yet."
+        },
+        "POST /minn-admin/v1/users/(?P<id>\\d+)/email": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/users/(?P<id>\\d+)/integrations/unhide": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/users/(?P<id>\\d+)/language": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/users/(?P<id>\\d+)/remove": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/users/(?P<id>\\d+)/reset-password": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/users/(?P<id>\\d+)/welcome": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/users/add-existing": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/visibility/toggle": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/wc/api-keys": {
+            "kind": "create",
+            "why": "Makes a new item: there is no stored value it could rewrite."
+        },
+        "POST /minn-admin/v1/wc/api-keys/(?P<id>\\d+)": {
+            "kind": "edit",
+            "why": "WooCommerce REST key edit (description, user, permissions). No round-trip pass opens it yet."
+        },
+        "POST /minn-admin/v1/wc/emails/(?P<id>[\\w-]+)": {
+            "kind": "edit",
+            "why": "Store settings sub-form (one email, one payment method). The pages pass saves the section page, not these forms."
+        },
+        "POST /minn-admin/v1/wc/orders/(?P<id>\\d+)/restore": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/wc/payment_gateways/(?P<id>(?!order$)[\\w-]+)": {
+            "kind": "edit",
+            "why": "Store settings sub-form (one email, one payment method). The pages pass saves the section page, not these forms."
+        },
+        "POST /minn-admin/v1/wc/payment_gateways/order": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/wc/settings/(?P<page>[\\w-]+)/(?P<section>[\\w-]+)": {
+            "kind": "clean",
+            "why": "The pages pass checks that a clean Store settings save sends nothing at all, which is stricter than a replay: this route is reached only by a real edit."
+        },
+        "POST /minn-admin/v1/wc/shipping/zones": {
+            "kind": "create",
+            "why": "Makes a new item: there is no stored value it could rewrite."
+        },
+        "POST /minn-admin/v1/wc/shipping/zones/(?P<zone>\\d+)": {
+            "kind": "edit",
+            "why": "Shipping zone / method editor. The pages pass saves the section page, not these forms."
+        },
+        "POST /minn-admin/v1/wc/shipping/zones/(?P<zone>\\d+)/methods": {
+            "kind": "create",
+            "why": "Makes a new item: there is no stored value it could rewrite."
+        },
+        "POST /minn-admin/v1/wc/shipping/zones/(?P<zone>\\d+)/methods/(?P<instance>\\d+)": {
+            "kind": "edit",
+            "why": "Shipping zone / method editor. The pages pass saves the section page, not these forms."
+        },
+        "POST /minn-admin/v1/wc/shipping/zones/(?P<zone>\\d+)/methods/order": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/wc/shipping/zones/order": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/wcgc/gift-cards": {
+            "kind": "create",
+            "why": "Makes a new item: there is no stored value it could rewrite."
+        },
+        "POST /minn-admin/v1/wcgc/gift-cards/(?P<id>\\d+)/balance": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/wcgc/gift-cards/(?P<id>\\d+)/resend": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/wcgc/gift-cards/(?P<id>\\d+)/status": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/wcm/members": {
+            "kind": "create",
+            "why": "Makes a new item: there is no stored value it could rewrite."
+        },
+        "POST /minn-admin/v1/wcm/members/(?P<id>\\d+)/cancel": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/wcm/members/(?P<id>\\d+)/end-date": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/wcm/members/(?P<id>\\d+)/notes": {
+            "kind": "create",
+            "why": "Makes a new record: there is no stored value it could rewrite."
+        },
+        "POST /minn-admin/v1/wcm/members/(?P<id>\\d+)/pause": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/wcm/members/(?P<id>\\d+)/resume": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/wcm/members/(?P<id>\\d+)/subscription": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/wcm/members/(?P<id>\\d+)/transfer": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/wcm/plans": {
+            "kind": "create",
+            "why": "Makes a new item: there is no stored value it could rewrite."
+        },
+        "POST /minn-admin/v1/wcm/plans/(?P<id>\\d+)/duplicate": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/wcpdf/orders/(?P<id>\\d+)/documents/(?P<type>[a-z0-9_-]+)/create": {
+            "kind": "create",
+            "why": "Makes a new record: there is no stored value it could rewrite."
+        },
+        "POST /minn-admin/v1/wcpdf/orders/(?P<id>\\d+)/documents/(?P<type>[a-z0-9_-]+)/regenerate": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/wp-migrate/accept": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/wp-migrate/backups/(?P<id>[^/]+)/delete": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/wpcode/snippets": {
+            "kind": "create",
+            "why": "Makes a new item: there is no stored value it could rewrite."
+        },
+        "POST /minn-admin/v1/wpcode/snippets/(?P<id>\\d+)/active": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/wpforms/entries/(?P<id>\\d+)/answers": {
+            "kind": "edit",
+            "why": "Entry answers editor (the registry #13/#15 class). No round-trip pass opens entry pages yet."
+        },
+        "POST /minn-admin/v1/wpforms/entries/(?P<id>\\d+)/star": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/wpforms/entries/(?P<id>\\d+)/status": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/wpforms/forms/(?P<id>\\d+)/emails/preview": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/wpml/emails/(?P<id>\\d+)/resend": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/wpvivid/backup-now": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/ywgc/gift-cards": {
+            "kind": "create",
+            "why": "Makes a new item: there is no stored value it could rewrite."
+        },
+        "POST /minn-admin/v1/ywgc/gift-cards/(?P<id>\\d+)/balance": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/ywgc/gift-cards/(?P<id>\\d+)/resend": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/ywgc/gift-cards/(?P<id>\\d+)/status": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "PUT /minn-admin/v1/acf/schema/fields/(?P<key>[a-zA-Z0-9_\\-]+)": {
+            "kind": "edit",
+            "why": "ACF field builder, one field: saves the field as the builder loaded it. No round-trip pass opens it yet."
+        },
+        "PUT /minn-admin/v1/fluent-snippets/(?P<file>[^/]+)": {
+            "kind": "edit",
+            "why": "FluentSnippets edit dialog: the surface pass covers it when the lab holds a snippet.",
+            "pass": "surfaces"
+        },
+        "PUT /minn-admin/v1/gf/entries/(?P<id>\\d+)/properties": {
+            "kind": "edit",
+            "why": "Gravity Forms entry properties (read, starred, status). No round-trip pass opens entry pages yet."
+        },
+        "PUT /minn-admin/v1/wcpdf/orders/(?P<id>\\d+)/documents/(?P<type>[a-z0-9_-]+)": {
+            "kind": "edit",
+            "why": "PDF invoice document edit (number, date, notes). No round-trip pass opens it yet."
+        }
+    }
+}

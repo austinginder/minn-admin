@@ -192,5 +192,14 @@ return ( function ( $name, $known ) {
 		return $keys;
 	};
 
-	return compact( 'check', 'summary', 'call', 'get', 'on', 'same', 'value_for', 'snapshot_db', 'db_changes' );
+	// A save this harness replayed and judged, for roundtrip-coverage: one
+	// "METHOD /path" line per write, in the file roundtrip.sh names.
+	$cover = function ( $method, $path ) {
+		$file = getenv( 'MINN_RT_COVERED' );
+		if ( $file ) {
+			file_put_contents( $file, strtoupper( $method ) . ' /' . ltrim( (string) $path, '/' ) . "\n", FILE_APPEND );
+		}
+	};
+
+	return compact( 'check', 'summary', 'call', 'get', 'on', 'same', 'value_for', 'snapshot_db', 'db_changes', 'cover' );
 } );

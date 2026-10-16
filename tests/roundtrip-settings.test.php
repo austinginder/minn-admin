@@ -171,7 +171,8 @@ foreach ( (array) $list as $s ) {
 			list( , $f ) = $get( $route );
 			return is_array( $f ) && isset( $f['values'] ) && is_array( $f['values'] ) ? $f['values'] : array();
 		};
-		$save = function ( $values ) use ( $call, $route ) {
+		$save = function ( $values ) use ( $call, $route, $cover ) {
+			$cover( 'POST', $route );
 			list( $st, $d ) = $call( 'POST', '/' . $route, array( 'values' => (object) $values ) );
 			return array( $st, is_array( $d ) && isset( $d['message'] ) ? $d['message'] : '' );
 		};

@@ -78,7 +78,7 @@ knowing before you believe a full-run failure:
 
 ## Round trips (`roundtrip.sh`)
 
-A save is only as good as what it stores. `roundtrip.sh` runs the four round-trip
+A save is only as good as what it stores. `roundtrip.sh` runs the round-trip
 harnesses in order, each replaying what the real client sends for one kind of write and
 checking what got stored: a value typed reads back as typed, a save that changes nothing
 stores nothing, and a change to one field leaves the rest.
@@ -92,11 +92,31 @@ stores nothing, and a change to one field leaves the rest.
 3. **Surface edit dialogs**: `roundtrip-surfaces-capture.js` opens each surface's first
    item in the real app, presses Save without touching anything and records the request
    (answered in the browser, so it never reaches the server); `roundtrip-surfaces.test.php`
-   replays the bodies for no-op, isolation and concurrency.
+   replays the bodies for no-op, isolation and concurrency. The pass runs three times:
+   on the lab's items as they are, then twice with seeds (`lib/roundtrip-seed.php`). A
+   seed finds where each free-text edit field is stored by saving a marker through the
+   dialog's own route inside a rolled-back transaction, writes a value into that cell the
+   way the vendor's own store would hold it ("rich": `50%DEAL`, an entity, inline markup,
+   line breaks; "empty": an unnamed item, for fields the dialog does not require), and the
+   capture then opens that item. Every seeded cell is backed up first and put back after
+   the run and on any exit; a save that writes files instead of rows is put back and not
+   seeded. A seeded run reports as `<surface> [rich]` or `[empty]`.
 4. **Minn's own pages**: `roundtrip-pages-capture.js` does the same for settings
    sections, the builders, the email pages, membership plans, orders, products, users
    and store settings, and the same PHP harness replays them. A page whose clean save
    sends anything fails, unless it proves freshness with a stamp (409 on a stale copy).
+5. **Coverage** (`roundtrip-coverage.test.php`, last): every POST, PUT, PATCH and DELETE
+   route under `minn-admin/v1` either had a save replayed and judged by a pass this run,
+   or is listed in `fixtures/roundtrip-coverage.json` with its kind (`delete`, `action`,
+   `create`, `clean` for a page whose clean save the pages pass proves sends nothing, or
+   `edit`) and why no pass covers it. The `edit` entries are the backlog:
+   saves of loaded values no pass reaches yet. A write route in neither fails the run (a
+   new route: give it a round trip or list it with its reason), as does a listed route a
+   pass now covers (take it off), so the backlog only shrinks. An entry naming a `pass`
+   is one that pass covers when the lab lets it (a page that loaded too slowly, a surface
+   with no item here); a run that misses it says so. `MINN_RT_COVERAGE=write` rewrites
+   the fixture from the run, guessing a new route's kind and marking it unreviewed, which
+   fails until someone writes the reason.
 
 Passes 3 and 4 replay inside a database transaction that is rolled back, so the lab's
 items end exactly as they started. Each harness keeps a ratchet of open findings in its
