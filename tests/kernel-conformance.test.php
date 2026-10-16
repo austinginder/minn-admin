@@ -2332,6 +2332,44 @@ if ( ! method_exists( 'Minn_Admin_Kernel', 'table_refused' ) ) {
 	$check( 'a whole table: a copy of a refused table is refused, under a word before or after, another site\'s prefix, any case', ! in_array( false, $tr_copies, true ), wp_json_encode( $tr_copies ) );
 	$check( 'a whole table: a copy of a table shown whole is shown', ! $tr( $p . 'minn_conf_tr_open_bak' ) );
 	$check( 'a whole table: a one-word name is refused whole, never found inside another name', $tr( $p . 'minnconfword' ) && ! $tr( $p . 'minnconfword_old' ) && ! $tr( $p . 'old_minnconfword' ) );
+
+	// The vendor's other tables holding the same data ('tables') take the
+	// source's own answer, copies included.
+	$tr_more_gate = false;
+	Minn_Admin_Kernel::resource( 'minn-conformance/tr-more', $tr_def( 'minn_conf_tr_more', function () use ( &$tr_more_gate ) {
+		return $tr_more_gate;
+	}, array( 'source' => array( 'tables' => array( 'minn_conf_tr_more_fields', array( 'table' => 'minn_conf_tr_more_net', 'network' => true ) ) ) ) ) );
+	$tr_more_shut = array( $tr( $p . 'minn_conf_tr_more_fields' ), $tr( $wpdb->base_prefix . 'minn_conf_tr_more_net' ), $tr( $p . 'minn_conf_tr_more_fields_bak' ) );
+	$tr_more_gate = true;
+	$tr_more_open = array( $tr( $p . 'minn_conf_tr_more_fields' ), $tr( $wpdb->base_prefix . 'minn_conf_tr_more_net' ) );
+	$check( "a whole table: a resource's other tables are refused with it, copies and a network one included, and shown with it", ! in_array( false, $tr_more_shut, true ) && ! in_array( true, $tr_more_open, true ), wp_json_encode( array( $tr_more_shut, $tr_more_open ) ) );
+	$tr_more_viewer = array( 'owner' => 3 );
+	Minn_Admin_Kernel::resource( 'minn-conformance/tr-more-viewer', $tr_def( 'minn_conf_tr_mview', '__return_true', array(
+		'source' => array(
+			'tables' => array( 'minn_conf_tr_mview_pay' ),
+			'where'  => function () use ( &$tr_more_viewer ) {
+				return $tr_more_viewer;
+			},
+			'viewer' => true,
+		),
+	) ) );
+	$check( "a whole table: a viewer-scoped resource's other tables follow its scope", $tr( $p . 'minn_conf_tr_mview_pay' ) );
+	$tr_more_refused = function ( $id ) {
+		foreach ( Minn_Admin_Kernel::refused() as $m ) {
+			if ( false !== strpos( $m, $id ) ) {
+				return true;
+			}
+		}
+		return false;
+	};
+	Minn_Admin_Kernel::resource( 'minn-conformance/tr-more-bad', $tr_def( 'minn_conf_tr_mbad', '__return_true', array( 'source' => array( 'tables' => 'minn_conf_tr_mbad_fields' ) ) ) );
+	Minn_Admin_Kernel::resource( 'minn-conformance/tr-more-nosrc', array(
+		'gates'  => array( 'view' => '__return_true' ),
+		'source' => array( 'rows' => '__return_empty_array', 'tables' => array( 'minn_conf_tr_mnosrc' ) ),
+		'list'   => array( 'fields' => array( 'id' => 'int' ) ),
+	) );
+	Minn_Admin_Kernel::resources();
+	$check( "a whole table: 'tables' that is not a list of names, or beside no source table, is a declaration the kernel refuses", $tr_more_refused( 'tr-more-bad' ) && $tr_more_refused( 'tr-more-nosrc' ) && ! $tr_more_refused( 'tr-more:' ) && ! $tr_more_refused( 'tr-more-viewer' ) );
 }
 
 // --- 2. Every real declaration ----------------------------------------------

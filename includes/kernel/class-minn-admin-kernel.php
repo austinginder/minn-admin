@@ -41,14 +41,18 @@
  *                 //           column anywhere may be "alias.col"; 'columns' => array( 'c.email' =>
  *                 //           'customer_email' ) names a joined column in the row
  *                 //           'where'   => conditions | callable(): conditions,
- *                 //           'viewer'  => true )   // the where is the viewer's own row scope
+ *                 //           'viewer'  => true,    // the where is the viewer's own row scope
  *                 //                                    (a provider's own bookings), not only a slice
+ *                 //           'tables'  => array( 'wpforms_entry_fields', … ) )   // the vendor's other
+ *                 //                                    tables holding this data (entry fields, payments),
+ *                 //                                    each a name or a table spec, on the source's prefix
  *                 // 'where' holds for every read of the source: the list, an item, a status
  *                 // card's counts (a site column, a vendor's own row scope); an array source
  *                 // is held to it in PHP. A callable that answers anything but an array
  *                 // matches nothing. A missing table is an empty list and a 404. A reader of
  *                 // whole tables (table_refused()) admits a 'viewer' source only to someone
- *                 // its where answers array() for.
+ *                 // its where answers array() for, and gives each of its 'tables' the
+ *                 // source's own answer. No read routes ever touch 'tables'.
  *                 // or array( 'rows' => callable(): array[] )   // a vendor's list in memory (an option, an
  *                 //    API's queue), in the order to show it: the kernel applies the facets, search
  *                 //    (any declared column contains the term), range and page to it in PHP
@@ -166,7 +170,7 @@ class Minn_Admin_Kernel {
 	 */
 	const KEYS = array(
 		'resource' => array( 'active', 'gates', 'item_gate', 'labels', 'source', 'list', 'item', 'reads', 'create', 'actions', 'id', 'file' ),
-		'source'   => array( 'table', 'key', 'columns', 'detail', 'network', 'joins', 'where', 'viewer', 'rows', 'list', 'get', 'exists' ),
+		'source'   => array( 'table', 'key', 'columns', 'detail', 'network', 'joins', 'where', 'viewer', 'tables', 'rows', 'list', 'get', 'exists' ),
 		'join'     => array( 'table', 'network', 'core', 'on', 'first' ),
 		'list'     => array( 'per_page', 'max', 'filter', 'tab', 'scope', 'facets', 'search', 'range', 'order', 'sort', 'keys', 'batch', 'row', 'fields' ),
 		'filter'   => array( 'param', 'column', 'values', 'default', 'order', 'many' ),
@@ -368,8 +372,9 @@ class Minn_Admin_Kernel {
 	 * it reads, for a screen that shows tables raw (the database browser), so
 	 * the vendor rule an adapter applies to its own list holds there too.
 	 *
-	 * A table a resource reads as its source is refused when any resource
-	 * reading it so does not show the viewer all of it: its view gate says no,
+	 * A table a resource reads as its source, or names among the vendor's
+	 * other tables holding the same data ('tables'), is refused when any
+	 * resource reading it so does not show the viewer all of it: its view gate says no,
 	 * its scope admits less than every row, it has a tab gate and no scope to
 	 * say which tabs pass, its fixed condition cannot be read, or that
 	 * condition is the viewer's own scope ('viewer') and narrows anything. A
@@ -498,6 +503,10 @@ class Minn_Admin_Kernel {
 				continue;
 			}
 			$add( array( 'table' => $src['table'], 'network' => ! empty( $src['network'] ) ), $id, 'source' );
+			// The vendor's other tables holding this data take the source's answer.
+			foreach ( (array) ( $src['tables'] ?? array() ) as $t ) {
+				$add( is_array( $t ) ? $t : array( 'table' => $t, 'network' => ! empty( $src['network'] ) ), $id, 'source' );
+			}
 			foreach ( (array) ( $src['joins'] ?? array() ) as $j ) {
 				if ( is_array( $j ) && empty( $j['core'] ) && isset( $j['table'] ) ) {
 					$add( $j, $id, 'read' );
@@ -662,6 +671,17 @@ class Minn_Admin_Kernel {
 		if ( '' === $why && array_key_exists( 'exists', (array) ( $def['source'] ?? array() ) ) && ! is_callable( $def['source']['exists'] ) ) {
 			// One that is not callable would leave gone to the source's own read.
 			$why = 'source.exists is not callable';
+		}
+		if ( '' === $why && array_key_exists( 'tables', (array) ( $def['source'] ?? array() ) ) ) {
+			// A list the kernel cannot read would leave those tables to nobody's rule.
+			$more = $def['source']['tables'];
+			$bad  = ! is_array( $more ) || ! isset( $def['source']['table'] );
+			foreach ( is_array( $more ) ? $more : array() as $t ) {
+				$bad = $bad || ! ( ( is_string( $t ) && '' !== $t ) || ( is_array( $t ) && is_string( $t['table'] ?? null ) ) );
+			}
+			if ( $bad ) {
+				$why = 'source.tables lists table names beside a source table';
+			}
 		}
 		return $why;
 	}
