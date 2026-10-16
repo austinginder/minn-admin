@@ -5565,22 +5565,24 @@ class Minn_Admin_REST {
 
 	/**
 	 * Locales that a real reader depends on: the configured site language,
-	 * every locale a user has personally selected, every language an active
+	 * every locale a user has personally selected, every language a
 	 * multilingual plugin serves visitors and, on a network, the language of
 	 * every other site. These can never be removed. Returns the site
 	 * language, a map locale => user count, a map locale => site count and a
 	 * map locale => the plugin that serves it, plus two answers that keep
-	 * every language: the network was too large to walk ('large'), or a
-	 * multilingual plugin runs whose languages cannot be read here
-	 * ('multilingual', that plugin's name).
+	 * every language: the network was too large to walk ('large'), or
+	 * something that may switch visitors between languages runs and its
+	 * list cannot be read ('multilingual', its name).
 	 *
 	 * Every site of a network reads the one shared WP_LANG_DIR and keeps its
 	 * own WPLANG; a site with none falls back to its own network's (an
 	 * install with several networks has one each). A multilingual plugin
 	 * keeps its languages in its own storage and loads WordPress's packs for
-	 * them, so they are in use however the site and its users are set. Only
-	 * this site's plugin can be asked: one active on any other site of the
-	 * network, or one that does not answer, keeps every language.
+	 * them, so they are in use however the site and its users are set. This
+	 * site's plugins are asked through their own API; on any other site that
+	 * runs one (active there, network-active, or loaded by a must-use
+	 * plugin), its list is read from that site's own tables, and a plugin
+	 * whose list cannot be read there keeps every language.
 	 */
 	private static function protected_locales() {
 		global $wpdb;
@@ -5602,34 +5604,39 @@ class Minn_Admin_REST {
 		// below walks every network.
 		$large = is_multisite() && ( wp_is_large_network() || (int) get_sites( array( 'count' => true, 'number' => 0 ) ) > 10000 );
 		if ( is_multisite() && ! $large ) {
-			$here      = (int) get_current_blog_id();
-			$languages = array();
-			$per_net   = array();
+			$here       = (int) get_current_blog_id();
+			$languages  = array();
+			$sitewide   = array();
+			$everywhere = self::multilingual_mu_plugins();
 			foreach ( get_sites( array( 'number' => 0 ) ) as $s ) {
 				$blog_id = (int) $s->blog_id;
 				$net     = (int) $s->network_id;
 				if ( ! isset( $languages[ $net ] ) ) {
 					$languages[ $net ] = (string) get_network_option( $net, 'WPLANG', '' );
+					$sitewide[ $net ]  = self::multilingual_plugins_in( array_keys( (array) get_network_option( $net, 'active_sitewide_plugins', array() ) ) );
 				}
-				$per_net[ $net ] = isset( $per_net[ $net ] ) ? $per_net[ $net ] + 1 : 1;
 				$opts = $wpdb->get_results( 'SELECT option_name, option_value FROM ' . $wpdb->get_blog_prefix( $blog_id ) . "options WHERE option_name IN ( 'WPLANG', 'active_plugins' )", OBJECT_K );
 				$loc  = isset( $opts['WPLANG'] ) ? (string) $opts['WPLANG']->option_value : $languages[ $net ];
 				if ( '' !== $loc && 'en_US' !== $loc ) {
 					$sites[ $loc ] = isset( $sites[ $loc ] ) ? $sites[ $loc ] + 1 : 1;
 				}
-				if ( '' === $multilingual && $blog_id !== $here && isset( $opts['active_plugins'] ) ) {
-					$multilingual = self::multilingual_plugin_in( maybe_unserialize( $opts['active_plugins']->option_value ) );
+				if ( '' !== $multilingual || $blog_id === $here ) {
+					continue;
 				}
-			}
-			// Network-active on a network with any site but this one: each of
-			// those sites keeps its own list.
-			foreach ( $per_net as $net => $count ) {
-				if ( '' !== $multilingual ) {
-					break;
+				$runs = array_values( array_unique( array_merge(
+					self::multilingual_plugins_in( isset( $opts['active_plugins'] ) ? maybe_unserialize( $opts['active_plugins']->option_value ) : array() ),
+					$sitewide[ $net ],
+					$everywhere
+				) ) );
+				if ( ! $runs ) {
+					continue;
 				}
-				if ( $count > 1 || (int) get_current_network_id() !== (int) $net ) {
-					$multilingual = self::multilingual_plugin_in( array_keys( (array) get_network_option( $net, 'active_sitewide_plugins', array() ) ) );
+				$read = self::site_multilingual_locales( $blog_id, $runs );
+				if ( ! is_array( $read ) ) {
+					$multilingual = (string) $read;
+					continue;
 				}
+				$plugins += $read;
 			}
 		}
 		return array(
@@ -5643,41 +5650,97 @@ class Minn_Admin_REST {
 	}
 
 	/**
-	 * The multilingual plugins whose front-end languages are WordPress's own
-	 * packs: name => plugin folders. Each one's list is read by
-	 * multilingual_locales().
+	 * The multilingual plugins that switch visitors between WordPress's own
+	 * language packs: name => plugin folders. Polylang, WPML, TranslatePress,
+	 * Bogo and qTranslate-XT are read by multilingual_locales() (and the
+	 * first three by site_multilingual_locales() on other sites); the rest
+	 * have no list Minn can read, so any of them running keeps every
+	 * language.
 	 */
 	const MULTILINGUAL_PLUGINS = array(
-		'Polylang'       => array( 'polylang', 'polylang-pro' ),
-		'WPML'           => array( 'sitepress-multilingual-cms' ),
-		'TranslatePress' => array( 'translatepress-multilingual' ),
-		'Bogo'           => array( 'bogo' ),
-		'qTranslate-XT'  => array( 'qtranslate-xt', 'qtranslate-x' ),
+		'Polylang'            => array( 'polylang', 'polylang-pro' ),
+		'WPML'                => array( 'sitepress-multilingual-cms' ),
+		'TranslatePress'      => array( 'translatepress-multilingual' ),
+		'Bogo'                => array( 'bogo' ),
+		'qTranslate-XT'       => array( 'qtranslate-xt', 'qtranslate-x' ),
+		'WPGlobus'            => array( 'wpglobus' ),
+		'WP Multilang'        => array( 'wp-multilang' ),
+		'Falang'              => array( 'falang' ),
+		'Sublanguage'         => array( 'sublanguage' ),
+		'xili-language'       => array( 'xili-language' ),
+		'Ceceppa Multilingua' => array( 'ceceppa-multilingua' ),
 	);
 
 	/**
-	 * The name of the first multilingual plugin in a list of active plugin
-	 * files, or ''.
+	 * Callbacks on the locale filters that are known to leave the locale as
+	 * it is, by hook => plugin folders.
+	 */
+	const LOCALE_HOOKS_PASSED = array(
+		// Gravity SMTP installs its error handler on the earliest filter it
+		// can and returns what it was given.
+		'pre_determine_locale' => array( 'gravitysmtp' ),
+	);
+
+	/**
+	 * The names of the multilingual plugins in a list of active plugin
+	 * files.
 	 *
 	 * @param mixed $active Plugin files ('folder/file.php').
-	 * @return string
+	 * @return string[]
 	 */
-	private static function multilingual_plugin_in( $active ) {
+	private static function multilingual_plugins_in( $active ) {
+		$out = array();
 		foreach ( (array) $active as $file ) {
-			$folder = strtolower( strtok( (string) $file, '/' ) );
+			$folder = strtolower( (string) strtok( (string) $file, '/' ) );
 			foreach ( self::MULTILINGUAL_PLUGINS as $name => $folders ) {
 				if ( in_array( $folder, $folders, true ) ) {
-					return $name;
+					$out[ $name ] = $name;
 				}
 			}
 		}
-		return '';
+		return array_values( $out );
+	}
+
+	/**
+	 * The multilingual plugins a must-use plugin may load. Every site of the
+	 * install runs WPMU_PLUGIN_DIR, so one there runs on every site: a
+	 * folder of its name there, or a must-use file that names it.
+	 *
+	 * @return string[]
+	 */
+	private static function multilingual_mu_plugins() {
+		if ( ! defined( 'WPMU_PLUGIN_DIR' ) || ! is_dir( WPMU_PLUGIN_DIR ) ) {
+			return array();
+		}
+		$found = array();
+		foreach ( (array) scandir( WPMU_PLUGIN_DIR ) as $entry ) {
+			$entry = (string) $entry;
+			if ( '' === $entry || '.' === $entry[0] ) {
+				continue;
+			}
+			$path = WPMU_PLUGIN_DIR . '/' . $entry;
+			$text = strtolower( $entry );
+			if ( is_file( $path ) && '.php' === substr( $text, -4 ) && filesize( $path ) <= 262144 ) {
+				$text .= "\n" . strtolower( (string) file_get_contents( $path ) );
+			}
+			foreach ( self::MULTILINGUAL_PLUGINS as $name => $folders ) {
+				foreach ( $folders as $folder ) {
+					if ( preg_match( '/(?<![a-z0-9_-])' . preg_quote( $folder, '/' ) . '(?![a-z0-9_-])/', $text ) ) {
+						$found[ $name ] = $name;
+					}
+				}
+			}
+		}
+		return array_values( $found );
 	}
 
 	/**
 	 * Every language this site's multilingual plugins serve visitors, as
-	 * locale => plugin name; or, when one is active but its list cannot be
-	 * read, that plugin's name, so the caller keeps every language.
+	 * locale => plugin name; or, when something that may switch visitors
+	 * between languages runs and its list cannot be read, its name, so the
+	 * caller keeps every language. That is a listed plugin whose list does
+	 * not answer, one with no list Minn reads, or anything outside WordPress
+	 * and Minn that hooks the locale filters (locale_hook_owner()).
 	 *
 	 * @return array|string
 	 */
@@ -5696,10 +5759,17 @@ class Minn_Admin_REST {
 			'WPML'           => array(
 				defined( 'ICL_SITEPRESS_VERSION' ),
 				static function () {
+					// Its own tables hold every active language, hidden ones
+					// included; the API adds any a filter supplies.
+					$table = self::wpml_site_locales( $GLOBALS['wpdb']->prefix );
+					if ( null === $table ) {
+						return null;
+					}
 					$langs = apply_filters( 'wpml_active_languages', null, array( 'skip_missing' => 0 ) );
-					return is_array( $langs ) && $langs ? array_map( static function ( $l ) {
-						return is_array( $l ) && isset( $l['default_locale'] ) ? $l['default_locale'] : null;
-					}, array_values( $langs ) ) : null;
+					foreach ( is_array( $langs ) ? $langs : array() as $l ) {
+						$table[] = is_array( $l ) && isset( $l['default_locale'] ) ? $l['default_locale'] : null;
+					}
+					return $table;
 				},
 			),
 			'TranslatePress' => array(
@@ -5737,31 +5807,249 @@ class Minn_Admin_REST {
 				},
 			),
 		);
-		$folders = array_map( static function ( $file ) {
-			return strtolower( (string) strtok( (string) $file, '/' ) );
-		}, $here );
-		$served  = array();
-		foreach ( $readers as $name => $reader ) {
+		$listed = self::multilingual_plugins_in( $here );
+		$served = array();
+		foreach ( self::MULTILINGUAL_PLUGINS as $name => $folders ) {
 			// Its code is loaded, or the site lists it as active and it never
 			// loaded: either way only its own list can say what it serves.
-			$present = $reader[0] || array_intersect( self::MULTILINGUAL_PLUGINS[ $name ], $folders );
+			$present = ( isset( $readers[ $name ] ) && $readers[ $name ][0] ) || in_array( $name, $listed, true );
 			if ( ! $present ) {
 				continue;
 			}
-			$list = $reader[1]();
-			if ( ! is_array( $list ) ) {
+			$list = isset( $readers[ $name ] ) ? $readers[ $name ][1]() : null;
+			if ( ! self::locale_list_ok( $list ) ) {
 				return $name;
 			}
 			foreach ( $list as $loc ) {
-				if ( ! is_string( $loc ) || ! preg_match( '/^[A-Za-z0-9_@.-]+$/', $loc ) ) {
-					return $name;
-				}
 				if ( 'en_US' !== $loc && ! isset( $served[ $loc ] ) ) {
 					$served[ $loc ] = $name;
 				}
 			}
 		}
-		return $served;
+		$owner = self::locale_hook_owner();
+		return '' !== $owner ? $owner : $served;
+	}
+
+	/**
+	 * Every language the multilingual plugins named run on another site
+	 * serve there, read from that site's own tables, as locale => plugin
+	 * name; or the name of the first whose list cannot be read there.
+	 *
+	 * @param int      $blog_id Site.
+	 * @param string[] $names   MULTILINGUAL_PLUGINS names that run there.
+	 * @return array|string
+	 */
+	private static function site_multilingual_locales( $blog_id, array $names ) {
+		global $wpdb;
+		$prefix = $wpdb->get_blog_prefix( (int) $blog_id );
+		$quiet  = $wpdb->suppress_errors( true );
+		$served = array();
+		$failed = '';
+		foreach ( $names as $name ) {
+			if ( 'Polylang' === $name ) {
+				$list = self::polylang_site_locales( $prefix );
+			} elseif ( 'WPML' === $name ) {
+				$list = self::wpml_site_locales( $prefix );
+			} elseif ( 'TranslatePress' === $name ) {
+				$list = self::option_from( $prefix, 'trp_settings' );
+				$list = is_array( $list ) && isset( $list['translation-languages'] ) ? $list['translation-languages'] : null;
+			} else {
+				$list = null;
+			}
+			if ( ! self::locale_list_ok( $list ) ) {
+				$failed = $name;
+				break;
+			}
+			foreach ( $list as $loc ) {
+				if ( 'en_US' !== $loc && ! isset( $served[ $loc ] ) ) {
+					$served[ $loc ] = $name;
+				}
+			}
+		}
+		$wpdb->suppress_errors( $quiet );
+		return '' !== $failed ? $failed : $served;
+	}
+
+	/**
+	 * Whether a plugin's answer is a list of locales.
+	 *
+	 * @param mixed $list The answer.
+	 * @return bool
+	 */
+	private static function locale_list_ok( $list ) {
+		if ( ! is_array( $list ) ) {
+			return false;
+		}
+		foreach ( $list as $loc ) {
+			if ( ! is_string( $loc ) || ! preg_match( '/^[A-Za-z0-9_@.-]+$/', $loc ) ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * One option of a site, read from its own table (unserialized), or null.
+	 *
+	 * @param string $prefix The site's table prefix.
+	 * @param string $name   Option name.
+	 * @return mixed
+	 */
+	private static function option_from( $prefix, $name ) {
+		global $wpdb;
+		$raw = $wpdb->get_var( $wpdb->prepare( 'SELECT option_value FROM ' . $prefix . 'options WHERE option_name = %s', $name ) );
+		return null === $raw || '' !== $wpdb->last_error ? null : maybe_unserialize( $raw );
+	}
+
+	/**
+	 * Polylang's languages on a site, from its own terms: each 'language'
+	 * term keeps its locale in its description. Null when that cannot be
+	 * read, or when there are no such terms (a store Minn cannot see).
+	 *
+	 * @param string $prefix The site's table prefix.
+	 * @return string[]|null
+	 */
+	private static function polylang_site_locales( $prefix ) {
+		global $wpdb;
+		$rows = $wpdb->get_col( 'SELECT description FROM ' . $prefix . "term_taxonomy WHERE taxonomy = 'language'" );
+		if ( '' !== $wpdb->last_error || ! $rows ) {
+			return null;
+		}
+		$out = array();
+		foreach ( $rows as $raw ) {
+			$data = maybe_unserialize( $raw );
+			if ( is_string( $data ) ) {
+				$data = json_decode( $data, true );
+			}
+			if ( ! is_array( $data ) || ! isset( $data['locale'] ) || ! is_string( $data['locale'] ) ) {
+				return null;
+			}
+			$out[] = $data['locale'];
+		}
+		return $out;
+	}
+
+	/**
+	 * WPML's languages on a site, hidden ones included: every active row of
+	 * its icl_languages table, by its default locale and by any locale
+	 * icl_locale_map gives that code. Null when the table cannot be read.
+	 *
+	 * @param string $prefix The site's table prefix.
+	 * @return string[]|null
+	 */
+	private static function wpml_site_locales( $prefix ) {
+		global $wpdb;
+		$table = $prefix . 'icl_languages';
+		if ( $table !== $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) ) ) ) {
+			return null;
+		}
+		$rows = $wpdb->get_results( 'SELECT code, default_locale FROM `' . $table . '` WHERE active = 1', ARRAY_A );
+		if ( '' !== $wpdb->last_error || ! is_array( $rows ) ) {
+			return null;
+		}
+		$map  = array();
+		$maps = $prefix . 'icl_locale_map';
+		if ( $maps === $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $maps ) ) ) ) {
+			foreach ( (array) $wpdb->get_results( 'SELECT code, locale FROM `' . $maps . '`', ARRAY_A ) as $r ) {
+				$map[ (string) $r['code'] ] = (string) $r['locale'];
+			}
+		}
+		$out = array();
+		foreach ( $rows as $r ) {
+			$out[] = (string) $r['default_locale'];
+			if ( isset( $map[ (string) $r['code'] ] ) ) {
+				$out[] = $map[ (string) $r['code'] ];
+			}
+		}
+		return array_values( array_filter( $out, 'strlen' ) );
+	}
+
+	/**
+	 * What, outside WordPress and Minn, hooks the locale filters (locale,
+	 * determine_locale, pre_determine_locale), which is how a multilingual
+	 * plugin switches visitors between installed packs: its plugin or theme
+	 * name, or the file's name, or '' when nothing does. The plugins
+	 * multilingual_locales() reads, and the callbacks LOCALE_HOOKS_PASSED
+	 * lists, are passed over.
+	 *
+	 * @return string
+	 */
+	private static function locale_hook_owner() {
+		global $wp_filter;
+		$roots = array_filter( array(
+			'core'    => realpath( ABSPATH . WPINC ),
+			'admin'   => realpath( ABSPATH . 'wp-admin' ),
+			'minn'    => realpath( dirname( __DIR__ ) ),
+			'plugins' => realpath( WP_PLUGIN_DIR ),
+			'mu'      => defined( 'WPMU_PLUGIN_DIR' ) ? realpath( WPMU_PLUGIN_DIR ) : false,
+			'themes'  => realpath( get_theme_root() ),
+		) );
+		$read = array();
+		foreach ( array( 'Polylang', 'WPML', 'TranslatePress', 'Bogo', 'qTranslate-XT' ) as $name ) {
+			$read = array_merge( $read, self::MULTILINGUAL_PLUGINS[ $name ] );
+		}
+		$under = static function ( $file, $root ) {
+			return is_string( $root ) && 0 === strpos( $file, rtrim( $root, '/' ) . '/' );
+		};
+		foreach ( array( 'locale', 'determine_locale', 'pre_determine_locale' ) as $hook ) {
+			if ( ! isset( $wp_filter[ $hook ] ) || ! $wp_filter[ $hook ] instanceof WP_Hook ) {
+				continue;
+			}
+			foreach ( $wp_filter[ $hook ]->callbacks as $callbacks ) {
+				foreach ( $callbacks as $cb ) {
+					$fn = $cb['function'];
+					try {
+						if ( is_array( $fn ) && isset( $fn[0], $fn[1] ) ) {
+							$ref = new ReflectionMethod( $fn[0], (string) $fn[1] );
+						} elseif ( is_string( $fn ) && false !== strpos( $fn, '::' ) ) {
+							$ref = new ReflectionMethod( $fn );
+						} elseif ( $fn instanceof Closure || is_string( $fn ) ) {
+							$ref = new ReflectionFunction( $fn );
+						} elseif ( is_object( $fn ) && method_exists( $fn, '__invoke' ) ) {
+							$ref = new ReflectionMethod( $fn, '__invoke' );
+						} else {
+							return __( 'A plugin', 'minn-admin' );
+						}
+					} catch ( \Throwable $e ) {
+						continue;
+					}
+					if ( $ref->isInternal() ) {
+						continue;
+					}
+					$file = realpath( (string) $ref->getFileName() );
+					$file = false === $file ? (string) $ref->getFileName() : $file;
+					if ( $under( $file, $roots['core'] ?? false ) || $under( $file, $roots['admin'] ?? false ) || $under( $file, $roots['minn'] ?? false ) ) {
+						continue;
+					}
+					if ( $under( $file, $roots['plugins'] ?? false ) ) {
+						$folder = strtok( substr( $file, strlen( rtrim( $roots['plugins'], '/' ) ) + 1 ), '/' );
+						if ( in_array( $folder, $read, true ) || in_array( $folder, self::LOCALE_HOOKS_PASSED[ $hook ] ?? array(), true ) ) {
+							continue;
+						}
+						if ( ! function_exists( 'get_plugins' ) ) {
+							require_once ABSPATH . 'wp-admin/includes/plugin.php';
+						}
+						$data = get_plugins( '/' . $folder );
+						$first = $data ? reset( $data ) : array();
+						return ! empty( $first['Name'] ) ? (string) $first['Name'] : (string) $folder;
+					}
+					if ( $under( $file, $roots['mu'] ?? false ) ) {
+						if ( ! function_exists( 'get_plugin_data' ) ) {
+							require_once ABSPATH . 'wp-admin/includes/plugin.php';
+						}
+						$data = is_file( $file ) ? get_plugin_data( $file, false, false ) : array();
+						return ! empty( $data['Name'] ) ? (string) $data['Name'] : basename( $file );
+					}
+					if ( $under( $file, $roots['themes'] ?? false ) ) {
+						$folder = strtok( substr( $file, strlen( rtrim( $roots['themes'], '/' ) ) + 1 ), '/' );
+						$theme  = wp_get_theme( $folder );
+						return $theme->exists() ? (string) $theme->get( 'Name' ) : (string) $folder;
+					}
+					return basename( $file );
+				}
+			}
+		}
+		return '';
 	}
 
 	/**
