@@ -40,7 +40,9 @@ A few properties worth knowing before auditing (details in
   never reaches the app and their PHP never prints into Minn's render paths
   (the one place it runs, a check of which blocks render cleanly enough to
   offer for insertion, discards the output); values are escaped at the
-  render edge.
+  render edge. Preview CSS that exists only once a page has run comes from a
+  sandboxed copy of that page (an opaque origin with no cookies, network or
+  storage), and only stylesheet URLs and CSS text come back from it.
 - When a shim must read third-party serialized storage, it uses a bounded
   parser or constrained decoding, validates the resulting shape, and does
   not instantiate arbitrary classes. An exact vendor class allowlist is
@@ -127,8 +129,13 @@ A few properties worth knowing before auditing (details in
   and JSON columns are not sort keys, and a value search counts at most
   1,000 rows. On a site holding too many credentials to check (more than
   about 200), value searches are refused and every cell of 16 bytes or more
-  is withheld rather than printed unchecked. Activity-log tables are shown
-  as their own screens show them. WooCommerce's own tables (orders,
+  is withheld rather than printed unchecked. A table whose plugin keeps the
+  viewer out of its own screen is left out for them, as Minn's own view of
+  that plugin is: each log and store read through the kernel (its view
+  gate and row scope), and WP Activity Log's, Simple History's, Stream's,
+  Activity Log's, PW Gift Cards' and WP Mail Logging's tables, copies
+  included, also while the plugin is inactive. The activity-log tables that
+  are shown are shown as their own screens show them. WooCommerce's own tables (orders,
   addresses, sessions, and its logs when it keeps them in the database), and
   copies of them (a name containing `woocommerce`, or `wc` with no letter
   directly before or after it, such as `wp_bak_wc_orders`), are left out for
@@ -143,6 +150,9 @@ A few properties worth knowing before auditing (details in
   networks (WP Multi Network), install-wide tools (the database browser,
   the logs, the wp-config switches, backup archives and migrations and
   their connection keys) belong to the main network's super admins.
+  Deleting a site, network plugin and theme switches, and network
+  administrator changes need the network's own super admin, and are
+  refused before anything runs.
 - Hiding a plugin's screens because a menu tool (White Label CMS) hid its
   wp-admin menu is presentation only; the plugin's routes keep their own
   permission checks. It follows what Minn last saw in wp-admin for that
