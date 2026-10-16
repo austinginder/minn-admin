@@ -473,7 +473,18 @@ class Minn_Admin_Kernel {
 		if ( isset( $memo[ $key ] ) ) {
 			return $memo[ $key ];
 		}
-		$core = array_map( 'strtolower', array_values( $wpdb->tables( 'all', true ) ) );
+		// Core's own tables from wpdb's class defaults: plugins append their
+		// tables to the live lists ($wpdb->tables), which would count them as
+		// core and leave them to nobody's rule.
+		$core     = array( strtolower( $wpdb->users ), strtolower( $wpdb->usermeta ) );
+		$defaults = get_class_vars( 'wpdb' );
+		foreach ( array_merge( (array) ( $defaults['tables'] ?? array() ), (array) ( $defaults['old_tables'] ?? array() ) ) as $t ) {
+			$core[] = strtolower( $wpdb->prefix . $t );
+			$core[] = strtolower( $wpdb->base_prefix . $t );
+		}
+		foreach ( array_merge( (array) ( $defaults['global_tables'] ?? array() ), (array) ( $defaults['ms_global_tables'] ?? array() ) ) as $t ) {
+			$core[] = strtolower( $wpdb->base_prefix . $t );
+		}
 		$out  = array( 'tables' => array(), 'bases' => array() );
 		$add  = function ( $spec, $id, $as ) use ( &$out, $core, $wpdb ) {
 			try {

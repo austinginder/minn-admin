@@ -2271,6 +2271,9 @@ if ( ! method_exists( 'Minn_Admin_Kernel', 'table_refused' ) ) {
 	} ) );
 	Minn_Admin_Kernel::resource( 'minn-conformance/tr-off', array_merge( $tr_def( 'minn_conf_tr_off', '__return_false' ), array( 'active' => false ) ) );
 	Minn_Admin_Kernel::resource( 'minn-conformance/tr-core', $tr_def( 'posts', '__return_false' ) );
+	// A plugin may list its own table in $wpdb->tables; that does not make it core's.
+	$wpdb->tables[] = 'minn_conf_tr_listed';
+	Minn_Admin_Kernel::resource( 'minn-conformance/tr-listed', $tr_def( 'minn_conf_tr_listed', '__return_false' ) );
 	Minn_Admin_Kernel::resource( 'minn-conformance/tr-net', $tr_def( 'minn_conf_tr_net', '__return_false', array( 'source' => array( 'network' => true ) ) ) );
 	$tr = function ( $name ) {
 		return Minn_Admin_Kernel::table_refused( $name );
@@ -2280,6 +2283,8 @@ if ( ! method_exists( 'Minn_Admin_Kernel', 'table_refused' ) ) {
 	$check( "a whole table: one whose resource's gate says no is refused, in any case", $tr( $p . 'minn_conf_tr_shut' ) && $tr( strtoupper( $p . 'minn_conf_tr_shut' ) ) );
 	$check( 'a whole table: a join only a refusing resource reads is refused, one another resource admits is not', $tr( $p . 'minn_conf_tr_shutjoin' ) && ! $tr( $p . 'minn_conf_tr_shared' ) );
 	$check( 'a whole table: a core table a resource joins or reads a slice of is never refused', ! $tr( $wpdb->users ) && ! $tr( $wpdb->posts ) );
+	$check( "a whole table: a plugin's table listed in \$wpdb->tables is still the plugin's, and refused with its resource", $tr( $p . 'minn_conf_tr_listed' ) );
+	$wpdb->tables = array_values( array_diff( $wpdb->tables, array( 'minn_conf_tr_listed' ) ) );
 	$tr_scope_some = $tr( $p . 'minn_conf_tr_scope' );
 	$tr_scope      = null;
 	$tr_scope_all  = $tr( $p . 'minn_conf_tr_scope' );
