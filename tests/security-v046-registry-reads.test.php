@@ -303,6 +303,44 @@ if ( ! $admin || ! current_user_can( 'manage_options' ) || ( is_multisite() && !
 		}
 		$check( "#7 every resource whose own list refuses the role leaves its table out of the browser ({$n} tables)", $n > 0 && ! $disagree, implode( ', ', $disagree ) );
 
+		// Round three: the vendor's other tables holding the same data
+		// ('tables') follow the resource's own table, both ways.
+		$apart = array();
+		$m     = 0;
+		$names = $listed();
+		foreach ( Minn_Admin_Kernel::resources() as $id => $res ) {
+			if ( 0 === strpos( $id, 'minn-conformance/' ) || empty( $res['source']['tables'] ) || ! is_string( $res['source']['table'] ?? null ) ) {
+				continue;
+			}
+			$net  = ! empty( $res['source']['network'] );
+			$own  = strtolower( ( $net ? $wpdb->base_prefix : $wpdb->prefix ) . $res['source']['table'] );
+			$real = function ( $t ) use ( $wpdb ) {
+				return 0 === strcasecmp( (string) $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $t ) ) ), $t );
+			};
+			if ( ! $real( $own ) ) {
+				continue;
+			}
+			foreach ( (array) $res['source']['tables'] as $t ) {
+				$t = strtolower( is_array( $t ) ? ( ( ! empty( $t['network'] ) ? $wpdb->base_prefix : $wpdb->prefix ) . $t['table'] ) : ( ( $net ? $wpdb->base_prefix : $wpdb->prefix ) . $t ) );
+				if ( ! $real( $t ) ) {
+					continue;
+				}
+				$m++;
+				if ( in_array( $own, $names, true ) !== in_array( $t, $names, true ) ) {
+					$apart[] = $t . ( in_array( $own, $names, true ) ? ' (hidden, its table shown)' : ' (shown, its table hidden)' );
+				}
+			}
+		}
+		$check( "#7 round three: each resource's other tables (payments, entry fields, meta, logs) are shown or left out with its own table ({$m} tables)", $m > 0 && ! $apart, implode( ', ', $apart ) );
+		$no_flag = array();
+		foreach ( array( 'amelia/appointments', 'latepoint/bookings', 'latepoint/event-registrations', 'jet-booking/bookings', 'bookly/appointments' ) as $id ) {
+			$res = Minn_Admin_Kernel::resources()[ $id ] ?? null;
+			if ( $res && empty( $res['source']['viewer'] ) ) {
+				$no_flag[] = $id;
+			}
+		}
+		$check( "#7 round three: every booking list held to a provider's, agent's, vendor's or staff member's own rows says so ('viewer')", ! $no_flag, implode( ', ', $no_flag ) );
+
 		// A plugin that cannot say who may read its log (inactive here) does
 		// not have its log shown.
 		foreach ( array( 'simple_history' => 'Simple_History\\Simple_History', 'stream' => 'WP_Stream\\Plugin' ) as $base => $class ) {
@@ -445,13 +483,13 @@ if ( ! $admin || ! current_user_can( 'manage_options' ) || ( is_multisite() && !
 		};
 		$listed = $names();
 		$out    = array();
-		foreach ( array( 'amelia_appointments', 'amelia_users', 'amelia_customer_bookings', 'amelia_services' ) as $b ) {
+		foreach ( array( 'amelia_appointments', 'amelia_users', 'amelia_customer_bookings', 'amelia_services', 'amelia_payments' ) as $b ) {
 			if ( in_array( $wpdb->prefix . $b, $listed, true ) ) {
 				$out[] = $b;
 			}
 		}
 		list( $rows ) = $call( 'GET', '/minn-admin/v1/db/rows', null, array( 'table' => $wpdb->prefix . 'amelia_appointments' ) );
-		$check( "#7 round two: a provider Amelia holds to their own appointments (Minn's list: {$own}) browses none of its appointments, customers or services whole", 200 === $own && ! $out && 404 === $rows, implode( ', ', $out ) . ' rows=' . $rows );
+		$check( "#7 round two: a provider Amelia holds to their own appointments (Minn's list: {$own}) browses none of its appointments, customers, services or payments whole", 200 === $own && ! $out && 404 === $rows, implode( ', ', $out ) . ' rows=' . $rows );
 		wp_set_current_user( $admin );
 		$listed = $names();
 		$check( '#7 round two control: an administrator Amelia shows every appointment still browses them and their customers', in_array( $wpdb->prefix . 'amelia_appointments', $listed, true ) && in_array( $wpdb->prefix . 'amelia_users', $listed, true ) );
