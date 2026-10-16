@@ -11,16 +11,95 @@
  *   MINN_TEST_URL=https://wpfreighter.localhost MINN_TEST_USER=minn-freighter \
  *   MINN_TEST_PASS=… node wp-freighter.test.js
  *
- * The write loop creates a throwaway tenant (a real wp_install under a new
- * table prefix, ~1s) and removes it again through the DELETE route, so the
- * host's own tenant list ends as it began. Domain mapping decides whether a
- * hostname is required; the suite derives one from the test host so a
- * wildcard dev mapping (*.wpfreighter.localhost) resolves it.
+ * The write loop creates exactly one throwaway tenant (a real wp_install
+ * under a new table prefix, ~1s) and removes it again through the DELETE
+ * route, so the host's own tenant list ends as it began. Domain mapping
+ * decides whether a hostname is required; the suite derives one from the test
+ * host so a wildcard dev mapping (*.wpfreighter.localhost) resolves it.
+ *
+ * A tenant left behind is not harmless here. Create and clone start by
+ * dropping every table under the new id's prefix, and the main site can sit
+ * on a stacked_<n>_ prefix itself (a tenant pulled out to its own install),
+ * so a WP Freighter that hands out ids as max + 1 replaces the main site the
+ * moment the tenant list reaches n - 1. So the write loop runs only when:
+ *   - WP-CLI reaches the host (MINN_TEST_WP, or the Cove site folder named
+ *     after the test host beside this one), so the tenant can be removed
+ *     however the suite ends: a kill or a crash runs onExit's synchronous
+ *     delete, as finally does;
+ *   - the id WP Freighter will hand out next has a prefix nothing uses.
+ * The removal deletes only a tenant this run's create added, named
+ * "Minn suite", on the suite's hostname, never one whose prefix is the main
+ * site's. A tenant with those marks that an earlier run left (a SIGKILL
+ * skips every hook) is removed first, the same way.
  */
-const { launch, login, reporter, BASE } = require( './helpers' );
+const fs = require( 'fs' );
+const path = require( 'path' );
+const { execFileSync } = require( 'child_process' );
+const { launch, login, reporter, onExit, BASE, WP } = require( './helpers' );
 
 const HOST = new URL( BASE ).host;
 const TENANT_DOMAIN = 'minn-suite.' + HOST;
+const SUITE_NAME = /^Minn suite/;
+
+// The host's WordPress root for WP-CLI: MINN_TEST_WP, or the Cove site
+// folder named after the test host beside the default site's.
+const WP_ROOT = process.env.MINN_TEST_WP || path.resolve( WP, '..', '..', HOST, 'public' );
+// PHP rides stdin (eval-file -), so the shell never expands its $vars. It
+// answers one JSON line after a marker, so a plugin's notice cannot be read
+// as the answer.
+const cli = ( php ) => {
+	const out = execFileSync( 'wp', [ `--path=${ WP_ROOT }`, 'eval-file', '-' ], { input: '<?php ' + php, encoding: 'utf8', stdio: [ 'pipe', 'pipe', 'ignore' ] } );
+	const line = out.split( '\n' ).reverse().find( ( l ) => l.startsWith( 'MINNJSON ' ) );
+	return line ? JSON.parse( line.slice( 9 ) ) : null;
+};
+// WP Freighter's own reading of the main site's prefix (get_primary_prefix).
+const PRIMARY = `
+	global $wpdb;
+	$primary = defined( 'TABLE_PREFIX' ) && 'TABLE_PREFIX' !== TABLE_PREFIX ? TABLE_PREFIX : $wpdb->prefix;
+`;
+
+// The host's tenants and whether a create is safe now (see the header).
+const PREFLIGHT = PRIMARY + `
+	$out = array( 'host' => (string) wp_parse_url( home_url(), PHP_URL_HOST ), 'ok' => false );
+	if ( ! class_exists( '\\WPFreighter\\Site' ) || ! method_exists( '\\WPFreighter\\Site', 'next_id' ) ) {
+		$out['why'] = 'this WP Freighter has no next_id() prefix check';
+		echo 'MINNJSON ' . wp_json_encode( $out ) . "\n";
+		return;
+	}
+	$sites = ( new \\WPFreighter\\Sites() )->get();
+	$next  = new ReflectionMethod( '\\WPFreighter\\Site', 'next_id' );
+	$next->setAccessible( true );
+	$id    = (int) $next->invoke( null, $sites );
+	$prefix = "stacked_{$id}_";
+	$used   = $wpdb->get_col( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $prefix ) . '%' ) );
+	$out['next']    = $id;
+	$out['prefix']  = $primary;
+	$out['tenants'] = array_map( function ( $s ) {
+		return array( 'id' => (int) $s['stacked_site_id'], 'name' => (string) ( $s['name'] ?? '' ), 'domain' => (string) ( $s['domain'] ?? '' ) );
+	}, array_values( (array) $sites ) );
+	$out['ok']  = $prefix !== $primary && $prefix !== $wpdb->prefix && ! $used;
+	$out['why'] = $out['ok'] ? '' : "the next tenant id {$id} would take {$prefix}, which " . ( $used ? count( $used ) . ' table(s) already use' : 'the main site uses' );
+	echo 'MINNJSON ' . wp_json_encode( $out ) . "\n";
+`;
+
+// Delete the tenants this run (or an earlier, killed one) made: not in
+// keep, named "Minn suite…", on domain, and never the main site's prefix.
+const removeSuiteTenants = ( keep, domain ) => cli( PRIMARY + `
+	$keep = array_map( 'intval', json_decode( '${ JSON.stringify( keep ) }', true ) );
+	$gone = array();
+	foreach ( (array) ( new \\WPFreighter\\Sites() )->get() as $s ) {
+		$id = (int) $s['stacked_site_id'];
+		if ( in_array( $id, $keep, true ) || ! preg_match( '/^Minn suite/', (string) ( $s['name'] ?? '' ) ) || ${ JSON.stringify( domain ) } !== (string) ( $s['domain'] ?? '' ) ) {
+			continue;
+		}
+		if ( "stacked_{$id}_" === $primary || "stacked_{$id}_" === $wpdb->prefix ) {
+			$gone[] = "refused {$id}: the main site's prefix";
+			continue;
+		}
+		$gone[] = ( \\WPFreighter\\Site::delete( $id ) ? 'deleted ' : 'could not delete ' ) . $id;
+	}
+	echo 'MINNJSON ' . wp_json_encode( $gone ) . "\n";
+` ) || [];
 
 async function rest( page, method, path, body ) {
 	return page.evaluate( async ( [ method, path, body ] ) => {
@@ -90,18 +169,45 @@ async function rest( page, method, path, body ) {
 	const bad = await rest( page, 'POST', 'minn-admin/v1/freighter/settings/freighter', { values: { files: 'nope' } } );
 	t.check( 'an unknown files mode is refused', bad.status === 400, String( bad.status ) );
 
-	// Write loop through WP Freighter's own API.
+	// Write loop through WP Freighter's own API: one throwaway tenant, gone
+	// again however the suite ends.
+	let pre = null;
+	try {
+		pre = fs.existsSync( WP_ROOT ) ? cli( PREFLIGHT ) : null;
+	} catch ( e ) { /* reported below */ }
+	if ( ! pre || pre.host !== HOST.replace( /:\d+$/, '' ) ) {
+		t.check( 'WP-CLI reaches this host, so a killed run can still remove its tenant (set MINN_TEST_WP to its root)', false, WP_ROOT + ( pre ? ' is ' + pre.host : '' ) );
+		await t.done( browser, errors );
+		return;
+	}
+	if ( ! pre.ok ) {
+		t.check( 'WP Freighter hands out a tenant id whose table prefix nothing uses', false, pre.why + '; update WP Freighter before running this suite' );
+		await t.done( browser, errors );
+		return;
+	}
+	const tenantDomain = mapping ? TENANT_DOMAIN : '';
+	const leftover = pre.tenants.filter( ( s ) => SUITE_NAME.test( s.name ) && s.domain === tenantDomain );
+	if ( leftover.length ) {
+		console.log( 'NOTE  an earlier run left ' + leftover.map( ( s ) => '#' + s.id ).join( ', ' ) + ': ' + removeSuiteTenants( pre.tenants.filter( ( s ) => ! leftover.includes( s ) ).map( ( s ) => s.id ), tenantDomain ).join( ', ' ) );
+	}
+	const before = pre.tenants.filter( ( s ) => ! leftover.includes( s ) ).map( ( s ) => s.id ).sort( ( a, b ) => a - b );
+	const cleanup = onExit( () => {
+		const gone = removeSuiteTenants( before, tenantDomain );
+		if ( gone.length ) console.log( 'NOTE  removed after the suite: ' + gone.join( ', ' ) );
+	} );
 	const me = await page.evaluate( () => window.MINN.user || {} );
 	const created = await rest( page, 'POST', 'minn-admin/v1/freighter/sites', {
 		title: 'Minn suite tenant',
 		name: 'Minn suite',
-		domain: mapping ? TENANT_DOMAIN : '',
+		domain: tenantDomain,
 		username: me.login || me.username || 'minn-suite-admin',
 		email: me.email || 'minn-suite@example.com',
 	} );
 	const id = created.data && created.data.id;
 	t.check( 'creating a tenant returns its row', created.status === 200 && !! id && created.data.name === 'Minn suite' && created.data.minn === 'inactive', JSON.stringify( created.data ).slice( 0, 200 ) );
+	t.check( 'it took the id WP Freighter offered, not one in use', Number( id ) === Number( pre.next ) && ! before.includes( Number( id ) ), `got ${ id }, next ${ pre.next }, in use ${ before.join( ',' ) }` );
 	if ( ! id ) {
+		cleanup();
 		await t.done( browser, errors );
 		return;
 	}
@@ -158,6 +264,9 @@ async function rest( page, method, path, body ) {
 		t.check( 'delete removes the tenant through Site::delete', del.status === 200 && del.data && del.data.deleted === true, JSON.stringify( del.data ) );
 		const gone = await rest( page, 'GET', 'minn-admin/v1/freighter/sites?search=Minn%20suite' );
 		t.check( 'deleted tenant is gone from the list', gone.status === 200 && ( gone.data.items || [] ).every( ( r ) => r.id !== id ) );
+		cleanup();
+		const after = ( ( cli( PREFLIGHT ) || {} ).tenants || [] ).map( ( s ) => s.id ).sort( ( a, b ) => a - b );
+		t.check( 'the host\'s tenant list ends as it began', JSON.stringify( after ) === JSON.stringify( before ), `before ${ before.join( ',' ) }, after ${ after.join( ',' ) }` );
 	}
 
 	await t.done( browser, errors );
