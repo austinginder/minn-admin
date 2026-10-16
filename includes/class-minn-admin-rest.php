@@ -12972,22 +12972,266 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	}
 
 	/**
-	 * How wp-config.php defines a constant: 'absent', 'bool' (a literal true
-	 * or false, which a switch may rewrite) or 'custom' (anything else: a log
-	 * file path for WP_DEBUG_LOG, an expression). A switch writes only true or
-	 * false, so it must never replace a custom value: a private log path
-	 * would become true and move the log to the public wp-content/debug.log.
+	 * How wp-config.php defines a constant: 'absent', 'bool' (one literal
+	 * true or false, which a switch may rewrite), 'custom' (anything else: a
+	 * log file path for WP_DEBUG_LOG, an expression) or 'multiple' (defined
+	 * more than once in a way that leaves which define wins to the file's
+	 * own branches). A switch writes only true or false, so it must never
+	 * replace a custom value: a private log path would become true and move
+	 * the log to the public wp-content/debug.log.
+	 *
+	 * The kind is that of the very define a write would replace: the one PHP
+	 * runs. A commented-out define is not one. A fallback written as
+	 * `if ( ! defined( 'NAME' ) ) { define( … ); }` (or `defined( 'NAME' ) ||
+	 * define( … )`), as WP-CLI's wp-config template has it, never overrides
+	 * a define above it, so it is passed over when one comes first, and is
+	 * the define when it stands alone. Two defines neither of which is such
+	 * a fallback (an environment branch), or a fallback ahead of the define,
+	 * are 'multiple'. A define this cannot place (a value holding a
+	 * parenthesis, a name that is not a plain string, a define inside a
+	 * string) is 'custom'.
 	 *
 	 * @param string $name     Constant name.
 	 * @param string $contents wp-config.php source.
 	 * @return string
 	 */
 	public static function config_define_kind( $name, $contents ) {
-		if ( ! preg_match( self::const_pattern( $name ), (string) $contents ) ) {
-			return 'absent';
+		return self::config_define_scan( $name, $contents )['kind'];
+	}
+
+	/**
+	 * config_define_kind() with where the define a switch rewrites sits:
+	 * kind, plus that define's offset and length when the kind is 'bool'.
+	 *
+	 * @param string $name     Constant name.
+	 * @param string $contents wp-config.php source.
+	 * @return array
+	 */
+	private static function config_define_scan( $name, $contents ) {
+		$contents = (string) $contents;
+		$custom   = array( 'kind' => 'custom', 'offset' => null, 'length' => 0 );
+		// A bare snippet (no open tag) is read as the code it shows.
+		$pad = false === strpos( $contents, '<?' ) ? "<?php\n" : '';
+		try {
+			$tokens = token_get_all( $pad . $contents );
+		} catch ( \Throwable $e ) {
+			return $custom;
 		}
-		$literal = "/define\\(\\s*(['\"])" . preg_quote( $name, '/' ) . "\\1\\s*,\\s*(true|false)\\s*\\)\\s*;/i";
-		return preg_match( $literal, (string) $contents ) ? 'bool' : 'custom';
+		$count  = count( $tokens );
+		$starts = array();
+		$offset = -strlen( $pad );
+		foreach ( $tokens as $i => $t ) {
+			$starts[ $i ] = $offset;
+			$offset      += strlen( is_array( $t ) ? $t[1] : $t );
+		}
+		$noise = array( T_WHITESPACE, T_COMMENT, T_DOC_COMMENT );
+		$next  = static function ( $k ) use ( $tokens, $count, $noise ) {
+			for ( ++$k; $k < $count; $k++ ) {
+				if ( ! ( is_array( $tokens[ $k ] ) && in_array( $tokens[ $k ][0], $noise, true ) ) ) {
+					return $k;
+				}
+			}
+			return $count;
+		};
+		$prev  = static function ( $k ) use ( $tokens, $noise ) {
+			for ( --$k; $k >= 0; $k-- ) {
+				if ( ! ( is_array( $tokens[ $k ] ) && in_array( $tokens[ $k ][0], $noise, true ) ) ) {
+					return $k;
+				}
+			}
+			return -1;
+		};
+		$is    = static function ( $k, $id, $text = null ) use ( $tokens, $count ) {
+			if ( $k < 0 || $k >= $count ) {
+				return false;
+			}
+			$t = $tokens[ $k ];
+			if ( is_string( $id ) ) {
+				return $t === $id;
+			}
+			return is_array( $t ) && $t[0] === $id && ( null === $text || 0 === strcasecmp( $t[1], $text ) );
+		};
+		$named = static function ( $k ) use ( $tokens, $name, $is ) {
+			return $is( $k, T_CONSTANT_ENCAPSED_STRING ) && substr( $tokens[ $k ][1], 1, -1 ) === $name;
+		};
+		// `defined( 'NAME' )` ending at the ')' $k: the index of `defined`, or -1.
+		$defined_call = static function ( $k ) use ( $prev, $is, $named ) {
+			if ( ! $is( $k, ')' ) ) {
+				return -1;
+			}
+			$k = $prev( $k );
+			if ( ! $named( $k ) ) {
+				return -1;
+			}
+			$k = $prev( $k );
+			if ( ! $is( $k, '(' ) ) {
+				return -1;
+			}
+			$k = $prev( $k );
+			return $is( $k, T_STRING, 'defined' ) ? $k : -1;
+		};
+		// Whether the define starting at $at only runs when NAME is undefined.
+		$fallback = static function ( $at ) use ( $prev, $is, $defined_call ) {
+			$k = $prev( $at );
+			if ( $is( $k, T_BOOLEAN_OR ) || $is( $k, T_LOGICAL_OR ) ) {
+				return $defined_call( $prev( $k ) ) >= 0;
+			}
+			if ( $is( $k, '{' ) ) {
+				$k = $prev( $k );
+			}
+			if ( ! $is( $k, ')' ) ) {
+				return false;
+			}
+			$d = $defined_call( $prev( $k ) );
+			if ( $d < 0 ) {
+				return false;
+			}
+			$k = $prev( $d );
+			if ( ! $is( $k, '!' ) ) {
+				return false;
+			}
+			$k = $prev( $k );
+			if ( ! $is( $k, '(' ) ) {
+				return false;
+			}
+			return $is( $prev( $k ), T_IF ) || $is( $prev( $k ), T_ELSEIF );
+		};
+
+		// Every define( 'NAME', … ) PHP would run, and every comment's span.
+		$real     = array();
+		$comments = array();
+		for ( $i = 0; $i < $count; $i++ ) {
+			$t = $tokens[ $i ];
+			if ( ! is_array( $t ) ) {
+				continue;
+			}
+			if ( T_COMMENT === $t[0] || T_DOC_COMMENT === $t[0] ) {
+				$comments[] = array( $starts[ $i ], $starts[ $i ] + strlen( $t[1] ) );
+				continue;
+			}
+			// define, or \define (one token from PHP 8), in any letter case.
+			$qualified = defined( 'T_NAME_FULLY_QUALIFIED' ) && T_NAME_FULLY_QUALIFIED === $t[0];
+			if ( ! ( T_STRING === $t[0] || $qualified ) || 0 !== strcasecmp( ltrim( $t[1], '\\' ), 'define' ) ) {
+				continue;
+			}
+			$at = $i;
+			$p  = $prev( $i );
+			if ( $is( $p, T_NS_SEPARATOR ) ) {
+				$at = $p;
+				$p  = $prev( $p );
+			}
+			// A method, property or declaration named define is not the function.
+			$member = array( T_OBJECT_OPERATOR, T_DOUBLE_COLON, T_FUNCTION, T_NEW, T_CONST );
+			if ( defined( 'T_NULLSAFE_OBJECT_OPERATOR' ) ) {
+				$member[] = T_NULLSAFE_OBJECT_OPERATOR;
+			}
+			if ( $p >= 0 && is_array( $tokens[ $p ] ) && in_array( $tokens[ $p ][0], $member, true ) ) {
+				continue;
+			}
+			$j = $next( $i );
+			if ( ! $is( $j, '(' ) ) {
+				continue;
+			}
+			$j = $next( $j );
+			if ( ! $is( $j, T_CONSTANT_ENCAPSED_STRING ) ) {
+				// A name that is not a plain string could be this constant.
+				return $custom;
+			}
+			if ( $named( $j ) ) {
+				$real[] = array( 'offset' => $starts[ $at ], 'fallback' => $fallback( $at ) );
+			}
+		}
+
+		// The define PHP runs first is the one that holds.
+		$plain = array_values( array_filter( $real, static function ( $d ) {
+			return ! $d['fallback'];
+		} ) );
+		if ( count( $plain ) > 1 ) {
+			return array( 'kind' => 'multiple', 'offset' => null, 'length' => 0 );
+		}
+		if ( $plain ) {
+			$target = $plain[0];
+			foreach ( $real as $d ) {
+				if ( $d['fallback'] && $d['offset'] < $target['offset'] ) {
+					// A fallback ahead of it would win.
+					return array( 'kind' => 'multiple', 'offset' => null, 'length' => 0 );
+				}
+			}
+		} elseif ( count( $real ) > 1 ) {
+			return array( 'kind' => 'multiple', 'offset' => null, 'length' => 0 );
+		} else {
+			$target = $real ? $real[0] : null;
+		}
+
+		// The pattern must see that same define, and nothing PHP would not
+		// run as one (outside a comment).
+		preg_match_all( self::const_pattern( $name ), $contents, $m, PREG_OFFSET_CAPTURE );
+		$offsets = wp_list_pluck( $real, 'offset' );
+		$hit     = null;
+		foreach ( $m[0] as $match ) {
+			foreach ( $comments as $span ) {
+				if ( $match[1] >= $span[0] && $match[1] < $span[1] ) {
+					continue 2;
+				}
+			}
+			if ( ! in_array( $match[1], $offsets, true ) ) {
+				return $custom;
+			}
+			if ( $target && $match[1] === $target['offset'] ) {
+				$hit = $match;
+			}
+		}
+		if ( ! $target ) {
+			return array( 'kind' => 'absent', 'offset' => null, 'length' => 0 );
+		}
+		$literal = "/^define\\(\\s*(['\"])" . preg_quote( $name, '/' ) . "\\1\\s*,\\s*(true|false)\\s*\\)\\s*;$/i";
+		if ( null === $hit || ! preg_match( $literal, $hit[0] ) ) {
+			return $custom;
+		}
+		return array( 'kind' => 'bool', 'offset' => $hit[1], 'length' => strlen( $hit[0] ) );
+	}
+
+	/**
+	 * wp-config.php with a debug switch set: the one literal define of the
+	 * constant rewritten in place, or a new define added when the file has
+	 * none. A custom value, or a constant defined more than once, is
+	 * refused rather than flattened.
+	 *
+	 * @param string $name     Constant name.
+	 * @param bool   $value    The switch.
+	 * @param string $contents wp-config.php source.
+	 * @return string|WP_Error The new source.
+	 */
+	public static function config_rewrite( $name, $value, $contents ) {
+		$contents = (string) $contents;
+		$line     = "define( '" . $name . "', " . ( $value ? 'true' : 'false' ) . ' );';
+		$scan     = self::config_define_scan( $name, $contents );
+		if ( 'custom' === $scan['kind'] ) {
+			/* translators: %s: a wp-config.php constant name, such as WP_DEBUG_LOG. */
+			return new WP_Error( 'custom_value', sprintf( __( '%s is set to a custom value in wp-config.php, so it can only be changed there.', 'minn-admin' ), $name ), array( 'status' => 400 ) );
+		}
+		if ( 'multiple' === $scan['kind'] ) {
+			/* translators: %s: a wp-config.php constant name, such as WP_DEBUG_LOG. */
+			return new WP_Error( 'defined_twice', sprintf( __( '%s is defined more than once in wp-config.php, so it can only be changed there.', 'minn-admin' ), $name ), array( 'status' => 400 ) );
+		}
+		if ( 'bool' === $scan['kind'] ) {
+			return substr_replace( $contents, $line, $scan['offset'], $scan['length'] );
+		}
+		if ( defined( $name ) ) {
+			// Defined elsewhere — a wp-config edit would be a confusing no-op.
+			return new WP_Error( 'defined_elsewhere', $name . ' is defined outside wp-config.php, so it can\'t be toggled here.', array( 'status' => 400 ) );
+		}
+		$marker = "/* That's all, stop editing! Happy publishing. */";
+		if ( false !== strpos( $contents, $marker ) ) {
+			$new = str_replace( $marker, $line . "\n\n" . $marker, $contents );
+		} else {
+			// Fall back to just before wp-settings.php loads.
+			$new = preg_replace( "/(require_once\\s*\\(?\\s*ABSPATH\\s*\\.\\s*['\"]wp-settings\\.php['\"])/", $line . "\n\n\$1", $contents, 1 );
+		}
+		if ( null === $new || $new === $contents ) {
+			return new WP_Error( 'place_failed', __( 'Could not find a safe place to add the constant.', 'minn-admin' ), array( 'status' => 500 ) );
+		}
+		return $new;
 	}
 
 	/**
@@ -13101,9 +13345,12 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				'desc'      => $meta['desc'],
 				'value'     => $defined ? (bool) constant( $name ) : false,
 				'in_config' => $in_config,
-				// Defined elsewhere, or to a custom value the switch would
-				// flatten into true or false.
-				'locked'    => ( $defined && ! $in_config ) || 'custom' === $kind,
+				// Defined elsewhere, or in wp-config.php any way but one
+				// literal true or false (a custom value the switch would
+				// flatten, or more than one define).
+				'locked'    => ( $defined && ! $in_config ) || ( $in_config && 'bool' !== $kind ),
+				// Why: 'elsewhere', 'custom' or 'multiple'.
+				'lock'      => ( $defined && ! $in_config ) ? 'elsewhere' : ( $in_config && 'bool' !== $kind ? $kind : '' ),
 			);
 		}
 
@@ -13151,32 +13398,9 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			return new WP_Error( 'read_failed', __( 'Could not read wp-config.php.', 'minn-admin' ), array( 'status' => 500 ) );
 		}
 
-		$line    = "define( '" . $name . "', " . ( $value ? 'true' : 'false' ) . " );";
-		$pattern = self::const_pattern( $name );
-
-		if ( 'custom' === self::config_define_kind( $name, $contents ) ) {
-			/* translators: %s: a wp-config.php constant name, such as WP_DEBUG_LOG. */
-			return new WP_Error( 'custom_value', sprintf( __( '%s is set to a custom value in wp-config.php, so it can only be changed there.', 'minn-admin' ), $name ), array( 'status' => 400 ) );
-		}
-		if ( preg_match( $pattern, $contents ) ) {
-			$new = preg_replace( $pattern, $line, $contents, 1 );
-		} elseif ( defined( $name ) ) {
-			// Defined elsewhere — a wp-config edit would be a confusing no-op.
-			return new WP_Error( 'defined_elsewhere', $name . ' is defined outside wp-config.php, so it can\'t be toggled here.', array( 'status' => 400 ) );
-		} else {
-			$marker = "/* That's all, stop editing! Happy publishing. */";
-			if ( false !== strpos( $contents, $marker ) ) {
-				$new = str_replace( $marker, $line . "\n\n" . $marker, $contents );
-			} else {
-				// Fall back to just before wp-settings.php loads.
-				$new = preg_replace( "/(require_once\\s*\\(?\\s*ABSPATH\\s*\\.\\s*['\"]wp-settings\\.php['\"])/", $line . "\n\n\$1", $contents, 1 );
-			}
-			if ( null === $new || $new === $contents ) {
-				return new WP_Error( 'place_failed', __( 'Could not find a safe place to add the constant.', 'minn-admin' ), array( 'status' => 500 ) );
-			}
-		}
-		if ( null === $new ) {
-			return new WP_Error( 'edit_failed', __( 'The edit could not be applied.', 'minn-admin' ), array( 'status' => 500 ) );
+		$new = self::config_rewrite( $name, $value, $contents );
+		if ( is_wp_error( $new ) ) {
+			return $new;
 		}
 
 		// Validate the transformed file parses BEFORE writing it. TOKEN_PARSE
