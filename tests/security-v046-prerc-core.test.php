@@ -451,6 +451,19 @@ rest_get_server();
 			$now = get_user_meta( $admin, 'minn_admin_overview_metrics', true );
 			$check( 'overview: a swap of two cards is written (control)', 200 === $st && $shown[2] === ( $now[1] ?? null ) && $shown[1] === ( $now[2] ?? null ), $st . ' ' . wp_json_encode( $now ) );
 			$check( 'overview: and the untouched slot keeps the stored card this account cannot see', 'minnprercgone' === ( $now[0] ?? null ), wp_json_encode( $now ) );
+			// L3: deliberately picking the slot whose hidden card shows a
+			// fallback, choosing that very fallback, must take; without the
+			// touched list the server would restore the hidden card and the
+			// pick would silently do nothing.
+			update_user_meta( $admin, 'minn_admin_overview_metrics', $stored );
+			list( , $o2 ) = $call( 'GET', '/minn-admin/v1/overview' );
+			$shown2 = array_values( (array) ( $o2['metricKeys'] ?? array() ) );
+			$keep   = $shown2;
+			$check( 'overview: L3 fixture: slot 0 shows a fallback for the hidden card', isset( $shown2[0] ) && 'minnprercgone' !== $shown2[0], wp_json_encode( $shown2 ) );
+			list( $st ) = $call( 'POST', '/minn-admin/v1/overview/metrics', array( 'keys' => $keep, 'base' => $shown2, 'touched' => array( 0 ) ) );
+			$now = get_user_meta( $admin, 'minn_admin_overview_metrics', true );
+			$check( 'overview: L3 a pick of the fallback in the hidden slot takes, the hidden card does not return', 200 === $st && $shown2[0] === ( $now[0] ?? null ), $st . ' ' . wp_json_encode( $now ) );
+			$check( 'overview: L3 and an untouched slot still keeps its stored card', ( $stored[3] ?? null ) === ( $now[3] ?? null ) || $shown2[3] === ( $now[3] ?? null ), wp_json_encode( $now ) );
 			list( $st ) = $call( 'POST', '/minn-admin/v1/overview/metrics', array( 'keys' => array() ) );
 			$check( 'overview: an empty list still clears the personal pick (control)', 200 === $st && '' === get_user_meta( $admin, 'minn_admin_overview_metrics', true ), (string) $st );
 		}
@@ -574,6 +587,114 @@ rest_get_server();
 		$check( "previews: control: an administrator's preview of the same block is not blanked", 200 === $status && false !== strpos( (string) ( $out[0] ?? '' ), 'minnprerc words' ), $status . ' ' . substr( wp_json_encode( $out ), 0, 160 ) );
 	} finally {
 		wp_set_current_user( $admin );
+		$wpdb->query( 'ROLLBACK' );
+	}
+} )();
+
+/*
+ * Island previews, fail-closed (review P1): a block carrying a vendor's
+ * dynamic markup in a CORE block previews empty for a writer who may not
+ * author dynamic data, even when the marker never appears in the markup the
+ * check scans. Two carriers the round review proved bypass the marker
+ * check: a [kb-dynamic] shortcode in a Kadence button's link (Kadence runs
+ * do_shortcode on it) and a \u-escaped kb-inline-dynamic span in a
+ * core/navigation-link label (Kadence's render_block filter resolves it, and
+ * JetEngine's shortcodes ride the same carriers). The fix takes off every
+ * non-core, non-Minn block-render hook and empties the shortcode table for
+ * the render, so these resolve to nothing. An Administrator still gets the
+ * full preview. The markup here reads a harmless option (blogname) so a
+ * failing check never prints a secret. do_blocks never runs a shortcode
+ * itself, so the shortcode carrier needs a vendor block that calls
+ * do_shortcode (Kadence's button) — these checks SKIP without Kadence Pro.
+ */
+( function () use ( $check, $skip, $call, $wpdb, $admin ) {
+	$kbp = defined( 'KBP_VERSION' );
+	if ( ! $kbp ) {
+		$skip( 'carriers: Kadence Blocks Pro inactive (the review carriers are Kadence blocks)' );
+	}
+	$render = function ( array $blocks ) use ( $call ) {
+		list( $status, $data ) = $call( 'POST', '/minn-admin/v1/render-blocks', array( 'blocks' => $blocks, 'post' => 0 ) );
+		return array( $status, is_array( $data ) && isset( $data['rendered'] ) ? $data['rendered'] : null );
+	};
+	$secret = (string) get_option( 'blogname' );
+	if ( '' === $secret ) {
+		$secret = 'Minn Test';
+		update_option( 'blogname', $secret );
+	}
+	// Spell every byte of a marker as a JSON \u escape, the way the review's
+	// probe did, so the raw markup never holds it.
+	$esc_u = function ( $str ) {
+		$out = '';
+		foreach ( str_split( (string) $str ) as $ch ) {
+			$out .= sprintf( '\u%04x', ord( $ch ) );
+		}
+		return $out;
+	};
+	$wpdb->query( 'START TRANSACTION' );
+	$canary_ran = false;
+	add_shortcode( 'minnprerc_canary', function () use ( &$canary_ran, $secret ) {
+		$canary_ran = true;
+		return 'CANARY-' . $secret;
+	} );
+	try {
+		$author = wp_insert_user( array( 'user_login' => 'minnprerc-a' . wp_rand( 10000, 99999 ), 'user_email' => 'minnprerca' . wp_rand( 10000, 99999 ) . '@example.com', 'user_pass' => wp_generate_password( 24 ), 'role' => 'author' ) );
+		if ( is_wp_error( $author ) || ! $author ) {
+			$check( 'carriers: an Author is made for the check', false, is_wp_error( $author ) ? $author->get_error_message() : '' );
+			return;
+		}
+		$sc_link = '[kb-dynamic field=' . $esc_u( '"site|custom_setting"' ) . ' custom=' . $esc_u( '"blogname"' ) . ']';
+		$span    = '<span data-field="site|custom_setting" data-custom="blogname" class="kb-inline-dynamic">X</span>';
+		if ( $kbp ) {
+			$carriers = array(
+				'a Kadence button link running a shortcode' => '<!-- wp:kadence/singlebtn {"uniqueID":"_mp","text":"Go","link":"https://example.com/?' . $sc_link . '"} /-->',
+				'a \u-escaped dynamic span in a nav-link label' => '<!-- wp:navigation-link {"label":"' . $esc_u( $span ) . '","url":"https://example.com/"} /-->',
+				// JetEngine's shortcodes ride the same do_shortcode carrier;
+				// the registered canary stands in so no vendor field is needed.
+				'a registered shortcode in a Kadence button link' => '<!-- wp:kadence/singlebtn {"uniqueID":"_mc","text":"Go","link":"https://example.com/?[minnprerc_canary]"} /-->',
+			);
+			wp_set_current_user( $author );
+			$canary_ran = false;
+			foreach ( $carriers as $name => $markup ) {
+				list( $status, $out ) = $render( array( $markup ) );
+				$html = (string) ( $out[0] ?? '' );
+				$check( "carriers: an Author's preview of {$name} resolves no dynamic data", 200 === $status && false === strpos( $html, $secret ) && false === strpos( $html, rawurlencode( $secret ) ) && false === strpos( $html, 'CANARY-' ), $status . ' leaked=' . ( ( false !== strpos( $html, $secret ) || false !== strpos( $html, 'CANARY-' ) ) ? 1 : 0 ) );
+			}
+			$check( 'carriers: no shortcode ran during the Author previews', ! $canary_ran );
+
+			// The direct layer: the parker takes a vendor's render_block
+			// callback off, and the finally puts it back.
+			$kb_on = function () {
+				foreach ( ( $GLOBALS['wp_filter']['render_block']->callbacks ?? array() ) as $cbs ) {
+					foreach ( $cbs as $cb ) {
+						$fn = $cb['function'];
+						if ( is_array( $fn ) && isset( $fn[0] ) && is_object( $fn[0] ) && false !== strpos( get_class( $fn[0] ), 'Kadence_Blocks_Pro' ) ) {
+							return true;
+						}
+					}
+				}
+				return false;
+			};
+			$check( 'carriers: Kadence Pro has a render_block callback (fixture)', $kb_on() );
+			wp_set_current_user( $author );
+			$render( array( '<!-- wp:paragraph --><p>minnprerc plain</p><!-- /wp:paragraph -->' ) );
+			$check( 'carriers: and it is back on after the render', $kb_on() );
+
+			// Control: an Administrator may author dynamic data, so the
+			// shortcode runs and the preview is full.
+			wp_set_current_user( $admin );
+			$canary_ran = false;
+			list( $status, $out ) = $render( array( '<!-- wp:kadence/singlebtn {"uniqueID":"_ma","text":"Go","link":"https://example.com/?[minnprerc_canary]"} /-->' ) );
+			$check( 'carriers: control: an Administrator still gets a full preview (the shortcode runs)', 200 === $status && $canary_ran && false !== strpos( (string) ( $out[0] ?? '' ), 'CANARY-' ), $status . ' ran=' . ( $canary_ran ? 1 : 0 ) );
+		}
+
+		// The \u-escaped marker is caught by the second layer too (no vendor
+		// needed: it calls the marker check directly).
+		$marked = new ReflectionMethod( 'Minn_Admin_REST', 'vendor_dynamic_marked' );
+		$marked->setAccessible( true );
+		$check( 'carriers: the marker check decodes \u escapes', (bool) $marked->invoke( null, '<!-- wp:paragraph --><p>' . $esc_u( $span ) . '</p><!-- /wp:paragraph -->', array( 'markup' => '#kb-inline-dynamic#i' ) ) );
+	} finally {
+		wp_set_current_user( $admin );
+		remove_shortcode( 'minnprerc_canary' );
 		$wpdb->query( 'ROLLBACK' );
 	}
 } )();

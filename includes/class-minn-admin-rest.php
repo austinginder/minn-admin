@@ -2705,6 +2705,173 @@ class Minn_Admin_REST {
 	}
 
 	/**
+	 * A string with its JSON \uXXXX escapes decoded, so a marker spelled
+	 * \u006b\u0062… in a block attribute's JSON is matched too. Invalid or
+	 * lone escapes are left as written.
+	 *
+	 * @param string $s Raw markup.
+	 * @return string
+	 */
+	private static function decode_unicode_escapes( $s ) {
+		if ( false === strpos( $s, '\\u' ) ) {
+			return $s;
+		}
+		return (string) preg_replace_callback(
+			'/\\\\u([0-9a-fA-F]{4})/',
+			static function ( $m ) {
+				$cp = hexdec( $m[1] );
+				return function_exists( 'mb_chr' ) ? (string) mb_chr( $cp, 'UTF-8' ) : (string) chr( $cp & 0xFF );
+			},
+			$s
+		);
+	}
+
+	/**
+	 * The directory roots whose code the island preview trusts to resolve
+	 * block content: WordPress core, wp-admin and Minn itself (wherever each
+	 * lives, raw and resolved, since a plugin folder may be a symlink and
+	 * Minn Engine keeps core elsewhere). Everything else — a plugin, a theme,
+	 * an mu-plugin, a dropin — is a vendor whose render-time resolver reads
+	 * data on the current object with no read check.
+	 *
+	 * @return string[][]
+	 */
+	private static function trusted_render_roots() {
+		static $roots = null;
+		if ( null !== $roots ) {
+			return $roots;
+		}
+		$roots = array();
+		foreach ( array( ABSPATH . WPINC, ABSPATH . 'wp-admin', dirname( __DIR__ ) ) as $dir ) {
+			foreach ( array( untrailingslashit( wp_normalize_path( (string) $dir ) ), (string) realpath( (string) $dir ) ) as $root ) {
+				$root = untrailingslashit( wp_normalize_path( (string) $root ) );
+				if ( '' !== $root ) {
+					$roots[ $root ] = $root;
+				}
+			}
+		}
+		$roots = array_values( $roots );
+		return $roots;
+	}
+
+	/**
+	 * Whether a hooked callback's code is WordPress core's, wp-admin's or
+	 * Minn's own. A PHP-internal callback is core. Anything that cannot be
+	 * reflected to a file under a trusted root is treated as untrusted, so an
+	 * unreadable or anonymous resolver fails closed (its block previews with
+	 * that resolver parked). Decisions are memoized per callback.
+	 *
+	 * @param callable|string|array $fn A hook callback.
+	 * @return bool
+	 */
+	private static function render_callback_trusted( $fn ) {
+		static $memo = array();
+		$key = null;
+		if ( is_string( $fn ) ) {
+			$key = 's:' . $fn;
+		} elseif ( is_array( $fn ) && isset( $fn[1] ) ) {
+			$key = 'a:' . ( is_object( $fn[0] ) ? get_class( $fn[0] ) . '#' . spl_object_id( $fn[0] ) : (string) $fn[0] ) . '::' . (string) $fn[1];
+		} elseif ( is_object( $fn ) ) {
+			$key = 'o:' . spl_object_id( $fn );
+		}
+		if ( null !== $key && isset( $memo[ $key ] ) ) {
+			return $memo[ $key ];
+		}
+		$trusted = false;
+		try {
+			if ( is_array( $fn ) && isset( $fn[0], $fn[1] ) ) {
+				$ref = new ReflectionMethod( $fn[0], (string) $fn[1] );
+			} elseif ( is_string( $fn ) && false !== strpos( $fn, '::' ) ) {
+				$ref = new ReflectionMethod( $fn );
+			} elseif ( $fn instanceof Closure || is_string( $fn ) ) {
+				$ref = new ReflectionFunction( $fn );
+			} elseif ( is_object( $fn ) && method_exists( $fn, '__invoke' ) ) {
+				$ref = new ReflectionMethod( $fn, '__invoke' );
+			} else {
+				$ref = null;
+			}
+			if ( $ref && $ref->isInternal() ) {
+				$trusted = true;
+			} elseif ( $ref ) {
+				$file = (string) $ref->getFileName();
+				// eval()'d code reflects as "<host>(NN) : eval()'d code".
+				// A render hook never reaches a real minn-admin/v1 request
+				// from eval()'d code (a REST request runs no eval'd render
+				// hook), so the only such callback is one a suite registers
+				// while it drives this route in-process from `wp eval-file`:
+				// the operator's own code, trusted like Minn. A plugin that
+				// eval()s a render hook keeps its own file as the host, which
+				// the root check below still judges.
+				if ( preg_match( "#^(.*)\(\d+\) : eval\(\)'d code$#", $file, $m ) ) {
+					$host = $m[1];
+					if ( 0 === strpos( $host, 'phar://' ) || false !== strpos( $host, '/wp-cli/' ) || false !== strpos( $host, '/wp-cli-bundle/' ) ) {
+						$trusted = true;
+					} else {
+						$file = $host;
+					}
+				}
+				if ( ! $trusted ) {
+					$real  = realpath( $file );
+					$paths = array_unique( array_filter( array( wp_normalize_path( $file ), false === $real ? '' : wp_normalize_path( $real ) ) ) );
+					foreach ( $paths as $path ) {
+						foreach ( self::trusted_render_roots() as $root ) {
+							if ( 0 === strpos( $path, $root . '/' ) ) {
+								$trusted = true;
+								break 2;
+							}
+						}
+					}
+				}
+			}
+		} catch ( \Throwable $e ) {
+			$trusted = false;
+		}
+		if ( null !== $key ) {
+			$memo[ $key ] = $trusted;
+		}
+		return $trusted;
+	}
+
+	/**
+	 * Take off every block-render hook callback that is not core's,
+	 * wp-admin's or Minn's own, and say which came off ([ hook, callback,
+	 * priority, accepted args ] each). The hooks are the ones a vendor
+	 * resolves dynamic content on — render_block, render_block_{name},
+	 * pre_render_block and render_block_data (and render_block_context, which
+	 * steers inner blocks) — and a vendor's filter runs on EVERY block,
+	 * including a core block carrying its markup in an attribute, so a marker
+	 * on the block itself cannot be relied on. Called again after each block
+	 * so a resolver a vendor re-arms mid-render (Otter's excerpt reader does)
+	 * is caught and that block blanked.
+	 *
+	 * @return array[]
+	 */
+	private static function park_untrusted_render_hooks() {
+		global $wp_filter;
+		$parked = array();
+		foreach ( (array) $wp_filter as $hook => $obj ) {
+			$hook = (string) $hook;
+			if ( ! $obj instanceof WP_Hook ) {
+				continue;
+			}
+			if ( 'render_block' !== $hook && 'pre_render_block' !== $hook && 0 !== strpos( $hook, 'render_block_' ) ) {
+				continue;
+			}
+			foreach ( $obj->callbacks as $priority => $callbacks ) {
+				foreach ( $callbacks as $cb ) {
+					if ( ! self::render_callback_trusted( $cb['function'] ) ) {
+						$parked[] = array( $hook, $cb['function'], $priority, (int) $cb['accepted_args'] );
+					}
+				}
+			}
+		}
+		foreach ( $parked as $p ) {
+			remove_filter( $p[0], $p[1], $p[2] );
+		}
+		return $parked;
+	}
+
+	/**
 	 * Take every one of Otter's dynamic-content resolvers off the hooks they
 	 * run on, and say which came off: [ hook, callback, priority, accepted
 	 * args ] each. A resolver is any callback of an Otter (ThemeIsle) class
@@ -2761,7 +2928,7 @@ class Minn_Admin_REST {
 		};
 		$walk( parse_blocks( $raw ) );
 		foreach ( $hay as $h ) {
-			foreach ( array( $h, html_entity_decode( $h, ENT_QUOTES | ENT_HTML5, 'UTF-8' ), rawurldecode( $h ) ) as $s ) {
+			foreach ( array( $h, html_entity_decode( $h, ENT_QUOTES | ENT_HTML5, 'UTF-8' ), rawurldecode( $h ), self::decode_unicode_escapes( $h ) ) as $s ) {
 				if ( preg_match( '#<\s*o-dynamic|otterdynamic|otter\\\\?/v1\\\\?/dynamic#i', $s ) ) {
 					return true;
 				}
@@ -2808,7 +2975,7 @@ class Minn_Admin_REST {
 			return true;
 		}
 		if ( ! empty( $spec['markup'] ) ) {
-			foreach ( array( $raw, html_entity_decode( $raw, ENT_QUOTES | ENT_HTML5, 'UTF-8' ), rawurldecode( $raw ) ) as $s ) {
+			foreach ( array( $raw, html_entity_decode( $raw, ENT_QUOTES | ENT_HTML5, 'UTF-8' ), rawurldecode( $raw ), self::decode_unicode_escapes( $raw ) ) as $s ) {
 				if ( preg_match( $spec['markup'], $s ) ) {
 					return true;
 				}
@@ -2985,6 +3152,23 @@ class Minn_Admin_REST {
 		}
 		// phpcs:enable WordPress.Security.NonceVerification
 
+		// Fail closed for a caller who may not author dynamic data: the
+		// marker lists above cannot cover every carrier, because a vendor's
+		// render_block filter runs on core blocks too (a shortcode in a
+		// Kadence button's link, a dynamic span in a nav-link label) and its
+		// shortcodes resolve on any block that calls do_shortcode. So take
+		// off every block-render hook that is not core's or Minn's, and empty
+		// the shortcode table, for the length of the render. The markers stay
+		// a second layer. Vendor block styling may thin out; this is a
+		// preview for a writer who could not author the data anyway.
+		$untrusted        = ! current_user_can( 'unfiltered_html' ) && ! current_user_can( 'manage_options' );
+		$untrusted_parked = $untrusted ? self::park_untrusted_render_hooks() : array();
+		global $shortcode_tags;
+		$held_shortcodes = $shortcode_tags;
+		if ( $untrusted ) {
+			$shortcode_tags = array();
+		}
+
 		$queue_before = wp_styles()->queue;
 		$rendered     = array();
 		// The resolvers and the preview clamps come back off however the
@@ -3022,11 +3206,15 @@ class Minn_Admin_REST {
 					}
 				}
 				$html = do_blocks( $raw );
-				// A resolver something put back while this block rendered (Otter's
+				// A resolver a vendor re-armed while this block rendered (Otter's
 				// own excerpt reader does exactly that) may have run on part of
-				// it: that block previews empty, and the resolver comes off again
-				// before the next one.
+				// it: that block previews empty, and every re-armed resolver
+				// comes off again before the next one.
 				if ( $otter_untrusted && self::park_otter_resolvers() ) {
+					$rendered[] = '';
+					continue;
+				}
+				if ( $untrusted && self::park_untrusted_render_hooks() ) {
 					$rendered[] = '';
 					continue;
 				}
@@ -3052,6 +3240,13 @@ class Minn_Admin_REST {
 			// taken off first, so nothing is left on twice.
 			if ( $otter_untrusted ) {
 				self::park_otter_resolvers();
+			}
+			if ( $untrusted ) {
+				self::park_untrusted_render_hooks();
+			}
+			$shortcode_tags = $held_shortcodes;
+			foreach ( $untrusted_parked as $parked ) {
+				add_filter( $parked[0], $parked[1], $parked[2], $parked[3] );
 			}
 			foreach ( $otter_parked as $parked ) {
 				add_filter( $parked[0], $parked[1], $parked[2], $parked[3] );
@@ -4619,21 +4814,35 @@ class Minn_Admin_REST {
 	 * sends what it shows, so a pick in another slot replaced the hidden
 	 * card for good. `base` is the layout the page showed before the pick:
 	 * a slot sent as shown keeps what the store holds there, the caller's
-	 * own pick when it has one, else the site default.
+	 * own pick when it has one, else the site default. `touched` names the
+	 * slots the person acted on, which keep what was sent even when that
+	 * equals the shown card (picking the fallback a hidden card shows under,
+	 * or resetting to it, is a real choice that must take, not silently
+	 * restore the hidden card).
 	 *
-	 * @param array $keys Sent keys.
-	 * @param mixed $base The layout the page showed, or null.
+	 * @param array $keys    Sent keys.
+	 * @param mixed $base    The layout the page showed, or null.
+	 * @param mixed $touched Slot indexes the person acted on, or null.
 	 * @return array
 	 */
-	private static function overview_metric_keys_kept( array $keys, $base ) {
+	private static function overview_metric_keys_kept( array $keys, $base, $touched = null ) {
 		if ( ! is_array( $base ) ) {
 			return $keys;
+		}
+		$acted  = array();
+		foreach ( is_array( $touched ) ? $touched : array() as $i ) {
+			if ( is_numeric( $i ) ) {
+				$acted[ (int) $i ] = true;
+			}
 		}
 		$uid    = get_current_user_id();
 		$raw    = $uid ? get_user_meta( $uid, 'minn_admin_overview_metrics', true ) : '';
 		$stored = self::overview_metric_keys_clean( is_array( $raw ) ? $raw : get_option( 'minn_admin_overview_metric_defaults', array() ) );
 		$base   = array_values( $base );
 		foreach ( array_values( $keys ) as $i => $k ) {
+			if ( isset( $acted[ $i ] ) ) {
+				continue;
+			}
 			if ( isset( $base[ $i ], $stored[ $i ] ) && is_scalar( $base[ $i ] ) && is_scalar( $k ) && (string) $base[ $i ] === (string) $k ) {
 				$keys[ $i ] = $stored[ $i ];
 			}
@@ -4661,7 +4870,7 @@ class Minn_Admin_REST {
 		} elseif ( ! is_array( $keys ) ) {
 			return new WP_Error( 'minn_admin_bad_metrics', __( 'No metrics provided.', 'minn-admin' ), array( 'status' => 400 ) );
 		} else {
-			$clean = self::overview_metric_keys_clean( self::overview_metric_keys_kept( array_values( $keys ), $json['base'] ?? null ) );
+			$clean = self::overview_metric_keys_clean( self::overview_metric_keys_kept( array_values( $keys ), $json['base'] ?? null, $json['touched'] ?? null ) );
 			if ( $clean ) {
 				update_user_meta( $uid, 'minn_admin_overview_metrics', $clean );
 			} else {
@@ -4688,7 +4897,7 @@ class Minn_Admin_REST {
 		} elseif ( ! is_array( $keys ) ) {
 			return new WP_Error( 'minn_admin_bad_metrics', __( 'No metrics provided.', 'minn-admin' ), array( 'status' => 400 ) );
 		} else {
-			$clean = self::overview_metric_keys_clean( self::overview_metric_keys_kept( array_values( $keys ), $json['base'] ?? null ) );
+			$clean = self::overview_metric_keys_clean( self::overview_metric_keys_kept( array_values( $keys ), $json['base'] ?? null, $json['touched'] ?? null ) );
 			if ( $clean ) {
 				update_option( 'minn_admin_overview_metric_defaults', $clean );
 			} else {
