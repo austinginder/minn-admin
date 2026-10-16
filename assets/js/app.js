@@ -34731,9 +34731,12 @@
 		window.addEventListener( 'message', onMessage );
 		// A published page is fetched as a visitor sees it, so the copy holds
 		// no nonce or account detail of the person editing. Only a draft's
-		// preview, which renders for its editors alone, carries the session.
+		// preview, which renders for its editors alone, carries the session,
+		// and so does a site that answers a visitor 401 (a staging site
+		// behind HTTP authentication), as every load did before.
 		const preview = /[?&](preview|preview_id)=/.test( src );
 		fetch( src, { credentials: preview ? 'same-origin' : 'omit' } )
+			.then( ( r ) => ( 401 === r.status && ! preview ? fetch( src, { credentials: 'same-origin' } ) : r ) )
 			.then( ( r ) => ( r.ok ? r.text().then( ( html ) => ( { html, base: r.url || src } ) ) : null ) )
 			.then( ( page ) => {
 				if ( settled || ! page || ! page.html ) { done(); return; }
