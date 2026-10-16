@@ -174,6 +174,12 @@ In order of preference:
   A field of any other type never leaves, and a declaration naming one
   registers nothing. Planned and not built: references, money and byte
   sizes, and stored encodings beyond entities.
+- **Generic readers ask the resource.** A screen that shows tables raw (the
+  database browser) asks `Minn_Admin_Kernel::table_refused( $table )`, so the
+  view gate and row scope a resource declares for the tables it reads hold
+  there too: a table is refused when a resource reading it as its source would
+  not show the viewer every row, or when every resource joining it says no. A
+  gate that cannot answer, a plugin being off included, says no.
 - **The descriptor.** Columns come from fields, tabs from views, and row and
   detail actions from one list. An adapter overrides only what is unusual.
 
