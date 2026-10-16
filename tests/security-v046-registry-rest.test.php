@@ -114,6 +114,69 @@ $undo[] = static function () use ( $probe_global, $link_name, $link_target ) {
 		rmdir( $link_target );
 	}
 };
+// Round five: a file that takes only part of what is written to it, for
+// the wp-config write check. $short is how many of the next writes fall
+// short (each keeps half of its first chunk and nothing after).
+class Minn_V046_Short_Stream {
+	public static $files = array();
+	public static $short = 0;
+	public $context;
+	private $path;
+	private $mode;
+	private $pos = 0;
+	private $cut = false;
+	public function stream_open( $path, $mode, $options, &$opened ) {
+		$this->path = $path;
+		$this->mode = $mode;
+		$this->pos  = 0;
+		if ( false !== strpbrk( $mode, 'wxc' ) ) {
+			self::$files[ $path ] = '';
+			$this->cut            = self::$short > 0;
+			if ( $this->cut ) {
+				--self::$short;
+			}
+			return true;
+		}
+		return isset( self::$files[ $path ] );
+	}
+	public function stream_write( $data ) {
+		if ( $this->cut ) {
+			$data      = substr( $data, 0, (int) floor( strlen( $data ) / 2 ) );
+			$this->cut = 'done';
+		} elseif ( 'done' === $this->cut ) {
+			return 0;
+		}
+		self::$files[ $this->path ] .= $data;
+		return strlen( $data );
+	}
+	public function stream_read( $n ) {
+		$r          = (string) substr( self::$files[ $this->path ], $this->pos, $n );
+		$this->pos += strlen( $r );
+		return $r;
+	}
+	public function stream_eof() {
+		return $this->pos >= strlen( self::$files[ $this->path ] );
+	}
+	public function stream_stat() {
+		return array( 'size' => strlen( self::$files[ $this->path ] ) );
+	}
+	public function url_stat( $path, $flags ) {
+		return isset( self::$files[ $path ] ) ? array( 'size' => strlen( self::$files[ $path ] ) ) : false;
+	}
+	public function stream_flush() {
+		return true;
+	}
+	public function stream_lock( $op ) {
+		return true;
+	}
+	public function stream_set_option( $option, $a, $b ) {
+		return false;
+	}
+}
+stream_wrapper_register( 'minnv046', 'Minn_V046_Short_Stream' );
+$undo[] = static function () {
+	stream_wrapper_unregister( 'minnv046' );
+};
 // No update check, translation fetch or loopback leaves this process.
 add_filter( 'pre_http_request', static function () {
 	return new WP_Error( 'minn_test_offline', 'blocked by the test' );
@@ -852,6 +915,31 @@ add_filter( 'pre_http_request', static function () {
 		$check( '#12 (L7, round four) one under a branch is locked even when it matches the running value', true === $same['locked'] && 'branch' === $same['lock'], wp_json_encode( $same ) );
 		$e = Minn_Admin_REST::config_rewrite( 'WP_DEBUG', true, $php . "if ( getenv( 'MINN_V046_STAGING' ) ) {\n\tdefine( 'WP_DEBUG', {$now} );\n}\n" );
 		$check( '#12 (L7, round four) and its write is refused', is_wp_error( $e ) && 'in_branch' === $e->get_error_code(), is_wp_error( $e ) ? $e->get_error_code() : 'written' );
+
+		// Round five N1: a define after the line that loads WordPress never
+		// takes effect, and a fallback counts only at the top of the file.
+		$settings = "require_once ABSPATH . 'wp-settings.php';\n";
+		$late     = Minn_Admin_REST::config_switch( 'WP_DEBUG', $php . $settings . "define( 'WP_DEBUG', {$now} );\n" );
+		$check( '#12 (N1) a define after wp-settings.php is locked, even when it matches the running value', true === $late['locked'] && 'late' === $late['lock'], wp_json_encode( $late ) );
+		$e = Minn_Admin_REST::config_rewrite( 'WP_DEBUG', true, $php . $settings . "define( 'WP_DEBUG', {$now} );\n" );
+		$check( '#12 (N1) and its write is refused', is_wp_error( $e ) && 'too_late' === $e->get_error_code(), is_wp_error( $e ) ? $e->get_error_code() : 'written' );
+		foreach ( array(
+			'inside another condition' => "if ( getenv( 'MINN_V046_STAGING' ) ) {\n\tif ( ! defined( 'WP_DEBUG' ) ) {\n\t\tdefine( 'WP_DEBUG', {$now} );\n\t}\n}\n",
+			'inside a function'        => "function minn_v046_cfg() {\n\tif ( ! defined( 'WP_DEBUG' ) ) {\n\t\tdefine( 'WP_DEBUG', {$now} );\n\t}\n}\n",
+			'as an elseif'             => "if ( getenv( 'MINN_V046_STAGING' ) ) {\n} elseif ( ! defined( 'WP_DEBUG' ) ) {\n\tdefine( 'WP_DEBUG', {$now} );\n}\n",
+		) as $where => $src ) {
+			$sw = Minn_Admin_REST::config_switch( 'WP_DEBUG', $php . $src );
+			$check( "#12 (N1) a ! defined() fallback {$where} is locked as in a branch", true === $sw['locked'] && 'branch' === $sw['lock'], wp_json_encode( $sw ) );
+		}
+		$sw = Minn_Admin_REST::config_switch( 'WP_DEBUG', $php . "if ( ! defined( 'WP_DEBUG' ) ) {\n\tdefine( 'WP_DEBUG', {$now} );\n}\n" . $settings );
+		$check( "#12 (N1) control: WP-CLI's fallback at the top of the file is still a switch", false === $sw['locked'], wp_json_encode( $sw ) );
+
+		// Round five N2: alternative syntax elsewhere in the file leaves a
+		// plain define a switch; one inside such a block is locked.
+		$sw = Minn_Admin_REST::config_switch( 'WP_DEBUG', $php . "if ( file_exists( __DIR__ . '/local.php' ) ) :\n\tinclude __DIR__ . '/local.php';\nendif;\ndefine( 'WP_DEBUG', {$now} );\n" );
+		$check( '#12 (N2) an if: … endif; block elsewhere leaves a plain define a switch', false === $sw['locked'], wp_json_encode( $sw ) );
+		$sw = Minn_Admin_REST::config_switch( 'WP_DEBUG', $php . "if ( getenv( 'MINN_V046_STAGING' ) ) :\n\tdefine( 'WP_DEBUG', {$now} );\nelse :\n\t\$x = 1;\nendif;\n" );
+		$check( '#12 (N2) control: a define inside an if: … endif; block is locked as in a branch', true === $sw['locked'] && 'branch' === $sw['lock'], wp_json_encode( $sw ) );
 	}
 
 	$has = method_exists( 'Minn_Admin_REST', 'config_rewrite' );
@@ -873,6 +961,46 @@ add_filter( 'pre_http_request', static function () {
 	$check( '#12 a constant defined twice is refused, both defines untouched', is_wp_error( $e ) && 'defined_twice' === $e->get_error_code(), is_wp_error( $e ) ? $e->get_error_code() : 'written' );
 	$e = Minn_Admin_REST::config_rewrite( 'WP_DEBUG_LOG', true, $php . $cases[3][1] . "\n" );
 	$check( '#12 a path next to a commented-out literal is refused', is_wp_error( $e ) && 'custom_value' === $e->get_error_code(), is_wp_error( $e ) ? $e->get_error_code() : 'written' );
+	// Round five: a write must prove it landed. A short write puts the
+	// original back and answers an error; only a landed write reaches
+	// OPcache.
+	$has_write = method_exists( 'Minn_Admin_REST', 'config_write' );
+	$check( '#12 (write) the write is proved (config_write)', $has_write );
+	if ( $has_write ) {
+		$file   = 'minnv046://wp-config.php';
+		$orig   = $php . "define( 'WP_DEBUG_LOG', true );\n" . str_repeat( "// padding\n", 50 );
+		$next   = str_replace( "define( 'WP_DEBUG_LOG', true );", "define( 'WP_DEBUG_LOG', false );", $orig );
+		$cleared = 0;
+		$spy     = static function ( $will, $path ) use ( $file, &$cleared ) {
+			if ( $path === $file ) {
+				++$cleared;
+			}
+			return false;
+		};
+		add_filter( 'wp_opcache_invalidate_file', $spy, 10, 2 );
+		$can_spy = function_exists( 'opcache_invalidate' ) && ! ini_get( 'opcache.restrict_api' );
+
+		Minn_V046_Short_Stream::$files[ $file ] = $orig;
+		Minn_V046_Short_Stream::$short          = 0;
+		$ok = Minn_Admin_REST::config_write( $file, $next, $orig );
+		$check( '#12 (write) control: a whole write lands and goes to OPcache', true === $ok && $next === Minn_V046_Short_Stream::$files[ $file ] && ( ! $can_spy || 1 === $cleared ), wp_json_encode( array( is_wp_error( $ok ) ? $ok->get_error_code() : $ok, $cleared ) ) );
+
+		$cleared = 0;
+		Minn_V046_Short_Stream::$files[ $file ] = $orig;
+		Minn_V046_Short_Stream::$short          = 1;
+		$e = Minn_Admin_REST::config_write( $file, $next, $orig );
+		$check( '#12 (write) a short write puts the original back and answers 500', is_wp_error( $e ) && 'write_incomplete' === $e->get_error_code() && 500 === ( $e->get_error_data()['status'] ?? 0 ) && $orig === Minn_V046_Short_Stream::$files[ $file ], is_wp_error( $e ) ? $e->get_error_code() : wp_json_encode( $e ) );
+		$check( '#12 (write) and nothing reaches OPcache', 0 === $cleared, (string) $cleared );
+
+		$cleared = 0;
+		Minn_V046_Short_Stream::$files[ $file ] = $orig;
+		Minn_V046_Short_Stream::$short          = 2;
+		$e = Minn_Admin_REST::config_write( $file, $next, $orig );
+		$check( '#12 (write) a short write that cannot be undone says so (500), and reaches no OPcache', is_wp_error( $e ) && 'write_broken' === $e->get_error_code() && 0 === $cleared, is_wp_error( $e ) ? $e->get_error_code() : wp_json_encode( $e ) );
+		remove_filter( 'wp_opcache_invalidate_file', $spy, 10 );
+		Minn_V046_Short_Stream::$short = 0;
+	}
+
 	$new = Minn_Admin_REST::config_rewrite( 'SAVEQUERIES', true, $php . "// define( 'SAVEQUERIES', false );\n" . $marker );
 	$check( '#12 control: a constant only a comment names gets a real define, the comment kept', defined( 'SAVEQUERIES' ) || ( is_string( $new )
 		&& 1 === substr_count( $new, "define( 'SAVEQUERIES', true );" ) && false !== strpos( $new, "// define( 'SAVEQUERIES', false );" ) ), is_string( $new ) ? $new : wp_json_encode( $new ) );

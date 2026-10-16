@@ -13382,17 +13382,18 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	 * true or false, which a switch may rewrite), 'custom' (anything else: a
 	 * log file path for WP_DEBUG_LOG, an expression), 'multiple' (defined
 	 * more than once in a way that leaves which define wins to the file's
-	 * own branches) or 'branch' (one define, inside a condition or a
-	 * function, so it may not be the one that ran). A switch writes only true or false, so it must never
+	 * own branches), 'branch' (one define, inside a condition or a
+	 * function, so it may not be the one that ran) or 'late' (after the
+	 * line that loads wp-settings.php, so it never takes effect). A switch writes only true or false, so it must never
 	 * replace a custom value: a private log path would become true and move
 	 * the log to the public wp-content/debug.log.
 	 *
 	 * The kind is that of the very define a write would replace: the one PHP
 	 * runs. A commented-out define is not one. A fallback written as
 	 * `if ( ! defined( 'NAME' ) ) { define( … ); }` (or `defined( 'NAME' ) ||
-	 * define( … )`), as WP-CLI's wp-config template has it, never overrides
-	 * a define above it, so it is passed over when one comes first, and is
-	 * the define when it stands alone. Two defines neither of which is such
+	 * define( … )`) at the top of the file, as WP-CLI's wp-config template
+	 * has it, never overrides a define above it, so it is passed over when
+	 * one comes first, and is the define when it stands alone. Two defines neither of which is such
 	 * a fallback (an environment branch), or a fallback ahead of the define,
 	 * are 'multiple'. A define this cannot place (a value holding a
 	 * parenthesis, a name that is not a plain string, a define inside a
@@ -13477,58 +13478,106 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			$k = $prev( $k );
 			return $is( $k, T_STRING, 'defined' ) ? $k : -1;
 		};
-		// Whether the define starting at $at only runs when NAME is undefined.
+		// Where the guard starts when the define starting at $at only runs
+		// while NAME is undefined: its `if`, or the `defined()` of a
+		// `defined() ||`; -1 otherwise. An elseif is no such guard: it runs
+		// only when the branches before it did not.
 		$fallback = static function ( $at ) use ( $prev, $is, $defined_call ) {
 			$k = $prev( $at );
 			if ( $is( $k, T_BOOLEAN_OR ) || $is( $k, T_LOGICAL_OR ) ) {
-				return $defined_call( $prev( $k ) ) >= 0;
+				return $defined_call( $prev( $k ) );
 			}
 			if ( $is( $k, '{' ) ) {
 				$k = $prev( $k );
 			}
 			if ( ! $is( $k, ')' ) ) {
-				return false;
+				return -1;
 			}
 			$d = $defined_call( $prev( $k ) );
 			if ( $d < 0 ) {
-				return false;
+				return -1;
 			}
 			$k = $prev( $d );
 			if ( ! $is( $k, '!' ) ) {
-				return false;
+				return -1;
 			}
 			$k = $prev( $k );
 			if ( ! $is( $k, '(' ) ) {
-				return false;
+				return -1;
 			}
-			return $is( $prev( $k ), T_IF ) || $is( $prev( $k ), T_ELSEIF );
+			return $is( $prev( $k ), T_IF ) ? $prev( $k ) : -1;
 		};
 
-		// Every define( 'NAME', … ) PHP would run, and every comment's span.
-		// A define inside braces (an if, else, switch, function) or right
-		// after a condition runs only sometimes; alternative syntax
-		// (if: … endif;) is not followed, so a file using it counts every
-		// define as conditional.
-		$real     = array();
-		$comments = array();
-		$depth    = 0;
-		$alt      = false;
-		foreach ( $tokens as $t ) {
-			if ( is_array( $t ) && in_array( $t[0], array( T_ENDIF, T_ENDWHILE, T_ENDFOR, T_ENDFOREACH, T_ENDSWITCH, T_ENDDECLARE ), true ) ) {
-				$alt = true;
-				break;
+		// The block depth of every token: braces (an if, else, switch, loop,
+		// function, class) and alternative syntax (if: … endif; and the like,
+		// opened by the ':' after its header, closed by its end keyword).
+		$opens = array();
+		foreach ( $tokens as $i => $t ) {
+			if ( ! is_array( $t ) || ! in_array( $t[0], array( T_IF, T_WHILE, T_FOR, T_FOREACH, T_SWITCH, T_DECLARE ), true ) ) {
+				continue;
+			}
+			$k = $next( $i );
+			if ( ! $is( $k, '(' ) ) {
+				continue;
+			}
+			for ( $level = 0; $k < $count; $k++ ) {
+				if ( '(' === $tokens[ $k ] ) {
+					++$level;
+				} elseif ( ')' === $tokens[ $k ] && 0 === --$level ) {
+					break;
+				}
+			}
+			$c = $next( $k );
+			if ( $is( $c, ':' ) ) {
+				$opens[ $c ] = true;
 			}
 		}
+		$depth_at = array();
+		$depth    = 0;
+		foreach ( $tokens as $i => $t ) {
+			$depth_at[ $i ] = $depth;
+			if ( '{' === $t || ( is_array( $t ) && in_array( $t[0], array( T_CURLY_OPEN, T_DOLLAR_OPEN_CURLY_BRACES ), true ) ) || isset( $opens[ $i ] ) ) {
+				++$depth;
+			} elseif ( '}' === $t || ( is_array( $t ) && in_array( $t[0], array( T_ENDIF, T_ENDWHILE, T_ENDFOR, T_ENDFOREACH, T_ENDSWITCH, T_ENDDECLARE ), true ) ) ) {
+				--$depth;
+			}
+		}
+		// A statement of its own at the top of the file: nothing before it
+		// but the end of another statement or block, or the open tag.
+		$top = static function ( $k ) use ( $prev, $is, $depth_at ) {
+			if ( ! isset( $depth_at[ $k ] ) || 0 !== $depth_at[ $k ] ) {
+				return false;
+			}
+			$before = $prev( $k );
+			while ( $is( $before, '@' ) ) {
+				$before = $prev( $before );
+			}
+			return $before < 0 || $is( $before, ';' ) || $is( $before, '}' ) || $is( $before, T_OPEN_TAG );
+		};
+		// Where wp-config.php loads wp-settings.php: a define after it runs
+		// once WordPress has already read the constant (core defines its
+		// defaults in wp-settings), so it never takes effect.
+		$settings_at = null;
+		foreach ( $tokens as $i => $t ) {
+			if ( null !== $settings_at || ! is_array( $t ) || ! in_array( $t[0], array( T_REQUIRE, T_REQUIRE_ONCE, T_INCLUDE, T_INCLUDE_ONCE ), true ) ) {
+				continue;
+			}
+			for ( $k = $i + 1; $k < $count && ';' !== $tokens[ $k ] && ! $is( $k, T_CLOSE_TAG ); $k++ ) {
+				if ( $is( $k, T_CONSTANT_ENCAPSED_STRING ) && false !== stripos( $tokens[ $k ][1], 'wp-settings.php' ) ) {
+					$settings_at = $starts[ $i ];
+					break;
+				}
+			}
+		}
+
+		// Every define( 'NAME', … ) PHP would run, and every comment's span.
+		// A define inside a block (an if, else, switch, loop, function) or
+		// right after a condition runs only sometimes, and so does a guard
+		// that is not a statement of its own at the top of the file.
+		$real     = array();
+		$comments = array();
 		for ( $i = 0; $i < $count; $i++ ) {
 			$t = $tokens[ $i ];
-			if ( '{' === $t || ( is_array( $t ) && in_array( $t[0], array( T_CURLY_OPEN, T_DOLLAR_OPEN_CURLY_BRACES ), true ) ) ) {
-				++$depth;
-				continue;
-			}
-			if ( '}' === $t ) {
-				--$depth;
-				continue;
-			}
 			if ( ! is_array( $t ) ) {
 				continue;
 			}
@@ -13565,15 +13614,12 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				return $custom;
 			}
 			if ( $named( $j ) ) {
-				$before = $prev( $at );
-				while ( $is( $before, '@' ) ) {
-					$before = $prev( $before );
-				}
+				$guard  = $fallback( $at );
 				$real[] = array(
 					'offset'   => $starts[ $at ],
-					'fallback' => $fallback( $at ),
-					// A statement of its own at the top of the file.
-					'branch'   => $alt || $depth > 0 || ! ( $before < 0 || $is( $before, ';' ) || $is( $before, '}' ) || $is( $before, T_OPEN_TAG ) ),
+					'fallback' => $guard >= 0 && $top( $guard ),
+					'branch'   => ! $top( $at ),
+					'late'     => null !== $settings_at && $starts[ $at ] > $settings_at,
 				);
 			}
 		}
@@ -13597,6 +13643,10 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			return array( 'kind' => 'multiple', 'offset' => null, 'length' => 0 );
 		} else {
 			$target = $real ? $real[0] : null;
+		}
+		if ( $target && $target['late'] ) {
+			// WordPress has read the constant before this line runs.
+			return array( 'kind' => 'late', 'offset' => null, 'length' => 0 );
 		}
 		if ( $target && ! $target['fallback'] && $target['branch'] ) {
 			// It may not be the define that ran, whatever the running value.
@@ -13657,6 +13707,10 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		if ( 'branch' === $scan['kind'] ) {
 			/* translators: %s: a wp-config.php constant name, such as WP_DEBUG_LOG. */
 			return new WP_Error( 'in_branch', sprintf( __( '%s is set inside a condition in wp-config.php, so it can only be changed there.', 'minn-admin' ), $name ), array( 'status' => 400 ) );
+		}
+		if ( 'late' === $scan['kind'] ) {
+			/* translators: %s: a wp-config.php constant name, such as WP_DEBUG_LOG. */
+			return new WP_Error( 'too_late', sprintf( __( '%s is set after wp-config.php loads WordPress, so it never takes effect; move it above that line in wp-config.php.', 'minn-admin' ), $name ), array( 'status' => 400 ) );
 		}
 		if ( 'bool' === $scan['kind'] ) {
 			return substr_replace( $contents, $line, $scan['offset'], $scan['length'] );
@@ -13761,8 +13815,8 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	 * wp-config.php defines it, and whether it is locked, with why:
 	 * 'elsewhere' (defined outside wp-config.php, or by a literal there
 	 * that is not what WordPress runs with: dead code under an if, a define
-	 * something earlier overrides), 'custom', 'multiple' or 'branch' (see
-	 * config_define_kind()).
+	 * something earlier overrides), 'custom', 'multiple', 'branch' or 'late'
+	 * (see config_define_kind()).
 	 *
 	 * @param string $name     Constant name.
 	 * @param string $contents wp-config.php source ('' when unreadable).
@@ -13907,30 +13961,19 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				array( 'status' => 500 )
 			);
 		}
-		if ( false === file_put_contents( $path, $new ) ) {
-			self::drop_wpconfig_backup( $path );
-			return new WP_Error( 'write_failed', __( 'Could not write wp-config.php.', 'minn-admin' ), array( 'status' => 500 ) );
+		$wrote = self::config_write( $path, $new, $contents );
+		if ( is_wp_error( $wrote ) && 'write_broken' === $wrote->get_error_code() ) {
+			// The rollback copy is all that is left of the original: keep it.
+			return new WP_Error(
+				'write_broken',
+				/* translators: %s: the file name of the kept copy of wp-config.php. */
+				sprintf( __( 'wp-config.php did not save completely and could not be put back. A copy of the original is kept as %s.', 'minn-admin' ), basename( self::wpconfig_backup_path( $path ) ) ),
+				array( 'status' => 500 )
+			);
 		}
-
-		// The write landed and was syntax-checked before it went out, so the
-		// rollback copy has done its job. Re-read from disk and confirm it
-		// parses before dropping the copy: if anything truncated the write,
-		// keep the copy and say so rather than leaving the site with a broken
-		// wp-config.php and nothing to restore from.
-		// The next request must run the new file, not OPcache's copy of the
-		// old one, as core's own file editors make sure.
-		if ( ! function_exists( 'wp_opcache_invalidate' ) && is_file( ABSPATH . 'wp-admin/includes/file.php' ) ) {
-			require_once ABSPATH . 'wp-admin/includes/file.php';
-		}
-		if ( function_exists( 'wp_opcache_invalidate' ) ) {
-			wp_opcache_invalidate( $path, true );
-		} elseif ( function_exists( 'opcache_invalidate' ) ) {
-			@opcache_invalidate( $path, true ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
-		}
-		$written = @file_get_contents( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
-		$intact  = false !== $written && $written === $new;
-		if ( $intact ) {
-			self::drop_wpconfig_backup( $path );
+		self::drop_wpconfig_backup( $path );
+		if ( is_wp_error( $wrote ) ) {
+			return $wrote;
 		}
 
 		return rest_ensure_response(
@@ -13939,10 +13982,47 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				// The value that will apply on the next request (this one already
 				// bootstrapped with the old constant).
 				'value'    => $value,
-				// Present only when the rollback copy had to be kept.
-				'backup'   => $intact ? '' : basename( self::wpconfig_backup_path( $path ) ),
+				// Kept for the response's shape: a write that did not land is
+				// now an error, so no copy is ever left behind on success.
+				'backup'   => '',
 			)
 		);
+	}
+
+	/**
+	 * Write wp-config.php and prove it: every byte written, and the same
+	 * bytes read back. A write that falls short puts the original back,
+	 * proved the same way. Only a write that landed is handed to OPcache, so
+	 * the next request runs the new file rather than its cached copy (as
+	 * core's own file editors do).
+	 *
+	 * @param string $path     wp-config.php.
+	 * @param string $new      The new source.
+	 * @param string $original The source it replaces.
+	 * @return true|WP_Error 'write_incomplete' when the original is back,
+	 *                       'write_broken' when it could not be put back.
+	 */
+	public static function config_write( $path, $new, $original ) {
+		$put = static function ( $bytes ) use ( $path ) {
+			$n = @file_put_contents( $path, $bytes ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			clearstatcache( true, $path );
+			return strlen( $bytes ) === $n && @file_get_contents( $path ) === $bytes; // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		};
+		if ( $put( (string) $new ) ) {
+			if ( ! function_exists( 'wp_opcache_invalidate' ) && is_file( ABSPATH . 'wp-admin/includes/file.php' ) ) {
+				require_once ABSPATH . 'wp-admin/includes/file.php';
+			}
+			if ( function_exists( 'wp_opcache_invalidate' ) ) {
+				wp_opcache_invalidate( $path, true );
+			} elseif ( function_exists( 'opcache_invalidate' ) ) {
+				@opcache_invalidate( $path, true ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			}
+			return true;
+		}
+		if ( $put( (string) $original ) ) {
+			return new WP_Error( 'write_incomplete', __( 'wp-config.php did not save completely, so it was put back as it was. Nothing changed.', 'minn-admin' ), array( 'status' => 500 ) );
+		}
+		return new WP_Error( 'write_broken', __( 'wp-config.php did not save completely and could not be put back.', 'minn-admin' ), array( 'status' => 500 ) );
 	}
 
 	/**
