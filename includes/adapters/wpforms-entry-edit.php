@@ -171,8 +171,17 @@ function minn_admin_wpforms_edit_block( $row ) {
 				$row_out['inputs'][] = array( 'id' => $fid . '.' . $key, 'label' => $part, 'value' => (string) ( $have[ $key ] ?? '' ) );
 			}
 		} elseif ( 'multi' === $kind ) {
-			$raw    = (string) ( $have['value_raw'] ?? $have['value'] ?? '' );
-			$picked = '' === $raw ? array() : array_values( array_filter( array_map( 'strval', explode( "\n", $raw ) ), 'strlen' ) );
+			$raw     = (string) ( $have['value_raw'] ?? $have['value'] ?? '' );
+			$picked  = '' === $raw ? array() : array_values( array_filter( array_map( 'strval', explode( "\n", $raw ) ), 'strlen' ) );
+			$offered = array_map( 'strval', wp_list_pluck( minn_admin_wpforms_edit_choices( $field ), 0 ) );
+			// With values shown, their format() rebuilds the answer's labels
+			// (what their entry view and export print) from the choices it
+			// still has, so a kept pick would stay in value_raw and drop out
+			// of what WPForms shows. Such an answer stays in their editor.
+			if ( ! empty( $field['show_values'] ) && array_diff( $picked, $offered ) ) {
+				$locked[] = $label;
+				continue;
+			}
 			$row_out['inputs'][] = array( 'id' => $fid, 'value' => $picked );
 			// A pick the form no longer offers keeps a ticked box (forms-kit.php).
 			$row_out['choices']  = minn_admin_forms_keep_choices( minn_admin_wpforms_edit_choices( $field ), $picked );
@@ -222,9 +231,11 @@ function minn_admin_wpforms_edit_run( $form_id, $entry_id, array $submit, array 
 	$quiet = function ( $trigger, $fn ) {
 		return 'wp_send_json' === $fn ? false : $trigger;
 	};
-	$known = function ( $allow, $field_submit, $field ) use ( $kept ) {
+	// Keyed by form and field: a hook inside their save that validates
+	// another form's field of the same id is not let through.
+	$known = function ( $allow, $field_submit, $field, $form_data = array() ) use ( $kept, $form_id ) {
 		$fid = (string) ( is_array( $field ) ? ( $field['id'] ?? '' ) : '' );
-		if ( $allow || ! isset( $kept[ $fid ] ) || ! is_array( $field_submit ) ) {
+		if ( $allow || ! is_array( $form_data ) || (int) ( $form_data['id'] ?? 0 ) !== (int) $form_id || ! isset( $kept[ $fid ] ) || ! is_array( $field_submit ) ) {
 			return $allow;
 		}
 		foreach ( $field_submit as $key => $v ) {
@@ -235,7 +246,7 @@ function minn_admin_wpforms_edit_run( $form_id, $entry_id, array $submit, array 
 		return true;
 	};
 	add_filter( 'wpforms_pro_admin_entries_edit_field_editable', $editable, PHP_INT_MAX, 3 );
-	add_filter( 'wpforms_field_choices_allow_unknown_value', $known, PHP_INT_MAX, 3 );
+	add_filter( 'wpforms_field_choices_allow_unknown_value', $known, PHP_INT_MAX, 4 );
 	add_filter( 'wp_doing_ajax', $ajax, PHP_INT_MAX );
 	add_filter( 'wp_die_ajax_handler', $halt, PHP_INT_MAX );
 	add_filter( 'doing_it_wrong_trigger_error', $quiet, 10, 2 );
