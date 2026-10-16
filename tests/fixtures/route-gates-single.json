@@ -768,6 +768,9 @@
         "GET /minn-admin/v1/minn-fold/settings/(?P<tab>tab-\\d+)": [
             "administrator"
         ],
+        "GET /minn-admin/v1/minn-switch/status": [
+            "administrator"
+        ],
         "GET /minn-admin/v1/navigation/usage": [
             "shop_manager",
             "administrator"
@@ -1679,6 +1682,12 @@
             "administrator"
         ],
         "POST /minn-admin/v1/minn-fold/settings/(?P<tab>tab-\\d+)": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/minn-switch/check": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/minn-switch/run": [
             "administrator"
         ],
         "POST /minn-admin/v1/minn-test/license-seed": [

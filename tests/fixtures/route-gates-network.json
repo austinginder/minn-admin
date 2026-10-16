@@ -165,6 +165,7 @@
             "shop_manager",
             "administrator"
         ],
+        "GET /minn-admin/v1/minn-switch/status": [],
         "GET /minn-admin/v1/my-sites": [
             "contributor",
             "author",
@@ -490,6 +491,8 @@
             "shop_manager",
             "administrator"
         ],
+        "POST /minn-admin/v1/minn-switch/check": [],
+        "POST /minn-admin/v1/minn-switch/run": [],
         "POST /minn-admin/v1/network/plugins/activate": [],
         "POST /minn-admin/v1/network/settings/(?P<tab>[a-z0-9_-]+)": [],
         "POST /minn-admin/v1/network/sites": [],
