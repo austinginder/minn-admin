@@ -415,33 +415,45 @@ class Minn_Admin_DB {
 	const WPDISCUZ_TABLES = array( 'wc_users_voted', 'wc_phrases', 'wc_comments_subscription', 'wc_follow_users', 'wc_feedback_forms', 'wc_users_rated', 'wc_avatars_cache', 'wc_flagged', 'wc_online_users' );
 
 	/**
-	 * Activity logs, mail logs and gift card stores whose plugin keeps
-	 * viewers out by its own rule, for the tables no kernel resource declares
-	 * whole: every table under the plugin's own name (its meta and context
-	 * tables, its other tables, a copy under any leading word), asked through
-	 * the helper Minn's adapter for that plugin uses, or a rule of this
-	 * class's own (self::). Pattern on the base name => helper; a helper that
+	 * Logs, entries and stores whose plugin keeps viewers out by its own
+	 * rule, for the tables no kernel resource declares whole: every table
+	 * under the plugin's own name (its meta, context and other tables, a copy
+	 * under any leading word), asked through the helper Minn's adapter for
+	 * that plugin uses, the plugin's own capability (cap:), or a rule of this
+	 * class's own (self::). Pattern on the base name => rule; a helper that
 	 * is not there refuses. Stream's names are too common a word to match
-	 * inside another name, so only its own two.
+	 * inside another name, so its tables are known by their columns
+	 * (stream_table()).
 	 */
 	const VIEWER_RULES = array(
 		'/(^|[^a-z0-9])wsal_/'             => 'minn_admin_wsal_can_view',
 		'/(^|[^a-z0-9])simple_history/'    => 'self::simple_history_admits',
-		'/^stream(_meta)?$/'               => 'minn_admin_stream_can',
 		'/(^|[^a-z0-9])aryo_activity_log/' => 'self::aryo_admits',
 		'/(^|[^a-z0-9])pimwick_gift_card/' => 'minn_admin_pwgc_can',
 		'/(^|[^a-z0-9])wpml_mails/'        => 'minn_admin_wpml_can',
+		// Gravity Forms' entries, their meta and notes, saved drafts, and the
+		// pre-2.3 tables a migration leaves behind.
+		'/(^|[^a-z0-9])(gf_entry|gf_draft_submissions|rg_lead|rg_incomplete_submissions)/' => 'self::gravity_forms_admits',
+		'/(^|[^a-z0-9])burst_/'            => 'cap:view_burst_statistics',
+		'/(^|[^a-z0-9])koko_analytics_/'   => 'cap:view_koko_analytics',
+		'/(^|[^a-z0-9])redirection_(logs|404)/' => 'minn_admin_redirection_can',
+		'/(^|[^a-z0-9])itsec_/'            => 'minn_admin_solid_security_can',
 	);
 
 	/**
-	 * Whether a VIEWER_RULES plugin keeps the viewer out of this table.
+	 * Whether a VIEWER_RULES plugin, or Stream, keeps the viewer out of this
+	 * table.
 	 *
 	 * @param string $table Table name as resolved (prefix included).
 	 * @return bool
 	 */
 	private static function viewer_refused( $table ) {
-		$base = self::secret_base( $table );
-		foreach ( self::VIEWER_RULES as $pattern => $admits ) {
+		$base  = self::secret_base( $table );
+		$rules = self::VIEWER_RULES;
+		if ( self::stream_table( $table ) ) {
+			$rules['/./'] = 'minn_admin_stream_can';
+		}
+		foreach ( $rules as $pattern => $admits ) {
 			if ( ! preg_match( $pattern, $base ) ) {
 				continue;
 			}
@@ -449,6 +461,8 @@ class Minn_Admin_DB {
 				if ( 0 === strpos( $admits, 'self::' ) ) {
 					$method = substr( $admits, 6 );
 					$yes    = true === self::$method();
+				} elseif ( 0 === strpos( $admits, 'cap:' ) ) {
+					$yes = current_user_can( substr( $admits, 4 ) );
 				} else {
 					$yes = function_exists( $admits ) && true === call_user_func( $admits );
 				}
@@ -456,6 +470,67 @@ class Minn_Admin_DB {
 				$yes = false;
 			}
 			if ( ! $yes ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Whether a table is Stream's, or a copy of one: its own two names, a
+	 * records table by the columns only Stream's carries together (connector,
+	 * context, action: the records table, and its pre-3.0 context table), or
+	 * a meta table by Stream's meta columns under a name holding "stream".
+	 * The columns come from one information_schema read per request.
+	 *
+	 * @param string $table Table name as resolved (prefix included).
+	 * @return bool
+	 */
+	private static function stream_table( $table ) {
+		global $wpdb;
+		static $shapes = null;
+		$base = self::secret_base( $table );
+		if ( 'stream' === $base || 'stream_meta' === $base ) {
+			return true;
+		}
+		if ( null === $shapes ) {
+			$shapes = array();
+			$rows   = $wpdb->get_results(
+				$wpdb->prepare(
+					'SELECT table_name AS t, LOWER( column_name ) AS c FROM information_schema.COLUMNS
+					 WHERE table_schema = %s AND LOWER( column_name ) IN ( %s, %s, %s, %s, %s, %s )',
+					DB_NAME,
+					'connector',
+					'context',
+					'action',
+					'record_id',
+					'meta_key',
+					'meta_value'
+				)
+			);
+			foreach ( (array) $rows as $r ) {
+				$r                                = array_change_key_case( (array) $r, CASE_LOWER );
+				$shapes[ strtolower( $r['t'] ) ][] = $r['c'];
+			}
+		}
+		$cols = $shapes[ strtolower( (string) $table ) ] ?? array();
+		return ! array_diff( array( 'connector', 'context', 'action' ), $cols )
+			|| ( ! array_diff( array( 'record_id', 'meta_key', 'meta_value' ), $cols ) && (bool) preg_match( '/(^|[^a-z0-9])stream([^a-z0-9]|$)/', $base ) );
+	}
+
+	/**
+	 * Gravity Forms shows its entries to whoever holds its view-entries
+	 * capability or full access, asked as Minn's own entries view asks.
+	 *
+	 * @return bool
+	 */
+	private static function gravity_forms_admits() {
+		$caps = array( 'gravityforms_view_entries', 'gform_full_access' );
+		if ( class_exists( 'GFCommon' ) && method_exists( 'GFCommon', 'current_user_can_any' ) ) {
+			return (bool) GFCommon::current_user_can_any( $caps );
+		}
+		foreach ( $caps as $cap ) {
+			if ( current_user_can( $cap ) ) {
 				return true;
 			}
 		}
@@ -1877,7 +1952,16 @@ class Minn_Admin_DB {
 	 */
 	public static function health( $request = null ) {
 		$fresh = $request ? rest_sanitize_boolean( $request->get_param( 'refresh' ) ) : false;
-		return rest_ensure_response( self::health_data( $fresh ) );
+		$data  = self::health_data( $fresh );
+		// The run is shared by every viewer, and a row's table opens the
+		// browser on it: a table this viewer may not open is not offered.
+		self::$hidden = array();
+		foreach ( (array) ( $data['checks'] ?? array() ) as $i => $c ) {
+			if ( ! empty( $c['table'] ) && self::store_table_hidden( (string) $c['table'] ) ) {
+				$data['checks'][ $i ]['table'] = null;
+			}
+		}
+		return rest_ensure_response( $data );
 	}
 
 	/** Cached check run. Shared by the route and the System page row. */
