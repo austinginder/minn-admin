@@ -481,7 +481,8 @@ class Minn_Admin_DB {
 	 * records table by the columns only Stream's carries together (connector,
 	 * context, action: the records table, and its pre-3.0 context table), or
 	 * a meta table by Stream's meta columns under a name holding "stream".
-	 * The columns come from one information_schema read per request.
+	 * The columns come from information_schema once per request, narrowed to
+	 * this install's tables and to the columns asked about.
 	 *
 	 * @param string $table Table name as resolved (prefix included).
 	 * @return bool
@@ -494,23 +495,35 @@ class Minn_Admin_DB {
 			return true;
 		}
 		if ( null === $shapes ) {
+			// Two narrow reads, once a request: the tables carrying one of the
+			// two rare columns, then only those tables' other columns.
 			$shapes = array();
-			$rows   = $wpdb->get_results(
+			$like   = $wpdb->esc_like( $wpdb->base_prefix ) . '%';
+			$found  = $wpdb->get_col(
 				$wpdb->prepare(
-					'SELECT table_name AS t, LOWER( column_name ) AS c FROM information_schema.COLUMNS
-					 WHERE table_schema = %s AND LOWER( column_name ) IN ( %s, %s, %s, %s, %s, %s )',
+					'SELECT DISTINCT table_name FROM information_schema.COLUMNS
+					 WHERE table_schema = %s AND table_name LIKE %s AND column_name IN ( %s, %s )',
 					DB_NAME,
+					$like,
 					'connector',
-					'context',
-					'action',
-					'record_id',
-					'meta_key',
-					'meta_value'
+					'record_id'
 				)
 			);
-			foreach ( (array) $rows as $r ) {
-				$r                                = array_change_key_case( (array) $r, CASE_LOWER );
-				$shapes[ strtolower( $r['t'] ) ][] = $r['c'];
+			$found  = array_values( array_filter( array_map( 'strval', (array) $found ), 'strlen' ) );
+			if ( $found ) {
+				$in   = implode( ', ', array_fill( 0, count( $found ), '%s' ) );
+				$rows = $wpdb->get_results(
+					$wpdb->prepare(
+						// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $in is placeholders only.
+						"SELECT table_name AS t, LOWER( column_name ) AS c FROM information_schema.COLUMNS
+						 WHERE table_schema = %s AND table_name IN ( {$in} ) AND column_name IN ( %s, %s, %s, %s, %s, %s )",
+						array_merge( array( DB_NAME ), $found, array( 'connector', 'context', 'action', 'record_id', 'meta_key', 'meta_value' ) )
+					)
+				);
+				foreach ( (array) $rows as $r ) {
+					$r                                 = array_change_key_case( (array) $r, CASE_LOWER );
+					$shapes[ strtolower( $r['t'] ) ][] = $r['c'];
+				}
 			}
 		}
 		$cols = $shapes[ strtolower( (string) $table ) ] ?? array();
