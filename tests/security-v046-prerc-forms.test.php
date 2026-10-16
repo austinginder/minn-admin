@@ -718,5 +718,141 @@ rest_get_server();
 	}
 } )();
 
+/*
+ * Gravity Forms answers sent back as loaded. A ticked box was turned into
+ * its choice's current value before the compare, so a box holding a choice
+ * since renamed was rewritten to the new name. Minn's entry page sends only
+ * changed answers; another client sending them all back reached this.
+ */
+( function () use ( $check, $skip, $call, $once ) {
+	if ( ! class_exists( 'GFAPI' ) || ! function_exists( 'minn_admin_gf_entry_edit_block' ) || ! GFCommon::current_user_can_any( array( 'gravityforms_edit_entries', 'gform_full_access' ) ) ) {
+		$skip( 'GF answers: Gravity Forms inactive' );
+		return;
+	}
+	$form_id = 0;
+	$clean   = $once( function () use ( &$form_id ) {
+		if ( $form_id ) {
+			GFAPI::delete_form( $form_id );
+		}
+	} );
+	try {
+		$form_id = GFAPI::add_form( array(
+			'title'  => 'Minn prerc answers ' . wp_rand( 1000, 9999 ),
+			'fields' => array(
+				array(
+					'id'      => 1,
+					'type'    => 'checkbox',
+					'label'   => 'Extras',
+					'choices' => array( array( 'text' => 'New name', 'value' => 'New name' ), array( 'text' => 'B', 'value' => 'B' ) ),
+					'inputs'  => array( array( 'id' => '1.1', 'label' => 'New name' ), array( 'id' => '1.2', 'label' => 'B' ) ),
+				),
+			),
+		) );
+		if ( is_wp_error( $form_id ) || ! $form_id ) {
+			$form_id = 0;
+			$skip( 'GF answers: Gravity Forms would not store a test form' );
+			return;
+		}
+		$form_id  = (int) $form_id;
+		// The box was ticked when the choice was still called "Old name".
+		$entry_id = GFAPI::add_entry( array( 'form_id' => $form_id, '1.1' => 'Old name', '1.2' => '' ) );
+		if ( is_wp_error( $entry_id ) || ! $entry_id ) {
+			$skip( 'GF answers: Gravity Forms would not store a test entry' );
+			return;
+		}
+		$block  = minn_admin_gf_entry_edit_block( GFAPI::get_form( $form_id ), GFAPI::get_entry( $entry_id ) );
+		$values = array();
+		$orig   = array();
+		foreach ( (array) ( $block['fields'] ?? array() ) as $f ) {
+			foreach ( $f['inputs'] as $i ) {
+				$values[ $i['id'] ] = 'checks' === $f['kind'] ? '' !== (string) $i['value'] : $i['value'];
+				$orig[ $i['id'] ]   = $i['value'];
+			}
+		}
+		list( $st, $d ) = $call( 'POST', "/minn-admin/v1/gf/entries/{$entry_id}/answers", array( 'values' => $values, 'original' => $orig ) );
+		$now = GFAPI::get_entry( $entry_id );
+		$check( 'GF answers: every answer sent back as loaded answers 200', 200 === $st, $st . ' ' . wp_json_encode( $d ) );
+		$check( 'GF answers: and keeps a ticked box holding a choice since renamed', 'Old name' === (string) rgar( $now, '1.1' ), wp_json_encode( rgar( $now, '1.1' ) ) );
+		$fresh = minn_admin_gf_entry_edit_block( GFAPI::get_form( $form_id ), GFAPI::get_entry( $entry_id ) );
+		$orig  = array();
+		foreach ( (array) ( $fresh['fields'] ?? array() ) as $f ) {
+			foreach ( $f['inputs'] as $i ) {
+				$orig[ $i['id'] ] = $i['value'];
+			}
+		}
+		list( $st ) = $call( 'POST', "/minn-admin/v1/gf/entries/{$entry_id}/answers", array( 'values' => array( '1.2' => true ), 'original' => array( '1.2' => $orig['1.2'] ?? '' ) ) );
+		$now = GFAPI::get_entry( $entry_id );
+		$check( 'GF answers: ticking the other box writes it (control)', 200 === $st && 'B' === (string) rgar( $now, '1.2' ), $st . ' ' . wp_json_encode( array( rgar( $now, '1.1' ), rgar( $now, '1.2' ) ) ) );
+	} finally {
+		$clean();
+	}
+} )();
+
+/*
+ * Elementor Pro answers sent back as loaded. sanitize_text_field ran before
+ * the compare, so a stored "50%DEAL" or inline markup was rewritten.
+ */
+( function () use ( $check, $skip, $call, $once ) {
+	if ( ! function_exists( 'minn_admin_elementor_forms_ready' ) || ! minn_admin_elementor_forms_ready() || ! function_exists( 'minn_admin_elementor_edit_block' ) || ! class_exists( '\ElementorPro\Modules\Forms\Submissions\Database\Repositories\Form_Snapshot_Repository' ) ) {
+		$skip( 'Elementor answers: Elementor Pro forms inactive' );
+		return;
+	}
+	$query = \ElementorPro\Modules\Forms\Submissions\Database\Query::get_instance();
+	$post  = wp_insert_post( array( 'post_title' => 'Minn prerc answers', 'post_status' => 'draft', 'post_type' => 'post' ), true );
+	$post  = is_wp_error( $post ) ? 0 : (int) $post;
+	$sub   = 0;
+	$clean = $once( function () use ( &$sub, $post, $query ) {
+		if ( $sub ) {
+			$query->delete_submission( $sub );
+		}
+		if ( $post ) {
+			wp_delete_post( $post, true );
+		}
+	} );
+	$stored = function ( $key ) use ( $query, &$sub ) {
+		foreach ( (array) ( $query->get_submission( $sub )['data']['values'] ?? array() ) as $v ) {
+			if ( $key === ( $v['key'] ?? '' ) ) {
+				return (string) $v['value'];
+			}
+		}
+		return null;
+	};
+	try {
+		if ( ! $post ) {
+			$skip( 'Elementor answers: could not make a page for the form' );
+			return;
+		}
+		\ElementorPro\Modules\Forms\Submissions\Database\Repositories\Form_Snapshot_Repository::instance()->create_or_update( $post, 'minnprerc', array(
+			'name'   => 'Prerc answers',
+			'fields' => array(
+				array( 'id' => 'note', 'type' => 'text', 'label' => 'Note' ),
+				array( 'id' => 'more', 'type' => 'textarea', 'label' => 'More' ),
+			),
+		) );
+		$note = 'Promo 50%DEAL <b>now</b>';
+		$more = "Line one <i>x</i>\n\n50%DEAL";
+		$sub  = (int) $query->add_submission(
+			array( 'post_id' => $post, 'element_id' => 'minnprerc', 'form_name' => 'Prerc answers', 'referer' => home_url( '/' ), 'referer_title' => 'Home' ),
+			array( array( 'id' => 'note', 'type' => 'text', 'value' => $note ), array( 'id' => 'more', 'type' => 'textarea', 'value' => $more ) )
+		);
+		if ( ! $sub || $note !== $stored( 'note' ) ) {
+			$skip( 'Elementor answers: Elementor would not store the test submission as given' );
+			return;
+		}
+		$block  = minn_admin_elementor_edit_block( $query->get_submission( $sub )['data'] );
+		$values = array();
+		foreach ( (array) ( $block['fields'] ?? array() ) as $f ) {
+			$values[ $f['id'] ] = $f['inputs'][0]['value'];
+		}
+		list( $st, $d ) = $call( 'POST', "/minn-admin/v1/elementor/submissions/{$sub}/answers", array( 'values' => $values, 'original' => $values ) );
+		$check( 'Elementor answers: every answer sent back as loaded answers 200', 200 === $st, $st . ' ' . wp_json_encode( $d ) );
+		$check( 'Elementor answers: and keeps the stored text and paragraph byte for byte', $note === $stored( 'note' ) && $more === $stored( 'more' ), wp_json_encode( array( $stored( 'note' ), $stored( 'more' ) ) ) );
+		list( $st ) = $call( 'POST', "/minn-admin/v1/elementor/submissions/{$sub}/answers", array( 'values' => array( 'note' => 'Changed <b>note</b>' ), 'original' => array( 'note' => $stored( 'note' ) ) ) );
+		$check( 'Elementor answers: an edited answer is still written cleaned (control)', 200 === $st && 'Changed note' === $stored( 'note' ), $st . ' ' . wp_json_encode( $stored( 'note' ) ) );
+	} finally {
+		$clean();
+	}
+} )();
+
 printf( "\nsecurity-v046-prerc-forms: %d/%d passed\n", count( array_filter( $results ) ), count( $results ) );
 exit( count( array_filter( $results ) ) === count( $results ) ? 0 : 1 );

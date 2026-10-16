@@ -305,6 +305,15 @@ add_action( 'rest_api_init', function () {
 				if ( array_key_exists( $input_id, $original ) && wp_json_encode( $original[ $input_id ] ) !== wp_json_encode( $e['input']['value'] ) ) {
 					return new WP_Error( 'minn_gfe_conflict', __( 'This entry changed since you opened it. Reload it to see the latest answers, then edit again.', 'minn-admin' ), array( 'status' => 409 ) );
 				}
+				// An answer sent back as the page read it stays as stored:
+				// preparing it first turned a ticked box holding a choice
+				// since renamed into the new name, and trimmed text.
+				$as_read = 'checks' === $e['row']['kind']
+					? (bool) $value === ( '' !== (string) $e['input']['value'] )
+					: wp_json_encode( is_scalar( $value ) ? (string) $value : $value ) === wp_json_encode( $e['input']['value'] );
+				if ( $as_read ) {
+					continue;
+				}
 				$stored = minn_admin_gfe_prepare( $form, $field, $e['row']['kind'], $e['input'], $value, $entry );
 				if ( is_wp_error( $stored ) ) {
 					return $stored;

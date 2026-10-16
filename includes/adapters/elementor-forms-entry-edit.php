@@ -197,6 +197,11 @@ add_action( 'rest_api_init', function () {
 				if ( array_key_exists( $key, $original ) && wp_json_encode( $original[ $key ] ) !== wp_json_encode( $stored ) ) {
 					return new WP_Error( 'minn_ele_conflict', __( 'This submission changed since you opened it. Reload it to see the latest answers, then edit again.', 'minn-admin' ), array( 'status' => 409 ) );
 				}
+				// An answer sent back as the page read it stays as stored:
+				// cleaning it first rewrote a stored "50%DEAL" or inline markup.
+				if ( wp_json_encode( $value ) === wp_json_encode( $stored ) ) {
+					continue;
+				}
 				$allowed = isset( $row['choices'] ) ? wp_list_pluck( $row['choices'], 0 ) : array();
 				if ( 'multi' === $row['kind'] ) {
 					// Each pick is one of the served choices exactly (the form's

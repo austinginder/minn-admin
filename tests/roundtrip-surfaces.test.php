@@ -25,14 +25,7 @@
  * @package minn-admin
  */
 
-$known = array(
-	// Answer routes that clean or convert a sent value before comparing it
-	// with the stored one, so an answer sent back as loaded is rewritten.
-	// The entry page sends only changed answers, so only another client
-	// reaches these; the fix compares first (adapters lane).
-	'gf-entry [answers]: every answer sent back as loaded stores nothing'        => 'a checkbox sent as checked becomes its choice\'s current value before the compare, so a box holding a renamed choice is rewritten to the new name',
-	'elementor-entry [answers]: every answer sent back as loaded stores nothing' => 'sanitize_text_field runs before the compare, so a stored "50%DEAL" or inline markup is rewritten',
-);
+$known = array();
 
 $rt = ( require __DIR__ . '/lib/roundtrip.php' )( 'roundtrip-surfaces', $known );
 extract( $rt ); // phpcs:ignore WordPress.PHP.DontExtract.extract_extract
