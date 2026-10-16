@@ -170,8 +170,16 @@ function minn_admin_gfc_build( $form, $stored, $body, $is_new ) {
 		return new WP_Error( 'minn_gfc_invalid', $message, array( 'status' => 400, 'field' => $field ) );
 	};
 
-	$name = $default ? (string) rgar( $stored, 'name' ) : trim( sanitize_text_field( $val( 'name' ) ) );
-	if ( '' === $name ) {
+	// The route merges the page's read of the stored confirmation under what
+	// the page sent, so a key the page left alone arrives as that read, and
+	// such a value keeps its stored bytes (see minn_admin_gfn_build()). The
+	// read serves a type it does not know as Text and a page that no longer
+	// exists as none, so those are compared with what it served.
+	$kept = function ( $key ) use ( $val, $stored, $is_new ) {
+		return ! $is_new && $val( $key ) === (string) rgar( $stored, $key );
+	};
+	$name = $default || $kept( 'name' ) ? (string) rgar( $stored, 'name' ) : trim( sanitize_text_field( $val( 'name' ) ) );
+	if ( '' === trim( $name ) ) {
 		return $invalid( 'name', __( 'Give the confirmation a name.', 'minn-admin' ) );
 	}
 	foreach ( $form['confirmations'] as $other_id => $other ) {
@@ -180,24 +188,32 @@ function minn_admin_gfc_build( $form, $stored, $body, $is_new ) {
 		}
 	}
 
-	$event = (string) rgar( $stored, 'event' );
-	$type  = GFCommon::whitelist( $val( 'type' ), array( 'message', 'page', 'redirect' ) );
-	if ( in_array( $event, array( 'form_saved', 'form_save_email_sent' ), true ) ) {
+	$event       = (string) rgar( $stored, 'event' );
+	$locked      = in_array( $event, array( 'form_saved', 'form_save_email_sent' ), true );
+	$served_type = in_array( rgar( $stored, 'type' ), array( 'message', 'page', 'redirect' ), true ) ? (string) $stored['type'] : 'message';
+	$type_kept   = ! $is_new && ! $locked && $val( 'type' ) === $served_type;
+	$type        = $type_kept ? $served_type : GFCommon::whitelist( $val( 'type' ), array( 'message', 'page', 'redirect' ) );
+	if ( $locked ) {
 		$type = 'message';
 	}
 
-	$message = $val( 'message' );
-	$page_id = absint( $val( 'pageId' ) );
-	$url     = trim( $val( 'url' ) );
+	$message     = $val( 'message' );
+	$stored_page = absint( rgar( $stored, 'pageId' ) );
+	$page_kept   = ! $is_new && $val( 'pageId' ) === ( $stored_page && get_post( $stored_page ) ? (string) $stored_page : '' );
+	$page_id     = $page_kept ? $stored_page : absint( $val( 'pageId' ) );
+	$url_kept    = $kept( 'url' );
+	$url         = $url_kept ? (string) rgar( $stored, 'url' ) : trim( $val( 'url' ) );
 	if ( 'page' === $type && ( ! $page_id || ! get_post( $page_id ) || 'trash' === get_post_status( $page_id ) || ! current_user_can( 'read_post', $page_id ) ) ) {
 		return $invalid( 'pageId', __( 'Choose the page visitors go to.', 'minn-admin' ) );
 	}
-	if ( 'redirect' === $type && ( '' === $url || ! GFCommon::is_valid_url( $url ) ) && ! GFCommon::has_merge_tag( $url ) ) {
+	if ( 'redirect' === $type && ( '' === trim( $url ) || ! GFCommon::is_valid_url( trim( $url ) ) ) && ! GFCommon::has_merge_tag( $url ) ) {
 		return $invalid( 'url', __( 'Enter a full address (https://…) or a merge tag.', 'minn-admin' ) );
 	}
 
-	$logic = array();
-	if ( ! $default && ! empty( $body['conditionalLogic'] ) && is_array( $body['conditionalLogic'] ) && ! empty( $body['conditionalLogic']['rules'] ) ) {
+	// Conditions sent back as the page read them stay as stored.
+	$logic      = array();
+	$logic_kept = ! $is_new && minn_admin_gfn_as_read( $body, 'conditionalLogic', minn_admin_gfn_logic_out( rgar( $stored, 'conditionalLogic' ) ) );
+	if ( ! $default && ! $logic_kept && ! empty( $body['conditionalLogic'] ) && is_array( $body['conditionalLogic'] ) && ! empty( $body['conditionalLogic']['rules'] ) ) {
 		$rules = array();
 		foreach ( (array) $body['conditionalLogic']['rules'] as $r ) {
 			if ( is_array( $r ) && '' !== (string) ( $r['fieldId'] ?? '' ) ) {
@@ -217,16 +233,29 @@ function minn_admin_gfc_build( $form, $stored, $body, $is_new ) {
 		}
 	}
 
-	// Their save callback, in order. An unchanged message is kept as stored.
-	$c['name']              = $name;
-	$c['event']             = $event;
-	$c['type']              = $type;
+	// Their save callback, in order. An unchanged message is kept as stored,
+	// and so are a name, type, page and address the page did not change (a
+	// deleted page's id stays: the read shows no page for it, and a restored
+	// page comes back).
+	if ( ! $kept( 'name' ) ) {
+		$c['name'] = $name;
+	}
+	$c['event'] = $event;
+	if ( ! $type_kept ) {
+		$c['type'] = $type;
+	}
 	$c['message']           = $message === (string) rgar( $stored, 'message' ) ? $message : minn_admin_gfc_kses( $message );
 	$c['disableAutoformat'] = ! empty( $body['disableAutoformat'] );
-	$c['pageId']            = $page_id ? (string) $page_id : '';
-	$c['url']               = $url;
+	if ( ! $page_kept ) {
+		$c['pageId'] = $page_id ? (string) $page_id : '';
+	}
+	if ( ! $url_kept ) {
+		$c['url'] = $url;
+	}
 	$c['queryString']       = $val( 'queryString' );
-	$c['conditionalLogic']  = $default || ! $logic ? array() : minn_admin_gfn_sanitize_rules( $logic, rgars( $stored, 'conditionalLogic/rules' ) );
+	if ( ! $logic_kept ) {
+		$c['conditionalLogic'] = $default || ! $logic ? array() : minn_admin_gfn_sanitize_rules( $logic, rgars( $stored, 'conditionalLogic/rules' ) );
+	}
 	return $c;
 }
 

@@ -194,6 +194,35 @@ function minn_admin_gfn_latest_entry( $form_id ) {
 	return is_array( $entries ) && $entries ? $entries[0] : null;
 }
 
+/** Normalize stored routing rules for the client. */
+function minn_admin_gfn_routing_out( $routing ) {
+	$out = array();
+	foreach ( (array) $routing as $r ) {
+		if ( is_array( $r ) ) {
+			$out[] = array(
+				'email'    => (string) rgar( $r, 'email' ),
+				'fieldId'  => (string) rgar( $r, 'fieldId' ),
+				'operator' => rgar( $r, 'operator' ) ? (string) $r['operator'] : 'is',
+				'value'    => (string) rgar( $r, 'value' ),
+			);
+		}
+	}
+	return $out;
+}
+
+/**
+ * Whether a rule list in the save body is the one the page read: the read
+ * normalizes stored rules, and the route merges that read under what the
+ * page changed, so an untouched list arrives as it.
+ *
+ * @param array  $body The merged save body.
+ * @param string $key  routing or conditionalLogic.
+ * @param mixed  $read What the page's read serves for the stored list.
+ */
+function minn_admin_gfn_as_read( $body, $key, $read ) {
+	return array_key_exists( $key, $body ) && wp_json_encode( $body[ $key ] ) === wp_json_encode( $read );
+}
+
 /** The page's whole read: the notification, its form, and every list it picks from. */
 function minn_admin_gfn_payload( $form, $n, $is_new ) {
 	$to_type = rgar( $n, 'toType' ) ? (string) $n['toType'] : 'email';
@@ -203,18 +232,8 @@ function minn_admin_gfn_payload( $form, $n, $is_new ) {
 	if ( ! isset( $events[ $event ] ) ) {
 		$evpairs[] = array( sanitize_key( $event ), GFNotification::get_missing_notification_event_label( sanitize_key( $event ) ) );
 	}
-	$routing = array();
-	foreach ( (array) rgar( $n, 'routing' ) as $r ) {
-		if ( is_array( $r ) ) {
-			$routing[] = array(
-				'email'    => (string) rgar( $r, 'email' ),
-				'fieldId'  => (string) rgar( $r, 'fieldId' ),
-				'operator' => rgar( $r, 'operator' ) ? (string) $r['operator'] : 'is',
-				'value'    => (string) rgar( $r, 'value' ),
-			);
-		}
-	}
-	$latest = minn_admin_gfn_latest_entry( $form['id'] );
+	$routing = minn_admin_gfn_routing_out( rgar( $n, 'routing' ) );
+	$latest  = minn_admin_gfn_latest_entry( $form['id'] );
 	$nid    = $is_new ? 'new' : (string) $n['id'];
 	return array(
 		'id'                   => $form['id'] . ':' . $nid,
@@ -305,8 +324,17 @@ function minn_admin_gfn_build( $form, $stored, $body, $is_new ) {
 		return array_key_exists( $key, $body ) && is_scalar( $body[ $key ] ) ? (string) $body[ $key ] : '';
 	};
 
-	$name = trim( sanitize_text_field( $val( 'name' ) ) );
-	if ( '' === $name ) {
+	// The route merges the stored notification under what the page sent, so
+	// a key the page left alone arrives as stored. Such a value is kept as
+	// stored (an absent key stays absent): cleaning it rewrote a name or a
+	// From name an import or the API had stored ('50%DEAL Store' became
+	// '50AL Store'). Gravity Forms' own screen never cleans one either; it
+	// refuses the save.
+	$kept = function ( $key, $stored_key = null ) use ( $val, $stored, $is_new ) {
+		return ! $is_new && $val( $key ) === (string) rgar( $stored, null === $stored_key ? $key : $stored_key );
+	};
+	$name = $kept( 'name' ) ? (string) rgar( $stored, 'name' ) : trim( sanitize_text_field( $val( 'name' ) ) );
+	if ( '' === trim( $name ) ) {
 		return minn_admin_gfn_invalid( 'name', __( 'Give the notification a name.', 'minn-admin' ) );
 	}
 	foreach ( $form['notifications'] as $other_id => $other ) {
@@ -334,7 +362,7 @@ function minn_admin_gfn_build( $form, $stored, $body, $is_new ) {
 	}
 	$to = (string) rgar( $stored, 'to' );
 	if ( 'email' === $to_type ) {
-		$to       = trim( $val( 'toEmail' ) );
+		$to       = 'email' === (string) rgar( $stored, 'toType' ) && $kept( 'toEmail', 'to' ) ? $to : trim( $val( 'toEmail' ) );
 		$is_valid = GFNotification::is_valid_notification_email( $to );
 		$is_valid = apply_filters( 'gform_is_valid_notification_to', $is_valid, $to_type, $to, '' );
 		if ( ! $is_valid ) {
@@ -352,8 +380,13 @@ function minn_admin_gfn_build( $form, $stored, $body, $is_new ) {
 		$to = '';
 	}
 
+	// Routing rules the page sent back as it read them stay as stored, with
+	// any key their editor or an add-on keeps on a rule, while the notification
+	// was already routed; a list being switched on is checked.
 	$routing = null;
-	if ( 'routing' === $to_type ) {
+	$route_kept = ! $is_new && 'routing' === (string) rgar( $stored, 'toType' ) && is_array( rgar( $stored, 'routing' ) ) && rgar( $stored, 'routing' )
+		&& minn_admin_gfn_as_read( $body, 'routing', minn_admin_gfn_routing_out( rgar( $stored, 'routing' ) ) );
+	if ( 'routing' === $to_type && ! $route_kept ) {
 		$rules   = array();
 		$sources = wp_list_pluck( minn_admin_gfn_fields( $form ), 'id' );
 		foreach ( (array) ( $body['routing'] ?? array() ) as $r ) {
@@ -409,8 +442,10 @@ function minn_admin_gfn_build( $form, $stored, $body, $is_new ) {
 		$message = minn_admin_gf_kses( $message );
 	}
 
-	$logic = null;
-	if ( ! empty( $body['conditionalLogic'] ) && is_array( $body['conditionalLogic'] ) && ! empty( $body['conditionalLogic']['rules'] ) ) {
+	// Conditions sent back as the page read them stay as stored.
+	$logic      = null;
+	$logic_kept = ! $is_new && minn_admin_gfn_as_read( $body, 'conditionalLogic', minn_admin_gfn_logic_out( rgar( $stored, 'conditionalLogic' ) ) );
+	if ( ! $logic_kept && ! empty( $body['conditionalLogic'] ) && is_array( $body['conditionalLogic'] ) && ! empty( $body['conditionalLogic']['rules'] ) ) {
 		$rules = array();
 		foreach ( (array) $body['conditionalLogic']['rules'] as $r ) {
 			if ( is_array( $r ) && '' !== (string) ( $r['fieldId'] ?? '' ) ) {
@@ -432,23 +467,35 @@ function minn_admin_gfn_build( $form, $stored, $body, $is_new ) {
 
 	// Their save callback, in order.
 	unset( $n['type'] );
-	$n['name']     = $name;
-	$n['service']  = $service;
-	$n['event']    = $event;
-	$n['toType']   = $to_type;
-	$n['to']       = $to;
-	$n['from']     = trim( $val( 'from' ) );
-	$n['fromName'] = sanitize_text_field( $val( 'fromName' ) );
-	$n['replyTo']  = trim( $val( 'replyTo' ) );
-	if ( gf_apply_filters( array( 'gform_notification_enable_cc', $form['id'], rgar( $stored, 'id' ) ), false, $stored, $form ) ) {
-		$n['cc'] = trim( $val( 'cc' ) );
+	if ( ! $kept( 'name' ) ) {
+		$n['name'] = $name;
 	}
-	$n['bcc']               = trim( $val( 'bcc' ) );
+	$n['service'] = $service;
+	$n['event']   = $event;
+	$n['toType']  = $to_type;
+	$n['to']      = $to;
+	$clean        = array(
+		'from'     => 'trim',
+		'fromName' => 'sanitize_text_field',
+		'replyTo'  => 'trim',
+		'cc'       => 'trim',
+		'bcc'      => 'trim',
+	);
+	if ( ! gf_apply_filters( array( 'gform_notification_enable_cc', $form['id'], rgar( $stored, 'id' ) ), false, $stored, $form ) ) {
+		unset( $clean['cc'] );
+	}
+	foreach ( $clean as $key => $fn ) {
+		if ( ! $kept( $key ) ) {
+			$n[ $key ] = $fn( $val( $key ) );
+		}
+	}
 	$n['subject']           = $subject;
 	$n['message']           = $message;
 	$n['disableAutoformat'] = ! empty( $body['disableAutoformat'] );
 	$n['enableAttachments'] = ! empty( $body['enableAttachments'] );
-	$n['conditionalLogic']  = $logic;
+	if ( ! $logic_kept ) {
+		$n['conditionalLogic'] = $logic;
+	}
 	if ( null !== $routing ) {
 		$n['routing'] = $routing;
 	}

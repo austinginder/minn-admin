@@ -812,9 +812,19 @@ function minn_admin_gfb_overlay( $arr, $row, $allowed, $form_id ) {
 		$visible = 0;
 		foreach ( $arr['inputs'] as &$in ) {
 			$sid = $suffix( rgar( $in, 'id' ) );
+			// The page sends every part when any part changes, so a part's
+			// setting sent back as stored stays as stored: Gravity Forms keeps
+			// markup in a sub-label, and cleaning stripped it from parts
+			// nobody touched.
 			if ( isset( $sub[ $sid ] ) ) {
-				$in['isHidden']    = ! empty( $sub[ $sid ]['isHidden'] );
-				$in['customLabel'] = sanitize_text_field( (string) ( $sub[ $sid ]['customLabel'] ?? '' ) );
+				$hide = ! empty( $sub[ $sid ]['isHidden'] );
+				if ( $hide !== ! empty( $in['isHidden'] ) ) {
+					$in['isHidden'] = $hide;
+				}
+				$label = (string) ( $sub[ $sid ]['customLabel'] ?? '' );
+				if ( $label !== (string) rgar( $in, 'customLabel' ) ) {
+					$in['customLabel'] = sanitize_text_field( $label );
+				}
 			}
 			if ( empty( $in['isHidden'] ) ) {
 				++$visible;
@@ -833,28 +843,93 @@ function minn_admin_gfb_overlay( $arr, $row, $allowed, $form_id ) {
 		$single  = in_array( (string) $arr['type'], array( 'radio', 'select' ), true );
 		$picked  = false;
 		$choices = array();
-		foreach ( $row['choices'] as $c ) {
-			if ( ! is_array( $c ) ) {
-				continue;
+		// The page sends every choice, as text, value and selected only, when
+		// any one changes. So each sent choice starts from the stored choice
+		// it stands for and only what differs is written: the keys an add-on
+		// keeps on a choice (an image, a limit, a price) survive an edit of
+		// another choice, and a text or value sent back as stored keeps its
+		// bytes. A sent choice stands for the stored one with its text (and
+		// value, when values show); else, with values shown, the one with its
+		// value (a relabel); else the unclaimed one in its place, when the
+		// list kept its length or the two share a text or value (a rename).
+		$was   = array_values( array_filter( (array) rgar( $arr, 'choices' ), 'is_array' ) );
+		$sent  = array_values( array_filter( $row['choices'], 'is_array' ) );
+		$from  = array();
+		$taken = array();
+		$claim = function ( $i, $match ) use ( $sent, $was, &$from, &$taken ) {
+			foreach ( $was as $j => $w ) {
+				if ( ! isset( $from[ $i ] ) && ! isset( $taken[ $j ] ) && $match( $sent[ $i ], $w, $i, $j ) ) {
+					$from[ $i ]  = $j;
+					$taken[ $j ] = true;
+				}
 			}
-			$text = trim( (string) ( $c['text'] ?? '' ) );
-			if ( '' === $text ) {
+		};
+		$same = function ( $c, $w, $key ) {
+			return (string) ( $c[ $key ] ?? '' ) === (string) rgar( $w, $key );
+		};
+		foreach ( array_keys( $sent ) as $i ) {
+			$claim( $i, function ( $c, $w ) use ( $same, $values ) {
+				return $same( $c, $w, 'text' ) && ( ! $values || $same( $c, $w, 'value' ) );
+			} );
+		}
+		if ( $values ) {
+			foreach ( array_keys( $sent ) as $i ) {
+				$claim( $i, function ( $c, $w ) use ( $same ) {
+					return $same( $c, $w, 'value' );
+				} );
+			}
+		}
+		$kept_length = count( $sent ) === count( $was );
+		foreach ( array_keys( $sent ) as $i ) {
+			$claim( $i, function ( $c, $w, $i, $j ) use ( $same, $kept_length ) {
+				return $i === $j && ( $kept_length || $same( $c, $w, 'text' ) || $same( $c, $w, 'value' ) );
+			} );
+		}
+		// What the page shows for the values switch (minn_admin_gfb_field_row()).
+		$shown = ! empty( $arr['enableChoiceValue'] );
+		foreach ( $was as $w ) {
+			$shown = $shown || (string) rgar( $w, 'value' ) !== (string) rgar( $w, 'text' );
+		}
+		foreach ( $sent as $i => $c ) {
+			$w    = isset( $from[ $i ] ) ? $was[ $from[ $i ] ] : null;
+			$keep = null !== $w && $same( $c, $w, 'text' );
+			$text = $keep ? (string) rgar( $w, 'text' ) : trim( (string) ( $c['text'] ?? '' ) );
+			if ( '' === trim( $text ) && ! $keep ) {
 				continue;
 			}
 			// With values shown, an empty value stays empty: Gravity Forms
 			// submits it as such (a "Not sure yet" that should read as no answer).
-			$value     = $values ? trim( (string) ( $c['value'] ?? '' ) ) : $text;
-			$sel       = ! empty( $c['isSelected'] ) && ! ( $single && $picked );
-			$picked    = $picked || $sel;
-			$choices[] = array( 'text' => $text, 'value' => $value, 'isSelected' => $sel, 'price' => '' );
+			if ( $values ) {
+				$value = null !== $w && $same( $c, $w, 'value' ) ? (string) rgar( $w, 'value' ) : trim( (string) ( $c['value'] ?? '' ) );
+			} else {
+				$value = $text;
+			}
+			$sel    = ! empty( $c['isSelected'] ) && ! ( $single && $picked );
+			$picked = $picked || $sel;
+			if ( null === $w ) {
+				$choices[] = array( 'text' => $text, 'value' => $value, 'isSelected' => $sel, 'price' => '' );
+				continue;
+			}
+			if ( ! $keep ) {
+				$w['text'] = $text;
+			}
+			if ( $value !== (string) rgar( $w, 'value' ) ) {
+				$w['value'] = $value;
+			}
+			if ( $sel !== (bool) rgar( $w, 'isSelected' ) ) {
+				$w['isSelected'] = $sel;
+			}
+			$choices[] = $w;
 		}
 		if ( ! $choices ) {
 			return new WP_Error( 'minn_gfb_choices', sprintf( /* translators: %s: the field's label. */ __( '“%s” needs at least one choice.', 'minn-admin' ), wp_strip_all_tags( (string) rgar( $arr, 'label' ) ) ), array( 'status' => 400 ) );
 		}
-		$arr['choices']           = $choices;
-		$arr['enableChoiceValue'] = $values;
-		if ( 'checkbox' === $arr['type'] ) {
+		if ( 'checkbox' === $arr['type'] && $choices !== $was ) {
 			$arr['inputs'] = minn_admin_gfb_checkbox_inputs( $id, $choices );
+		}
+		$arr['choices'] = $choices;
+		if ( $values !== $shown ) {
+			$arr['enableChoiceValue'] = $values;
 		}
 	}
 
