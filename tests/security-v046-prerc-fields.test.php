@@ -84,9 +84,14 @@ $tag = (string) wp_rand( 1000, 9999 );
 	$box   = 'minnprerc_box' . $tag;
 	$gid   = '';
 	$post  = 0;
-	$clean = $once( function () use ( &$gid, &$post ) {
+	$clean = $once( function () use ( &$gid, &$post, $tag ) {
+		global $wpdb;
 		if ( $post ) {
 			wp_delete_post( $post, true );
+		}
+		// What the option-page check wrote: options under the run's own page slug.
+		foreach ( (array) $wpdb->get_col( $wpdb->prepare( "SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name LIKE %s", '%' . $wpdb->esc_like( 'prerc_acpt_' . $tag ) . '%', '%' . $wpdb->esc_like( 'prerc-acpt-' . $tag ) . '%' ) ) as $opt ) { // phpcs:ignore
+			delete_option( $opt );
 		}
 		if ( '' !== $gid ) {
 			try {
@@ -300,6 +305,64 @@ $tag = (string) wp_rand( 1000, 9999 );
 		list( $st ) = $call( 'POST', "/wp/v2/posts/{$post}", array( 'minn_acpt' => array( (string) $picks['id'] => array( 'a' ) ) ) );
 		$now = get_acpt_field( $args + array( 'format' => 'only_value', 'return' => 'raw' ) );
 		$check( 'ACPT panel: unticking a box removes it (control)', 200 === $st && array( 'a' ) === $now, wp_json_encode( $now ) );
+
+		/*
+		 * A value ACPT's setter refuses (a select value that is not one of its
+		 * options, a number above its max) was not stored, and the save
+		 * answered 200 all the same. It answers an error naming the field,
+		 * the fields beside it are still written, and so are the REST fields
+		 * registered after Minn's ACPT panel.
+		 */
+		$ids = array();
+		foreach ( (array) $ed['boxes'][0]['fields'] as $f ) {
+			$ids[ $f['name'] ] = (string) $f['id'];
+		}
+		$raw = function ( $n ) use ( $post, $ed ) {
+			return get_acpt_field( array( 'post_id' => $post, 'box_name' => (string) $ed['boxes'][0]['name'], 'field_name' => $n, 'format' => 'only_value', 'return' => 'raw' ) );
+		};
+		$ran = false;
+		register_rest_field( 'post', 'minn_prerc_probe', array(
+			'update_callback' => function () use ( &$ran ) {
+				$ran = true;
+			},
+			'schema'          => array( 'type' => 'string', 'context' => array( 'edit' ) ),
+		) );
+		$ratio_was = $raw( 'ratio' );
+		list( $st, $d ) = $call( 'POST', "/wp/v2/posts/{$post}", array( 'minn_acpt' => array( $ids['width'] => 'Panel text', $ids['ratio'] => 'nope' ), 'minn_prerc_probe' => 'x' ) );
+		$msg = is_array( $d ) ? (string) ( $d['message'] ?? '' ) : '';
+		$check( 'ACPT panel: a select value ACPT refuses answers an error naming the field, not 200', 400 === $st && false !== strpos( $msg, '“Ratio”' ), $st . ' ' . $msg );
+		$check( 'ACPT panel: and the error says the other changes were saved', false !== strpos( $msg, 'other changes were saved' ), $msg );
+		$check( 'ACPT panel: the field beside it is written', 'Panel text' === $raw( 'width' ), wp_json_encode( $raw( 'width' ) ) );
+		$check( 'ACPT panel: the refused field keeps its stored value', $ratio_was === $raw( 'ratio' ), wp_json_encode( $raw( 'ratio' ) ) );
+		$check( 'ACPT panel: REST fields registered after the ACPT panel still run in that save', $ran );
+		list( $st, $d ) = $call( 'POST', "/wp/v2/posts/{$post}", array( 'minn_acpt' => array( $ids['qty'] => '100' ) ) );
+		$msg = is_array( $d ) ? (string) ( $d['message'] ?? '' ) : '';
+		$check( 'ACPT panel: a number above its max answers an error naming the field', 400 === $st && false !== strpos( $msg, '“Qty”' ) && false === strpos( $msg, 'other changes' ), $st . ' ' . $msg );
+		list( $st, $d ) = $call( 'POST', "/wp/v2/posts/{$post}", array( 'minn_acpt' => array( $ids['qty'] => '100', $ids['ratio'] => 'nope', $ids['width'] => 'Panel text two' ) ) );
+		$msg = is_array( $d ) ? (string) ( $d['message'] ?? '' ) : '';
+		$check( 'ACPT panel: two refused fields are both named, beside a written one', 400 === $st && false !== strpos( $msg, '“Qty”' ) && false !== strpos( $msg, '“Ratio”' ) && false !== strpos( $msg, 'other changes were saved' ) && 'Panel text two' === $raw( 'width' ), $st . ' ' . $msg );
+		// ACPT's setter also answers false when its own cleaning leaves what is
+		// already stored: that is no refusal.
+		list( $st, $d ) = $call( 'POST', "/wp/v2/posts/{$post}", array( 'minn_acpt' => array( $ids['width'] => 'Panel text two ' ) ) );
+		$check( 'ACPT panel: a value ACPT cleans to what it already holds answers 200 (control)', 200 === $st && 'Panel text two' === $raw( 'width' ), $st . ' ' . wp_json_encode( is_array( $d ) ? ( $d['message'] ?? '' ) : '' ) );
+		list( $st ) = $call( 'POST', "/wp/v2/posts/{$post}", array( 'minn_acpt' => array( $ids['ratio'] => 'tall', $ids['qty'] => '7' ) ) );
+		$check( 'ACPT panel: values ACPT accepts answer 200 and are written (control)', 200 === $st && 'tall' === $raw( 'ratio' ) && 7 === (int) $raw( 'qty' ), $st . ' ' . wp_json_encode( array( $raw( 'ratio' ), $raw( 'qty' ) ) ) );
+
+		// Option pages write through the same writer (listing one needs an
+		// ACPT licence, so drive it with an option-page context).
+		$model = null;
+		foreach ( \ACPT\Core\Repository\MetaRepository::get( array( 'id' => $gid ) )[0]->getBoxes() as $b ) {
+			foreach ( $b->getFields() as $f ) {
+				if ( 'ratio' === $f->getName() ) {
+					$model = $f;
+				}
+			}
+		}
+		$opage = 'minn-prerc-acpt-' . $tag;
+		$res   = $model ? minn_admin_acpt_write_one( $model, 'nope', array( 'option_page' => $opage, 'box_name' => (string) $ed['boxes'][0]['name'], 'field_name' => 'ratio' ) ) : null;
+		$check( 'ACPT options: the shared writer answers an error naming a field ACPT refused', is_wp_error( $res ) && false !== strpos( $res->get_error_message(), '“Ratio”' ), is_wp_error( $res ) ? $res->get_error_message() : wp_json_encode( $res ) );
+		$res = $model ? minn_admin_acpt_write_one( $model, 'wide', array( 'option_page' => $opage, 'box_name' => (string) $ed['boxes'][0]['name'], 'field_name' => 'ratio' ) ) : 'no model';
+		$check( 'ACPT options: and a value it accepts writes with no error (control)', null === $res, is_wp_error( $res ) ? $res->get_error_message() : wp_json_encode( $res ) );
 	} finally {
 		$clean();
 	}

@@ -437,7 +437,8 @@ function minn_admin_acpt_image_in( $value ) {
 /**
  * Write allowed simple fields through ACPT's public value helpers.
  *
- * @return WP_Error|null The first field that could not be written as asked.
+ * @return WP_Error|null Every field that was not written as asked, named in
+ *                       one error; the others are written either way.
  */
 function minn_admin_acpt_write_values( $post_id, $values ) {
 	$post = get_post( $post_id );
@@ -445,7 +446,8 @@ function minn_admin_acpt_write_values( $post_id, $values ) {
 		return null;
 	}
 	$schema = minn_admin_acpt_fields_payload( $post_id, $post->post_type, true );
-	$error  = null;
+	$errors = array();
+	$done   = 0;
 	foreach ( $values as $id => $value ) {
 		if ( ! isset( $schema['lookup'][ $id ] ) ) {
 			continue;
@@ -456,11 +458,91 @@ function minn_admin_acpt_write_values( $post_id, $values ) {
 			'box_name'   => $field->getBox()->getName(),
 			'field_name' => $field->getName(),
 		) );
-		if ( is_wp_error( $result ) && ! $error ) {
-			$error = $result;
+		if ( is_wp_error( $result ) ) {
+			$errors[] = $result;
+		} else {
+			$done++;
 		}
 	}
-	return $error;
+	return minn_admin_acpt_write_errors( $errors, $done );
+}
+
+/**
+ * The fields a save could not write, as one error, or null when there are
+ * none. One field keeps its own message; several are named together. When
+ * the same save wrote other fields, the error says so, since a save answering
+ * an error otherwise reads as if nothing was saved.
+ *
+ * @param WP_Error[] $errors One per field not written.
+ * @param int        $done   Fields the same save wrote (or found already so).
+ * @return WP_Error|null
+ */
+function minn_admin_acpt_write_errors( $errors, $done ) {
+	if ( ! $errors ) {
+		return null;
+	}
+	if ( 1 === count( $errors ) ) {
+		$message = $errors[0]->get_error_message();
+	} else {
+		$names = array();
+		foreach ( $errors as $e ) {
+			$data    = $e->get_error_data();
+			$names[] = '“' . ( is_array( $data ) && isset( $data['field'] ) ? $data['field'] : '' ) . '”';
+		}
+		/* translators: %s: comma-separated list of field labels, each in quotes. */
+		$message = sprintf( __( 'These fields were not saved: %s.', 'minn-admin' ), implode( ', ', $names ) );
+	}
+	if ( $done > 0 ) {
+		$message .= ' ' . __( 'Your other changes were saved.', 'minn-admin' );
+	}
+	return new WP_Error( $errors[0]->get_error_code(), $message, array( 'status' => 400 ) );
+}
+
+/**
+ * The error for one field ACPT did not store.
+ *
+ * @param object $field ACPT MetaFieldModel.
+ * @return WP_Error
+ */
+function minn_admin_acpt_refused( $field ) {
+	$label = (string) $field->getLabelOrName();
+	return new WP_Error( 'minn_acpt_refused', sprintf(
+		/* translators: %s: field label. */
+		__( '“%s” was not saved: ACPT did not accept that value.', 'minn-admin' ),
+		$label
+	), array( 'status' => 400, 'field' => $label ) );
+}
+
+/**
+ * Whether ACPT's setter stored a value, read back from the store.
+ *
+ * save_acpt_meta_field_value() answers false both when ACPT refuses a value
+ * (not one of a select's or checkbox's options, a number outside its bounds,
+ * an id that is not an image) and when the value it would store after its own
+ * cleaning is the one already there, so its answer alone cannot tell the two
+ * apart, and a refusal used to report as saved. The store decides: the value
+ * changed, or it already holds what was sent or what ACPT's own cleaning makes
+ * of it (compared loosely, as ACPT's setter compares).
+ *
+ * @param object $field  ACPT MetaFieldModel.
+ * @param array  $args   The context the value was written under.
+ * @param mixed  $before The raw stored value before the write.
+ * @param mixed  $value  The value handed to ACPT.
+ * @return bool
+ */
+function minn_admin_acpt_took( $field, $args, $before, $value ) {
+	unset( $args['value'] );
+	$after = get_acpt_field( array_merge( $args, array( 'format' => 'only_value', 'return' => 'raw' ) ) );
+	// phpcs:ignore Universal.Operators.StrictComparisons -- ACPT's own setter compares loosely.
+	if ( $after != $before || $after == $value ) {
+		return true;
+	}
+	try {
+		// phpcs:ignore Universal.Operators.StrictComparisons
+		return class_exists( '\\ACPT\\Utils\\Data\\Sanitizer' ) && $after == \ACPT\Utils\Data\Sanitizer::sanitizeRawData( $field->getType(), $value );
+	} catch ( \Throwable $e ) {
+		return false;
+	}
 }
 
 /**
@@ -567,7 +649,9 @@ function minn_admin_acpt_checkbox_in( $field, $value ) {
  * @param object $field ACPT MetaFieldModel.
  * @param mixed  $value Submitted value.
  * @param array  $args  Context plus box_name / field_name.
- * @return WP_Error|null An error only when an emptied field could not be stored empty.
+ * @return WP_Error|null An error naming the field when it was not stored as
+ *                       asked (ACPT refused the value, Minn refused it, or an
+ *                       emptied field could not be stored empty).
  */
 function minn_admin_acpt_write_one( $field, $value, $args ) {
 	$type = $field->getType();
@@ -592,7 +676,7 @@ function minn_admin_acpt_write_one( $field, $value, $args ) {
 			/* translators: %s: field label. */
 			__( '“%s” could not be cleared here. Clear it in ACPT’s own screen.', 'minn-admin' ),
 			$field->getLabelOrName()
-		), array( 'status' => 400 ) );
+		), array( 'status' => 400, 'field' => (string) $field->getLabelOrName() ) );
 	}
 	if ( 'Toggle' === $type ) {
 		$value = ! empty( $value ) && 'false' !== $value && '0' !== (string) $value;
@@ -604,7 +688,7 @@ function minn_admin_acpt_write_one( $field, $value, $args ) {
 		// picture that is fine.
 		$att = minn_admin_acpt_image_in( $value );
 		if ( ! $att ) {
-			return null;
+			return minn_admin_acpt_refused( $field );
 		}
 		$value = $att;
 	} elseif ( 'Url' === $type ) {
@@ -621,7 +705,7 @@ function minn_admin_acpt_write_one( $field, $value, $args ) {
 		// working link because someone pasted something odd over it.
 		$next = minn_admin_url_clean( $value );
 		if ( null === $next ) {
-			return null;
+			return minn_admin_acpt_refused( $field );
 		}
 		$value = array(
 			'url'   => $next,
@@ -630,7 +714,7 @@ function minn_admin_acpt_write_one( $field, $value, $args ) {
 	}
 	$args['value'] = $value;
 	save_acpt_meta_field_value( $args );
-	return null;
+	return minn_admin_acpt_took( $field, $args, $read, $value ) ? null : minn_admin_acpt_refused( $field );
 }
 
 add_filter( 'minn_admin_editor_panels', function ( $panels ) {
@@ -700,16 +784,29 @@ add_action( 'rest_api_init', function () {
 				$id = isset( $obj['id'] ) ? (int) $obj['id'] : 0;
 				return ( $id && current_user_can( 'edit_post', $id ) ) ? (object) minn_admin_acpt_read_values( $id ) : new stdClass();
 			},
-			'update_callback' => function ( $value, $post ) {
+			'update_callback' => function ( $value, $post, $field_name = '', $request = null ) {
 				if ( ! $post instanceof WP_Post || ! current_user_can( 'edit_post', $post->ID ) ) {
 					return;
 				}
 				if ( is_object( $value ) ) {
 					$value = (array) $value;
 				}
-				if ( is_array( $value ) ) {
-					return minn_admin_acpt_write_values( $post->ID, $value );
+				if ( ! is_array( $value ) ) {
+					return;
 				}
+				$error = minn_admin_acpt_write_values( $post->ID, $value );
+				if ( ! is_wp_error( $error ) ) {
+					return;
+				}
+				// An error returned here stops the controller from writing
+				// the fields registered after this one (another plugin's panel
+				// in the same save). Held until the save has run, then it is
+				// the answer.
+				if ( $request instanceof WP_REST_Request ) {
+					minn_admin_acpt_held_error( $request, $error );
+					return;
+				}
+				return $error;
 			},
 			'schema'          => array(
 				'description' => __( 'ACPT simple field values for Minn Admin.', 'minn-admin' ),
@@ -719,6 +816,36 @@ add_action( 'rest_api_init', function () {
 		) );
 	}
 } );
+
+/**
+ * The panel's write error for one REST request: set it with $error, take it
+ * (and forget it) without.
+ *
+ * @param WP_REST_Request $request The request the save runs in.
+ * @param WP_Error|null   $error   The error to hold.
+ * @return WP_Error|null
+ */
+function minn_admin_acpt_held_error( $request, $error = null ) {
+	static $held = array();
+	$key = spl_object_hash( $request );
+	if ( null !== $error ) {
+		$held[ $key ] = $error;
+		return $error;
+	}
+	$out = $held[ $key ] ?? null;
+	unset( $held[ $key ] );
+	return $out;
+}
+
+// A post save whose ACPT fields were not all written answers that error once
+// the controller has written everything else, not 200.
+add_filter( 'rest_request_after_callbacks', function ( $response, $handler, $request ) {
+	if ( ! $request instanceof WP_REST_Request ) {
+		return $response;
+	}
+	$error = minn_admin_acpt_held_error( $request );
+	return ( $error && ! is_wp_error( $response ) ) ? $error : $response;
+}, 10, 3 );
 
 /** Normalize an ACPT license API error into Minn's action result contract. */
 function minn_admin_acpt_license_error( $message ) {
@@ -1020,13 +1147,15 @@ function minn_admin_acpt_option_tab_shape( $slug, $tab_id ) {
 /**
  * Write edited option page values through ACPT's own setter.
  *
- * @return WP_Error|null The first field that could not be written as asked.
+ * @return WP_Error|null Every field that was not written as asked, named in
+ *                       one error; the others are written either way.
  */
 function minn_admin_acpt_option_save( $slug, $values ) {
 	if ( ! is_array( $values ) ) {
 		return null;
 	}
-	$error  = null;
+	$errors = array();
+	$done   = 0;
 	$lookup = array();
 	foreach ( minn_admin_acpt_option_tabs( $slug ) as $t ) {
 		$lookup += $t['lookup'];
@@ -1042,11 +1171,13 @@ function minn_admin_acpt_option_save( $slug, $values ) {
 			'field_name'  => $field->getName(),
 		);
 		$result = minn_admin_acpt_write_one( $field, $value, $args );
-		if ( is_wp_error( $result ) && ! $error ) {
-			$error = $result;
+		if ( is_wp_error( $result ) ) {
+			$errors[] = $result;
+		} else {
+			$done++;
 		}
 	}
-	return $error;
+	return minn_admin_acpt_write_errors( $errors, $done );
 }
 
 // Option pages gather under the shared Site options item rather than each
