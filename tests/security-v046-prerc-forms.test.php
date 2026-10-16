@@ -563,5 +563,52 @@ rest_get_server();
 	}
 } )();
 
+/*
+ * Fluent Forms notifications and confirmation page. The page sends the
+ * confirmation keys it changed, but the save normalized all five on every
+ * save: it trimmed a stored redirect address (or turned an empty one into
+ * null), recast a page id 42 as '42' and reset a behaviour it reads as "hide
+ * the form" to hide_form.
+ */
+( function () use ( $check, $skip, $call, $once, $wpdb ) {
+	if ( ! function_exists( 'minn_admin_fluent_emails_payload' ) || ! function_exists( 'minn_admin_fluent_emails_ready' ) || ! minn_admin_fluent_emails_ready() ) {
+		$skip( 'Fluent Forms emails: Fluent Forms inactive' );
+		return;
+	}
+	$p     = $wpdb->prefix;
+	$fid   = 0;
+	$clean = $once( function () use ( &$fid, $wpdb, $p ) {
+		if ( $fid > 0 ) {
+			$wpdb->delete( "{$p}fluentform_form_meta", array( 'form_id' => $fid ) );
+			$wpdb->delete( "{$p}fluentform_forms", array( 'id' => $fid ) );
+		}
+	} );
+	$stored = function () use ( $wpdb, $p, &$fid ) {
+		$v = json_decode( (string) $wpdb->get_var( $wpdb->prepare( "SELECT value FROM {$p}fluentform_form_meta WHERE form_id = %d AND meta_key = 'formSettings'", $fid ) ), true ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		return (array) ( $v['confirmation'] ?? array() );
+	};
+	try {
+		$ok = $wpdb->insert( "{$p}fluentform_forms", array( 'title' => 'Minn prerc emails', 'status' => 'published', 'type' => 'form', 'form_fields' => wp_json_encode( array( 'fields' => array() ) ), 'created_at' => current_time( 'mysql' ), 'updated_at' => current_time( 'mysql' ) ) );
+		$fid = $ok ? (int) $wpdb->insert_id : 0;
+		if ( $fid <= 0 ) {
+			$fid = 0;
+			$skip( 'Fluent Forms emails: could not store a test form' );
+			return;
+		}
+		$conf = array( 'redirectTo' => 'samePage', 'messageToShow' => 'Thanks', 'customPage' => 42, 'samePageFormBehavior' => '', 'customUrl' => ' https://example.com/x ' );
+		$wpdb->insert( "{$p}fluentform_form_meta", array( 'form_id' => $fid, 'meta_key' => 'formSettings', 'value' => wp_json_encode( array( 'confirmation' => $conf, 'restrictions' => array(), 'layout' => array( 'labelPlacement' => 'top' ) ) ) ) );
+		list( $st, $d ) = $call( 'POST', "/minn-admin/v1/fluent-forms/forms/{$fid}/emails", array( 'confirmation' => array( 'messageToShow' => 'Thanks!' ) ) );
+		$now = $stored();
+		$check( 'Fluent Forms emails: a message-only edit answers 200 and writes the message (control)', 200 === $st && 'Thanks!' === ( $now['messageToShow'] ?? null ), $st . ' ' . wp_json_encode( 200 === $st ? $now : $d ) );
+		$check( 'Fluent Forms emails: and keeps the stored address, page id and behaviour byte for byte', wp_json_encode( array( $conf['customUrl'], $conf['customPage'], $conf['samePageFormBehavior'], $conf['redirectTo'] ) ) === wp_json_encode( array( $now['customUrl'] ?? null, $now['customPage'] ?? null, $now['samePageFormBehavior'] ?? null, $now['redirectTo'] ?? null ) ), wp_json_encode( $now ) );
+
+		list( $st ) = $call( 'POST', "/minn-admin/v1/fluent-forms/forms/{$fid}/emails", array( 'confirmation' => array( 'redirectTo' => 'customUrl', 'customUrl' => '  https://example.com/thanks  ' ) ) );
+		$now = $stored();
+		$check( 'Fluent Forms emails: an edited redirect is still written trimmed (control)', 200 === $st && 'customUrl' === ( $now['redirectTo'] ?? null ) && 'https://example.com/thanks' === ( $now['customUrl'] ?? null ), $st . ' ' . wp_json_encode( $now ) );
+	} finally {
+		$clean();
+	}
+} )();
+
 printf( "\nsecurity-v046-prerc-forms: %d/%d passed\n", count( array_filter( $results ) ), count( $results ) );
 exit( count( array_filter( $results ) ) === count( $results ) ? 0 : 1 );

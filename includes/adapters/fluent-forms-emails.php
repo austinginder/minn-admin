@@ -312,25 +312,45 @@ add_action( 'rest_api_init', function () {
 			if ( isset( $body['confirmation'] ) && is_array( $body['confirmation'] ) ) {
 				$settings = minn_admin_fluent_meta( $form->id, 'formSettings' );
 				$c        = (array) ( $settings['confirmation'] ?? array() );
-				// Keys the page leaves out keep their stored values.
-				$in = array_merge(
-					array(
-						'redirectTo'           => $c['redirectTo'] ?? 'samePage',
-						'messageToShow'        => $c['messageToShow'] ?? '',
-						'samePageFormBehavior' => $c['samePageFormBehavior'] ?? 'hide_form',
-						'customPage'           => $c['customPage'] ?? 0,
-						'customUrl'            => $c['customUrl'] ?? '',
-					),
-					$body['confirmation']
-				);
-				$to       = (string) ( $in['redirectTo'] ?? 'samePage' );
-				$c['redirectTo']           = in_array( $to, array( 'samePage', 'customPage', 'customUrl' ), true ) ? $to : 'samePage';
-				$c['messageToShow']        = is_scalar( $in['messageToShow'] ?? '' ) ? (string) ( $in['messageToShow'] ?? '' ) : '';
-				$c['samePageFormBehavior'] = 'reset_form' === ( $in['samePageFormBehavior'] ?? '' ) ? 'reset_form' : 'hide_form';
-				$c['customPage']           = absint( $in['customPage'] ?? 0 ) ? (string) absint( $in['customPage'] ) : null;
-				$c['customUrl']            = trim( is_scalar( $in['customUrl'] ?? '' ) ? (string) ( $in['customUrl'] ?? '' ) : '' );
-				$c['customUrl']            = '' !== $c['customUrl'] ? $c['customUrl'] : null;
-				if ( 'customPage' === $c['redirectTo'] && $c['customPage'] && ( ! get_post( (int) $c['customPage'] ) || ! current_user_can( 'read_post', (int) $c['customPage'] ) ) ) {
+				// The page sends the keys it changed. Each is written only when
+				// it differs from the stored one, so a key left out or sent back
+				// as stored keeps its bytes: normalizing all five on every save
+				// trimmed a stored address, turned an empty one into null and a
+				// page id 42 into '42', and reset a behaviour the page reads as
+				// "hide the form".
+				$in   = (array) $body['confirmation'];
+				$sent = function ( $key ) use ( $in, $c ) {
+					if ( ! array_key_exists( $key, $in ) ) {
+						return false;
+					}
+					$a = $in[ $key ];
+					$b = $c[ $key ] ?? null;
+					return ! ( ( null === $a || is_scalar( $a ) ) && ( null === $b || is_scalar( $b ) ) && (string) $a === (string) $b );
+				};
+				$scalar = function ( $key ) use ( $in ) {
+					return is_scalar( $in[ $key ] ) ? (string) $in[ $key ] : '';
+				};
+				if ( $sent( 'redirectTo' ) ) {
+					$c['redirectTo'] = in_array( $scalar( 'redirectTo' ), array( 'samePage', 'customPage', 'customUrl' ), true ) ? $scalar( 'redirectTo' ) : 'samePage';
+				}
+				if ( $sent( 'messageToShow' ) ) {
+					$c['messageToShow'] = $scalar( 'messageToShow' );
+				}
+				if ( $sent( 'samePageFormBehavior' ) ) {
+					$c['samePageFormBehavior'] = 'reset_form' === $scalar( 'samePageFormBehavior' ) ? 'reset_form' : 'hide_form';
+				}
+				if ( $sent( 'customPage' ) ) {
+					$c['customPage'] = absint( $scalar( 'customPage' ) ) ? (string) absint( $scalar( 'customPage' ) ) : null;
+				}
+				if ( $sent( 'customUrl' ) ) {
+					$c['customUrl'] = '' !== trim( $scalar( 'customUrl' ) ) ? trim( $scalar( 'customUrl' ) ) : null;
+				}
+				// Their validator requires a type; one never stored reads as
+				// the same page.
+				if ( ! isset( $c['redirectTo'] ) ) {
+					$c['redirectTo'] = 'samePage';
+				}
+				if ( ( $sent( 'redirectTo' ) || $sent( 'customPage' ) ) && 'customPage' === $c['redirectTo'] && ! empty( $c['customPage'] ) && ( ! get_post( (int) $c['customPage'] ) || ! current_user_can( 'read_post', (int) $c['customPage'] ) ) ) {
 					return new WP_Error( 'minn_ffe_invalid', __( 'Choose a published page.', 'minn-admin' ), array( 'status' => 400, 'field' => 'confirmation.customPage' ) );
 				}
 				$settings['confirmation'] = $c;
