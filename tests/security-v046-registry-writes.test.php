@@ -606,11 +606,13 @@ if ( function_exists( 'minn_admin_novamira_active' ) && minn_admin_novamira_acti
 } )();
 
 /*
- * N2 and I9 (review of ed4a8756): on a WPForms field with values shown,
- * their format() rebuilds the answer's labels from the choices it still has,
- * so a kept pick would stay in value_raw and leave what WPForms shows and
- * exports. Such an answer stays in their editor. And the allow-unknown
- * filter Minn sets for its save answers for this form only.
+ * N2 and I9 (reviews of ed4a8756 and aea3eff6): on a WPForms field with
+ * values shown, their format() rebuilds the answer's labels (`value`, what
+ * their entry view and export print) from the choices it still has, so a
+ * kept pick stayed in value_raw and left `value`. Minn's save now puts the
+ * kept pick's stored label back into `value`, and the field stays editable
+ * in Minn (a lock into WPForms' editor was the first fix). And the
+ * allow-unknown filter Minn sets for its save answers for this form only.
  */
 ( function () use ( $check, $skip, $call, $once ) {
 	if ( ! function_exists( 'minn_admin_wpforms_edit_supported' ) || ! minn_admin_wpforms_edit_supported() || ! function_exists( 'minn_admin_wpforms_edit_block' ) ) {
@@ -644,11 +646,21 @@ if ( function_exists( 'minn_admin_novamira_active' ) && minn_admin_novamira_acti
 		$made['entry'] = (int) wpforms()->obj( 'entry' )->add( array( 'form_id' => $made['form'], 'status' => '', 'fields' => wp_json_encode( $fields ) ) );
 		wpforms()->obj( 'entry_fields' )->save( $fields, wpforms()->obj( 'form' )->get( $made['form'], array( 'content_only' => true ) ), $made['entry'] );
 		$block = minn_admin_wpforms_edit_block( (object) Minn_Admin_Kernel_SQL::row( 'wpforms_entries', 'entry_id', $made['entry'] ) );
-		$ids   = wp_list_pluck( (array) ( $block['fields'] ?? array() ), 'id' );
-		$check( 'N2 WPForms: a values-shown answer holding a pick the form no longer offers stays in WPForms', ! in_array( '1', array_map( 'strval', $ids ), true ) && in_array( 'Coded', (array) ( $block['locked'] ?? array() ), true ), wp_json_encode( $block ) );
-		list( $st ) = $call( 'POST', "/minn-admin/v1/wpforms/entries/{$made['entry']}/answers", array( 'values' => array( '1' => array( 'n', 'c', 'g' ) ), 'original' => array( '1' => array( 'n', 'g' ) ) ) );
-		$check( 'N2 WPForms: and a save of it is refused', 400 === $st, (string) $st );
-		$check( 'N2 WPForms: a plain checkbox answer with a kept pick is still editable (control)', in_array( '2', array_map( 'strval', $ids ), true ), wp_json_encode( $ids ) );
+		$ids   = array_map( 'strval', wp_list_pluck( (array) ( $block['fields'] ?? array() ), 'id' ) );
+		$check( 'N2 WPForms: a values-shown answer holding a pick the form no longer offers is editable in Minn', in_array( '1', $ids, true ) && ! in_array( 'Coded', (array) ( $block['locked'] ?? array() ), true ), wp_json_encode( $block ) );
+		list( $st, $d ) = $call( 'POST', "/minn-admin/v1/wpforms/entries/{$made['entry']}/answers", array( 'values' => array( '1' => array( 'n', 'c', 'g' ) ), 'original' => array( '1' => array( 'n', 'g' ) ) ) );
+		$entry  = wpforms()->obj( 'entry' )->get( $made['entry'] );
+		$stored = (array) wpforms_decode( (string) ( $entry->fields ?? '' ) );
+		$coded  = (array) ( $stored[1] ?? $stored['1'] ?? array() );
+		$shown  = explode( "\n", (string) ( $coded['value'] ?? '' ) );
+		$check( 'N2 WPForms: ticking Call answers 200 and keeps the pick in value_raw (control)', 200 === $st && array( 'n', 'c', 'g' ) === explode( "\n", (string) ( $coded['value_raw'] ?? '' ) ), $st . ' ' . wp_json_encode( $d ) . ' ' . wp_json_encode( $coded ) );
+		$check( 'N2 WPForms: and what WPForms shows and exports keeps the kept pick\'s label', in_array( 'Gone', $shown, true ) && in_array( 'News', $shown, true ) && in_array( 'Call', $shown, true ), wp_json_encode( $coded ) );
+		$row_value = '';
+		foreach ( (array) wpforms()->obj( 'entry_fields' )->get_fields( array( 'entry_id' => $made['entry'], 'field_id' => 1 ) ) as $ef ) {
+			$row_value = (string) ( is_object( $ef ) ? $ef->value : ( $ef['value'] ?? '' ) );
+		}
+		$check( 'N2 WPForms: and so does its entry_fields row (their search)', false !== strpos( $row_value, 'Gone' ), wp_json_encode( $row_value ) );
+		$check( 'N2 WPForms: a plain checkbox answer with a kept pick is still editable (control)', in_array( '2', $ids, true ), wp_json_encode( $ids ) );
 
 		// I9: inside Minn's save, the filter answers for this form only.
 		$seen  = array();

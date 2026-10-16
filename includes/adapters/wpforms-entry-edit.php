@@ -173,15 +173,6 @@ function minn_admin_wpforms_edit_block( $row ) {
 		} elseif ( 'multi' === $kind ) {
 			$raw     = (string) ( $have['value_raw'] ?? $have['value'] ?? '' );
 			$picked  = '' === $raw ? array() : array_values( array_filter( array_map( 'strval', explode( "\n", $raw ) ), 'strlen' ) );
-			$offered = array_map( 'strval', wp_list_pluck( minn_admin_wpforms_edit_choices( $field ), 0 ) );
-			// With values shown, their format() rebuilds the answer's labels
-			// (what their entry view and export print) from the choices it
-			// still has, so a kept pick would stay in value_raw and drop out
-			// of what WPForms shows. Such an answer stays in their editor.
-			if ( ! empty( $field['show_values'] ) && array_diff( $picked, $offered ) ) {
-				$locked[] = $label;
-				continue;
-			}
 			$row_out['inputs'][] = array( 'id' => $fid, 'value' => $picked );
 			// A pick the form no longer offers keeps a ticked box (forms-kit.php).
 			$row_out['choices']  = minn_admin_forms_keep_choices( minn_admin_wpforms_edit_choices( $field ), $picked );
@@ -211,8 +202,14 @@ function minn_admin_wpforms_edit_block( $row ) {
  *                    save their own wpforms_field_choices_allow_unknown_value
  *                    (the filter their entry importer sets) admits a field
  *                    whose every value is one of these.
+ * @param array $named Field id => [ stored pick => its stored label ] for a
+ *                    values-shown field's picks the form no longer offers.
+ *                    Their format() rebuilds such a field's `value` (the
+ *                    labels their entry view and export print) from the
+ *                    choices it still has, so the kept picks' labels are
+ *                    added back to it before their save writes the entry.
  */
-function minn_admin_wpforms_edit_run( $form_id, $entry_id, array $submit, array $kept = array() ) {
+function minn_admin_wpforms_edit_run( $form_id, $entry_id, array $submit, array $kept = array(), array $named = array() ) {
 	$edit           = new \WPForms\Pro\Admin\Entries\Edit();
 	$edit->form_id  = (int) $form_id;
 	$edit->entry_id = (int) $entry_id;
@@ -245,8 +242,30 @@ function minn_admin_wpforms_edit_run( $form_id, $entry_id, array $submit, array 
 		}
 		return true;
 	};
+	$relabel = function ( $fields, $entry, $form_data ) use ( $named, $form_id ) {
+		if ( ! is_array( $fields ) || ! is_array( $form_data ) || (int) ( $form_data['id'] ?? 0 ) !== (int) $form_id ) {
+			return $fields;
+		}
+		foreach ( $named as $fid => $map ) {
+			if ( ! isset( $fields[ $fid ] ) || ! is_array( $fields[ $fid ] ) || ! isset( $fields[ $fid ]['value_raw'] ) ) {
+				continue;
+			}
+			$add = array();
+			foreach ( explode( "\n", (string) $fields[ $fid ]['value_raw'] ) as $item ) {
+				if ( isset( $map[ $item ] ) ) {
+					$add[] = $map[ $item ];
+				}
+			}
+			if ( $add ) {
+				$have                    = (string) ( $fields[ $fid ]['value'] ?? '' );
+				$fields[ $fid ]['value'] = wpforms_sanitize_array_combine( array_merge( '' === $have ? array() : explode( "\n", $have ), $add ) );
+			}
+		}
+		return $fields;
+	};
 	add_filter( 'wpforms_pro_admin_entries_edit_field_editable', $editable, PHP_INT_MAX, 3 );
 	add_filter( 'wpforms_field_choices_allow_unknown_value', $known, PHP_INT_MAX, 4 );
+	add_filter( 'wpforms_pro_admin_entries_edit_process_after_filter', $relabel, PHP_INT_MAX, 3 );
 	add_filter( 'wp_doing_ajax', $ajax, PHP_INT_MAX );
 	add_filter( 'wp_die_ajax_handler', $halt, PHP_INT_MAX );
 	add_filter( 'doing_it_wrong_trigger_error', $quiet, 10, 2 );
@@ -267,6 +286,7 @@ function minn_admin_wpforms_edit_run( $form_id, $entry_id, array $submit, array 
 	$out = (string) ob_get_clean();
 	remove_filter( 'wpforms_pro_admin_entries_edit_field_editable', $editable, PHP_INT_MAX );
 	remove_filter( 'wpforms_field_choices_allow_unknown_value', $known, PHP_INT_MAX );
+	remove_filter( 'wpforms_pro_admin_entries_edit_process_after_filter', $relabel, PHP_INT_MAX );
 	remove_filter( 'wp_doing_ajax', $ajax, PHP_INT_MAX );
 	remove_filter( 'wp_die_ajax_handler', $halt, PHP_INT_MAX );
 	remove_filter( 'doing_it_wrong_trigger_error', $quiet, 10 );
@@ -302,7 +322,7 @@ add_action( 'rest_api_init', function () {
 			if ( ! $block ) {
 				return new WP_Error( 'minn_wpe_none', __( 'This entry has no answers that can be edited here.', 'minn-admin' ), array( 'status' => 400 ) );
 			}
-			list( $form_data ) = minn_admin_wpforms_edit_context( $row );
+			list( $form_data, $stored_fields ) = minn_admin_wpforms_edit_context( $row );
 
 			$inputs = array();
 			foreach ( $block['fields'] as $f ) {
@@ -358,15 +378,31 @@ add_action( 'rest_api_init', function () {
 			$submit = array();
 			$labels = array();
 			$kept   = array();
+			$named  = array();
 			foreach ( $block['fields'] as $f ) {
 				if ( ! isset( $next[ $f['id'] ] ) ) {
 					continue;
 				}
 				$labels[] = $f['label'];
+				$field    = $form_data['fields'][ $f['id'] ] ?? array();
 				if ( 'multi' === $f['kind'] ) {
 					$kept[ $f['id'] ] = array_map( 'strval', wp_list_pluck( $f['choices'], 0 ) );
+					// With values shown, each kept pick's stored label, read
+					// from the entry as stored (value and value_raw line up
+					// one for one when no choice had an empty label; when
+					// they do not, the pick itself is its label).
+					if ( ! empty( $field['show_values'] ) ) {
+						$offered = array_map( 'strval', wp_list_pluck( minn_admin_wpforms_edit_choices( $field ), 0 ) );
+						$have    = isset( $stored_fields[ $f['id'] ] ) && is_array( $stored_fields[ $f['id'] ] ) ? $stored_fields[ $f['id'] ] : array();
+						$raws    = '' === (string) ( $have['value_raw'] ?? '' ) ? array() : explode( "\n", (string) $have['value_raw'] );
+						$shown   = '' === (string) ( $have['value'] ?? '' ) ? array() : explode( "\n", (string) $have['value'] );
+						foreach ( $raws as $i => $raw ) {
+							if ( '' !== $raw && ! in_array( $raw, $offered, true ) ) {
+								$named[ $f['id'] ][ $raw ] = count( $raws ) === count( $shown ) && '' !== (string) $shown[ $i ] ? (string) $shown[ $i ] : $raw;
+							}
+						}
+					}
 				}
-				$field    = $form_data['fields'][ $f['id'] ] ?? array();
 				if ( 'parts' === $f['kind'] ) {
 					$parts = array();
 					foreach ( $f['inputs'] as $i ) {
@@ -380,7 +416,7 @@ add_action( 'rest_api_init', function () {
 				}
 			}
 
-			$res = minn_admin_wpforms_edit_run( (int) $row->form_id, $id, $submit, $kept );
+			$res = minn_admin_wpforms_edit_run( (int) $row->form_id, $id, $submit, $kept, $named );
 			if ( is_wp_error( $res ) ) {
 				return $res;
 			}
