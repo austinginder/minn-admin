@@ -373,16 +373,26 @@ add_action( 'rest_api_init', function () {
 				}
 				// saveEventMeta() always rewrites the cost (an absent one is
 				// deleted) and stores through add_post_meta(), which unslashes,
-				// as its own form's slashed $_POST expects. So a cost or website
-				// nobody touched goes back exactly as stored, and an edited one is
-				// cleaned; both slashed, or a backslash would be lost.
+				// as its own form's slashed $_POST expects. It also runs every
+				// string it stores through tec_sanitize_string() (entity decode,
+				// then strip_tags), so a value passed back as stored still came
+				// out changed: a cost the block editor stored as 'Under &lt;$20'
+				// became 'Under '. A website nobody touched is left out (an absent
+				// one is kept); an untouched cost has to be sent, so it is put
+				// back as stored once TEC is done (below). An edited one is
+				// cleaned, slashed or a backslash would be lost.
 				$stored_cost = (string) get_post_meta( $post->ID, '_EventCost', true );
 				$stored_url  = (string) get_post_meta( $post->ID, '_EventURL', true );
+				$cost_was    = null;
 				if ( array_key_exists( 'cost', $value ) ) {
-					$data['EventCost'] = wp_slash( Minn_Admin::unchanged( $value['cost'], $stored_cost ) ? $stored_cost : sanitize_text_field( (string) $value['cost'] ) );
+					$same              = Minn_Admin::unchanged( $value['cost'], $stored_cost );
+					$data['EventCost'] = wp_slash( $same ? $stored_cost : sanitize_text_field( (string) $value['cost'] ) );
+					if ( $same && 1 === count( get_post_meta( $post->ID, '_EventCost' ) ) ) {
+						$cost_was = $stored_cost;
+					}
 				}
-				if ( array_key_exists( 'website', $value ) ) {
-					$data['EventURL'] = wp_slash( Minn_Admin::unchanged( $value['website'], $stored_url ) ? $stored_url : esc_url_raw( (string) $value['website'] ) );
+				if ( array_key_exists( 'website', $value ) && ! Minn_Admin::unchanged( $value['website'], $stored_url ) ) {
+					$data['EventURL'] = wp_slash( esc_url_raw( (string) $value['website'] ) );
 				}
 				if ( ! $data ) {
 					return null;
@@ -480,6 +490,12 @@ add_action( 'rest_api_init', function () {
 						foreach ( $map_was as $meta_key => $v ) {
 							update_post_meta( $post->ID, $meta_key, $v );
 						}
+					}
+					// One stored cost row, as it was (a ticketing add-on that
+					// writes several price rows is left to its own rows).
+					$now = null === $cost_was ? array() : get_post_meta( $post->ID, '_EventCost' );
+					if ( 1 === count( $now ) && (string) $now[0] !== $cost_was ) {
+						update_post_meta( $post->ID, '_EventCost', wp_slash( $cost_was ) );
 					}
 				}
 				if ( false === $ok ) {

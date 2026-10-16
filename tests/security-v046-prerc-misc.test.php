@@ -426,5 +426,41 @@ rest_get_server();
 	}
 } )();
 
+/*
+ * The Events Calendar: an edit of the end time leaves a cost and a website
+ * nobody touched as stored. saveEventMeta() runs every string through
+ * tec_sanitize_string() (entity decode, then strip_tags), so the cost the
+ * block editor stored as 'Under &lt;$20' came out as 'Under '.
+ */
+( function () use ( $check, $skip, $call, $wpdb ) {
+	if ( ! class_exists( 'Tribe__Events__API' ) || ! function_exists( 'minn_admin_tec_panel_values' ) ) {
+		$skip( 'The Events Calendar inactive' );
+		return;
+	}
+	$cost = 'Under &lt;$20 &amp; free for kids';
+	$url  = 'https://example.com/tickets?a=1&amp;b=2';
+	$wpdb->query( 'START TRANSACTION' );
+	try {
+		$id = (int) Tribe__Events__API::createEvent( array( 'post_title' => 'Minn prerc event', 'post_status' => 'draft', 'EventStartDate' => '2031-03-04', 'EventStartTime' => '10:00:00', 'EventEndDate' => '2031-03-04', 'EventEndTime' => '11:00:00' ) );
+		if ( $id <= 0 ) {
+			$check( 'TEC: an event is seeded for the check', false, (string) $id );
+			return;
+		}
+		update_post_meta( $id, '_EventCost', wp_slash( $cost ) );
+		update_post_meta( $id, '_EventURL', wp_slash( $url ) );
+		$served = minn_admin_tec_panel_values( $id );
+		$end    = gmdate( 'Y-m-d H:i', strtotime( (string) $served['end'] ) + HOUR_IN_SECONDS );
+		list( $st, $d ) = $call( 'POST', "/wp/v2/tribe_events/{$id}", array( 'minn_tec' => array( 'end' => $end ) ) );
+		$check( 'TEC: an end-time edit answers 200 and writes the end (control)', 200 === $st && 0 === strpos( (string) get_post_meta( $id, '_EventEndDate', true ), $end ), $st . ' ' . wp_json_encode( get_post_meta( $id, '_EventEndDate', true ) ?: $d ) );
+		$check( 'TEC: and keeps the stored cost byte for byte', array( $cost ) === get_post_meta( $id, '_EventCost' ), wp_json_encode( get_post_meta( $id, '_EventCost' ) ) );
+		$check( 'TEC: and keeps the stored website byte for byte', $url === get_post_meta( $id, '_EventURL', true ), wp_json_encode( get_post_meta( $id, '_EventURL', true ) ) );
+		list( $st ) = $call( 'POST', "/wp/v2/tribe_events/{$id}", array( 'minn_tec' => array( 'cost' => 'Free <b>entry</b>' ) ) );
+		$check( 'TEC: a changed cost is cleaned and written (control)', 200 === $st && 'Free entry' === get_post_meta( $id, '_EventCost', true ), $st . ' ' . wp_json_encode( get_post_meta( $id, '_EventCost', true ) ) );
+	} finally {
+		$wpdb->query( 'ROLLBACK' );
+		wp_cache_flush();
+	}
+} )();
+
 printf( "\nsecurity-v046-prerc-misc: %d/%d passed\n", count( array_filter( $results ) ), count( $results ) );
 exit( count( array_filter( $results ) ) === count( $results ) ? 0 : 1 );
