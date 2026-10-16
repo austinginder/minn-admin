@@ -3292,24 +3292,30 @@ class Minn_Admin_REST {
 		require_once ABSPATH . 'wp-admin/includes/file.php';
 		require_once ABSPATH . 'wp-admin/includes/misc.php';
 
-		$structure = trim( (string) $request['structure'] );
+		$sent      = (string) $request['structure'];
+		$structure = trim( $sent );
 		$blog      = self::permalink_blog_prefix();
 		$state     = self::permalink_state();
+		// The page sends all three fields when any one changed, and each is
+		// cleaned on the way in (a leading slash, single slashes, no hash),
+		// so only one that differs from what the page showed is written: a
+		// new tag base must not rewrite a structure stored without its
+		// leading slash, or refuse one stored without a tag.
+		$set_structure = $sent !== $state['structure'] && $structure !== $state['structure'];
+		$set_category  = $request->has_param( 'category_base' ) && (string) $request['category_base'] !== $state['category_base'];
+		$set_tag       = $request->has_param( 'tag_base' ) && (string) $request['tag_base'] !== $state['tag_base'];
 		// Nothing changed: the same structure and bases go back unflushed.
-		$same = $structure === $state['structure']
-			&& ( ! $request->has_param( 'category_base' ) || (string) $request['category_base'] === $state['category_base'] )
-			&& ( ! $request->has_param( 'tag_base' ) || (string) $request['tag_base'] === $state['tag_base'] );
-		if ( $same ) {
+		if ( ! $set_structure && ! $set_category && ! $set_tag ) {
 			return rest_ensure_response( $state );
 		}
-		if ( '' !== $structure && ! preg_match( '/%[^\/%]+%/', $structure ) ) {
+		if ( $set_structure && '' !== $structure && ! preg_match( '/%[^\/%]+%/', $structure ) ) {
 			return new WP_Error(
 				'invalid_structure',
 				__( 'A custom structure needs at least one tag, e.g. %postname%.', 'minn-admin' ),
 				array( 'status' => 400 )
 			);
 		}
-		if ( '' !== $structure ) {
+		if ( $set_structure && '' !== $structure ) {
 			// Same normalization as options-permalink.php: no hash, single
 			// slashes, a leading slash. Core adds no /index.php to what was
 			// typed on a single site; its presets carry it (index_prefix).
@@ -3320,7 +3326,9 @@ class Minn_Admin_REST {
 				$structure = '' !== $state['index_prefix'] ? $state['index_prefix'] . preg_replace( '#^/?index\.php#', '', $structure ) : $blog . $structure;
 			}
 		}
-		$wp_rewrite->set_permalink_structure( $structure );
+		if ( $set_structure ) {
+			$wp_rewrite->set_permalink_structure( $structure );
+		}
 
 		$based = static function ( $base ) use ( $blog ) {
 			if ( '' !== $blog && ! empty( $base ) ) {
@@ -3328,10 +3336,10 @@ class Minn_Admin_REST {
 			}
 			return $base;
 		};
-		if ( $request->has_param( 'category_base' ) ) {
+		if ( $set_category ) {
 			$wp_rewrite->set_category_base( sanitize_option( 'category_base', $based( (string) $request['category_base'] ) ) );
 		}
-		if ( $request->has_param( 'tag_base' ) ) {
+		if ( $set_tag ) {
 			$wp_rewrite->set_tag_base( sanitize_option( 'tag_base', $based( (string) $request['tag_base'] ) ) );
 		}
 
@@ -3343,12 +3351,26 @@ class Minn_Admin_REST {
 	/**
 	 * The Custom CSS state: the active theme's stylesheet (core keeps one
 	 * custom_css post per theme) plus the theme name for the UI note.
+	 *
+	 * `css` is the post as stored, which is what the Customizer edits.
+	 * wp_get_custom_css() is the front end's copy: its filter lets a plugin
+	 * add rules, and a save of that copy wrote them into the post. `stamp`
+	 * is what a save carries back as `base`, so a copy opened before someone
+	 * else saved is refused (409) instead of written over their change.
 	 */
 	private static function custom_css_state() {
+		$css = self::stored_custom_css();
 		return array(
-			'css'   => (string) wp_get_custom_css(),
+			'css'   => $css,
+			'stamp' => substr( md5( $css ), 0, 12 ),
 			'theme' => wp_get_theme()->get( 'Name' ),
 		);
+	}
+
+	/** The active theme's custom_css post content, '' without one. */
+	private static function stored_custom_css() {
+		$post = wp_get_custom_css_post();
+		return $post ? (string) $post->post_content : '';
 	}
 
 	public static function get_custom_css() {
@@ -3356,7 +3378,17 @@ class Minn_Admin_REST {
 	}
 
 	public static function save_custom_css( WP_REST_Request $request ) {
-		$css = (string) $request['css'];
+		$css    = (string) $request['css'];
+		$stored = self::stored_custom_css();
+		$base   = (string) $request->get_param( 'base' );
+		if ( '' !== $base && ! hash_equals( substr( md5( $stored ), 0, 12 ), $base ) ) {
+			return new WP_Error( 'minn_stale', __( 'The custom CSS was changed somewhere else after you opened it. Copy your edit, reload, and apply it again.', 'minn-admin' ), array( 'status' => 409 ) );
+		}
+		// The stylesheet as stored goes back unwritten: no revision, and no
+		// pass through the update_custom_css_data filter.
+		if ( $css === $stored ) {
+			return rest_ensure_response( self::custom_css_state() );
+		}
 
 		// The Customizer refuses obviously broken CSS rather than blanking the
 		// front end with it; mirror its cheap structural checks (balance only —
@@ -4468,7 +4500,37 @@ class Minn_Admin_REST {
 	}
 
 	/**
-	 * POST minn-admin/v1/overview/metrics { keys } — this user's Overview
+	 * The keys a card save stores, with each slot the person left alone
+	 * holding the stored key rather than the one the page showed there. The
+	 * page fills a slot whose stored card this account cannot see right now
+	 * (a WooCommerce card while WooCommerce is off) from the fallback, and
+	 * sends what it shows, so a pick in another slot replaced the hidden
+	 * card for good. `base` is the layout the page showed before the pick:
+	 * a slot sent as shown keeps what the store holds there, the caller's
+	 * own pick when it has one, else the site default.
+	 *
+	 * @param array $keys Sent keys.
+	 * @param mixed $base The layout the page showed, or null.
+	 * @return array
+	 */
+	private static function overview_metric_keys_kept( array $keys, $base ) {
+		if ( ! is_array( $base ) ) {
+			return $keys;
+		}
+		$uid    = get_current_user_id();
+		$raw    = $uid ? get_user_meta( $uid, 'minn_admin_overview_metrics', true ) : '';
+		$stored = self::overview_metric_keys_clean( is_array( $raw ) ? $raw : get_option( 'minn_admin_overview_metric_defaults', array() ) );
+		$base   = array_values( $base );
+		foreach ( array_values( $keys ) as $i => $k ) {
+			if ( isset( $base[ $i ], $stored[ $i ] ) && is_scalar( $base[ $i ] ) && is_scalar( $k ) && (string) $base[ $i ] === (string) $k ) {
+				$keys[ $i ] = $stored[ $i ];
+			}
+		}
+		return $keys;
+	}
+
+	/**
+	 * POST minn-admin/v1/overview/metrics { keys, base? } — this user's Overview
 	 * cards. An empty or null keys list clears the personal pick so the
 	 * site default (or the built-in layout) shows again.
 	 */
@@ -4487,7 +4549,7 @@ class Minn_Admin_REST {
 		} elseif ( ! is_array( $keys ) ) {
 			return new WP_Error( 'minn_admin_bad_metrics', __( 'No metrics provided.', 'minn-admin' ), array( 'status' => 400 ) );
 		} else {
-			$clean = self::overview_metric_keys_clean( $keys );
+			$clean = self::overview_metric_keys_clean( self::overview_metric_keys_kept( array_values( $keys ), $json['base'] ?? null ) );
 			if ( $clean ) {
 				update_user_meta( $uid, 'minn_admin_overview_metrics', $clean );
 			} else {
@@ -4498,7 +4560,7 @@ class Minn_Admin_REST {
 	}
 
 	/**
-	 * POST minn-admin/v1/overview/metric-defaults { keys } — site-wide
+	 * POST minn-admin/v1/overview/metric-defaults { keys, base? } — site-wide
 	 * Overview cards for anyone without a personal pick. Does not rewrite
 	 * existing user metas. Empty or null keys restores the built-in layout
 	 * as the default.
@@ -4514,7 +4576,7 @@ class Minn_Admin_REST {
 		} elseif ( ! is_array( $keys ) ) {
 			return new WP_Error( 'minn_admin_bad_metrics', __( 'No metrics provided.', 'minn-admin' ), array( 'status' => 400 ) );
 		} else {
-			$clean = self::overview_metric_keys_clean( $keys );
+			$clean = self::overview_metric_keys_clean( self::overview_metric_keys_kept( array_values( $keys ), $json['base'] ?? null ) );
 			if ( $clean ) {
 				update_option( 'minn_admin_overview_metric_defaults', $clean );
 			} else {
@@ -6709,7 +6771,7 @@ class Minn_Admin_REST {
 		Minn_Admin::save_site_appearance(
 			array(
 				'scheme' => array_key_exists( 'scheme', $json ) ? $json['scheme'] : $cur['scheme'],
-				'custom' => array_key_exists( 'custom', $json ) ? $json['custom'] : $cur['custom'],
+				'custom' => array_key_exists( 'custom', $json ) ? Minn_Admin::merge_custom_tokens( $cur['custom'], $json['custom'] ) : $cur['custom'],
 				'mode'   => array_key_exists( 'mode', $json ) ? $json['mode'] : $cur['mode'],
 			)
 		);
@@ -6783,8 +6845,17 @@ class Minn_Admin_REST {
 			array(
 				'roles'    => $roles,
 				'policies' => Minn_Admin::role_defaults(),
+				// What a save carries back as `base`: the page sends every
+				// policy, so a copy opened before another administrator saved
+				// is refused (409) instead of putting theirs back.
+				'stamp'    => self::role_defaults_stamp(),
 			)
 		);
+	}
+
+	/** The stored role policies' stamp (see get_role_defaults()). */
+	private static function role_defaults_stamp() {
+		return substr( md5( (string) wp_json_encode( Minn_Admin::role_defaults() ) ), 0, 12 );
 	}
 
 	/**
@@ -6803,9 +6874,14 @@ class Minn_Admin_REST {
 		if ( null === $policies ) {
 			return new WP_Error( 'minn_admin_bad_policies', __( 'No policies provided.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
-		$all   = wp_roles()->role_objects;
-		$clean = array();
-		$every = isset( $policies['*'] ) && is_array( $policies['*'] ) ? $policies['*'] : array();
+		$base = (string) ( is_array( $json ) && isset( $json['base'] ) && is_scalar( $json['base'] ) ? $json['base'] : '' );
+		if ( '' !== $base && ! hash_equals( self::role_defaults_stamp(), $base ) ) {
+			return new WP_Error( 'minn_stale', __( 'Role defaults were changed somewhere else after you opened them. Reload to see the change, then make yours again.', 'minn-admin' ), array( 'status' => 409 ) );
+		}
+		$all    = wp_roles()->role_objects;
+		$stored = Minn_Admin::role_defaults();
+		$clean  = array();
+		$every  = isset( $policies['*'] ) && is_array( $policies['*'] ) ? $policies['*'] : array();
 		foreach ( $policies as $role => $p ) {
 			$role = (string) $role;
 			if ( '*' !== $role && ! isset( $all[ $role ] ) ) {
@@ -6837,12 +6913,36 @@ class Minn_Admin_REST {
 			}
 			// Every role may name Minn: a role without Minn access simply
 			// keeps its choice when the policy resolves (policy_for_user).
-			$needs_minn = isset( $entry['signin'] ) && 'minn' === $entry['signin'] || ( isset( $entry['toolbar'] ) && 'minn' === $entry['toolbar'] );
+			// A Minn value the role already holds is not a new one: a role
+			// that lost edit_posts after it was set keeps it, and the save
+			// of every other role goes through.
+			$was        = isset( $stored[ $role ] ) ? $stored[ $role ] : array();
+			$needs_minn = ( isset( $entry['signin'] ) && 'minn' === $entry['signin'] && 'minn' !== ( $was['signin'] ?? '' ) )
+				|| ( isset( $entry['toolbar'] ) && 'minn' === $entry['toolbar'] && 'minn' !== ( $was['toolbar'] ?? '' ) );
 			if ( '*' !== $role && $needs_minn && ! $all[ $role ]->has_cap( 'edit_posts' ) ) {
 				return new WP_Error( 'minn_admin_role_no_minn', __( 'That role cannot use Minn, so a Minn policy cannot apply to it.', 'minn-admin' ), array( 'status' => 400 ) );
 			}
 			if ( $entry ) {
 				$clean[ $role ] = $entry;
+			}
+		}
+		// What the page cannot show stays as stored. It lists the roles that
+		// exist now, so a policy for a role a switched-off plugin registers
+		// is not in the body; and it shows no sign-in choice for a role
+		// without Minn access, so the one such a role holds is not either.
+		foreach ( $stored as $role => $p ) {
+			if ( '*' === $role ) {
+				continue;
+			}
+			if ( ! isset( $all[ $role ] ) ) {
+				if ( ! array_key_exists( $role, $policies ) ) {
+					$clean[ $role ] = $p;
+				}
+				continue;
+			}
+			if ( isset( $p['signin'] ) && ! $all[ $role ]->has_cap( 'edit_posts' )
+				&& ! ( isset( $policies[ $role ] ) && is_array( $policies[ $role ] ) && array_key_exists( 'signin', $policies[ $role ] ) ) ) {
+				$clean[ $role ] = array_merge( array( 'signin' => $p['signin'] ), isset( $clean[ $role ] ) ? $clean[ $role ] : array() );
 			}
 		}
 		if ( $clean ) {
@@ -7151,7 +7251,7 @@ class Minn_Admin_REST {
 	/**
 	 * POST minn-admin/v1/me/appearance — save scheme for the current user only.
 	 * Body: { scheme, custom?: { dark: {slot:hex}, light: {slot:hex} } }
-	 * Partial custom maps merge onto Minn defaults. Legacy {accent,custom:#hex}
+	 * Partial custom maps merge onto the stored palette. Legacy {accent,custom:#hex}
 	 * still migrates via normalize_appearance.
 	 */
 	public static function hide_integration( WP_REST_Request $request ) {
@@ -7198,9 +7298,11 @@ class Minn_Admin_REST {
 			'scheme'       => array_key_exists( 'scheme', $json )
 				? $json['scheme']
 				: ( $request->has_param( 'scheme' ) ? $request->get_param( 'scheme' ) : $cur['scheme'] ),
+			// Only the colors sent change; the rest of the palette stays as
+			// stored (Minn_Admin::merge_custom_tokens()).
 			'custom'       => array_key_exists( 'custom', $json )
-				? $json['custom']
-				: ( $request->has_param( 'custom' ) ? $request->get_param( 'custom' ) : $cur['custom'] ),
+				? Minn_Admin::merge_custom_tokens( $cur['custom'], $json['custom'] )
+				: ( $request->has_param( 'custom' ) ? Minn_Admin::merge_custom_tokens( $cur['custom'], $request->get_param( 'custom' ) ) : $cur['custom'] ),
 			'defaultAdmin' => array_key_exists( 'defaultAdmin', $json )
 				? $json['defaultAdmin']
 				: ( $request->has_param( 'defaultAdmin' ) ? $request->get_param( 'defaultAdmin' ) : $cur['defaultAdmin'] ),
@@ -9881,13 +9983,10 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			$clean[ $path ] = $cv;
 		}
 		$id  = (int) WP_Theme_JSON_Resolver::get_user_global_styles_post_id();
-		$req = new WP_REST_Request( 'GET', '/wp/v2/global-styles/' . $id );
-		$req->set_param( 'context', 'edit' );
-		$res = rest_do_request( $req );
-		if ( $res->is_error() ) {
-			return $res->as_error();
+		$cfg = self::gs_stored_config( $id );
+		if ( is_wp_error( $cfg ) ) {
+			return $cfg;
 		}
-		$cfg = self::gs_revision_config( (array) $res->get_data() );
 		foreach ( $clean as $path => $value ) {
 			$cfg = self::gs_set_path( $cfg, $path, $value );
 		}
@@ -10129,13 +10228,10 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			return new WP_Error( 'settings_locked', __( 'WordPress only stores a palette or typeset for someone who can post unfiltered HTML, which this account cannot on this site.', 'minn-admin' ), array( 'status' => 403 ) );
 		}
 		$id  = (int) WP_Theme_JSON_Resolver::get_user_global_styles_post_id();
-		$req = new WP_REST_Request( 'GET', '/wp/v2/global-styles/' . $id );
-		$req->set_param( 'context', 'edit' );
-		$res = rest_do_request( $req );
-		if ( $res->is_error() ) {
-			return $res->as_error();
+		$cfg = self::gs_stored_config( $id );
+		if ( is_wp_error( $cfg ) ) {
+			return $cfg;
 		}
-		$cfg = self::gs_revision_config( (array) $res->get_data() );
 		// A slice replaces the same slice of the current look: strip the
 		// user's color (or type) keys first, then merge the new ones in, so
 		// a palette with fewer colors does not inherit leftovers. Default
@@ -10293,6 +10389,41 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	}
 
 	/** One revision's settings/styles as plain arrays. */
+	/**
+	 * The user styles as stored, for a write that changes part of them.
+	 * Core's REST read passes the config through WP_Theme_JSON, which drops
+	 * the styles of every block and block style variation not registered on
+	 * the server (one a plugin registers in the editor only, or a plugin
+	 * switched off) and any key outside this core's schema, so writing that
+	 * copy back deleted what the edit never touched. The stored post is read
+	 * instead, moved to the current schema as core's read does
+	 * (WP_Theme_JSON_Schema::migrate, which sanitizes nothing). A post that
+	 * is not a user config falls back to core's read.
+	 *
+	 * @param int $id The user global styles post.
+	 * @return array|WP_Error { settings, styles }
+	 */
+	private static function gs_stored_config( $id ) {
+		$post = $id ? get_post( $id ) : null;
+		$raw  = ( $post && 'wp_global_styles' === $post->post_type ) ? json_decode( (string) $post->post_content, true ) : null;
+		if ( is_array( $raw ) && ! empty( $raw['isGlobalStylesUserThemeJSON'] ) ) {
+			if ( class_exists( 'WP_Theme_JSON_Schema' ) && method_exists( 'WP_Theme_JSON_Schema', 'migrate' ) ) {
+				$raw = WP_Theme_JSON_Schema::migrate( $raw, 'custom' );
+			}
+			return array(
+				'settings' => isset( $raw['settings'] ) && is_array( $raw['settings'] ) ? $raw['settings'] : array(),
+				'styles'   => isset( $raw['styles'] ) && is_array( $raw['styles'] ) ? $raw['styles'] : array(),
+			);
+		}
+		$req = new WP_REST_Request( 'GET', '/wp/v2/global-styles/' . $id );
+		$req->set_param( 'context', 'edit' );
+		$res = rest_do_request( $req );
+		if ( $res->is_error() ) {
+			return $res->as_error();
+		}
+		return self::gs_revision_config( (array) $res->get_data() );
+	}
+
 	private static function gs_revision_config( $row ) {
 		return array(
 			'settings' => ! empty( $row['settings'] ) ? (array) json_decode( wp_json_encode( $row['settings'] ), true ) : array(),

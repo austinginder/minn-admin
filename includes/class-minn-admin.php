@@ -908,6 +908,38 @@ class Minn_Admin {
 	}
 
 	/**
+	 * A custom palette after a save: the colors it sends, by mode and slot,
+	 * over the palette as stored. A partial map used to fill every slot it
+	 * left out from Minn's base colors, so a save of one color reset the
+	 * person's others, and a palette sent whole from a copy loaded earlier
+	 * put back colors another session changed since. A color that is not a
+	 * hex value keeps the stored one.
+	 *
+	 * @param mixed $stored  Stored { dark, light } slot maps.
+	 * @param mixed $partial Sent { dark?, light? } slot maps.
+	 * @return array
+	 */
+	public static function merge_custom_tokens( $stored, $partial ) {
+		$out = is_array( $stored ) ? $stored : array();
+		if ( ! is_array( $partial ) ) {
+			return $out;
+		}
+		foreach ( array( 'dark', 'light' ) as $mode ) {
+			if ( empty( $partial[ $mode ] ) || ! is_array( $partial[ $mode ] ) ) {
+				continue;
+			}
+			$out[ $mode ] = isset( $out[ $mode ] ) && is_array( $out[ $mode ] ) ? $out[ $mode ] : array();
+			foreach ( array_keys( self::scheme_slots() ) as $slot ) {
+				$hex = isset( $partial[ $mode ][ $slot ] ) ? self::sanitize_hex_color( $partial[ $mode ][ $slot ] ) : '';
+				if ( '' !== $hex ) {
+					$out[ $mode ][ $slot ] = $hex;
+				}
+			}
+		}
+		return $out;
+	}
+
+	/**
 	 * Normalize appearance meta / REST body. Migrates legacy {accent,custom:#hex}.
 	 *
 	 * @param mixed $raw User meta value or request params.

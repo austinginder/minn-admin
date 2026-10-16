@@ -413,9 +413,11 @@ class Minn_Admin_CPT {
 			$row  = (array) ( self::acf_types()[ $slug ] ?? array() );
 			$text = array( $row['labels']['name'] ?? null, $row['labels']['singular_name'] ?? null, $row['description'] ?? null );
 		} elseif ( 'jet' === $source ) {
-			// JetEngine's model has no description for Minn to write.
+			// JetEngine's model has no description for Minn to write. Its
+			// edit shape moves a post type's plural label out of labels into
+			// general_settings.
 			$edit = (array) ( self::jet_types()[ $slug ]['edit'] ?? array() );
-			$text = array( $edit['labels']['name'] ?? null, $edit['labels']['singular_name'] ?? null, null );
+			$text = array( $edit['labels']['name'] ?? ( $edit['general_settings']['name'] ?? null ), $edit['labels']['singular_name'] ?? null, null );
 		} else {
 			$row  = (array) ( ( (array) get_option( self::OPTION, array() ) )[ $slug ] ?? array() );
 			$text = array( $row['plural'] ?? null, $row['singular'] ?? null, $row['description'] ?? null );
@@ -494,6 +496,73 @@ class Minn_Admin_CPT {
 			}
 		}
 		return $def;
+	}
+
+	/**
+	 * The settings a save changes, by definition key. A text field counts
+	 * when untouched() says it was edited; a switch when it is sent with a
+	 * value other than the one the modal showed. The modal shows the
+	 * REGISTERED definition, which other code may have filtered
+	 * (register_post_type_args, a translation plugin), so a switch sent back
+	 * as shown is not an edit and the store keeps its own value.
+	 *
+	 * @param WP_REST_Request $request  The save.
+	 * @param array           $now      The definition the modal was built from.
+	 * @param array           $def      The definition from the request.
+	 * @param string[]        $text     Text keys.
+	 * @param string[]        $switches Switch keys.
+	 * @return string[]
+	 */
+	private static function changed_keys( WP_REST_Request $request, array $now, array $def, array $text, array $switches ) {
+		$only = array();
+		foreach ( $text as $k ) {
+			if ( ! self::untouched( $request, $now, $k ) ) {
+				$only[] = $k;
+			}
+		}
+		foreach ( $switches as $k ) {
+			if ( $request->has_param( $k ) && (bool) $def[ $k ] !== (bool) ( $now[ $k ] ?? false ) ) {
+				$only[] = $k;
+			}
+		}
+		return $only;
+	}
+
+	/**
+	 * A list setting after an edit, applied to what the store holds rather
+	 * than to what the modal showed. The modal ticks the REGISTERED list:
+	 * support a theme adds at runtime, a taxonomy that attaches itself from
+	 * its own definition. Writing that list back put those into the vendor's
+	 * store, where they stayed after the theme changed, and kept a taxonomy
+	 * attached after the person detached it on the taxonomy's side. Only
+	 * what the person ticked or unticked moves; the rest stays as stored.
+	 *
+	 * @param string[]      $stored What the store holds.
+	 * @param string[]      $shown  What the modal ticked.
+	 * @param string[]|null $sent   What the save ticked, null when not sent.
+	 * @return string[]
+	 */
+	private static function list_edit( array $stored, array $shown, $sent ) {
+		if ( null === $sent ) {
+			return $stored;
+		}
+		$removed = array_diff( $shown, $sent );
+		$out     = array_values( array_diff( $stored, $removed ) );
+		foreach ( array_diff( $sent, $shown ) as $v ) {
+			if ( ! in_array( $v, $out, true ) ) {
+				$out[] = $v;
+			}
+		}
+		return $out;
+	}
+
+	/** Whether two lists hold the same entries, in any order. */
+	private static function same_list( array $a, array $b ) {
+		$a = array_values( array_unique( array_map( 'strval', $a ) ) );
+		$b = array_values( array_unique( array_map( 'strval', $b ) ) );
+		sort( $a );
+		sort( $b );
+		return $a === $b;
 	}
 
 	/**
@@ -794,55 +863,60 @@ class Minn_Admin_CPT {
 			return self::stale_error( 'type' );
 		}
 		$def = self::def_from_request( $request );
-		// A field the save leaves out keeps what the modal showed for it, so
-		// a save that sends only what changed stores the same as one that
-		// sends everything. Labels and the description keep the stored text.
-		$def = self::keep_untouched_text( $def, $request, $now, self::stored_type_text( $source, $slug ) );
-		foreach ( array( 'public', 'hierarchical', 'has_archive', 'show_in_rest' ) as $k ) {
-			if ( ! $request->has_param( $k ) ) {
-				$def[ $k ] = $now[ $k ];
-			}
-		}
-		if ( ! $request->has_param( 'supports' ) ) {
-			$def['supports'] = array_values( array_intersect( $now['supports'], self::SUPPORTS ) );
-		}
-		if ( ! $request->has_param( 'taxonomies' ) ) {
-			$def['taxonomies'] = array_values( array_filter( $now['taxonomies'], function ( $name ) {
-				$tax = get_taxonomy( $name );
-				return $tax && self::offered_taxonomy( $tax );
-			} ) );
-		}
-		// The modal offers nine supports and the listed taxonomies; what it can't show (post formats, trackbacks,
-		// a taxonomy hidden from it) stays as it was instead of being dropped
-		// by every save. "As it was" is the vendor's STORED definition, not
-		// the registered one: support or a taxonomy other code attaches at
-		// runtime (a theme's post formats, a translation plugin's language
-		// taxonomy) must not be written into the vendor's store.
-		$stored          = self::stored_type_lists( $source, $slug );
+		// A field the save leaves out, or sends back as the modal showed it,
+		// is not written: the vendor's store keeps its own value for it. The
+		// modal shows the REGISTERED definition, so writing a shown value
+		// back would put another plugin's filter or a runtime addition into
+		// the store. Labels and the description keep the stored text.
+		$def  = self::keep_untouched_text( $def, $request, $now, self::stored_type_text( $source, $slug ) );
+		$only = self::changed_keys( $request, $now, $def, array( 'plural', 'singular', 'description' ), array( 'public', 'hierarchical', 'has_archive', 'show_in_rest' ) );
+		// The modal offers nine supports and the listed taxonomies; a tick or
+		// untick moves that one entry in the STORED list, and what the modal
+		// can't show (post formats, trackbacks, a taxonomy hidden from it)
+		// stays as stored.
+		$stored = self::stored_type_lists( $source, $slug );
+		// An empty stored list registers with core's default title and
+		// editor, which is what the modal showed for it.
+		$base = $stored['supports'] ? $stored['supports'] : array( 'title', 'editor' );
+		$next = self::list_edit( $base, array_values( array_intersect( $now['supports'], self::SUPPORTS ) ), $request->has_param( 'supports' ) ? $def['supports'] : null );
 		// CPT UI's 'none' marker turns every support off when present, so it is
 		// dropped once the modal ticks something: what it ticks has to take
 		// effect. With nothing ticked it stays, since an empty list gets core's
 		// default title and editor.
-		$def['supports'] = array_values( array_unique( array_merge( $def['supports'], array_values( array_diff( $stored['supports'], self::SUPPORTS, $def['supports'] ? array( 'none' ) : array() ) ) ) ) );
-		foreach ( $stored['taxonomies'] as $tax_name ) {
-			$tax = get_taxonomy( $tax_name );
-			if ( $tax && ! self::offered_taxonomy( $tax ) && ! in_array( $tax_name, $def['taxonomies'], true ) ) {
-				$def['taxonomies'][] = $tax_name;
-			}
+		if ( array_intersect( $next, self::SUPPORTS ) ) {
+			$next = array_values( array_diff( $next, array( 'none' ) ) );
+		}
+		$def['supports'] = $stored['supports'];
+		if ( ! self::same_list( $next, $base ) ) {
+			$def['supports'] = $next;
+			$only[]          = 'supports';
+		}
+		$shown_tax = array_values( array_filter( $now['taxonomies'], function ( $name ) {
+			$tax = get_taxonomy( $name );
+			return $tax && self::offered_taxonomy( $tax );
+		} ) );
+		$next = self::list_edit( $stored['taxonomies'], $shown_tax, $request->has_param( 'taxonomies' ) ? $def['taxonomies'] : null );
+		$def['taxonomies'] = $stored['taxonomies'];
+		if ( ! self::same_list( $next, $stored['taxonomies'] ) ) {
+			$def['taxonomies'] = $next;
+			$only[]            = 'taxonomies';
 		}
 		if ( ! $def['singular'] || ! $def['plural'] ) {
 			return new WP_Error( 'missing_labels', __( 'Singular and plural labels are required.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
+		if ( ! $only ) {
+			return rest_ensure_response( array( 'updated' => $slug ) );
+		}
 
 		if ( 'acf' === $source ) {
 			$existing = self::acf_types()[ $slug ] ?? null;
-			$result   = self::acf_write( $slug, $def, $existing );
+			$result   = self::acf_write( $slug, $def, $existing, $only );
 		} elseif ( 'cptui' === $source ) {
-			$result = self::cptui_write( $slug, $def );
+			$result = self::cptui_write( $slug, $def, $only );
 		} elseif ( 'jet' === $source ) {
-			$result = self::jet_write( $slug, $def, self::jet_types()[ $slug ] ?? null );
+			$result = self::jet_write( $slug, $def, self::jet_types()[ $slug ] ?? null, $only );
 		} else {
-			$result = self::minn_write( $slug, $def );
+			$result = self::minn_write( $slug, $def, $only );
 		}
 		if ( is_wp_error( $result ) ) {
 			return $result;
@@ -1031,42 +1105,42 @@ class Minn_Admin_CPT {
 			return self::stale_error( 'taxonomy' );
 		}
 		$def = self::tax_def_from_request( $request );
-		// A field the save leaves out keeps what the modal showed for it;
-		// labels keep the stored text.
-		$def = self::keep_untouched_text( $def, $request, $now, self::stored_tax_text( $source, $slug ) );
-		foreach ( array( 'public', 'hierarchical', 'show_in_rest' ) as $k ) {
-			if ( ! $request->has_param( $k ) ) {
-				$def[ $k ] = $now[ $k ];
-			}
-		}
-		if ( ! $request->has_param( 'object_types' ) ) {
-			$def['object_types'] = array_values( array_filter( $now['object_types'], function ( $type ) {
-				$pto = get_post_type_object( $type );
-				return $pto && self::offered_type( $pto );
-			} ) );
-		}
-		// Same for the post types it attaches to: one the modal doesn't list
-		// (Media, for a media category) stays attached, read from the
-		// vendor's stored definition for the same reason.
-		foreach ( self::stored_tax_object_types( $source, $slug ) as $type ) {
+		// A field the save leaves out, or sends back as the modal showed it,
+		// is not written (see update_type()); labels keep the stored text.
+		$def  = self::keep_untouched_text( $def, $request, $now, self::stored_tax_text( $source, $slug ) );
+		$only = self::changed_keys( $request, $now, $def, array( 'plural', 'singular' ), array( 'public', 'hierarchical', 'show_in_rest' ) );
+		// The post types it attaches to: the modal shows the REGISTERED list,
+		// which holds every post type that names this taxonomy in its own
+		// definition. A tick or untick moves that one entry in the stored
+		// list; one the modal doesn't list (Media, for a media category)
+		// stays as stored.
+		$stored = self::stored_tax_object_types( $source, $slug );
+		$shown  = array_values( array_filter( $now['object_types'], function ( $type ) {
 			$pto = get_post_type_object( $type );
-			if ( $pto && ! self::offered_type( $pto ) && ! in_array( $type, $def['object_types'], true ) ) {
-				$def['object_types'][] = $type;
-			}
+			return $pto && self::offered_type( $pto );
+		} ) );
+		$next                = self::list_edit( $stored, $shown, $request->has_param( 'object_types' ) ? $def['object_types'] : null );
+		$def['object_types'] = $stored;
+		if ( ! self::same_list( $next, $stored ) ) {
+			$def['object_types'] = $next;
+			$only[]              = 'object_types';
 		}
 		if ( ! $def['singular'] || ! $def['plural'] ) {
 			return new WP_Error( 'missing_labels', __( 'Singular and plural labels are required.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
+		if ( ! $only ) {
+			return rest_ensure_response( array( 'updated' => $slug ) );
+		}
 
 		if ( 'acf' === $source ) {
 			$existing = self::acf_taxonomies()[ $slug ] ?? null;
-			$result   = self::acf_tax_write( $slug, $def, $existing );
+			$result   = self::acf_tax_write( $slug, $def, $existing, $only );
 		} elseif ( 'cptui' === $source ) {
-			$result = self::cptui_tax_write( $slug, $def );
+			$result = self::cptui_tax_write( $slug, $def, $only );
 		} elseif ( 'jet' === $source ) {
-			$result = self::jet_tax_write( $slug, $def, self::jet_taxonomies()[ $slug ] ?? null );
+			$result = self::jet_tax_write( $slug, $def, self::jet_taxonomies()[ $slug ] ?? null, $only );
 		} else {
-			$result = self::minn_tax_write( $slug, $def );
+			$result = self::minn_tax_write( $slug, $def, $only );
 		}
 		if ( is_wp_error( $result ) ) {
 			return $result;
@@ -1110,16 +1184,49 @@ class Minn_Admin_CPT {
 		return rest_ensure_response( array( 'deleted' => $slug, 'note' => __( 'Definition removed; existing terms stay in the database.', 'minn-admin' ) ) );
 	}
 
-	private static function minn_tax_write( $slug, array $def ) {
+	/**
+	 * A stored row with only the changed settings put in: a new row (no
+	 * $only, or nothing stored yet) is the whole definition.
+	 *
+	 * @param array         $row  What the store holds for the slug.
+	 * @param array         $vals Store key => value, for every key Minn writes.
+	 * @param array         $map  Definition key => store keys it writes.
+	 * @param string[]|null $only Definition keys the save changed.
+	 * @return array
+	 */
+	private static function changed_row( array $row, array $vals, array $map, $only ) {
+		if ( null === $only || ! $row ) {
+			return array_merge( $row, $vals );
+		}
+		foreach ( $only as $k ) {
+			foreach ( (array) ( $map[ $k ] ?? array() ) as $store_key ) {
+				$row[ $store_key ] = $vals[ $store_key ];
+			}
+		}
+		return $row;
+	}
+
+	private static function minn_tax_write( $slug, array $def, $only = null ) {
 		$taxes          = (array) get_option( self::OPTION_TAX, array() );
-		$taxes[ $slug ] = $def;
+		$row            = null === $only ? $def : self::changed_row( is_array( $taxes[ $slug ] ?? null ) ? $taxes[ $slug ] : array(), $def, array_combine( array_keys( $def ), array_keys( $def ) ), $only );
+		$taxes[ $slug ] = $row;
 		update_option( self::OPTION_TAX, $taxes );
-		register_taxonomy( $slug, self::tax_object_types( $def ), self::tax_register_args( $def ) ); // live for this request
+		register_taxonomy( $slug, self::tax_object_types( $row ), self::tax_register_args( $row ) ); // live for this request
 		return true;
 	}
 
 	/** Write through ACF's internal-post-type API with the acf-taxonomy type. */
-	private static function acf_tax_write( $slug, array $def, $existing ) {
+	private static function acf_tax_write( $slug, array $def, $existing, $only = null ) {
+		if ( $existing && null !== $only ) {
+			$settings = self::acf_changed( $existing, $def, $only, 'object_types', 'object_type' );
+			// ACF's update_post() unslashes what it is given; slash first so
+			// a backslash in a stored or typed setting survives.
+			$saved = acf_update_internal_post_type( wp_slash( $settings ), 'acf-taxonomy' );
+			if ( empty( $saved ) ) {
+				return new WP_Error( 'acf_failed', __( 'ACF could not save the taxonomy.', 'minn-admin' ), array( 'status' => 500 ) );
+			}
+			return true;
+		}
 		$settings = array(
 			'key'          => $existing['key'] ?? uniqid( 'taxonomy_' ),
 			'title'        => $def['plural'],
@@ -1152,13 +1259,14 @@ class Minn_Admin_CPT {
 	}
 
 	/** Write in CPT UI's cptui_taxonomies option shape (string booleans). */
-	private static function cptui_tax_write( $slug, array $def ) {
+	private static function cptui_tax_write( $slug, array $def, $only = null ) {
 		$b     = function ( $v ) {
 			return $v ? 'true' : 'false';
 		};
 		$taxes = (array) get_option( 'cptui_taxonomies', array() );
-		$taxes[ $slug ] = array_merge(
-			(array) ( $taxes[ $slug ] ?? array() ),
+		$row   = is_array( $taxes[ $slug ] ?? null ) ? $taxes[ $slug ] : array();
+		$taxes[ $slug ] = self::changed_row(
+			$row,
 			array(
 				'name'           => $slug,
 				'label'          => $def['plural'],
@@ -1166,11 +1274,20 @@ class Minn_Admin_CPT {
 				'public'         => $b( $def['public'] ),
 				// The dialog never shows it: a new taxonomy gets a screen, an
 				// existing one keeps the owner's choice.
-				'show_ui'        => $taxes[ $slug ]['show_ui'] ?? 'true',
+				'show_ui'        => $row['show_ui'] ?? 'true',
 				'hierarchical'   => $b( $def['hierarchical'] ),
 				'show_in_rest'   => $b( $def['show_in_rest'] ),
 				'object_types'   => $def['object_types'],
-			)
+			),
+			array(
+				'plural'       => 'label',
+				'singular'     => 'singular_label',
+				'public'       => 'public',
+				'hierarchical' => 'hierarchical',
+				'show_in_rest' => 'show_in_rest',
+				'object_types' => 'object_types',
+			),
+			$only
 		);
 		update_option( 'cptui_taxonomies', $taxes );
 		return true;
@@ -1178,19 +1295,61 @@ class Minn_Admin_CPT {
 
 	/* ===== Backend writers ===== */
 
-	private static function minn_write( $slug, array $def ) {
+	private static function minn_write( $slug, array $def, $only = null ) {
 		$types          = (array) get_option( self::OPTION, array() );
-		$types[ $slug ] = $def;
+		$row            = null === $only ? $def : self::changed_row( is_array( $types[ $slug ] ?? null ) ? $types[ $slug ] : array(), $def, array_combine( array_keys( $def ), array_keys( $def ) ), $only );
+		$types[ $slug ] = $row;
 		update_option( self::OPTION, $types );
-		register_post_type( $slug, self::register_args( $def ) ); // live for this request
+		register_post_type( $slug, self::register_args( $row ) ); // live for this request
 		return true;
+	}
+
+	/**
+	 * An ACF post type's or taxonomy's stored settings with only the changed
+	 * settings put in. The plural label is ACF's title too, as its own
+	 * screen saves it.
+	 *
+	 * @param array    $existing  ACF's stored settings.
+	 * @param array    $def       The definition.
+	 * @param string[] $only      Definition keys the save changed.
+	 * @param string   $list_key  The definition's attachment list key.
+	 * @param string   $acf_key   ACF's key for it.
+	 * @return array
+	 */
+	private static function acf_changed( array $existing, array $def, array $only, $list_key, $acf_key ) {
+		$settings = $existing;
+		foreach ( $only as $k ) {
+			if ( 'plural' === $k ) {
+				$settings['title']          = $def['plural'];
+				$settings['labels']         = (array) ( $settings['labels'] ?? array() );
+				$settings['labels']['name'] = $def['plural'];
+			} elseif ( 'singular' === $k ) {
+				$settings['labels']                  = (array) ( $settings['labels'] ?? array() );
+				$settings['labels']['singular_name'] = $def['singular'];
+			} elseif ( $list_key === $k ) {
+				$settings[ $acf_key ] = $def[ $k ];
+			} elseif ( array_key_exists( $k, $def ) ) {
+				$settings[ $k ] = $def[ $k ];
+			}
+		}
+		return $settings;
 	}
 
 	/**
 	 * Write through ACF's internal-post-type API — the same path its importer
 	 * uses — so the result is a first-class ACF post type.
 	 */
-	private static function acf_write( $slug, array $def, $existing ) {
+	private static function acf_write( $slug, array $def, $existing, $only = null ) {
+		if ( $existing && null !== $only ) {
+			$settings = self::acf_changed( $existing, $def, $only, 'taxonomies', 'taxonomies' );
+			// ACF's update_post() unslashes what it is given; slash first so
+			// a backslash in a stored or typed setting survives.
+			$saved = acf_update_internal_post_type( wp_slash( $settings ), 'acf-post-type' );
+			if ( empty( $saved ) ) {
+				return new WP_Error( 'acf_failed', __( 'ACF could not save the post type.', 'minn-admin' ), array( 'status' => 500 ) );
+			}
+			return true;
+		}
 		$settings = array(
 			'key'          => $existing['key'] ?? uniqid( 'post_type_' ),
 			'title'        => $def['plural'],
@@ -1235,11 +1394,24 @@ class Minn_Admin_CPT {
 	 * model (it lives on the taxonomy's object_type), so def['taxonomies']
 	 * is left to the taxonomy side.
 	 */
-	private static function jet_write( $slug, array $def, $existing ) {
+	private static function jet_write( $slug, array $def, $existing, $only = null ) {
 		$b = function ( $v ) {
 			return $v ? 'true' : 'false';
 		};
-		$edit    = ( $existing && is_array( $existing['edit'] ?? null ) ) ? $existing['edit'] : array();
+		$edit = ( $existing && is_array( $existing['edit'] ?? null ) ) ? $existing['edit'] : array();
+		// JetEngine takes the row whole, so the labels always ride along (as
+		// stored when untouched); a switch or the supports the save left
+		// alone ride along from the stored args below.
+		$set = array(
+			'public'       => $b( $def['public'] ),
+			'show_in_rest' => $b( $def['show_in_rest'] ),
+			'has_archive'  => $b( $def['has_archive'] ),
+			'hierarchical' => $b( $def['hierarchical'] ),
+			'supports'     => $def['supports'],
+		);
+		if ( $existing && null !== $only ) {
+			$set = array_intersect_key( $set, array_flip( $only ) );
+		}
 		$request = array_merge(
 			(array) ( $edit['advanced_settings'] ?? array() ),
 			(array) ( $edit['labels'] ?? array() ),
@@ -1247,11 +1419,9 @@ class Minn_Admin_CPT {
 				'slug'          => $slug,
 				'name'          => $def['plural'],
 				'singular_name' => $def['singular'],
-				'public'        => $b( $def['public'] ),
-				'show_in_rest'  => $b( $def['show_in_rest'] ),
-				'has_archive'   => $b( $def['has_archive'] ),
-				'hierarchical'  => $b( $def['hierarchical'] ),
-				'supports'      => $def['supports'],
+			),
+			$set,
+			array(
 				'meta_fields'   => (array) ( $edit['meta_fields'] ?? array() ),
 				'admin_columns' => (array) ( $edit['admin_columns'] ?? array() ),
 				'admin_filters' => (array) ( $edit['admin_filters'] ?? array() ),
@@ -1295,11 +1465,27 @@ class Minn_Admin_CPT {
 		return true;
 	}
 
-	private static function jet_tax_write( $slug, array $def, $existing ) {
+	private static function jet_tax_write( $slug, array $def, $existing, $only = null ) {
 		$b = function ( $v ) {
 			return $v ? 'true' : 'false';
 		};
-		$edit    = ( $existing && is_array( $existing['edit'] ?? null ) ) ? $existing['edit'] : array();
+		$edit = ( $existing && is_array( $existing['edit'] ?? null ) ) ? $existing['edit'] : array();
+		// Whole row, as jet_write(): what the save left alone rides along as
+		// stored. The post types live in general_settings, not in the args.
+		$set = array(
+			'object_type'  => $def['object_types'],
+			'public'       => $b( $def['public'] ),
+			'show_in_rest' => $b( $def['show_in_rest'] ),
+			'hierarchical' => $b( $def['hierarchical'] ),
+		);
+		if ( $existing && null !== $only ) {
+			$keep = array_flip( str_replace( 'object_types', 'object_type', $only ) );
+			if ( ! isset( $keep['object_type'] ) && isset( $edit['general_settings']['object_type'] ) ) {
+				$set['object_type'] = $edit['general_settings']['object_type'];
+				$keep['object_type'] = true;
+			}
+			$set = array_intersect_key( $set, $keep );
+		}
 		$request = array_merge(
 			(array) ( $edit['advanced_settings'] ?? array() ),
 			(array) ( $edit['labels'] ?? array() ),
@@ -1308,10 +1494,10 @@ class Minn_Admin_CPT {
 				'name'          => $def['plural'],
 				'singular_name' => $def['singular'],
 				'object_type'   => $def['object_types'],
-				'public'        => $b( $def['public'] ),
-				'show_in_rest'  => $b( $def['show_in_rest'] ),
-				'hierarchical'  => $b( $def['hierarchical'] ),
-				'meta_fields'   => (array) ( $edit['meta_fields'] ?? array() ),
+			),
+			$set,
+			array(
+				'meta_fields' => (array) ( $edit['meta_fields'] ?? array() ),
 			)
 		);
 		if ( ! $existing ) {
@@ -1358,13 +1544,14 @@ class Minn_Admin_CPT {
 	}
 
 	/** Write in CPT UI's option shape (string booleans and all). */
-	private static function cptui_write( $slug, array $def ) {
+	private static function cptui_write( $slug, array $def, $only = null ) {
 		$b     = function ( $v ) {
 			return $v ? 'true' : 'false';
 		};
 		$types = (array) get_option( 'cptui_post_types', array() );
-		$types[ $slug ] = array_merge(
-			(array) ( $types[ $slug ] ?? array() ),
+		$row   = is_array( $types[ $slug ] ?? null ) ? $types[ $slug ] : array();
+		$types[ $slug ] = self::changed_row(
+			$row,
 			array(
 				'name'           => $slug,
 				'label'          => $def['plural'],
@@ -1373,13 +1560,25 @@ class Minn_Admin_CPT {
 				'public'         => $b( $def['public'] ),
 				// The dialog never shows it: a new type gets a screen, an
 				// existing one keeps the owner's choice.
-				'show_ui'        => $types[ $slug ]['show_ui'] ?? 'true',
+				'show_ui'        => $row['show_ui'] ?? 'true',
 				'show_in_rest'   => $b( $def['show_in_rest'] ),
 				'has_archive'    => $b( $def['has_archive'] ),
 				'hierarchical'   => $b( $def['hierarchical'] ),
 				'supports'       => $def['supports'],
 				'taxonomies'     => $def['taxonomies'],
-			)
+			),
+			array(
+				'plural'       => 'label',
+				'singular'     => 'singular_label',
+				'description'  => 'description',
+				'public'       => 'public',
+				'show_in_rest' => 'show_in_rest',
+				'has_archive'  => 'has_archive',
+				'hierarchical' => 'hierarchical',
+				'supports'     => 'supports',
+				'taxonomies'   => 'taxonomies',
+			),
+			$only
 		);
 		update_option( 'cptui_post_types', $types );
 		return true;
