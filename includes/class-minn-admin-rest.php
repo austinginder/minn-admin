@@ -5560,16 +5560,22 @@ class Minn_Admin_REST {
 
 	/**
 	 * Locales that a real reader depends on: the configured site language,
-	 * every locale a user has personally selected and, on a network, the
-	 * language of every other site. These can never be removed. Returns the
-	 * site language, a map locale => user count and a map locale => site
-	 * count, plus whether the network was too large to walk.
+	 * every locale a user has personally selected, every language an active
+	 * multilingual plugin serves visitors and, on a network, the language of
+	 * every other site. These can never be removed. Returns the site
+	 * language, a map locale => user count, a map locale => site count and a
+	 * map locale => the plugin that serves it, plus two answers that keep
+	 * every language: the network was too large to walk ('large'), or a
+	 * multilingual plugin runs whose languages cannot be read here
+	 * ('multilingual', that plugin's name).
 	 *
-	 * Every site of a network reads the one shared WP_LANG_DIR, and each
-	 * keeps its own WPLANG (a site with none falls back to the network's), so
-	 * a language another site runs in is in use even when this site and its
-	 * users are English. A network too large to walk counts every language as
-	 * in use.
+	 * Every site of a network reads the one shared WP_LANG_DIR and keeps its
+	 * own WPLANG; a site with none falls back to its own network's (an
+	 * install with several networks has one each). A multilingual plugin
+	 * keeps its languages in its own storage and loads WordPress's packs for
+	 * them, so they are in use however the site and its users are set. Only
+	 * this site's plugin can be asked: one active on any other site of the
+	 * network, or one that does not answer, keeps every language.
 	 */
 	private static function protected_locales() {
 		global $wpdb;
@@ -5583,31 +5589,181 @@ class Minn_Admin_REST {
 			}
 			$users[ $loc ] = isset( $users[ $loc ] ) ? $users[ $loc ] + 1 : 1;
 		}
-		$sites = array();
-		$large = is_multisite() && wp_is_large_network();
+		$served       = self::multilingual_locales();
+		$plugins      = is_array( $served ) ? $served : array();
+		$multilingual = is_array( $served ) ? '' : (string) $served;
+		$sites        = array();
+		// wp_is_large_network() counts the current network only; get_sites()
+		// below walks every network.
+		$large = is_multisite() && ( wp_is_large_network() || (int) get_sites( array( 'count' => true, 'number' => 0 ) ) > 10000 );
 		if ( is_multisite() && ! $large ) {
-			$network = (string) get_site_option( 'WPLANG', '' );
-			foreach ( get_sites( array( 'fields' => 'ids', 'number' => 0 ) ) as $blog_id ) {
-				$loc = $wpdb->get_var( 'SELECT option_value FROM ' . $wpdb->get_blog_prefix( (int) $blog_id ) . "options WHERE option_name = 'WPLANG'" );
-				$loc = null === $loc ? $network : (string) $loc;
+			$here      = (int) get_current_blog_id();
+			$languages = array();
+			$per_net   = array();
+			foreach ( get_sites( array( 'number' => 0 ) ) as $s ) {
+				$blog_id = (int) $s->blog_id;
+				$net     = (int) $s->network_id;
+				if ( ! isset( $languages[ $net ] ) ) {
+					$languages[ $net ] = (string) get_network_option( $net, 'WPLANG', '' );
+				}
+				$per_net[ $net ] = isset( $per_net[ $net ] ) ? $per_net[ $net ] + 1 : 1;
+				$opts = $wpdb->get_results( 'SELECT option_name, option_value FROM ' . $wpdb->get_blog_prefix( $blog_id ) . "options WHERE option_name IN ( 'WPLANG', 'active_plugins' )", OBJECT_K );
+				$loc  = isset( $opts['WPLANG'] ) ? (string) $opts['WPLANG']->option_value : $languages[ $net ];
 				if ( '' !== $loc && 'en_US' !== $loc ) {
 					$sites[ $loc ] = isset( $sites[ $loc ] ) ? $sites[ $loc ] + 1 : 1;
+				}
+				if ( '' === $multilingual && $blog_id !== $here && isset( $opts['active_plugins'] ) ) {
+					$multilingual = self::multilingual_plugin_in( maybe_unserialize( $opts['active_plugins']->option_value ) );
+				}
+			}
+			// Network-active on a network with any site but this one: each of
+			// those sites keeps its own list.
+			foreach ( $per_net as $net => $count ) {
+				if ( '' !== $multilingual ) {
+					break;
+				}
+				if ( $count > 1 || (int) get_current_network_id() !== (int) $net ) {
+					$multilingual = self::multilingual_plugin_in( array_keys( (array) get_network_option( $net, 'active_sitewide_plugins', array() ) ) );
 				}
 			}
 		}
 		return array(
-			'site'  => 'en_US' === $site ? '' : $site,
-			'users' => $users,
-			'sites' => $sites,
-			'large' => $large,
+			'site'         => 'en_US' === $site ? '' : $site,
+			'users'        => $users,
+			'sites'        => $sites,
+			'plugins'      => $plugins,
+			'large'        => $large,
+			'multilingual' => $multilingual,
 		);
+	}
+
+	/**
+	 * The multilingual plugins whose front-end languages are WordPress's own
+	 * packs: name => plugin folders. Each one's list is read by
+	 * multilingual_locales().
+	 */
+	const MULTILINGUAL_PLUGINS = array(
+		'Polylang'       => array( 'polylang', 'polylang-pro' ),
+		'WPML'           => array( 'sitepress-multilingual-cms' ),
+		'TranslatePress' => array( 'translatepress-multilingual' ),
+		'Bogo'           => array( 'bogo' ),
+		'qTranslate-XT'  => array( 'qtranslate-xt', 'qtranslate-x' ),
+	);
+
+	/**
+	 * The name of the first multilingual plugin in a list of active plugin
+	 * files, or ''.
+	 *
+	 * @param mixed $active Plugin files ('folder/file.php').
+	 * @return string
+	 */
+	private static function multilingual_plugin_in( $active ) {
+		foreach ( (array) $active as $file ) {
+			$folder = strtolower( strtok( (string) $file, '/' ) );
+			foreach ( self::MULTILINGUAL_PLUGINS as $name => $folders ) {
+				if ( in_array( $folder, $folders, true ) ) {
+					return $name;
+				}
+			}
+		}
+		return '';
+	}
+
+	/**
+	 * Every language this site's multilingual plugins serve visitors, as
+	 * locale => plugin name; or, when one is active but its list cannot be
+	 * read, that plugin's name, so the caller keeps every language.
+	 *
+	 * @return array|string
+	 */
+	private static function multilingual_locales() {
+		$here = (array) get_option( 'active_plugins', array() );
+		if ( is_multisite() ) {
+			$here = array_merge( $here, array_keys( (array) get_site_option( 'active_sitewide_plugins', array() ) ) );
+		}
+		$readers = array(
+			'Polylang'       => array(
+				function_exists( 'pll_languages_list' ) || defined( 'POLYLANG_VERSION' ),
+				static function () {
+					return function_exists( 'pll_languages_list' ) ? pll_languages_list( array( 'fields' => 'locale' ) ) : null;
+				},
+			),
+			'WPML'           => array(
+				defined( 'ICL_SITEPRESS_VERSION' ),
+				static function () {
+					$langs = apply_filters( 'wpml_active_languages', null, array( 'skip_missing' => 0 ) );
+					return is_array( $langs ) && $langs ? array_map( static function ( $l ) {
+						return is_array( $l ) && isset( $l['default_locale'] ) ? $l['default_locale'] : null;
+					}, array_values( $langs ) ) : null;
+				},
+			),
+			'TranslatePress' => array(
+				defined( 'TRP_PLUGIN_VERSION' ) || class_exists( 'TRP_Translate_Press' ),
+				static function () {
+					$settings = get_option( 'trp_settings' );
+					return is_array( $settings ) && isset( $settings['translation-languages'] ) ? $settings['translation-languages'] : null;
+				},
+			),
+			'Bogo'           => array(
+				function_exists( 'bogo_available_locales' ) || defined( 'BOGO_VERSION' ),
+				static function () {
+					if ( ! function_exists( 'bogo_available_locales' ) ) {
+						return null;
+					}
+					$list = bogo_available_locales();
+					return is_array( $list ) ? array_merge( array_values( $list ), array_filter( array_keys( $list ), 'is_string' ) ) : null;
+				},
+			),
+			'qTranslate-XT'  => array(
+				defined( 'QTX_VERSION' ),
+				static function () {
+					global $q_config;
+					if ( ! is_array( $q_config ) || ! isset( $q_config['enabled_languages'], $q_config['locale'] ) || ! is_array( $q_config['enabled_languages'] ) ) {
+						return null;
+					}
+					$out = array();
+					foreach ( $q_config['enabled_languages'] as $code ) {
+						if ( ! isset( $q_config['locale'][ $code ] ) ) {
+							return null;
+						}
+						$out[] = $q_config['locale'][ $code ];
+					}
+					return $out;
+				},
+			),
+		);
+		$folders = array_map( static function ( $file ) {
+			return strtolower( (string) strtok( (string) $file, '/' ) );
+		}, $here );
+		$served  = array();
+		foreach ( $readers as $name => $reader ) {
+			// Its code is loaded, or the site lists it as active and it never
+			// loaded: either way only its own list can say what it serves.
+			$present = $reader[0] || array_intersect( self::MULTILINGUAL_PLUGINS[ $name ], $folders );
+			if ( ! $present ) {
+				continue;
+			}
+			$list = $reader[1]();
+			if ( ! is_array( $list ) ) {
+				return $name;
+			}
+			foreach ( $list as $loc ) {
+				if ( ! is_string( $loc ) || ! preg_match( '/^[A-Za-z0-9_@.-]+$/', $loc ) ) {
+					return $name;
+				}
+				if ( 'en_US' !== $loc && ! isset( $served[ $loc ] ) ) {
+					$served[ $loc ] = $name;
+				}
+			}
+		}
+		return $served;
 	}
 
 	/**
 	 * Every language installed on this site, whether or not it has an update
 	 * waiting. Components are counted from wp_get_installed_translations()
 	 * (core collapses to a single WordPress entry). Each language is marked
-	 * removable unless it is the site language or a user's personal locale.
+	 * removable unless protected_locales() keeps it, and says why.
 	 */
 	public static function installed_languages() {
 		if ( ! current_user_can( 'update_languages' ) ) {
@@ -5665,7 +5821,24 @@ class Minn_Admin_REST {
 			$is_site  = $protected['site'] === $locale;
 			$users    = isset( $protected['users'][ $locale ] ) ? (int) $protected['users'][ $locale ] : 0;
 			$sites    = isset( $protected['sites'][ $locale ] ) ? (int) $protected['sites'][ $locale ] : 0;
-			$reason   = $is_site ? 'site' : ( $users > 0 ? 'users' : ( $sites > 0 ? 'sites' : ( $protected['large'] ? 'network' : '' ) ) );
+			$plugin   = isset( $protected['plugins'][ $locale ] ) ? (string) $protected['plugins'][ $locale ] : '';
+			if ( $is_site ) {
+				$reason = 'site';
+			} elseif ( $users > 0 ) {
+				$reason = 'users';
+			} elseif ( '' !== $plugin ) {
+				$reason = 'plugin';
+			} elseif ( $sites > 0 ) {
+				$reason = 'sites';
+			} elseif ( $protected['large'] ) {
+				$reason = 'network';
+			} elseif ( '' !== $protected['multilingual'] ) {
+				// A multilingual plugin that may serve it: kept, and named.
+				$reason = 'multilingual';
+				$plugin = $protected['multilingual'];
+			} else {
+				$reason = '';
+			}
 			$total    = ( $counts['core'] ? 1 : 0 ) + $counts['plugin'] + $counts['theme'];
 			$out[]    = array(
 				'locale'    => $locale,
@@ -5678,6 +5851,7 @@ class Minn_Admin_REST {
 				'site'      => $is_site,
 				'users'     => $users,
 				'sites'     => $sites,
+				'plugin'    => $plugin,
 				'removable' => '' === $reason,
 				'reason'    => $reason,
 			);
@@ -5820,8 +5994,16 @@ class Minn_Admin_REST {
 		if ( isset( $protected['sites'][ $locale ] ) ) {
 			return new WP_Error( 'minn_admin_locale_network', __( 'Another site on the network uses this language, so it cannot be removed.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
+		if ( isset( $protected['plugins'][ $locale ] ) ) {
+			/* translators: %s: a multilingual plugin's name, such as Polylang. */
+			return new WP_Error( 'minn_admin_locale_plugin', sprintf( __( '%s serves this language to visitors, so it cannot be removed.', 'minn-admin' ), $protected['plugins'][ $locale ] ), array( 'status' => 400 ) );
+		}
 		if ( $protected['large'] ) {
 			return new WP_Error( 'minn_admin_locale_large_network', __( 'This network has too many sites to check which languages they use, so languages cannot be removed here.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		if ( '' !== $protected['multilingual'] ) {
+			/* translators: %s: a multilingual plugin's name, such as Polylang. */
+			return new WP_Error( 'minn_admin_locale_multilingual', sprintf( __( '%s may serve any installed language to visitors, so languages cannot be removed here.', 'minn-admin' ), $protected['multilingual'] ), array( 'status' => 400 ) );
 		}
 		// Only ever act on a locale this site actually has installed: a
 		// request for anything else is refused rather than answered with a
