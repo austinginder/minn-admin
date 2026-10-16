@@ -142,8 +142,10 @@ A few properties worth knowing before auditing (details in
   tables, which follow their plugins' own rules. A table holding a list its
   plugin keeps to the viewer's own rows (Amelia providers, LatePoint agents,
   JetBooking vendors) is shown only to someone that list shows everything,
-  and so are the tables the list reads. Copies count by name, and Stream's
-  also by their columns. The activity-log tables that are shown are shown
+  and so are the tables the list reads. A plugin's other tables holding the
+  same data (entry fields, payments, booking and log meta) follow the rule
+  of the list they belong to. Copies count by name, and Stream's also by
+  their columns. The activity-log tables that are shown are shown
   as their own screens show them. WooCommerce's own tables (orders,
   addresses, sessions, and its logs when it keeps them in the database), and
   copies of them (a name containing `woocommerce`, or `wc` with no letter
