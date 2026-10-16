@@ -137,8 +137,14 @@ A few properties worth knowing before auditing (details in
   that plugin is: each log and store read through the kernel (its view
   gate and row scope), and WP Activity Log's, Simple History's, Stream's,
   Activity Log's, PW Gift Cards' and WP Mail Logging's tables, copies
-  included, also while the plugin is inactive. The activity-log tables that
-  are shown are shown as their own screens show them. WooCommerce's own tables (orders,
+  included, also while the plugin is inactive, and Gravity Forms' entries,
+  Burst's and Koko's statistics, Redirection's logs and Solid Security's
+  tables, which follow their plugins' own rules. A table holding a list its
+  plugin keeps to the viewer's own rows (Amelia providers, LatePoint agents,
+  JetBooking vendors) is shown only to someone that list shows everything,
+  and so are the tables the list reads. Copies count by name, and Stream's
+  also by their columns. The activity-log tables that are shown are shown
+  as their own screens show them. WooCommerce's own tables (orders,
   addresses, sessions, and its logs when it keeps them in the database), and
   copies of them (a name containing `woocommerce`, or `wc` with no letter
   directly before or after it, such as `wp_bak_wc_orders`), are left out for
@@ -153,7 +159,8 @@ A few properties worth knowing before auditing (details in
   networks (WP Multi Network), install-wide tools (the database browser,
   the logs, the wp-config switches, backup archives and migrations and
   their connection keys) belong to the main network's super admins.
-  Deleting a site, network plugin and theme switches, and network
+  Deleting a site, network plugin and theme switches (the site's own plugin
+  switch included, when it would act network-wide), and network
   administrator changes need the network's own super admin, and are
   refused before anything runs.
 - Hiding a plugin's screens because a menu tool (White Label CMS) hid its
