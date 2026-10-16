@@ -262,6 +262,7 @@ minn_admin_resource( 'amelia/appointments', function () use ( $minn_amelia_list,
 			'detail'  => array_merge( $minn_amelia_list, array( 'serviceId', 'c.phone' => 'customer_phone', 'c.note' => 'customer_note', 'b.persons' => 'persons', 'b.price' => 'price', 'b.customFields' => 'customFields', 'b.info' => 'info' ) ),
 			// A provider without read_others sees only their own bookings.
 			'where'   => 'minn_admin_amelia_scope',
+			'viewer'  => true,
 		),
 		'list'      => array(
 			'filter' => minn_admin_booking_filter( $minn_amelia_views ),

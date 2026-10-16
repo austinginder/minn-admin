@@ -334,7 +334,9 @@ minn_admin_resource( 'jet-booking/bookings', function () use ( $minn_jet_booking
 			// Every column: a site adds its own booking columns (a note, a phone).
 			'columns' => array( '*', 'p.post_title' => 'item_title', 'u.display_name' => 'user_name' ),
 			'detail'  => array( '*', 'p.post_title' => 'item_title' ),
+			// A booking vendor sees only their own bookings.
 			'where'   => 'minn_admin_jet_booking_scope',
+			'viewer'  => true,
 		),
 		'list'    => array(
 			'filter' => minn_admin_booking_filter( $minn_jet_booking_views ),

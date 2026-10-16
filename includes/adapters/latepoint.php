@@ -357,9 +357,12 @@ minn_admin_resource( 'latepoint/bookings', function () use ( $minn_latepoint_lis
 					Minn_Admin_Kernel_SQL::has_column( 'latepoint_bookings', 'customer_comment' ) ? array( 'customer_comment' ) : array()
 				);
 			},
+			// An agent, or a role LatePoint limits to some locations or
+			// services, sees only those bookings.
 			'where'   => function () {
 				return minn_admin_latepoint_scope_where( minn_admin_latepoint_scope() );
 			},
+			'viewer'  => true,
 		),
 		'list'    => array(
 			'filter' => minn_admin_booking_filter( $minn_latepoint_views ),
@@ -416,6 +419,7 @@ minn_admin_resource( 'latepoint/event-registrations', function () {
 			'columns' => array( 'id', 'quantity', 'status', 'ev.name' => 'event_name', 'ev.start_datetime_utc', 'c.first_name', 'c.last_name', 'c.email' ),
 			'detail'  => array( '*', 'ev.name' => 'event_name', 'ev.start_datetime_utc', 'ev.end_datetime_utc', 'c.first_name', 'c.last_name', 'c.email', 'c.phone' ),
 			'where'   => 'minn_admin_latepoint_reg_scope',
+			'viewer'  => true,
 		),
 		'list'    => array(
 			'filter' => array(
