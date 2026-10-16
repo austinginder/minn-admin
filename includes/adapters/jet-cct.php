@@ -155,7 +155,14 @@ function minn_admin_jet_cct_item( $factory, $row ) {
 			$title = $item[ $name ];
 		}
 	}
-	$item['title'] = '' !== $title ? $title : '#' . (int) $row['_ID'];
+	// The display title is the first non-empty text field, or the id. A type
+	// with a field of its own named 'title' keeps that field's stored value
+	// there: its edit dialog sends the key back as the item serves it, and a
+	// display fallback in it stored '#7', or another field's text, as that
+	// item's title. The detail heading falls back to the id by itself.
+	if ( ! isset( $set['fields']['title'] ) ) {
+		$item['title'] = '' !== $title ? $title : '#' . (int) $row['_ID'];
+	}
 	return $item;
 }
 
@@ -188,7 +195,7 @@ function minn_admin_jet_cct_itemarr( $factory, $values, $row = null ) {
 			$out[ $name ] = (string) $value;
 			continue;
 		}
-		$stored = minn_admin_jet_value_in( $f, $value );
+		$stored = minn_admin_jet_value_in( $f, $value, is_array( $row ) && isset( $row[ $name ] ) ? minn_admin_jet_cct_decode( $row[ $name ] ) : null );
 		if ( null === $stored ) {
 			continue; // refused: their handler merges, so the column survives
 		}

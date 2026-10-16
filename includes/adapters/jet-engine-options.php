@@ -119,9 +119,17 @@ function minn_admin_jet_options_save( $slug, $values ) {
 		if ( minn_admin_jet_same_value( $set['fields'][ $name ], $value, minn_admin_jet_value_out( $set['fields'][ $name ], $page->get( $name, false ) ) ) ) {
 			continue; // untouched: a caller may send the whole page
 		}
-		$stored = minn_admin_jet_value_in( $set['fields'][ $name ], $value );
+		$f      = $set['fields'][ $name ];
+		$stored = minn_admin_jet_value_in( $f, $value, $page->get( $name, false ) );
 		if ( null === $stored ) {
 			continue; // refused: rewrite=false leaves the stored value alone
+		}
+		// A "save as array" checkbox goes in the shape their own form posts,
+		// key => 'true': their sanitize callback (sanitize=true below) keeps
+		// the keys whose value reads as true, so a plain list of keys stored
+		// an empty list whatever was ticked.
+		if ( 'multicheck' === $f['type'] && 'checkbox' === ( $f['_jet']['type'] ?? '' ) && ! empty( $f['_jet']['is_array'] ) && is_array( $stored ) ) {
+			$stored = array_fill_keys( array_map( 'strval', $stored ), 'true' );
 		}
 		$data[ $name ] = false === $stored ? '' : $stored;
 	}

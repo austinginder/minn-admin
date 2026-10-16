@@ -373,6 +373,49 @@ function minn_admin_jet_image_out( $id ) {
 	return $url ? array( 'id' => $id, 'url' => $url ) : '';
 }
 
+/**
+ * A stored checkbox or multiple-select value → its entries, in stored order,
+ * each as array( key, on, raw value, map entry? ).
+ *
+ * JetEngine stores a checkbox as key => 'true' / 'false' (the default) or,
+ * with "save as array" and for a multiple select, as a list of keys. PHP
+ * keeps a numeric key ('1', '2') as an integer, so a map of such keys looks
+ * like a list by its keys alone: read that way, nothing showed as ticked and
+ * the next tick cleared the rest. The shape is told by the values instead,
+ * as JetEngine's own CCT handler tells them: 'true' / 'false' (or a bool) is
+ * a map entry.
+ *
+ * @param mixed $raw Stored value.
+ * @return array[]
+ */
+function minn_admin_jet_check_entries( $raw ) {
+	if ( ! is_array( $raw ) ) {
+		return ( is_scalar( $raw ) && ! is_bool( $raw ) && '' !== (string) $raw ) ? array( array( (string) $raw, true, $raw, false ) ) : array();
+	}
+	$out = array();
+	foreach ( $raw as $k => $v ) {
+		if ( is_bool( $v ) || ( is_string( $v ) && in_array( strtolower( $v ), array( 'true', 'false' ), true ) ) ) {
+			$out[] = array( (string) $k, minn_admin_jet_bool( $v ), $v, true );
+		} elseif ( is_int( $k ) && is_scalar( $v ) ) {
+			$out[] = array( (string) $v, true, $v, false );
+		} else {
+			$out[] = array( (string) $k, minn_admin_jet_bool( $v ), $v, true );
+		}
+	}
+	return $out;
+}
+
+/** The ticked keys of a stored checkbox or multiple-select value, in stored order. */
+function minn_admin_jet_check_picks( $raw ) {
+	$on = array();
+	foreach ( minn_admin_jet_check_entries( $raw ) as $e ) {
+		if ( $e[1] ) {
+			$on[] = $e[0];
+		}
+	}
+	return $on;
+}
+
 /** Stored meta → panel value. */
 function minn_admin_jet_value_out( $f, $raw ) {
 	$jt = $f['_jet'];
@@ -382,18 +425,7 @@ function minn_admin_jet_value_out( $f, $raw ) {
 		case 'number':
 			return ( null === $raw || '' === $raw || false === $raw ) ? '' : (string) $raw;
 		case 'multicheck':
-			if ( is_array( $raw ) ) {
-				$on = array();
-				foreach ( $raw as $k => $v ) {
-					if ( is_int( $k ) && is_scalar( $v ) ) {
-						$on[] = (string) $v; // list of keys
-					} elseif ( minn_admin_jet_bool( $v ) ) {
-						$on[] = (string) $k; // key => 'true' map
-					}
-				}
-				return array_values( array_intersect( $on, array_keys( $f['choices'] ) ) );
-			}
-			return ( '' !== (string) $raw && isset( $f['choices'][ (string) $raw ] ) ) ? array( (string) $raw ) : array();
+			return array_values( array_intersect( minn_admin_jet_check_picks( $raw ), array_map( 'strval', array_keys( $f['choices'] ) ) ) );
 		case 'date':
 		case 'datetime':
 		case 'time':
@@ -455,11 +487,16 @@ function minn_admin_jet_value_out( $f, $raw ) {
  * form submission wrote as '12 units', a picture since deleted — was wiped for
  * everyone by someone who never touched it.
  *
- * @param array $f     Mapped field.
- * @param mixed $value Incoming panel value.
+ * @param array $f      Mapped field.
+ * @param mixed $value  Incoming panel value.
+ * @param mixed $stored The value stored now, as the store returns it. A
+ *                      checkbox list keeps the picks in it the field no
+ *                      longer offers: the panel draws only the current
+ *                      choices, so nobody could have unticked them, and a
+ *                      change to another pick in the list dropped them.
  * @return mixed Stored shape, false to clear, or null to refuse.
  */
-function minn_admin_jet_value_in( $f, $value ) {
+function minn_admin_jet_value_in( $f, $value, $stored = null ) {
 	$jt = $f['_jet'];
 	switch ( $f['type'] ) {
 		case 'true_false':
@@ -470,13 +507,27 @@ function minn_admin_jet_value_in( $f, $value ) {
 			}
 			return is_numeric( $value ) ? (string) ( $value + 0 ) : null;
 		case 'multicheck':
-			$on = array_values( array_intersect( array_map( 'strval', (array) $value ), array_keys( $f['choices'] ) ) );
+			$offered = array_map( 'strval', array_keys( $f['choices'] ) );
+			$on      = array_values( array_intersect( array_map( 'strval', (array) $value ), $offered ) );
+			// The stored picks the field no longer offers have no switch, so
+			// nobody unticked them: they stay, a map entry with its stored
+			// value and a list pick at its stored place.
 			if ( 'checkbox' === $jt['type'] && empty( $jt['is_array'] ) ) {
 				$map = array();
 				foreach ( array_keys( $f['choices'] ) as $k ) {
 					$map[ $k ] = in_array( (string) $k, $on, true ) ? 'true' : 'false';
 				}
+				foreach ( minn_admin_jet_check_entries( $stored ) as $e ) {
+					if ( ! in_array( $e[0], $offered, true ) && ! array_key_exists( $e[0], $map ) ) {
+						$map[ $e[0] ] = $e[3] ? $e[2] : 'true';
+					}
+				}
 				return $map;
+			}
+			foreach ( minn_admin_jet_check_picks( $stored ) as $pos => $pick ) {
+				if ( ! in_array( $pick, $offered, true ) && ! in_array( $pick, $on, true ) ) {
+					array_splice( $on, min( $pos, count( $on ) ), 0, array( $pick ) );
+				}
 			}
 			return $on ? $on : false;
 		case 'select':
@@ -690,7 +741,7 @@ function minn_admin_jet_write_values( $post_id, $values ) {
 		if ( minn_admin_jet_same_value( $map[ $name ], $value, minn_admin_jet_value_out( $map[ $name ], get_post_meta( $post_id, $name, true ) ) ) ) {
 			continue; // untouched: the panel resends every value it holds
 		}
-		$stored = minn_admin_jet_value_in( $map[ $name ], $value );
+		$stored = minn_admin_jet_value_in( $map[ $name ], $value, get_post_meta( $post_id, $name, true ) );
 		if ( null === $stored ) {
 			continue; // refused: leave whatever is stored alone
 		}
