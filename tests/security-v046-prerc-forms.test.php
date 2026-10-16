@@ -16,6 +16,9 @@
  * @package minn-admin
  */
 
+// Ctrl-C, TERM and HUP end the suite through its cleanups (see the file).
+require_once __DIR__ . '/lib/signals.php';
+
 $results = array();
 $check   = function ( $label, $ok, $detail = '' ) use ( &$results ) {
 	set_time_limit( 0 );

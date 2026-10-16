@@ -33,6 +33,9 @@
  * @package minn-admin
  */
 
+// Ctrl-C, TERM and HUP end the suite through its cleanups (see the file).
+require_once __DIR__ . '/lib/signals.php';
+
 if ( ! function_exists( 'rest_get_server' ) ) {
 	if ( class_exists( 'WP_CLI' ) ) {
 		// An option the site never stored is answered by its default_ hook.
