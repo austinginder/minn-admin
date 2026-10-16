@@ -19,12 +19,19 @@
  * Run: node roundtrip-surfaces-capture.js /tmp/minn-surface-saves.json
  *      MINN_RT_CAPTURE=/tmp/minn-surface-saves.json wp eval-file tests/roundtrip-surfaces.test.php --user=admin --path=<site>
  * Minn's own pages (roundtrip-pages-capture.js) replay the same way; with no
- * detail route to read back, they get the no-op check.
+ * detail route to read back, they get the no-op check. Form entries
+ * (roundtrip-entries-capture.js) get checks of their own: see $entry_checks.
  *
  * @package minn-admin
  */
 
 $known = array(
+	// Answer routes that clean or convert a sent value before comparing it
+	// with the stored one, so an answer sent back as loaded is rewritten.
+	// The entry page sends only changed answers, so only another client
+	// reaches these; the fix compares first (adapters lane).
+	'gf-entry [answers]: every answer sent back as loaded stores nothing'        => 'a checkbox sent as checked becomes its choice\'s current value before the compare, so a box holding a renamed choice is rewritten to the new name',
+	'elementor-entry [answers]: every answer sent back as loaded stores nothing' => 'sanitize_text_field runs before the compare, so a stored "50%DEAL" or inline markup is rewritten',
 );
 
 $rt = ( require __DIR__ . '/lib/roundtrip.php' )( 'roundtrip-surfaces', $known );
@@ -203,7 +210,11 @@ $value_of = function ( $table, $key ) use ( $wpdb, $volatile ) {
 	}
 	if ( preg_match( '/meta$/', $table ) && false !== strpos( $key, ':' ) ) {
 		list( $o, $k ) = explode( ':', $key, 2 );
-		$owner = $table === $wpdb->postmeta ? 'post_id' : ( $table === $wpdb->usermeta ? 'user_id' : 'post_id' );
+		// The owner column $rows_of keys the row by.
+		$names = $wpdb->get_col( "SHOW COLUMNS FROM `{$table}`" );
+		$owner = array_values( array_filter( $names, function ( $f ) {
+			return '_id' === substr( $f, -3 ) && ! in_array( $f, array( 'meta_id', 'umeta_id' ), true );
+		} ) )[0] ?? 'post_id';
 		$vals = $wpdb->get_col( $wpdb->prepare( "SELECT meta_value FROM `{$table}` WHERE `{$owner}` = %s AND meta_key = %s", $o, $k ) );
 		return $vals ? implode( ' | ', $vals ) : null;
 	}
@@ -333,21 +344,12 @@ $detail_of = function ( $c, $id ) use ( $get ) {
 	return 200 === $st && is_array( $d ) ? $d : null;
 };
 
-foreach ( (array) $captures as $c ) {
-	// A seeded run (lib/roundtrip-seed.php) is its own ratchet line.
-	$label = $c['surface'] . ( ! empty( $c['seeded']['set'] ) ? " [{$c['seeded']['set']}]" : '' );
-	if ( ! empty( $c['skip'] ) || empty( $c['path'] ) ) {
-		printf( "SKIP  %s: %s\n", $label, $c['skip'] ?? 'no capture' );
-		continue;
-	}
-	$body = (array) $c['body'];
-	$id   = $item_id( $c );
-	if ( ! empty( $c['seeded'] ) && (string) $id !== (string) $c['seeded']['id'] ) {
-		$check( "{$label}: the capture saved the seeded item", false, 'saved ' . wp_json_encode( $id ) . ', seeded ' . $c['seeded']['id'] );
-		continue;
-	}
-
-	// No-op.
+/*
+ * The no-op judgment: what a replay of $body changed, beyond timestamps,
+ * bookkeeping and a vendor's own representation (each excused only if the
+ * item reads back the same through its detail route). [ status, changes ].
+ */
+$unchanged = function ( $c, $body, $id ) use ( $wpdb, $changes_of, $values_around, $only_filled, $decode, $in_tx, $replay, $detail_of, $volatile, $representational, $verbose, $explain ) {
 	list( $moved, $st ) = $changes_of( $c, $body );
 	$desc     = array();
 	$excused  = array();
@@ -422,6 +424,223 @@ foreach ( (array) $captures as $c ) {
 	if ( $verbose && $desc ) {
 		$explain( $c, $body, $moved );
 	}
+	return array( $st, $desc );
+};
+
+/*
+ * Form entry answer editors (roundtrip-entries-capture.js). The entry page
+ * sends only the answers a person changed, each with the value it loaded, so
+ * each entry is held to:
+ *   clean      Save with nothing changed sends nothing;
+ *   as loaded  every answer sent back as loaded stores nothing: the route
+ *              compares what it is sent with what is stored before any
+ *              cleaning, and the page loads each answer as stored;
+ *   text       a real edit of one answer changes that answer alone: every
+ *              other answer reads back as it was through the entry route,
+ *              the edited one reads back as typed, and every row the save
+ *              changed holds the typed text or is the edit's own record
+ *              ($entry_trail);
+ *   pick       clicking one box of a multi-choice answer leaves every other
+ *              answer, and a pick the form no longer offers (the `answers`
+ *              seed) stays;
+ *   action     the page's Star changes only what its body names, a second
+ *              one stores nothing, and an answers save from a page opened
+ *              before it keeps it.
+ */
+$entry_trail = array(
+	// Table (prefix off) => why a real edit adds a row there.
+	'gf_entry_notes' => 'the entry\'s notes say who changed which answers (Minn adds one per edit)',
+);
+$entry_typed = ' minnrt'; // what the capture types (roundtrip-entries-capture.js TYPED)
+$entry_answers = function ( $c ) use ( $get ) {
+	list( $st, $d ) = $get( str_replace( '{id}', rawurlencode( (string) $c['entry']['id'] ), $c['entry']['sectionsRoute'] ) );
+	$out = array();
+	foreach ( (array) ( 200 === $st && is_array( $d ) ? ( $d['edit']['fields'] ?? array() ) : array() ) as $f ) {
+		foreach ( (array) $f['inputs'] as $i ) {
+			$out[ (string) $i['id'] ] = $i['value'];
+		}
+	}
+	return $out;
+};
+// One recorded write in the shape $replay and $unchanged take.
+$entry_write = function ( $c, $w ) {
+	$w += array( 'query' => array() );
+	return array( 'surface' => $c['surface'], 'method' => $w['method'], 'path' => $w['path'], 'body' => $w['body'], 'writes' => array( $w ), 'route' => $c['route'], 'detailRoute' => $c['entry']['sectionsRoute'], 'preserve' => array(), 'actions' => array() );
+};
+// A row a text edit changed is that answer's own storage when, with the
+// typed text taken out, it holds what it held: plain, or every differing
+// leaf of a stored structure.
+$entry_typed_only = function ( $before, $after ) use ( $decode, $entry_typed ) {
+	if ( null === $before || null === $after || false === strpos( (string) $after, trim( $entry_typed ) ) ) {
+		return false;
+	}
+	if ( str_replace( $entry_typed, '', (string) $after ) === (string) $before ) {
+		return true;
+	}
+	$walk = function ( $x, $y ) use ( &$walk, $entry_typed ) {
+		if ( is_array( $x ) && is_array( $y ) ) {
+			if ( array_keys( $x ) !== array_keys( $y ) ) {
+				return false;
+			}
+			foreach ( $x as $k => $v ) {
+				if ( ! $walk( $v, $y[ $k ] ) ) {
+					return false;
+				}
+			}
+			return true;
+		}
+		return $x === $y || ( is_string( $y ) && str_replace( $entry_typed, '', $y ) === (string) $x );
+	};
+	$a = $decode( $before );
+	$b = $decode( $after );
+	return is_array( $a ) && is_array( $b ) && $walk( $a, $b );
+};
+$entry_checks = function ( $c, $label ) use ( $wpdb, $check, $unchanged, $changes_of, $values_around, $in_tx, $replay, $checksums, $rows_of, $entry_answers, $entry_write, $entry_typed_only, $entry_trail ) {
+	$id = (string) $c['entry']['id'];
+	if ( ! empty( $c['seeded'] ) && $id !== (string) $c['seeded']['id'] ) {
+		$check( "{$label}: the capture opened the seeded entry", false, "opened {$id}, seeded {$c['seeded']['id']}" );
+		return;
+	}
+	$sent = function ( $writes ) {
+		return implode( ' + ', array_map( function ( $w ) {
+			return $w['method'] . ' ' . $w['path'] . ' ' . wp_json_encode( $w['body'] );
+		}, (array) $writes ) );
+	};
+
+	// clean
+	$check( "{$label}: Save with nothing changed sends nothing", empty( $c['clean'] ), $sent( $c['clean'] ?? array() ) );
+	foreach ( (array) ( $c['clean'] ?? array() ) as $w ) {
+		list( $st, $desc ) = $unchanged( $entry_write( $c, $w ), $w['body'], $id );
+		$check( "{$label}: what the clean Save sent stores nothing", $st < 400 && ! $desc, $st . ( $desc ? ' changed: ' . implode( '; ', array_slice( $desc, 0, 6 ) ) : '' ) );
+	}
+
+	// as loaded: the route must take it (a refusal is a page that cannot
+	// save what it loaded), and store nothing.
+	$al  = $c['asLoaded'];
+	$alw = $entry_write( $c, $al );
+	list( $ast, $amsg ) = $in_tx( function () use ( $alw, $al, $replay ) {
+		return $replay( $alw, $al['body'] );
+	} );
+	list( $st, $desc ) = $unchanged( $alw, $al['body'], $id );
+	$check( "{$label}: every answer sent back as loaded stores nothing", $ast < 400 && ! $desc, $ast . ( '' !== $amsg ? " {$amsg}" : '' ) . ( $desc ? ' changed: ' . implode( '; ', array_slice( $desc, 0, 6 ) ) : '' ) );
+
+	// text and pick
+	$text = null;
+	foreach ( (array) $c['edits'] as $e ) {
+		if ( empty( $e['writes'] ) ) {
+			$check( "{$label}: a {$e['what']} edit of {$e['input']} ({$e['label']}) sends a save", false, 'the page sent nothing' );
+			continue;
+		}
+		$w  = $e['writes'][0];
+		$wc = $entry_write( $c, $w );
+		list( $was, $now, $st ) = $in_tx( function () use ( $c, $wc, $w, $replay, $entry_answers ) {
+			$was = $entry_answers( $c );
+			list( $st ) = $replay( $wc, $w['body'] );
+			return array( $was, $entry_answers( $c ), $st );
+		} );
+		$others = array();
+		foreach ( $was as $k => $v ) {
+			if ( (string) $k !== (string) $e['input'] && wp_json_encode( $v ) !== wp_json_encode( $now[ $k ] ?? null ) ) {
+				$others[] = "{$k} " . wp_json_encode( $v ) . ' → ' . wp_json_encode( $now[ $k ] ?? null );
+			}
+		}
+		if ( 'text' === $e['what'] ) {
+			$text = $e;
+			list( $moved ) = $changes_of( $wc, $w['body'] );
+			$stray = array();
+			foreach ( $moved ? $values_around( $wc, $w['body'], $moved ) : array() as $row ) {
+				list( $t, $key, $before, $after ) = $row;
+				$short = preg_replace( '/^' . preg_quote( $wpdb->prefix, '/' ) . '/', '', $t );
+				if ( ( null === $before && isset( $entry_trail[ $short ] ) ) || $entry_typed_only( $before, $after ) ) {
+					continue;
+				}
+				$stray[] = "{$t} {$key}";
+			}
+			$check( "{$label}: changing {$e['input']} ({$e['label']}) changes that answer alone", $st < 400 && ! $others && ! $stray,
+				$st . ( $others ? ' other answers: ' . implode( '; ', array_slice( $others, 0, 4 ) ) : '' ) . ( $stray ? ' rows: ' . implode( '; ', array_slice( $stray, 0, 4 ) ) : '' ) );
+			$check( "{$label}: the changed answer reads back as typed", $st < 400 && (string) ( $now[ $e['input'] ] ?? '' ) === (string) $e['typed'], wp_json_encode( $now[ $e['input'] ] ?? null ) . ', typed ' . wp_json_encode( $e['typed'] ) );
+			continue;
+		}
+		$check( "{$label}: clicking a box of {$e['input']} ({$e['label']}) leaves the other answers", $st < 400 && ! $others, $st . ( $others ? ' ' . implode( '; ', array_slice( $others, 0, 4 ) ) : '' ) );
+		foreach ( (array) ( $c['seeded']['retired'] ?? array() ) as $k => $pick ) {
+			$v    = $now[ $k ] ?? null;
+			$kept = is_array( $v ) ? in_array( (string) $pick, array_map( 'strval', $v ), true ) : (string) $v === (string) $pick;
+			$check( "{$label}: a pick the form no longer offers stays ({$k})", $st < 400 && $kept, 'now ' . wp_json_encode( $v ) );
+		}
+	}
+
+	// action
+	foreach ( (array) $c['actions'] as $a ) {
+		$w    = $a['writes'][0];
+		$ac   = $entry_write( $c, $w );
+		$keys = array_map( 'strval', array_keys( (array) $w['body'] ) );
+		list( $moved, $st ) = $changes_of( $ac, $w['body'] );
+		$beyond = array();
+		foreach ( $moved as $t => $rows ) {
+			foreach ( $rows as $k ) {
+				$cols = preg_match( '/\((.*)\)$/', $k, $m ) ? explode( ',', $m[1] ) : array();
+				if ( ! $cols || array_diff( $cols, $keys ) ) {
+					$beyond[] = "{$t} {$k}";
+				}
+			}
+		}
+		$check( "{$label}: {$a['label']} changes only " . implode( ', ', $keys ), $st < 400 && $moved && ! $beyond, $st . ( $moved ? '' : ' changed nothing' ) . ( $beyond ? ' also: ' . implode( '; ', array_slice( $beyond, 0, 4 ) ) : '' ) );
+		$again = $in_tx( function () use ( $ac, $w, $replay, $checksums ) {
+			$replay( $ac, $w['body'] );
+			$x = $checksums();
+			$replay( $ac, $w['body'] );
+			return array_keys( array_diff_assoc( $checksums(), $x ) );
+		} );
+		$check( "{$label}: a second {$a['label']} stores nothing", ! $again, implode( ', ', $again ) );
+		if ( $text && $moved ) {
+			$tw   = $text['writes'][0];
+			$lost = $in_tx( function () use ( $c, $ac, $w, $tw, $moved, $replay, $rows_of, $entry_write ) {
+				$replay( $ac, $w['body'] );
+				$snap = array();
+				foreach ( array_keys( $moved ) as $t ) {
+					$snap[ $t ] = $rows_of( $t );
+				}
+				$replay( $entry_write( $c, $tw ), $tw['body'] );
+				$lost = array();
+				foreach ( $moved as $t => $rows ) {
+					$after = $rows_of( $t );
+					foreach ( $rows as $k ) {
+						$key  = preg_replace( '/^[+-]|\(.*\)$/', '', $k );
+						$cols = preg_match( '/\((.*)\)$/', $k, $m ) ? explode( ',', $m[1] ) : array();
+						foreach ( $cols as $col ) {
+							if ( ( $snap[ $t ][ $key ][ "h_{$col}" ] ?? null ) !== ( $after[ $key ][ "h_{$col}" ] ?? null ) ) {
+								$lost[] = "{$t} {$key}.{$col}";
+							}
+						}
+					}
+				}
+				return $lost;
+			} );
+			$check( "{$label}: an answers save from a page opened before {$a['label']} keeps it", ! $lost, implode( '; ', $lost ) );
+		}
+	}
+};
+
+foreach ( (array) $captures as $c ) {
+	// A seeded run (lib/roundtrip-seed.php) is its own ratchet line.
+	$label = $c['surface'] . ( ! empty( $c['seeded']['set'] ) ? " [{$c['seeded']['set']}]" : '' );
+	if ( ! empty( $c['skip'] ) || empty( $c['path'] ) ) {
+		printf( "SKIP  %s: %s\n", $label, $c['skip'] ?? 'no capture' );
+		continue;
+	}
+	if ( ! empty( $c['entry'] ) ) {
+		$entry_checks( $c, $label );
+		continue;
+	}
+	$body = (array) $c['body'];
+	$id   = $item_id( $c );
+	if ( ! empty( $c['seeded'] ) && (string) $id !== (string) $c['seeded']['id'] ) {
+		$check( "{$label}: the capture saved the seeded item", false, 'saved ' . wp_json_encode( $id ) . ', seeded ' . $c['seeded']['id'] );
+		continue;
+	}
+
+	// No-op.
+	list( $st, $desc ) = $unchanged( $c, $body, $id );
 	$check( "{$label}: an unchanged save stores nothing", $st < 400 && ! $desc, $st . ( $desc ? ' changed: ' . implode( '; ', array_slice( $desc, 0, 6 ) ) : '' ) );
 
 	if ( empty( $c['detailRoute'] ) ) {

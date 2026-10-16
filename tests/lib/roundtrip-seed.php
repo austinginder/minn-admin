@@ -15,7 +15,16 @@
  * own store would hold it, never through Minn's save (which is what is under
  * test). Every cell written is backed up first and put back by `restore`.
  *
- *   MINN_RT_SEED=apply   MINN_RT_SEED_SET=rich|empty  MINN_RT_SEED_FILE=<state.json>
+ * The `answers` set does the same for form entries (the entry page's answer
+ * editor, roundtrip-entries-capture.js): on the first editable entry per
+ * forms plugin (lib/roundtrip-fixtures.php), a free-text answer holds
+ * `Minn 50%DEAL &amp; <em>x</em>`, and a multi-choice answer holds a pick the
+ * form no longer offers. That pick's cell is found by unticking it through
+ * the answers route in a rolled-back transaction: the cell that held the pick
+ * and changed. A checkbox input then holds the retired pick in place of its
+ * own (a choice renamed since); a list of picks gets it added.
+ *
+ *   MINN_RT_SEED=apply   MINN_RT_SEED_SET=rich|empty|answers  MINN_RT_SEED_FILE=<state.json>
  *   MINN_RT_SEED=restore MINN_RT_SEED_FILE=<state.json>
  *   wp eval-file tests/lib/roundtrip-seed.php --user=admin --path=<site>
  *
@@ -25,7 +34,7 @@
 $mode = getenv( 'MINN_RT_SEED' ) ?: '';
 $file = getenv( 'MINN_RT_SEED_FILE' ) ?: '';
 if ( '' === $file || ! in_array( $mode, array( 'apply', 'restore' ), true ) ) {
-	echo "usage: MINN_RT_SEED=apply|restore MINN_RT_SEED_FILE=<state.json> [MINN_RT_SEED_SET=rich|empty]\n";
+	echo "usage: MINN_RT_SEED=apply|restore MINN_RT_SEED_FILE=<state.json> [MINN_RT_SEED_SET=rich|empty|answers]\n";
 	exit( 2 );
 }
 
@@ -252,6 +261,300 @@ $save  = function () use ( &$state, $file ) {
 	file_put_contents( $file, wp_json_encode( $state, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
 };
 
+/*
+ * Where a save puts a value: each body (the marker in it) is sent through the
+ * route inside a transaction that is rolled back, and the cells that took the
+ * marker are its storage. Returns [ hits or null, files the save wrote (put
+ * back) ]. A save that changes a table a rollback cannot undo stops the run.
+ */
+$locate = function ( $label, $method, $route, array $bodies ) use ( $wpdb, $call, $checksums, $find, $no_undo, $files_now, $save ) {
+	$files_before = $files_now();
+	$found        = null;
+	foreach ( $bodies as $body ) {
+		$wpdb->query( 'START TRANSACTION' );
+		try {
+			$a = $checksums();
+			list( $wst ) = $call( $method, $route, $body );
+			$changed = array_keys( array_diff_assoc( $checksums(), $a ) );
+			$hits    = $wst < 400 ? $find( $changed ) : array();
+			if ( array_intersect( $changed, $no_undo ) ) {
+				printf( "FAIL  %s: the save changed %s, which a rollback cannot undo; stopping\n", $label, implode( ', ', array_intersect( $changed, $no_undo ) ) );
+				$wpdb->query( 'ROLLBACK' );
+				$save();
+				exit( 1 );
+			}
+		} finally {
+			$wpdb->query( 'ROLLBACK' );
+			wp_cache_flush();
+		}
+		// A field's storage is a cell of a row the item already had, or a
+		// meta row the save adds for it. Any other new row means the save
+		// made something else (a create), so try the next body.
+		$hits = array_values( array_filter( $hits, function ( $h ) use ( $wpdb ) {
+			return preg_match( '/meta$/', $h['table'] ) || null !== $wpdb->get_var( $wpdb->prepare( "SELECT `{$h['pk']}` FROM `{$h['table']}` WHERE `{$h['pk']}` = %s", $h['id'] ) );
+		} ) );
+		if ( $hits ) {
+			$found = $hits;
+			break;
+		}
+	}
+	// A save that wrote files: put them back, and seed nothing there.
+	$files_after = $files_now();
+	$wrote       = array();
+	foreach ( $files_after + $files_before as $path => $unused ) {
+		if ( ( $files_before[ $path ] ?? null ) !== ( $files_after[ $path ] ?? null ) ) {
+			$wrote[] = $path;
+			if ( isset( $files_before[ $path ] ) ) {
+				file_put_contents( $path, $files_before[ $path ] );
+			} else {
+				unlink( $path );
+			}
+		}
+	}
+	return array( $found, $wrote );
+};
+
+// Write $value into each cell that took the marker, backing it up first.
+// Returns how many cells now hold it.
+$plant = function ( $sid, $key, array $found, $value ) use ( $wpdb, $marker, $decode, $encode, $paths, $set_path, &$state, $save ) {
+	$n = 0;
+	foreach ( $found as $h ) {
+		$now_row = $wpdb->get_row( $wpdb->prepare( "SELECT `{$h['pk']}` AS p, `{$h['column']}` AS v FROM `{$h['table']}` WHERE `{$h['pk']}` = %s", $h['id'] ), ARRAY_A );
+		$was     = $now_row ? $now_row['v'] : null;
+		if ( ! $now_row ) {
+			// A row the save adds (a meta key the item did not have yet):
+			// add it holding the value, as the vendor would have.
+			list( $kind ) = $decode( $h['after'] );
+			if ( 'plain' !== $kind ) {
+				printf( "SKIP  %s %s: the save adds a structured %s row the seed cannot write\n", $sid, $key, $h['table'] );
+				continue;
+			}
+			$row = $h['row'];
+			unset( $row[ $h['pk'] ] );
+			$row[ $h['column'] ] = str_replace( $marker, $value, $h['after'] );
+			if ( false === $wpdb->insert( $h['table'], $row ) ) {
+				printf( "SKIP  %s %s: could not add its %s row\n", $sid, $key, $h['table'] );
+				continue;
+			}
+			$state['cells'][] = array( 'surface' => $sid, 'field' => $key, 'table' => $h['table'], 'pk' => $h['pk'], 'id' => (string) $wpdb->insert_id, 'column' => $h['column'], 'inserted' => true );
+			$save();
+			$n++;
+			printf( "SEED  %s %s → new %s row #%s\n", $sid, $key, $h['table'], $wpdb->insert_id );
+			continue;
+		}
+		$was_null = null === $was;
+		$was      = (string) $was;
+		list( $kind, $after ) = $decode( $h['after'] );
+		if ( 'plain' === $kind ) {
+			$new = $h['after'] === $marker ? $value : str_replace( $marker, $value, $h['after'] );
+		} else {
+			list( $wkind, $data ) = $decode( $was );
+			$ok = $wkind === $kind;
+			foreach ( $paths( $after ) as $path ) {
+				$ok = $ok && $set_path( $data, $path, $value );
+			}
+			if ( ! $ok ) {
+				printf( "SKIP  %s %s: %s.%s holds it in a shape the seed cannot write\n", $sid, $key, $h['table'], $h['column'] );
+				continue;
+			}
+			$new = $encode( $kind, $data, $was );
+		}
+		$state['cells'][] = array( 'surface' => $sid, 'field' => $key, 'table' => $h['table'], 'pk' => $h['pk'], 'id' => $h['id'], 'column' => $h['column'], 'was' => base64_encode( $was ), 'was_null' => $was_null );
+		$save(); // backed up before the write, so a crash can still restore
+		$wpdb->update( $h['table'], array( $h['column'] => $new ), array( $h['pk'] => $h['id'] ) );
+		$n++;
+		printf( "SEED  %s %s → %s.%s #%s\n", $sid, $key, $h['table'], $h['column'], $h['id'] );
+	}
+	return $n;
+};
+
+if ( 'answers' === $set ) {
+	$retired = 'Minn retired choice';
+	$text    = 'Minn 50%DEAL &amp; <em>x</em>';
+	// The entries the capture opens; its own scope, so its variables stay there.
+	$fx = ( function () {
+		$GLOBALS['minn_rt_fixtures_return'] = true;
+		return require __DIR__ . '/roundtrip-fixtures.php';
+	} )();
+	$sections = array();
+	foreach ( (array) $list as $s ) {
+		if ( ! empty( $s['collection']['detail']['sectionsRoute'] ) ) {
+			$sections[ $s['id'] ] = $s['collection']['detail']['sectionsRoute'];
+		}
+	}
+	$state['entries'] = array();
+	$by_fixture       = array( 'gf_entry' => 'gravity-forms', 'elementor_entry' => 'elementor-forms', 'nf_entry' => 'ninja-forms', 'wpforms_entry' => 'wpforms' );
+
+	/*
+	 * The cells holding a pick: unticking it through the answers route,
+	 * inside a rolled-back transaction, shows which tables it touches; the
+	 * cells of those tables that hold the pick now and change when it is
+	 * unticked again (in a second rolled-back transaction) are its storage.
+	 */
+	$pick_cells = function ( $label, $route, $body, $pick, $exact ) use ( $wpdb, $call, $checksums, $no_undo, $pk_of, $derived, $save ) {
+		$wpdb->query( 'START TRANSACTION' );
+		try {
+			$a = $checksums();
+			list( $st ) = $call( 'POST', $route, $body );
+			$changed = array_keys( array_diff_assoc( $checksums(), $a ) );
+			if ( array_intersect( $changed, $no_undo ) ) {
+				printf( "FAIL  %s: unticking changed %s, which a rollback cannot undo; stopping\n", $label, implode( ', ', array_intersect( $changed, $no_undo ) ) );
+				$wpdb->query( 'ROLLBACK' );
+				$save();
+				exit( 1 );
+			}
+		} finally {
+			$wpdb->query( 'ROLLBACK' );
+			wp_cache_flush();
+		}
+		if ( $st >= 400 ) {
+			return array();
+		}
+		$cands = array();
+		foreach ( $changed as $table ) {
+			$pk = $pk_of( $table );
+			if ( ! $pk ) {
+				continue;
+			}
+			foreach ( $wpdb->get_results( "SHOW COLUMNS FROM `{$table}`", ARRAY_A ) as $col ) {
+				if ( ! preg_match( '/char|text|blob|json/i', $col['Type'] ) || preg_match( $derived, $col['Field'] ) ) {
+					continue;
+				}
+				$where = $exact ? $wpdb->prepare( "`{$col['Field']}` = %s", $pick ) : $wpdb->prepare( "`{$col['Field']}` LIKE %s", '%' . $wpdb->esc_like( $pick ) . '%' );
+				foreach ( $wpdb->get_results( "SELECT `{$pk}` AS p, `{$col['Field']}` AS v FROM `{$table}` WHERE {$where} LIMIT 200", ARRAY_A ) as $r ) {
+					$cands[] = array( 'table' => $table, 'pk' => $pk, 'id' => (string) $r['p'], 'column' => $col['Field'], 'was' => (string) $r['v'] );
+				}
+			}
+		}
+		if ( ! $cands ) {
+			return array();
+		}
+		$wpdb->query( 'START TRANSACTION' );
+		try {
+			$call( 'POST', $route, $body );
+			$cells = array();
+			foreach ( $cands as $c ) {
+				$now = $wpdb->get_var( $wpdb->prepare( "SELECT `{$c['column']}` FROM `{$c['table']}` WHERE `{$c['pk']}` = %s", $c['id'] ) );
+				if ( null === $now || (string) $now !== $c['was'] ) {
+					$cells[] = $c;
+				}
+			}
+		} finally {
+			$wpdb->query( 'ROLLBACK' );
+			wp_cache_flush();
+		}
+		return $cells;
+	};
+
+	foreach ( $by_fixture as $fk => $sid ) {
+		if ( empty( $fx[ $fk ] ) || empty( $sections[ $sid ] ) ) {
+			printf( "SKIP  %s: no editable entry on this site\n", $sid );
+			continue;
+		}
+		$id = (string) $fx[ $fk ];
+		list( $dst, $d ) = $get( str_replace( '{id}', rawurlencode( $id ), $sections[ $sid ] ) );
+		$edit = 200 === $dst && is_array( $d ) && ! empty( $d['edit']['fields'] ) ? $d['edit'] : null;
+		if ( ! $edit ) {
+			printf( "SKIP  %s #%s: the entry route offers no edit block\n", $sid, $id );
+			continue;
+		}
+		$route = '/' . ltrim( str_replace( '{id}', rawurlencode( $id ), $edit['route'] ), '/' );
+		$rec   = array( 'id' => $id, 'inputs' => array(), 'retired' => array() );
+
+		// A free-text answer: a single-line one or a name part first.
+		$target = null;
+		foreach ( array( array( 'text', 'parts' ), array( 'textarea' ) ) as $kinds ) {
+			foreach ( $edit['fields'] as $f ) {
+				foreach ( in_array( $f['kind'], $kinds, true ) ? $f['inputs'] : array() as $i ) {
+					if ( ! $target && is_string( $i['value'] ) && '' !== $i['value'] ) {
+						$target = $i;
+					}
+				}
+			}
+		}
+		if ( $target ) {
+			$key = (string) $target['id'];
+			list( $found, $wrote ) = $locate( "{$sid} #{$id} {$key}", 'POST', $route, array( array( 'values' => array( $key => $marker ), 'original' => array( $key => $target['value'] ) ) ) );
+			if ( $wrote ) {
+				printf( "SKIP  %s %s: its save writes files (%s); put back, not seeded\n", $sid, $key, implode( ', ', array_map( 'basename', $wrote ) ) );
+			} elseif ( ! $found ) {
+				printf( "SKIP  %s %s: no database cell took the answer\n", $sid, $key );
+			} elseif ( $plant( $sid, $key, $found, $text ) ) {
+				$rec['inputs'][ $key ] = $text;
+			}
+		} else {
+			printf( "SKIP  %s #%s: no free-text answer holds a value\n", $sid, $id );
+		}
+
+		// A multi-choice answer holding a pick the form no longer offers.
+		$multi = null;
+		foreach ( $edit['fields'] as $f ) {
+			foreach ( $f['inputs'] as $i ) {
+				if ( $multi ) {
+					break 2;
+				}
+				if ( 'checks' === $f['kind'] && '' !== (string) $i['value'] ) {
+					$multi = array( 'field' => $f, 'input' => $i, 'pick' => (string) $i['value'], 'body' => array( 'values' => array( $i['id'] => false ), 'original' => array( $i['id'] => $i['value'] ) ) );
+				} elseif ( 'multi' === $f['kind'] && is_array( $i['value'] ) && $i['value'] ) {
+					$picks = array_values( array_map( 'strval', $i['value'] ) );
+					$multi = array( 'field' => $f, 'input' => $i, 'pick' => $picks[0], 'picks' => $picks, 'body' => array( 'values' => array( $i['id'] => array_slice( $picks, 1 ) ), 'original' => array( $i['id'] => $i['value'] ) ) );
+				}
+			}
+		}
+		if ( ! $multi ) {
+			printf( "SKIP  %s #%s: no multi-choice answer holds a pick\n", $sid, $id );
+		} else {
+			$key   = (string) $multi['input']['id'];
+			$cells = $pick_cells( "{$sid} #{$id} {$key}", $route, $multi['body'], $multi['pick'], 'checks' === $multi['field']['kind'] );
+			$wrote = 0;
+			foreach ( $cells as $c ) {
+				$was = $c['was'];
+				$new = null;
+				if ( 'checks' === $multi['field']['kind'] ) {
+					// One input per choice: it holds the retired pick in place of its own.
+					$new = $was === $multi['pick'] ? $retired : null;
+				} else {
+					list( $kind, $data ) = $decode( $was );
+					if ( 'plain' !== $kind && is_array( $data ) && in_array( $multi['pick'], array_map( 'strval', $data ), true ) && array_values( $data ) === $data ) {
+						$data[] = $retired;
+						$new    = $encode( $kind, $data, $was );
+					} elseif ( 'plain' === $kind ) {
+						// The picks joined the way this store joins them.
+						foreach ( array( ', ', "\n", ',' ) as $sep ) {
+							if ( implode( $sep, $multi['picks'] ) === $was ) {
+								$new = $was . $sep . $retired;
+								break;
+							}
+						}
+					}
+				}
+				if ( null === $new ) {
+					printf( "SKIP  %s %s: %s.%s holds the pick in a shape the seed cannot extend\n", $sid, $key, $c['table'], $c['column'] );
+					continue;
+				}
+				$state['cells'][] = array( 'surface' => $sid, 'field' => $key, 'table' => $c['table'], 'pk' => $c['pk'], 'id' => $c['id'], 'column' => $c['column'], 'was' => base64_encode( $was ), 'was_null' => false );
+				$save();
+				$wpdb->update( $c['table'], array( $c['column'] => $new ), array( $c['pk'] => $c['id'] ) );
+				$wrote++;
+				printf( "SEED  %s %s → %s.%s #%s (a pick the form no longer offers)\n", $sid, $key, $c['table'], $c['column'], $c['id'] );
+			}
+			if ( $wrote ) {
+				$rec['retired'][ $key ] = $retired;
+			} elseif ( ! $cells ) {
+				printf( "SKIP  %s %s: no database cell held the pick\n", $sid, $key );
+			}
+		}
+		if ( $rec['inputs'] || $rec['retired'] ) {
+			$state['entries'][ $sid ] = $rec;
+		}
+		$save();
+	}
+	wp_cache_flush();
+	$save();
+	printf( "\nseeded %d cell(s) on %d entr%s (set answers); state in %s\n", count( $state['cells'] ), count( $state['entries'] ), 1 === count( $state['entries'] ) ? 'y' : 'ies', $file );
+	exit( 0 );
+}
+
 foreach ( (array) $list as $s ) {
 	$edit = $s['collection']['detail']['edit'] ?? null;
 	if ( ! $edit || empty( $edit['route'] ) || empty( $s['collection']['route'] ) ) {
@@ -290,66 +593,21 @@ foreach ( (array) $list as $s ) {
 			continue;
 		}
 		// Find the field's cell: a partial save first, then the whole body
-		// the dialog would send, inside a transaction rolled back after.
-		$files_before = $files_now();
-		$found        = null;
-		foreach ( array( 'partial', 'whole' ) as $shape ) {
-			$body = $nest( $key, $marker );
-			if ( 'whole' === $shape ) {
-				$body = array();
-				foreach ( (array) ( $edit['fields'] ?? array() ) as $g ) {
-					$v = $dig( $detail, (string) $g['key'] );
-					if ( null !== $v ) {
-						$body = array_replace_recursive( $body, $nest( (string) $g['key'], $v ) );
-					}
-				}
-				foreach ( (array) ( $edit['preserve'] ?? array() ) as $p ) {
-					if ( null !== $dig( $detail, (string) $p ) ) {
-						$body = array_replace_recursive( $body, $nest( (string) $p, $dig( $detail, (string) $p ) ) );
-					}
-				}
-				$body = array_replace_recursive( $body, $nest( $key, $marker ) );
-			}
-			$wpdb->query( 'START TRANSACTION' );
-			try {
-				$a = $checksums();
-				list( $wst ) = $call( $method, $route, $body );
-				$changed = array_keys( array_diff_assoc( $checksums(), $a ) );
-				$hits    = $wst < 400 ? $find( $changed ) : array();
-				if ( array_intersect( $changed, $no_undo ) ) {
-					printf( "FAIL  %s %s: the save changed %s, which a rollback cannot undo; stopping\n", $sid, $key, implode( ', ', array_intersect( $changed, $no_undo ) ) );
-					$wpdb->query( 'ROLLBACK' );
-					$save();
-					exit( 1 );
-				}
-			} finally {
-				$wpdb->query( 'ROLLBACK' );
-				wp_cache_flush();
-			}
-			// A field's storage is a cell of a row the item already had, or a
-			// meta row the save adds for it. Any other new row means the save
-			// made something else (a create), so try the next body.
-			$hits = array_values( array_filter( $hits, function ( $h ) use ( $wpdb ) {
-				return preg_match( '/meta$/', $h['table'] ) || null !== $wpdb->get_var( $wpdb->prepare( "SELECT `{$h['pk']}` FROM `{$h['table']}` WHERE `{$h['pk']}` = %s", $h['id'] ) );
-			} ) );
-			if ( $hits ) {
-				$found = $hits;
-				break;
+		// the dialog would send.
+		$whole = array();
+		foreach ( (array) ( $edit['fields'] ?? array() ) as $g ) {
+			$v = $dig( $detail, (string) $g['key'] );
+			if ( null !== $v ) {
+				$whole = array_replace_recursive( $whole, $nest( (string) $g['key'], $v ) );
 			}
 		}
-		// A save that wrote files: put them back, and seed nothing there.
-		$files_after = $files_now();
-		$wrote       = array();
-		foreach ( $files_after + $files_before as $path => $unused ) {
-			if ( ( $files_before[ $path ] ?? null ) !== ( $files_after[ $path ] ?? null ) ) {
-				$wrote[] = $path;
-				if ( isset( $files_before[ $path ] ) ) {
-					file_put_contents( $path, $files_before[ $path ] );
-				} else {
-					unlink( $path );
-				}
+		foreach ( (array) ( $edit['preserve'] ?? array() ) as $p ) {
+			if ( null !== $dig( $detail, (string) $p ) ) {
+				$whole = array_replace_recursive( $whole, $nest( (string) $p, $dig( $detail, (string) $p ) ) );
 			}
 		}
+		$whole = array_replace_recursive( $whole, $nest( $key, $marker ) );
+		list( $found, $wrote ) = $locate( "{$sid} {$key}", $method, $route, array( $nest( $key, $marker ), $whole ) );
 		if ( $wrote ) {
 			$note( "{$key}: its save writes files (" . implode( ', ', array_map( 'basename', $wrote ) ) . '); put back, not seeded' );
 			continue 2;
@@ -358,52 +616,8 @@ foreach ( (array) $list as $s ) {
 			printf( "SKIP  %s %s: no database cell took the field\n", $sid, $key );
 			continue;
 		}
-		foreach ( $found as $h ) {
-			$now_row = $wpdb->get_row( $wpdb->prepare( "SELECT `{$h['pk']}` AS p, `{$h['column']}` AS v FROM `{$h['table']}` WHERE `{$h['pk']}` = %s", $h['id'] ), ARRAY_A );
-			$was     = $now_row ? $now_row['v'] : null;
-			if ( ! $now_row ) {
-				// A row the save adds (a meta key the item did not have yet):
-				// add it holding the value, as the vendor would have.
-				list( $kind ) = $decode( $h['after'] );
-				if ( 'plain' !== $kind ) {
-					printf( "SKIP  %s %s: the save adds a structured %s row the seed cannot write\n", $sid, $key, $h['table'] );
-					continue;
-				}
-				$row = $h['row'];
-				unset( $row[ $h['pk'] ] );
-				$row[ $h['column'] ] = str_replace( $marker, $value, $h['after'] );
-				if ( false === $wpdb->insert( $h['table'], $row ) ) {
-					printf( "SKIP  %s %s: could not add its %s row\n", $sid, $key, $h['table'] );
-					continue;
-				}
-				$state['cells'][] = array( 'surface' => $sid, 'field' => $key, 'table' => $h['table'], 'pk' => $h['pk'], 'id' => (string) $wpdb->insert_id, 'column' => $h['column'], 'inserted' => true );
-				$save();
-				$state['surfaces'][ $sid ]['fields'][ $key ] = $value;
-				printf( "SEED  %s %s → new %s row #%s\n", $sid, $key, $h['table'], $wpdb->insert_id );
-				continue;
-			}
-			$was_null = null === $was;
-			$was      = (string) $was;
-			list( $kind, $after ) = $decode( $h['after'] );
-			if ( 'plain' === $kind ) {
-				$new = $h['after'] === $marker ? $value : str_replace( $marker, $value, $h['after'] );
-			} else {
-				list( $wkind, $data ) = $decode( $was );
-				$ok = $wkind === $kind;
-				foreach ( $paths( $after ) as $path ) {
-					$ok = $ok && $set_path( $data, $path, $value );
-				}
-				if ( ! $ok ) {
-					printf( "SKIP  %s %s: %s.%s holds it in a shape the seed cannot write\n", $sid, $key, $h['table'], $h['column'] );
-					continue;
-				}
-				$new = $encode( $kind, $data, $was );
-			}
-			$state['cells'][] = array( 'surface' => $sid, 'field' => $key, 'table' => $h['table'], 'pk' => $h['pk'], 'id' => $h['id'], 'column' => $h['column'], 'was' => base64_encode( $was ), 'was_null' => $was_null );
-			$save(); // backed up before the write, so a crash can still restore
-			$wpdb->update( $h['table'], array( $h['column'] => $new ), array( $h['pk'] => $h['id'] ) );
+		if ( $plant( $sid, $key, $found, $value ) ) {
 			$state['surfaces'][ $sid ]['fields'][ $key ] = $value;
-			printf( "SEED  %s %s → %s.%s #%s\n", $sid, $key, $h['table'], $h['column'], $h['id'] );
 		}
 	}
 	$save();

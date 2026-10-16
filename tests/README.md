@@ -109,7 +109,22 @@ stores nothing, and a change to one field leaves the rest.
    sections, the builders, the email pages, membership plans, orders, products, users
    and store settings, and the same PHP harness replays them. A page whose clean save
    sends anything fails, unless it proves freshness with a stamp (409 on a stale copy).
-5. **Coverage** (`roundtrip-coverage.test.php`, last): every POST, PUT, PATCH and DELETE
+5. **Form entries**: `roundtrip-entries-capture.js` opens each forms plugin's first
+   read entry with answers to edit (`lib/roundtrip-fixtures.php`) and records what the
+   entry page sends: Save answers with nothing changed (it must send nothing), one
+   free-text answer changed by real keystrokes, one box of a multi-choice answer
+   clicked, and the title's Star. The replay holds each entry to: every answer sent
+   back as loaded stores nothing (the route compares before it cleans); the one-answer
+   edit changes that answer alone, read back through the entry route and row by row
+   (a row the save changed holds the typed text, or is the edit's own note); the click
+   leaves the other answers; the Star changes only what it names, a second one stores
+   nothing, and an answers save from a page opened before it keeps it. It runs again
+   seeded ("answers"): a free-text answer holds `Minn 50%DEAL &amp; <em>x</em>` and a
+   checkbox answer holds a choice the form no longer offers (a list of picks gets one
+   added), written straight into the plugin's entry storage, found the way the surface
+   seeds are, and put back the same way; the capture then edits an answer the seed
+   did not fill and clicks a box that is not the retired one, which must stay.
+6. **Coverage** (`roundtrip-coverage.test.php`, last): every POST, PUT, PATCH and DELETE
    route under `minn-admin/v1` either had a save replayed and judged by a pass this run,
    or is listed in `fixtures/roundtrip-coverage.json` with its kind (`delete`, `action`,
    `create`, `clean` for a page whose clean save the pages pass proves sends nothing, or
@@ -122,7 +137,7 @@ stores nothing, and a change to one field leaves the rest.
    the fixture from the run, guessing a new route's kind and marking it unreviewed, which
    fails until someone writes the reason.
 
-Passes 3 and 4 replay inside a database transaction that is rolled back, so the lab's
+Passes 3 to 5 replay inside a database transaction that is rolled back, so the lab's
 items end exactly as they started. Each harness keeps a ratchet of open findings in its
 `$known` list: a listed failure reports KNOWN and does not fail the run, one that starts
 passing fails until its line is removed, and an unlisted failure is a regression, so the

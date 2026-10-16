@@ -1,9 +1,9 @@
 <?php
 /**
- * Ids of real items for the page capture (roundtrip-pages-capture.js): the
- * first of each kind the lab holds, so every bespoke page can be opened on
- * something that exists. Prints one JSON object; a kind the site lacks is
- * left out.
+ * Ids of real items for the page and entry captures (roundtrip-pages-capture.js,
+ * roundtrip-entries-capture.js): the first of each kind the lab holds, so
+ * every bespoke page can be opened on something that exists. Prints one JSON
+ * object; a kind the site lacks is left out.
  *
  * Run: wp eval-file tests/lib/roundtrip-fixtures.php --user=admin --path=<site>
  *
@@ -62,6 +62,58 @@ if ( function_exists( 'wc_memberships_get_membership_plans' ) ) {
 	$out['membership'] = $first_post( 'wc_user_membership' );
 }
 
-echo wp_json_encode( array_filter( $out, function ( $v ) {
+/*
+ * Form entries whose answers the entry page edits (roundtrip-entries-capture.js,
+ * the `answers` seed): the first one per plugin that is already read and not
+ * in the spam or trash, since opening an unread entry marks it read, a write
+ * the capture cannot answer for. One with no editable answer is passed over.
+ */
+global $wpdb;
+$table_exists = function ( $name ) use ( $wpdb ) {
+	return $name === $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $name ) ) );
+};
+if ( function_exists( 'minn_admin_gf_entry_edit_block' ) && class_exists( 'GFAPI' ) && $table_exists( $wpdb->prefix . 'gf_entry' ) ) {
+	foreach ( $wpdb->get_col( "SELECT id FROM {$wpdb->prefix}gf_entry WHERE status = 'active' AND is_read = 1 ORDER BY id ASC LIMIT 50" ) as $id ) {
+		$entry = GFAPI::get_entry( (int) $id );
+		$form  = is_wp_error( $entry ) ? null : GFAPI::get_form( $entry['form_id'] );
+		if ( $form && minn_admin_gf_entry_edit_block( $form, $entry ) ) {
+			$out['gf_entry'] = (int) $id;
+			break;
+		}
+	}
+}
+if ( function_exists( 'minn_admin_elementor_edit_block' ) && class_exists( '\ElementorPro\Modules\Forms\Submissions\Database\Query' ) && $table_exists( $wpdb->prefix . 'e_submissions' ) ) {
+	$query = \ElementorPro\Modules\Forms\Submissions\Database\Query::get_instance();
+	foreach ( $wpdb->get_col( "SELECT id FROM {$wpdb->prefix}e_submissions WHERE is_read = 1 AND status NOT LIKE '%trash%' ORDER BY id ASC LIMIT 50" ) as $id ) {
+		$raw = $query->get_submission( (int) $id );
+		if ( ! empty( $raw['data'] ) && minn_admin_elementor_edit_block( $raw['data'] ) ) {
+			$out['elementor_entry'] = (int) $id;
+			break;
+		}
+	}
+}
+if ( function_exists( 'minn_admin_ninja_forms_edit_block' ) ) {
+	foreach ( get_posts( array( 'post_type' => 'nf_sub', 'post_status' => 'publish', 'numberposts' => 50, 'orderby' => 'ID', 'order' => 'ASC' ) ) as $sub ) {
+		if ( minn_admin_ninja_forms_edit_block( $sub, (int) get_post_meta( $sub->ID, '_form_id', true ) ) ) {
+			$out['nf_entry'] = (int) $sub->ID;
+			break;
+		}
+	}
+}
+if ( function_exists( 'minn_admin_wpforms_edit_block' ) && $table_exists( $wpdb->prefix . 'wpforms_entries' ) ) {
+	foreach ( $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}wpforms_entries WHERE viewed = 1 AND status NOT IN ('spam', 'trash') ORDER BY entry_id ASC LIMIT 50" ) as $row ) {
+		if ( minn_admin_wpforms_edit_block( $row ) ) {
+			$out['wpforms_entry'] = (int) $row->entry_id;
+			break;
+		}
+	}
+}
+
+$out = array_filter( $out, function ( $v ) {
 	return null !== $v && '' !== $v;
-} ) );
+} );
+// lib/roundtrip-seed.php includes this file for the same items.
+if ( ! empty( $GLOBALS['minn_rt_fixtures_return'] ) ) {
+	return $out;
+}
+echo wp_json_encode( $out );

@@ -384,10 +384,6 @@
             "kind": "action",
             "why": "A one-shot action: it carries no loaded values back."
         },
-        "POST /minn-admin/v1/elementor/submissions/(?P<id>\\d+)/answers": {
-            "kind": "edit",
-            "why": "Entry answers editor (the registry #13/#15 class). No round-trip pass opens entry pages yet."
-        },
         "POST /minn-admin/v1/elementor/submissions/(?P<id>\\d+)/read": {
             "kind": "action",
             "why": "A one-shot action: it carries no loaded values back."
@@ -461,8 +457,8 @@
             "why": "A one-shot action: it carries no loaded values back."
         },
         "POST /minn-admin/v1/generateblocks/designs/(?P<id>[^/]+)": {
-            "kind": "edit",
-            "why": "Design token editor: saves the tokens the editor loaded. No round-trip pass opens it yet."
+            "kind": "action",
+            "why": "Inserts a design pattern and copies its images: nothing the page loaded is sent back."
         },
         "POST /minn-admin/v1/gf/confirmations/(?P<form>\\d+):(?P<cid>[a-zA-Z0-9_.-]+)/active": {
             "kind": "action",
@@ -479,10 +475,6 @@
         "POST /minn-admin/v1/gf/confirmations/new": {
             "kind": "create",
             "why": "Makes a new item: there is no stored value it could rewrite."
-        },
-        "POST /minn-admin/v1/gf/entries/(?P<id>\\d+)/answers": {
-            "kind": "edit",
-            "why": "Entry answers editor (the registry #13/#15 class). No round-trip pass opens entry pages yet."
         },
         "POST /minn-admin/v1/gf/entries/(?P<id>\\d+)/notes": {
             "kind": "create",
@@ -614,8 +606,8 @@
             "why": "Makes a new item: there is no stored value it could rewrite."
         },
         "POST /minn-admin/v1/kadence/designs/(?P<id>\\d+)": {
-            "kind": "edit",
-            "why": "Design token editor: saves the tokens the editor loaded. No round-trip pass opens it yet."
+            "kind": "action",
+            "why": "Inserts a design pattern and copies its images: nothing the page loaded is sent back."
         },
         "POST /minn-admin/v1/latepoint/bookings/(?P<id>\\d+)/status": {
             "kind": "action",
@@ -676,10 +668,6 @@
         "POST /minn-admin/v1/minn-test/wpm-license": {
             "kind": "action",
             "why": "A one-shot action: it carries no loaded values back."
-        },
-        "POST /minn-admin/v1/ninja-forms/entries/(?P<id>\\d+)/answers": {
-            "kind": "edit",
-            "why": "Entry answers editor (the registry #13/#15 class). No round-trip pass opens entry pages yet."
         },
         "POST /minn-admin/v1/ninja-forms/entries/(?P<id>\\d+)/restore": {
             "kind": "action",
@@ -842,8 +830,8 @@
             "why": "A one-shot action: it carries no loaded values back."
         },
         "POST /minn-admin/v1/stackable/designs/(?P<id>[\\w-]+)": {
-            "kind": "edit",
-            "why": "Design token editor: saves the tokens the editor loaded. No round-trip pass opens it yet."
+            "kind": "action",
+            "why": "Inserts a design pattern and copies its images: nothing the page loaded is sent back."
         },
         "POST /minn-admin/v1/styles/mix": {
             "kind": "action",
@@ -1087,7 +1075,8 @@
         },
         "POST /minn-admin/v1/wpforms/entries/(?P<id>\\d+)/answers": {
             "kind": "edit",
-            "why": "Entry answers editor (the registry #13/#15 class). No round-trip pass opens entry pages yet."
+            "why": "Entry answers editor (the registry #13/#15 class): the entries pass covers it when the lab holds a read WPForms entry with answers to edit (minnadmin's two entries belong to a form with no fields).",
+            "pass": "entries (wpforms-entry)"
         },
         "POST /minn-admin/v1/wpforms/entries/(?P<id>\\d+)/star": {
             "kind": "action",
@@ -1133,10 +1122,6 @@
             "kind": "edit",
             "why": "FluentSnippets edit dialog: the surface pass covers it when the lab holds a snippet.",
             "pass": "surfaces"
-        },
-        "PUT /minn-admin/v1/gf/entries/(?P<id>\\d+)/properties": {
-            "kind": "edit",
-            "why": "Gravity Forms entry properties (read, starred, status). No round-trip pass opens entry pages yet."
         },
         "PUT /minn-admin/v1/wcpdf/orders/(?P<id>\\d+)/documents/(?P<type>[a-z0-9_-]+)": {
             "kind": "edit",
