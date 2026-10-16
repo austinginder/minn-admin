@@ -518,6 +518,46 @@ function minn_admin_acpt_clear( $field, $args ) {
 }
 
 /**
+ * A Checkbox value as sent → the list to store.
+ *
+ * ACPT's own setter refuses the whole list when any value in it is not one
+ * of the field's options (SaveMetaFieldValueCommand), and cleans the list
+ * itself. A pick that is an option therefore goes exactly as sent:
+ * sanitize_text_field() took the %XX run out of an option value such as
+ * '50%DEAL', ACPT then refused the list, and ticking any other box in it
+ * saved nothing while the save answered as done. Anything else is cleaned
+ * as before (ACPT refuses it either way). A stored pick the field no longer
+ * offers cannot be written back through that setter, so it goes, as it does
+ * on ACPT's own screen.
+ *
+ * @param object $field ACPT MetaFieldModel.
+ * @param mixed  $value Submitted value.
+ * @return array
+ */
+function minn_admin_acpt_checkbox_in( $field, $value ) {
+	$offered = array();
+	try {
+		foreach ( (array) $field->getOptions() as $option ) {
+			$offered[] = (string) $option->getValue();
+		}
+	} catch ( \Throwable $e ) {
+		$offered = array();
+	}
+	$out = array();
+	foreach ( is_array( $value ) ? $value : array() as $v ) {
+		if ( ! is_scalar( $v ) ) {
+			continue;
+		}
+		$v = (string) $v;
+		if ( ! in_array( $v, $offered, true ) ) {
+			$v = sanitize_text_field( $v );
+		}
+		$out[] = $v;
+	}
+	return $out;
+}
+
+/**
  * Write one field through ACPT's own setter.
  *
  * `$args` carries the context ACPT keys a value by, which is a post id for the
@@ -557,7 +597,7 @@ function minn_admin_acpt_write_one( $field, $value, $args ) {
 	if ( 'Toggle' === $type ) {
 		$value = ! empty( $value ) && 'false' !== $value && '0' !== (string) $value;
 	} elseif ( 'Checkbox' === $type ) {
-		$value = is_array( $value ) ? array_values( array_map( 'sanitize_text_field', $value ) ) : array();
+		$value = minn_admin_acpt_checkbox_in( $field, $value );
 	} elseif ( 'Image' === $type ) {
 		// An id that is not an attachment, or one this person may not attach,
 		// is refused rather than written, so a stray value cannot blank a
@@ -1539,24 +1579,34 @@ function minn_admin_acpt_builder_payload( $group ) {
 /**
  * Rebuild a field's advanced options from submitted min / max / step,
  * keeping every other advanced option (and the ids of the three when they
- * already existed) exactly as stored.
+ * already existed) exactly as stored. One of the three sent back as the
+ * builder was served it keeps its stored rows untouched: a step of 'any'
+ * stored by ACPT's own canvas is no number, and would refuse the save.
  *
- * @param array $row    Submitted builder row.
- * @param array $stored Stored advancedOptions rows.
+ * @param array      $row    Submitted builder row.
+ * @param array      $stored Stored advancedOptions rows.
+ * @param array|null $served The row as the builder was served it (existing fields).
  * @return array|WP_Error
  */
-function minn_admin_acpt_builder_adv_in( $row, $stored ) {
-	$out   = array();
+function minn_admin_acpt_builder_adv_in( $row, $stored, $served = null ) {
+	$out    = array();
 	$by_key = array();
+	$kept   = array();
+	foreach ( array( 'min', 'max', 'step' ) as $key ) {
+		$kept[ $key ] = is_array( $served ) && array_key_exists( $key, $row ) && is_scalar( $row[ $key ] ?? '' ) && (string) ( $row[ $key ] ?? '' ) === (string) ( $served[ $key ] ?? '' );
+	}
 	foreach ( (array) $stored as $option ) {
 		$key = (string) ( $option['key'] ?? '' );
-		if ( in_array( $key, array( 'min', 'max', 'step' ), true ) ) {
+		if ( in_array( $key, array( 'min', 'max', 'step' ), true ) && ! $kept[ $key ] ) {
 			$by_key[ $key ] = $option;
 			continue;
 		}
 		$out[] = $option;
 	}
 	foreach ( array( 'min', 'max', 'step' ) as $key ) {
+		if ( $kept[ $key ] ) {
+			continue;
+		}
 		$value = trim( (string) ( $row[ $key ] ?? '' ) );
 		if ( '' === $value ) {
 			continue;
@@ -1607,16 +1657,40 @@ function minn_admin_acpt_builder_plan_field( $row, $stored, &$names, $depth ) {
 		$base = $stored[ $key ];
 		$bid  = minn_admin_acpt_builder_id_of( (string) ( $base['type'] ?? '' ) );
 		$edit = '' !== $bid && empty( $base['forgedBy'] ) && empty( $base['blockId'] ) && ! ( 'repeater' === $bid && $depth > 0 );
-		$base['label'] = sanitize_text_field( (string) ( $row['label'] ?? '' ) );
-		$names[]       = strtolower( (string) $base['name'] );
+		// The builder sends every setting of every row, an untouched one as
+		// the payload served it, and a setting sent back as served keeps its
+		// stored value. ACPT's own canvas stores labels and descriptions as
+		// typed, markup and %XX runs included ('Width <small>(px)</small>',
+		// '100%Beef'), so cleaning them on a save that changed another field
+		// rewrote them, and a choice list parsed back from its text lost edge
+		// spaces and split a label holding ' : '. A setting left out of the
+		// row keeps its stored value too.
+		$served  = minn_admin_acpt_builder_field_out( $base, $depth );
+		$changed = function ( $setting ) use ( $row, $served ) {
+			if ( ! array_key_exists( $setting, $row ) ) {
+				return false;
+			}
+			$sent = null === $row[ $setting ] ? '' : $row[ $setting ];
+			return ! ( is_scalar( $sent ) && (string) $sent === (string) ( $served[ $setting ] ?? '' ) );
+		};
+		if ( $changed( 'label' ) ) {
+			$base['label'] = sanitize_text_field( (string) ( $row['label'] ?? '' ) );
+		}
+		$names[] = strtolower( (string) $base['name'] );
 		if ( ! $edit ) {
 			return $base;
 		}
-		$base['description'] = sanitize_textarea_field( (string) ( $row['instructions'] ?? '' ) );
-		$base['isRequired']  = ! empty( $row['required'] );
-		$default             = $row['default_value'] ?? '';
-		$base['defaultValue'] = is_scalar( $default ) ? (string) $default : '';
-		if ( in_array( 'choices', $types[ $bid ]['settings'], true ) ) {
+		if ( $changed( 'instructions' ) ) {
+			$base['description'] = sanitize_textarea_field( (string) ( $row['instructions'] ?? '' ) );
+		}
+		if ( array_key_exists( 'required', $row ) ) {
+			$base['isRequired'] = ! empty( $row['required'] );
+		}
+		if ( $changed( 'default_value' ) ) {
+			$default              = $row['default_value'] ?? '';
+			$base['defaultValue'] = is_scalar( $default ) ? (string) $default : '';
+		}
+		if ( in_array( 'choices', $types[ $bid ]['settings'], true ) && $changed( 'choices' ) ) {
 			$choices = minn_admin_acpt_builder_choices_in( $row['choices'] ?? '', $base['options'] ?? array() );
 			if ( ! $choices ) {
 				return new WP_Error( 'minn_no_choices', sprintf(
@@ -1627,8 +1701,8 @@ function minn_admin_acpt_builder_plan_field( $row, $stored, &$names, $depth ) {
 			}
 			$base['options'] = $choices;
 		}
-		if ( in_array( 'min', $types[ $bid ]['settings'], true ) ) {
-			$adv = minn_admin_acpt_builder_adv_in( $row, $base['advancedOptions'] ?? array() );
+		if ( in_array( 'min', $types[ $bid ]['settings'], true ) && ( $changed( 'min' ) || $changed( 'max' ) || $changed( 'step' ) ) ) {
+			$adv = minn_admin_acpt_builder_adv_in( $row, $base['advancedOptions'] ?? array(), $served );
 			if ( is_wp_error( $adv ) ) {
 				return $adv;
 			}
@@ -1840,9 +1914,14 @@ function minn_admin_acpt_builder_save( $group, $body ) {
 			if ( ! isset( $stored_box[ $key ] ) ) {
 				return new WP_Error( 'minn_unknown_box', __( 'A submitted box does not exist in this group — reload and try again.', 'minn-admin' ), array( 'status' => 400 ) );
 			}
-			$base          = $stored_box[ $key ];
-			$base['label'] = sanitize_text_field( (string) ( $row['label'] ?? '' ) );
-			$fields        = minn_admin_acpt_builder_plan_list( $row['sub_fields'] ?? array(), minn_admin_acpt_builder_box_fields( $base ), 0 );
+			$base = $stored_box[ $key ];
+			// A box label sent back as served keeps its stored value (see
+			// minn_admin_acpt_builder_plan_field()).
+			$sent = array_key_exists( 'label', $row ) && is_scalar( $row['label'] ) ? (string) $row['label'] : null;
+			if ( null !== $sent && $sent !== (string) ( $base['label'] ?? '' ) ) {
+				$base['label'] = sanitize_text_field( $sent );
+			}
+			$fields = minn_admin_acpt_builder_plan_list( $row['sub_fields'] ?? array(), minn_admin_acpt_builder_box_fields( $base ), 0 );
 			if ( is_wp_error( $fields ) ) {
 				return $fields;
 			}
@@ -1890,11 +1969,21 @@ function minn_admin_acpt_builder_save( $group, $body ) {
 	if ( is_wp_error( $belongs ) ) {
 		return $belongs;
 	}
-	$title = sanitize_text_field( (string) ( $body['title'] ?? '' ) );
-	$data  = array(
+	// The title is served as the label, or the name when there is none; one
+	// sent back as served (or not sent) keeps the stored label, so an
+	// unlabelled group stays unlabelled rather than taking its name as one.
+	$served_title = (string) ( '' !== (string) ( $g['label'] ?? '' ) ? $g['label'] : $g['name'] );
+	$sent_title   = isset( $body['title'] ) && is_scalar( $body['title'] ) ? (string) $body['title'] : ( array_key_exists( 'title', $body ) ? '' : null );
+	if ( null === $sent_title || $sent_title === $served_title ) {
+		$label = $g['label'] ?? null;
+	} else {
+		$title = sanitize_text_field( $sent_title );
+		$label = '' !== $title ? $title : null;
+	}
+	$data = array(
 		'id'       => (string) $g['id'],
 		'name'     => (string) $g['name'],
-		'label'    => '' !== $title ? $title : null,
+		'label'    => $label,
 		'display'  => (string) ( $g['display'] ?? '' ),
 		'context'  => (string) ( $g['context'] ?? '' ),
 		'priority' => (string) ( $g['priority'] ?? '' ),
