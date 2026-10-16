@@ -36596,6 +36596,13 @@
 				}
 			}
 			ed.status = p.status;
+			// Panel fields the post's own answer says were not stored (ACPT
+			// refused the value): the post saved, so it is adopted as usual,
+			// and those fields stay changed and are named in a toast below.
+			const refused = {};
+			( Array.isArray( p && p.minn_field_errors ) ? p.minn_field_errors : [] ).forEach( ( r ) => {
+				if ( r && r.field && null != r.key ) ( refused[ r.field ] = refused[ r.field ] || {} )[ String( r.key ) ] = true;
+			} );
 			// The title this save sent is what the box is compared with next.
 			if ( 'title' in payload ) {
 				ed.titleSeed = payload.title;
@@ -36696,13 +36703,17 @@
 				}
 				const back = pn.desc.valuesKey && p && p[ pn.desc.valuesKey ] && 'object' === typeof p[ pn.desc.valuesKey ] ? p[ pn.desc.valuesKey ] : null;
 				const base = ed.panelBase[ pid ] = ed.panelBase[ pid ] || {};
+				const notStored = refused[ pn.desc.writeKey ] || {};
 				Object.keys( sent ).forEach( ( k ) => {
+					if ( notStored[ k ] ) return;
 					if ( back && k in back && blank( back[ k ] ) && ! blank( sent[ k ] ) ) return;
 					base[ k ] = sent[ k ];
 				} );
 				if ( Object.keys( changedKeys( ( ed.panelValues || {} )[ pid ], base ) ).length ) stillDirty[ pid ] = true;
 			} );
 			ed.panelDirty = stillDirty;
+			// A field that was not stored leaves the editor unsaved.
+			if ( Object.keys( refused ).length ) ed.dirty = true;
 			ed.featuredDirty = false;
 			ed.parentDirty = false;
 			ed.templateDirty = false;
@@ -36732,6 +36743,7 @@
 			else ed.ppp = null;
 			renderEditorSide();
 			renderTopbar();
+			if ( p && p.minn_field_message ) toast( String( p.minn_field_message ), true );
 		} catch ( e ) {
 			// A 409 from the lock guard means someone took the lock and this
 			// copy must not save — flip straight to the taken-over UI (the

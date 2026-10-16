@@ -471,7 +471,8 @@ function minn_admin_acpt_write_values( $post_id, $values ) {
  * The fields a save could not write, as one error, or null when there are
  * none. One field keeps its own message; several are named together. When
  * the same save wrote other fields, the error says so, since a save answering
- * an error otherwise reads as if nothing was saved.
+ * an error otherwise reads as if nothing was saved. The error data lists each
+ * field (key, label, message) for a caller that reports them one by one.
  *
  * @param WP_Error[] $errors One per field not written.
  * @param int        $done   Fields the same save wrote (or found already so).
@@ -481,21 +482,28 @@ function minn_admin_acpt_write_errors( $errors, $done ) {
 	if ( ! $errors ) {
 		return null;
 	}
+	$fields = array();
+	$names  = array();
+	foreach ( $errors as $e ) {
+		$data     = $e->get_error_data();
+		$label    = is_array( $data ) && isset( $data['field'] ) ? (string) $data['field'] : '';
+		$fields[] = array(
+			'key'     => is_array( $data ) && isset( $data['key'] ) ? (string) $data['key'] : '',
+			'label'   => $label,
+			'message' => $e->get_error_message(),
+		);
+		$names[] = '“' . $label . '”';
+	}
 	if ( 1 === count( $errors ) ) {
 		$message = $errors[0]->get_error_message();
 	} else {
-		$names = array();
-		foreach ( $errors as $e ) {
-			$data    = $e->get_error_data();
-			$names[] = '“' . ( is_array( $data ) && isset( $data['field'] ) ? $data['field'] : '' ) . '”';
-		}
 		/* translators: %s: comma-separated list of field labels, each in quotes. */
 		$message = sprintf( __( 'These fields were not saved: %s.', 'minn-admin' ), implode( ', ', $names ) );
 	}
 	if ( $done > 0 ) {
 		$message .= ' ' . __( 'Your other changes were saved.', 'minn-admin' );
 	}
-	return new WP_Error( $errors[0]->get_error_code(), $message, array( 'status' => 400 ) );
+	return new WP_Error( $errors[0]->get_error_code(), $message, array( 'status' => 400, 'fields' => $fields ) );
 }
 
 /**
@@ -510,7 +518,7 @@ function minn_admin_acpt_refused( $field ) {
 		/* translators: %s: field label. */
 		__( '“%s” was not saved: ACPT did not accept that value.', 'minn-admin' ),
 		$label
-	), array( 'status' => 400, 'field' => $label ) );
+	), array( 'status' => 400, 'field' => $label, 'key' => method_exists( $field, 'getId' ) ? (string) $field->getId() : '' ) );
 }
 
 /**
@@ -520,26 +528,26 @@ function minn_admin_acpt_refused( $field ) {
  * (not one of a select's or checkbox's options, a number outside its bounds,
  * an id that is not an image) and when the value it would store after its own
  * cleaning is the one already there, so its answer alone cannot tell the two
- * apart, and a refusal used to report as saved. The store decides: the value
- * changed, or it already holds what was sent or what ACPT's own cleaning makes
- * of it (compared loosely, as ACPT's setter compares).
+ * apart, and a refusal used to report as saved. The store decides: what it
+ * holds after the write, read as the form reads it, is what was handed to
+ * ACPT or what ACPT's own cleaning makes of that. Compared strictly in that
+ * shape (a never-set field reads '', which a sent 0 is not), so neither an
+ * unset value nor a change made meanwhile by someone else passes for this one.
  *
- * @param object $field  ACPT MetaFieldModel.
- * @param array  $args   The context the value was written under.
- * @param mixed  $before The raw stored value before the write.
- * @param mixed  $value  The value handed to ACPT.
+ * @param object $field ACPT MetaFieldModel.
+ * @param array  $args  The context the value was written under.
+ * @param mixed  $value The value handed to ACPT.
  * @return bool
  */
-function minn_admin_acpt_took( $field, $args, $before, $value ) {
+function minn_admin_acpt_took( $field, $args, $value ) {
 	unset( $args['value'] );
-	$after = get_acpt_field( array_merge( $args, array( 'format' => 'only_value', 'return' => 'raw' ) ) );
-	// phpcs:ignore Universal.Operators.StrictComparisons -- ACPT's own setter compares loosely.
-	if ( $after != $before || $after == $value ) {
+	$now = minn_admin_acpt_value_out( $field, get_acpt_field( array_merge( $args, array( 'format' => 'only_value', 'return' => 'raw' ) ) ) );
+	if ( minn_admin_acpt_same( $now, minn_admin_acpt_value_out( $field, $value ) ) ) {
 		return true;
 	}
 	try {
-		// phpcs:ignore Universal.Operators.StrictComparisons
-		return class_exists( '\\ACPT\\Utils\\Data\\Sanitizer' ) && $after == \ACPT\Utils\Data\Sanitizer::sanitizeRawData( $field->getType(), $value );
+		return class_exists( '\\ACPT\\Utils\\Data\\Sanitizer' )
+			&& minn_admin_acpt_same( $now, minn_admin_acpt_value_out( $field, \ACPT\Utils\Data\Sanitizer::sanitizeRawData( $field->getType(), $value ) ) );
 	} catch ( \Throwable $e ) {
 		return false;
 	}
@@ -676,7 +684,7 @@ function minn_admin_acpt_write_one( $field, $value, $args ) {
 			/* translators: %s: field label. */
 			__( '“%s” could not be cleared here. Clear it in ACPT’s own screen.', 'minn-admin' ),
 			$field->getLabelOrName()
-		), array( 'status' => 400, 'field' => (string) $field->getLabelOrName() ) );
+		), array( 'status' => 400, 'field' => (string) $field->getLabelOrName(), 'key' => method_exists( $field, 'getId' ) ? (string) $field->getId() : '' ) );
 	}
 	if ( 'Toggle' === $type ) {
 		$value = ! empty( $value ) && 'false' !== $value && '0' !== (string) $value;
@@ -714,7 +722,7 @@ function minn_admin_acpt_write_one( $field, $value, $args ) {
 	}
 	$args['value'] = $value;
 	save_acpt_meta_field_value( $args );
-	return minn_admin_acpt_took( $field, $args, $read, $value ) ? null : minn_admin_acpt_refused( $field );
+	return minn_admin_acpt_took( $field, $args, $value ) ? null : minn_admin_acpt_refused( $field );
 }
 
 add_filter( 'minn_admin_editor_panels', function ( $panels ) {
@@ -798,10 +806,12 @@ add_action( 'rest_api_init', function () {
 				if ( ! is_wp_error( $error ) ) {
 					return;
 				}
-				// An error returned here stops the controller from writing
-				// the fields registered after this one (another plugin's panel
-				// in the same save). Held until the save has run, then it is
-				// the answer.
+				// Never an error from here. The post is already saved, a new
+				// one included, so an error answer would hide its id from the
+				// editor (each retry and autosave then made another draft),
+				// and it would stop the controller from writing the REST
+				// fields registered after this one. The refusal rides on the
+				// post's own answer instead (minn_admin_acpt_report_held()).
 				if ( $request instanceof WP_REST_Request ) {
 					minn_admin_acpt_held_error( $request, $error );
 					return;
@@ -818,33 +828,95 @@ add_action( 'rest_api_init', function () {
 } );
 
 /**
- * The panel's write error for one REST request: set it with $error, take it
- * (and forget it) without.
+ * The panel's refusals for one REST request: add one with $error, take them
+ * all (and forget them) without. Held by the request object itself, so a
+ * leftover can never be read by another request.
  *
  * @param WP_REST_Request $request The request the save runs in.
- * @param WP_Error|null   $error   The error to hold.
- * @return WP_Error|null
+ * @param WP_Error|null   $error   A refusal to add.
+ * @return WP_Error[]
  */
 function minn_admin_acpt_held_error( $request, $error = null ) {
-	static $held = array();
-	$key = spl_object_hash( $request );
-	if ( null !== $error ) {
-		$held[ $key ] = $error;
-		return $error;
+	static $held = null;
+	if ( null === $held ) {
+		$held = new SplObjectStorage();
 	}
-	$out = $held[ $key ] ?? null;
-	unset( $held[ $key ] );
-	return $out;
+	if ( null !== $error ) {
+		$list             = $held->contains( $request ) ? $held[ $request ] : array();
+		$list[]           = $error;
+		$held[ $request ] = $list;
+		return $list;
+	}
+	if ( ! $held->contains( $request ) ) {
+		return array();
+	}
+	$list = $held[ $request ];
+	$held->detach( $request );
+	return $list;
 }
 
-// A post save whose ACPT fields were not all written answers that error once
-// the controller has written everything else, not 200.
-add_filter( 'rest_request_after_callbacks', function ( $response, $handler, $request ) {
-	if ( ! $request instanceof WP_REST_Request ) {
+/**
+ * Put the panel's refusals on the post's own answer once the save has run.
+ *
+ * A successful answer keeps its status (the post was saved) and carries
+ * `minn_field_errors` (each refused field: the panel's write key, the field
+ * key, its label and message) and `minn_field_message`, which the editor
+ * shows, keeping those fields unsaved. An answer that is already an error
+ * keeps its own message first and gains the refusal's, so neither is lost.
+ *
+ * @param mixed           $response The callback's answer.
+ * @param WP_REST_Request $request  The request.
+ * @return mixed
+ */
+function minn_admin_acpt_report_held( $response, $request ) {
+	$held = $request instanceof WP_REST_Request ? minn_admin_acpt_held_error( $request ) : array();
+	if ( ! $held ) {
 		return $response;
 	}
-	$error = minn_admin_acpt_held_error( $request );
-	return ( $error && ! is_wp_error( $response ) ) ? $error : $response;
+	$fields   = array();
+	$messages = array();
+	foreach ( $held as $e ) {
+		$messages[] = $e->get_error_message();
+		$data       = $e->get_error_data();
+		foreach ( (array) ( is_array( $data ) && isset( $data['fields'] ) ? $data['fields'] : array() ) as $f ) {
+			$fields[] = array( 'field' => 'minn_acpt' ) + (array) $f;
+		}
+	}
+	if ( is_wp_error( $response ) ) {
+		$out = new WP_Error( $response->get_error_code(), trim( $response->get_error_message() . ' ' . implode( ' ', $messages ) ), $response->get_error_data() );
+		foreach ( $response->get_error_codes() as $code ) {
+			foreach ( $response->get_error_messages( $code ) as $i => $message ) {
+				if ( $code !== $response->get_error_code() || $i > 0 ) {
+					$out->add( $code, $message );
+				}
+			}
+		}
+		foreach ( $held as $e ) {
+			$out->add( $e->get_error_code(), $e->get_error_message(), $e->get_error_data() );
+		}
+		return $out;
+	}
+	$response = rest_ensure_response( $response );
+	$data     = $response->get_data();
+	if ( ! is_array( $data ) ) {
+		return $response;
+	}
+	$data['minn_field_errors']  = $fields;
+	$data['minn_field_message'] = implode( ' ', $messages );
+	$response->set_data( $data );
+	return $response;
+}
+
+add_filter( 'rest_request_after_callbacks', function ( $response, $handler, $request ) {
+	return minn_admin_acpt_report_held( $response, $request );
+}, 10, 3 );
+// A controller run outside the server's own dispatch never reaches the filter
+// above; whatever it held goes with its request.
+add_filter( 'rest_post_dispatch', function ( $result, $server, $request ) {
+	if ( $request instanceof WP_REST_Request ) {
+		minn_admin_acpt_held_error( $request );
+	}
+	return $result;
 }, 10, 3 );
 
 /** Normalize an ACPT license API error into Minn's action result contract. */
