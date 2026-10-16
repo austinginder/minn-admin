@@ -202,7 +202,8 @@ function minn_admin_freighter_row( $site, $configs = null ) {
 	$id      = (int) $site['stacked_site_id'];
 	$current = $id === minn_admin_freighter_current_id();
 	$domain  = isset( $site['domain'] ) ? trim( (string) $site['domain'] ) : '';
-	$name    = isset( $site['name'] ) ? Minn_Admin::plain_text( $site['name'] ) : '';
+	$name    = isset( $site['name'] ) ? (string) $site['name'] : '';
+	$shown   = Minn_Admin::plain_text( $name );
 	$exists  = minn_admin_freighter_tenant_exists( $id );
 	$minn    = $exists && minn_admin_freighter_tenant_has_minn( $id );
 	$runnable = minn_admin_freighter_tenant_can_run_minn( $id, $configs );
@@ -222,11 +223,17 @@ function minn_admin_freighter_row( $site, $configs = null ) {
 
 	return array(
 		'id'         => $id,
-		'name'       => '' !== $name ? $name : ( '' !== $domain ? $domain : sprintf(
+		// What the list and the switcher show: the name, or for an unnamed
+		// tenant its hostname or number.
+		'title'      => '' !== $shown ? $shown : ( '' !== $domain ? $domain : sprintf(
 			/* translators: %d: tenant id. */
 			__( 'Tenant %d', 'minn-admin' ),
 			$id
 		) ),
+		// The stored name, as stored ('' for an unnamed tenant): the edit
+		// dialog sends an untouched field back as the row has it, so a
+		// display fallback here would be saved as the name.
+		'name'       => $name,
 		'domain'     => $domain,
 		'url'        => minn_admin_freighter_tenant_url( $site, $configs ),
 		'users'      => $exists ? minn_admin_freighter_tenant_user_count( $id ) : 0,
@@ -350,7 +357,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	}
 
 	$columns = array(
-		array( 'key' => 'name', 'label' => __( 'Tenant', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.2fr)' ),
+		array( 'key' => 'title', 'label' => __( 'Tenant', 'minn-admin' ), 'format' => 'title', 'width' => 'minmax(0,1.2fr)' ),
 	);
 	if ( $mapping ) {
 		$columns[] = array( 'key' => 'domain', 'label' => __( 'Domain', 'minn-admin' ), 'format' => 'mono', 'width' => 'minmax(0,1.3fr)' );
@@ -389,7 +396,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'fields' => $create_fields,
 			),
 			'detail'   => array(
-				'skip' => array( 'canOpen', 'canOpenMinn', 'canEnableMinn', 'canDisableMinn', 'canDelete' ),
+				'skip' => array( 'title', 'canOpen', 'canOpenMinn', 'canEnableMinn', 'canDisableMinn', 'canDelete' ),
 				'edit' => array(
 					'route'  => 'minn-admin/v1/freighter/sites/{id}',
 					'method' => 'POST',
@@ -493,7 +500,7 @@ add_filter( 'minn_admin_sites', function ( $payload ) {
 		$row = minn_admin_freighter_row( $site, $configs );
 		$sites[] = array(
 			'id'      => $id,
-			'name'    => $row['name'],
+			'name'    => $row['title'],
 			'url'     => $row['url'] . '/',
 			'app'     => $id === $current ? Minn_Admin::app_url() : '',
 			'login'   => $id === $current ? '' : 'minn-admin/v1/freighter/sites/' . $id . '/login',
@@ -671,7 +678,7 @@ function minn_admin_freighter_sites_list( WP_REST_Request $request ) {
 			continue;
 		}
 		if ( '' !== $search ) {
-			$hay = strtolower( $row['name'] . ' ' . $row['domain'] . ' ' . $row['url'] . ' ' . $row['id'] );
+			$hay = strtolower( $row['title'] . ' ' . $row['domain'] . ' ' . $row['url'] . ' ' . $row['id'] );
 			if ( false === strpos( $hay, $search ) ) {
 				continue;
 			}
@@ -889,10 +896,15 @@ function minn_admin_freighter_site_update( WP_REST_Request $request ) {
 	$configs = minn_admin_freighter_configs();
 	$args    = array();
 
-	if ( null !== $request->get_param( 'name' ) ) {
-		$args['name'] = sanitize_text_field( (string) $request->get_param( 'name' ) );
+	// The dialog sends every field, an untouched one as the row has it: only
+	// a value that differs from the stored one is written, so a save that
+	// changes the domain never re-cleans the name WP Freighter stored.
+	$sent = $request->get_param( 'name' );
+	if ( null !== $sent && (string) $sent !== (string) ( $site['name'] ?? '' ) ) {
+		$args['name'] = sanitize_text_field( (string) $sent );
 	}
-	if ( null !== $request->get_param( 'domain' ) ) {
+	$sent = $request->get_param( 'domain' );
+	if ( null !== $sent && trim( (string) $sent ) !== trim( (string) ( $site['domain'] ?? '' ) ) ) {
 		if ( 'on' !== $configs->domain_mapping ) {
 			return new WP_Error( 'mapping_off', __( 'Turn domain mapping on in Freighter settings before giving tenants their own hostnames.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
@@ -962,7 +974,7 @@ function minn_admin_freighter_site_clone( WP_REST_Request $request ) {
 	$row['message'] = sprintf(
 		/* translators: %s: the new tenant's name. */
 		__( 'Copied as %s.', 'minn-admin' ),
-		$row['name']
+		$row['title']
 	);
 	return rest_ensure_response( $row );
 }
