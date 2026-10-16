@@ -1,7 +1,7 @@
 <?php
 /**
  * Pre-RC census of Minn's own write routes for a save that rewrites what
- * nobody changed.
+ * nobody changed, and the island preview's dynamic-content guard.
  *
  * Each write section seeds an awkward value straight into the store (a
  * switch another plugin filters on the registered copy, a support a theme
@@ -12,6 +12,12 @@
  * registered), replays what Minn's client sends for an edit of something
  * else, and checks the stored bytes. A control in each shows a real change
  * is still written.
+ *
+ * The preview section checks that a block carrying JetEngine's or Kadence
+ * Blocks Pro's dynamic markup previews empty for a caller who may not
+ * author dynamic data, with harmless markup only, and that the request
+ * keys JetEngine reads an object from are set aside while the preview
+ * renders and put back after.
  *
  * Every section runs inside a database transaction that is rolled back.
  * Sections SKIP when their plugin is inactive.
@@ -481,6 +487,91 @@ rest_get_server();
 	} finally {
 		$wpdb->query( 'ROLLBACK' );
 		wp_cache_flush();
+	}
+} )();
+
+/*
+ * Island previews (registry #1, other vendors): JetEngine and Kadence
+ * Blocks Pro resolve dynamic content when a block renders and check no read
+ * access there, so for a caller who may not author dynamic data a block
+ * carrying their dynamic markup previews empty, as Otter's does. The
+ * markup here is harmless: each block would render its own words.
+ */
+( function () use ( $check, $skip, $call, $wpdb, $admin ) {
+	$jet     = function_exists( 'jet_engine' );
+	$kadence = defined( 'KBP_VERSION' );
+	if ( ! $jet && ! $kadence ) {
+		$skip( 'previews: JetEngine and Kadence Blocks Pro inactive' );
+		return;
+	}
+	$render = function ( array $blocks ) use ( $call ) {
+		list( $status, $data ) = $call( 'POST', '/minn-admin/v1/render-blocks', array( 'blocks' => $blocks, 'post' => 0 ) );
+		return array( $status, is_array( $data ) && isset( $data['rendered'] ) ? $data['rendered'] : null );
+	};
+	$wpdb->query( 'START TRANSACTION' );
+	try {
+		$contrib = wp_insert_user( array( 'user_login' => 'minnprerc-c' . wp_rand( 10000, 99999 ), 'user_email' => 'minnprerc' . wp_rand( 10000, 99999 ) . '@example.com', 'user_pass' => wp_generate_password( 24 ), 'role' => 'contributor' ) );
+		if ( is_wp_error( $contrib ) || ! $contrib ) {
+			$check( 'previews: a Contributor is made for the check', false, is_wp_error( $contrib ) ? $contrib->get_error_message() : '' );
+			return;
+		}
+		$shapes = array();
+		if ( $jet ) {
+			$shapes['a JetEngine dynamic data attribute']      = '<!-- wp:paragraph {"jetEngineDynamicData":{}} --><p>minnprerc words one</p><!-- /wp:paragraph -->';
+			$shapes['a JetEngine dynamic visibility attribute'] = '<!-- wp:paragraph {"jetDynamicVisibility":{}} --><p>minnprerc words two</p><!-- /wp:paragraph -->';
+			$shapes['a JetEngine attribute on an inner block']  = '<!-- wp:group --><div class="wp-block-group"><!-- wp:paragraph {"jetEngineDynamicData":{}} --><p>minnprerc words three</p><!-- /wp:paragraph --></div><!-- /wp:group -->';
+			$shapes['a JetEngine block']                        = '<!-- wp:group --><div class="wp-block-group"><p>minnprerc words four</p><!-- wp:jet-engine/dynamic-field /--></div><!-- /wp:group -->';
+		}
+		if ( $kadence ) {
+			$shapes['a Kadence dynamic attribute']     = '<!-- wp:paragraph {"kadenceDynamic":{}} --><p>minnprerc words five</p><!-- /wp:paragraph -->';
+			$shapes['a Kadence conditional attribute'] = '<!-- wp:paragraph {"kadenceConditional":{}} --><p>minnprerc words six</p><!-- /wp:paragraph -->';
+			$shapes['a Kadence inline dynamic span']   = '<!-- wp:paragraph --><p>minnprerc words seven <span class="kb-inline-dynamic">x</span></p><!-- /wp:paragraph -->';
+			$shapes['an entity-spelled inline span']   = '<!-- wp:paragraph --><p>minnprerc words eight <span class="kb&#45;inline&#45;dynamic">x</span></p><!-- /wp:paragraph -->';
+			$shapes['a Kadence dynamic HTML block']    = '<!-- wp:group --><div class="wp-block-group"><p>minnprerc words nine</p><!-- wp:kadence/dynamichtml {"uniqueID":"_minnprerc"} /--></div><!-- /wp:group -->';
+		}
+		$plain = '<!-- wp:paragraph --><p>minnprerc plain words</p><!-- /wp:paragraph -->';
+
+		// The request keys JetEngine reads an object from are set aside
+		// while the preview renders and put back after.
+		$during = null;
+		$spy    = function ( $content ) use ( &$during ) {
+			if ( false !== strpos( (string) $content, 'minnprerc plain words' ) ) {
+				$during = array( isset( $_GET['object'] ), isset( $_REQUEST['object'] ), isset( $_REQUEST['post_id'] ), isset( $_REQUEST['listing'] ) ); // phpcs:ignore WordPress.Security.NonceVerification
+			}
+			return $content;
+		};
+		add_filter( 'render_block', $spy );
+		$held_get     = $_GET; // phpcs:ignore WordPress.Security.NonceVerification
+		$held_request = $_REQUEST; // phpcs:ignore WordPress.Security.NonceVerification
+		wp_set_current_user( $contrib );
+		try {
+			foreach ( $shapes as $name => $markup ) {
+				list( $status, $out ) = $render( array( $markup ) );
+				$check( "previews: a Contributor's preview of {$name} is empty", 200 === $status && is_array( $out ) && '' === trim( (string) ( $out[0] ?? 'x' ) ), $status . ' ' . substr( wp_json_encode( $out ), 0, 160 ) );
+			}
+			$_GET['object']        = 7;
+			$_REQUEST['object']    = 7;
+			$_REQUEST['post_id']   = 7;
+			$_REQUEST['listing']   = array( 'listing_source' => 'posts' );
+			list( $status, $out ) = $render( array( $plain ) );
+			$check( "previews: control: a Contributor's plain block still previews", 200 === $status && false !== strpos( (string) ( $out[0] ?? '' ), 'minnprerc plain words' ), $status . ' ' . wp_json_encode( $out ) );
+			if ( $jet ) {
+				$check( 'previews: the object JetEngine reads from the request is set aside while it renders', array( false, false, false, false ) === $during, wp_json_encode( $during ) );
+				$check( 'previews: and put back after', 7 === ( $_GET['object'] ?? null ) && 7 === ( $_REQUEST['post_id'] ?? null ) && isset( $_REQUEST['listing'] ), wp_json_encode( array( $_GET, $_REQUEST ) ) ); // phpcs:ignore WordPress.Security.NonceVerification
+			}
+		} finally {
+			wp_set_current_user( $admin );
+			$_GET     = $held_get;
+			$_REQUEST = $held_request;
+			remove_filter( 'render_block', $spy );
+		}
+		// An administrator may author dynamic data: nothing is blanked.
+		$trusted = $jet ? $shapes['a JetEngine dynamic data attribute'] : $shapes['a Kadence dynamic attribute'];
+		list( $status, $out ) = $render( array( $trusted ) );
+		$check( "previews: control: an administrator's preview of the same block is not blanked", 200 === $status && false !== strpos( (string) ( $out[0] ?? '' ), 'minnprerc words' ), $status . ' ' . substr( wp_json_encode( $out ), 0, 160 ) );
+	} finally {
+		wp_set_current_user( $admin );
+		$wpdb->query( 'ROLLBACK' );
 	}
 } )();
 

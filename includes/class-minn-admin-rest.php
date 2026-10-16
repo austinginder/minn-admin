@@ -2770,6 +2770,53 @@ class Minn_Admin_REST {
 		return false;
 	}
 
+	/**
+	 * Whether block markup carries a vendor's dynamic content, as $spec
+	 * names it: a block whose name starts with one of `prefixes` (other than
+	 * the `except` names) or is one of `names`, a block attribute key in
+	 * `attrs`, at any depth of inner blocks, or the `markup` pattern in the
+	 * markup as written, with entities and percent-escapes decoded. Attribute
+	 * keys are matched exactly, as the vendors read them from the parsed
+	 * block (parse_blocks has undone any \u escape).
+	 *
+	 * @param string $raw  Block markup.
+	 * @param array  $spec { prefixes, except, names, attrs, markup }.
+	 * @return bool
+	 */
+	private static function vendor_dynamic_marked( $raw, array $spec ) {
+		$walk = function ( $blocks ) use ( &$walk, $spec ) {
+			foreach ( (array) $blocks as $b ) {
+				$name = strtolower( (string) ( $b['blockName'] ?? '' ) );
+				if ( in_array( $name, (array) ( $spec['names'] ?? array() ), true ) ) {
+					return true;
+				}
+				foreach ( (array) ( $spec['prefixes'] ?? array() ) as $prefix ) {
+					if ( 0 === strpos( $name, $prefix ) && ! in_array( $name, (array) ( $spec['except'] ?? array() ), true ) ) {
+						return true;
+					}
+				}
+				if ( is_array( $b['attrs'] ?? null ) && array_intersect_key( $b['attrs'], array_flip( (array) ( $spec['attrs'] ?? array() ) ) ) ) {
+					return true;
+				}
+				if ( ! empty( $b['innerBlocks'] ) && $walk( $b['innerBlocks'] ) ) {
+					return true;
+				}
+			}
+			return false;
+		};
+		if ( $walk( parse_blocks( $raw ) ) ) {
+			return true;
+		}
+		if ( ! empty( $spec['markup'] ) ) {
+			foreach ( array( $raw, html_entity_decode( $raw, ENT_QUOTES | ENT_HTML5, 'UTF-8' ), rawurldecode( $raw ) ) as $s ) {
+				if ( preg_match( $spec['markup'], $s ) ) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
 	public static function render_blocks( WP_REST_Request $request ) {
 		$blocks = $request['blocks'];
 		if ( ! is_array( $blocks ) ) {
@@ -2887,6 +2934,56 @@ class Minn_Admin_REST {
 		$otter_untrusted = ! current_user_can( 'unfiltered_html' ) && ! current_user_can( 'manage_options' )
 			&& ( defined( 'OTTER_BLOCKS_VERSION' ) || class_exists( '\ThemeIsle\GutenbergBlocks\Plugins\Dynamic_Content' ) );
 		$otter_parked = $otter_untrusted ? self::park_otter_resolvers() : array();
+		// JetEngine and Kadence Blocks Pro have no such rule either, and check
+		// nothing at render: JetEngine's macros read any option or run any
+		// shortcode, its blocks read any post or user, and Kadence's dynamic
+		// HTML reads options and an author's user meta (it checks only on
+		// save, which a preview never does). For the same caller a block
+		// carrying their dynamic markup previews empty. Their query and grid
+		// blocks ask for published posts only and stay.
+		$vendor_marks = array();
+		$request_keys = array();
+		if ( ! current_user_can( 'unfiltered_html' ) && ! current_user_can( 'manage_options' ) ) {
+			if ( function_exists( 'jet_engine' ) ) {
+				// Its two layout wrappers show nothing of their own but what
+				// jetEngineDynamicData drives.
+				$vendor_marks[] = array(
+					'prefixes' => array( 'jet-engine/' ),
+					'except'   => array( 'jet-engine/container', 'jet-engine/section' ),
+					'attrs'    => array( 'jetEngineDynamicData', 'jetDynamicVisibility' ),
+				);
+				// Its blocks also take the object they show from the request
+				// (?listing=, ?post_id=, ?object=), and a published synced
+				// pattern can hold one: none of those reach this render.
+				$request_keys = array( 'listing', 'post_id', 'object' );
+			}
+			if ( defined( 'KBP_VERSION' ) ) {
+				// Its repeater reads the rows of a repeater field on any post
+				// id (or ACF's options) the block names.
+				$vendor_marks[] = array(
+					'names'  => array( 'kadence/dynamichtml', 'kadence/dynamiclist', 'kadence/repeater', 'kadence/repeatertemplate' ),
+					'attrs'  => array( 'kadenceDynamic', 'kadenceConditional' ),
+					'markup' => '#kb-inline-dynamic#i',
+				);
+			}
+		}
+		// phpcs:disable WordPress.Security.NonceVerification -- set aside, never read.
+		$request_held = array( 'get' => array(), 'post' => array(), 'request' => array() );
+		foreach ( $request_keys as $key ) {
+			if ( array_key_exists( $key, $_GET ) ) {
+				$request_held['get'][ $key ] = $_GET[ $key ];
+				unset( $_GET[ $key ] );
+			}
+			if ( array_key_exists( $key, $_POST ) ) {
+				$request_held['post'][ $key ] = $_POST[ $key ];
+				unset( $_POST[ $key ] );
+			}
+			if ( array_key_exists( $key, $_REQUEST ) ) {
+				$request_held['request'][ $key ] = $_REQUEST[ $key ];
+				unset( $_REQUEST[ $key ] );
+			}
+		}
+		// phpcs:enable WordPress.Security.NonceVerification
 
 		$queue_before = wp_styles()->queue;
 		$rendered     = array();
@@ -2917,6 +3014,12 @@ class Minn_Admin_REST {
 				if ( $otter_untrusted && self::otter_marked( $raw ) ) {
 					$rendered[] = '';
 					continue;
+				}
+				foreach ( $vendor_marks as $spec ) {
+					if ( self::vendor_dynamic_marked( $raw, $spec ) ) {
+						$rendered[] = '';
+						continue 2;
+					}
 				}
 				$html = do_blocks( $raw );
 				// A resolver something put back while this block rendered (Otter's
@@ -2955,6 +3058,15 @@ class Minn_Admin_REST {
 			}
 			remove_filter( 'render_block_data', $clamp_preview_query );
 			remove_action( 'pre_get_posts', $cap_preview_posts, PHP_INT_MAX );
+			foreach ( $request_held['get'] as $key => $value ) {
+				$_GET[ $key ] = $value;
+			}
+			foreach ( $request_held['post'] as $key => $value ) {
+				$_POST[ $key ] = $value;
+			}
+			foreach ( $request_held['request'] as $key => $value ) {
+				$_REQUEST[ $key ] = $value;
+			}
 		}
 		$out         = array( 'rendered' => $rendered );
 		$new_handles = array_values( array_diff( wp_styles()->queue, $queue_before ) );
