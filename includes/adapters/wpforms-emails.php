@@ -179,32 +179,43 @@ add_action( 'rest_api_init', function () {
 				if ( ! isset( $s['confirmations'][ $key ] ) ) {
 					return new WP_Error( 'minn_wpfe_unknown', __( 'That confirmation is not on this form.', 'minn-admin' ), array( 'status' => 400 ) );
 				}
-				// Keys the page leaves out keep their stored values.
-				$was = $s['confirmations'][ $key ];
-				$in  = array_merge(
-					array(
-						'name'     => $was['name'] ?? '',
-						'type'     => $was['type'] ?? 'message',
-						'message'  => $was['message'] ?? '',
-						'page'     => $was['page'] ?? '',
-						'redirect' => $was['redirect'] ?? '',
-					),
-					$in
-				);
-				$type = in_array( $text( $in, 'type' ), array( 'message', 'page', 'redirect' ), true ) ? $text( $in, 'type' ) : 'message';
-				$page = absint( $in['page'] ?? 0 );
-				$url  = trim( $text( $in, 'redirect' ) );
-				if ( 'page' === $type && ( ! $page || ! get_post( $page ) || ! current_user_can( 'read_post', $page ) ) ) {
+				// The page sends a changed confirmation with only its changed
+				// keys. Each key is written only when it differs from the stored
+				// one, so a key left out or sent back as stored keeps its bytes:
+				// rewriting all five on every save ran a name their builder had
+				// stored as typed through sanitize_text_field ('Promo 50%DEAL'
+				// became 'Promo 50AL') and turned a type the page reads as a
+				// message into one.
+				$was     = (array) $s['confirmations'][ $key ];
+				$changed = function ( $field ) use ( $in, $was, $text ) {
+					return array_key_exists( $field, $in ) && $text( $in, $field ) !== $text( $was, $field );
+				};
+				$type = $changed( 'type' ) ? $text( $in, 'type' ) : $text( $was, 'type' );
+				if ( $changed( 'type' ) && ! in_array( $type, array( 'message', 'page', 'redirect' ), true ) ) {
+					$type = 'message';
+				}
+				$page = absint( $changed( 'page' ) ? $text( $in, 'page' ) : $text( $was, 'page' ) );
+				$url  = $changed( 'redirect' ) ? trim( $text( $in, 'redirect' ) ) : $text( $was, 'redirect' );
+				// Where visitors go is checked when this save changes it.
+				$aims = $changed( 'type' ) || $changed( 'page' ) || $changed( 'redirect' );
+				if ( $aims && 'page' === $type && ( ! $page || ! get_post( $page ) || ! current_user_can( 'read_post', $page ) ) ) {
 					return new WP_Error( 'minn_wpfe_invalid', __( 'Choose the page visitors go to.', 'minn-admin' ), array( 'status' => 400, 'field' => 'c' . $key . '.page' ) );
 				}
-				if ( 'redirect' === $type && ( '' === $url || ! wp_http_validate_url( $url ) ) ) {
+				if ( $aims && 'redirect' === $type && ( '' === trim( $url ) || ! wp_http_validate_url( trim( $url ) ) ) ) {
 					return new WP_Error( 'minn_wpfe_invalid', __( 'Enter a full address (https://…).', 'minn-admin' ), array( 'status' => 400, 'field' => 'c' . $key . '.redirect' ) );
 				}
-				$s['confirmations'][ $key ]['name']     = sanitize_text_field( $text( $in, 'name' ) );
-				$s['confirmations'][ $key ]['type']     = $type;
-				$s['confirmations'][ $key ]['message']  = $text( $in, 'message' );
-				$s['confirmations'][ $key ]['page']     = $page ? (string) $page : '';
-				$s['confirmations'][ $key ]['redirect'] = $url;
+				$write = array(
+					'name'     => sanitize_text_field( $text( $in, 'name' ) ),
+					'type'     => $type,
+					'message'  => $text( $in, 'message' ),
+					'page'     => $page ? (string) $page : '',
+					'redirect' => $url,
+				);
+				foreach ( $write as $field => $value ) {
+					if ( $changed( $field ) ) {
+						$s['confirmations'][ $key ][ $field ] = $value;
+					}
+				}
 			}
 			unset( $s );
 			// Not a builder save (see the file comment). Their update unslashes

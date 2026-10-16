@@ -427,5 +427,141 @@ rest_get_server();
 	}
 } )();
 
+/*
+ * WPForms answers. Their format() writes '' for a name or address part not
+ * submitted, and the save submitted only the parts the form shows now, so an
+ * edit of the first name emptied a middle name the form had since stopped
+ * asking for, and a city edit emptied a hidden Address line 2.
+ */
+( function () use ( $check, $skip, $call, $once ) {
+	if ( ! function_exists( 'minn_admin_wpforms_edit_supported' ) || ! minn_admin_wpforms_edit_supported() || ! function_exists( 'minn_admin_wpforms_edit_block' ) ) {
+		$skip( 'WPForms parts: WPForms Pro inactive' );
+		return;
+	}
+	$made  = array( 'form' => 0, 'entry' => 0 );
+	$clean = $once( function () use ( &$made ) {
+		if ( $made['entry'] ) {
+			wpforms()->obj( 'entry' )->delete( $made['entry'] );
+		}
+		if ( $made['form'] ) {
+			wp_delete_post( $made['form'], true );
+		}
+	} );
+	try {
+		$made['form'] = (int) wpforms()->obj( 'form' )->add( 'Minn prerc parts' );
+		if ( ! $made['form'] ) {
+			$skip( 'WPForms parts: WPForms would not store a test form' );
+			return;
+		}
+		wpforms()->obj( 'form' )->update( $made['form'], array(
+			'id'       => $made['form'],
+			'field_id' => 3,
+			'settings' => array( 'form_title' => 'Minn prerc parts' ),
+			'fields'   => array(
+				1 => array( 'id' => 1, 'type' => 'name', 'label' => 'Name', 'format' => 'first-last' ),
+				2 => array( 'id' => 2, 'type' => 'address', 'label' => 'Address', 'scheme' => 'international', 'address2_hide' => '1' ),
+			),
+		) );
+		$fields        = array(
+			1 => array( 'name' => 'Name', 'value' => 'Ann Q. Lee', 'id' => 1, 'type' => 'name', 'first' => 'Ann', 'middle' => 'Q.', 'last' => 'Lee' ),
+			2 => array( 'name' => 'Address', 'value' => "1 Main St\nSuite 5\nParis, IDF\n75001\nFR", 'id' => 2, 'type' => 'address', 'address1' => '1 Main St', 'address2' => 'Suite 5', 'city' => 'Paris', 'state' => 'IDF', 'postal' => '75001', 'country' => 'FR' ),
+		);
+		$made['entry'] = (int) wpforms()->obj( 'entry' )->add( array( 'form_id' => $made['form'], 'status' => '', 'fields' => wp_json_encode( $fields ) ) );
+		if ( ! $made['entry'] ) {
+			$skip( 'WPForms parts: WPForms would not store a test entry' );
+			return;
+		}
+		wpforms()->obj( 'entry_fields' )->save( $fields, wpforms()->obj( 'form' )->get( $made['form'], array( 'content_only' => true ) ), $made['entry'] );
+		$stored = function () use ( &$made ) {
+			$e = wpforms()->obj( 'entry' )->get( $made['entry'] );
+			return (array) wpforms_decode( (string) ( $e->fields ?? '' ) );
+		};
+		$part = function ( $f, $id, $key ) {
+			return (string) ( $f[ $id ][ $key ] ?? $f[ (string) $id ][ $key ] ?? '' );
+		};
+
+		list( $st, $d ) = $call( 'POST', "/minn-admin/v1/wpforms/entries/{$made['entry']}/answers", array( 'values' => array( '1.first' => 'Anne' ), 'original' => array( '1.first' => 'Ann' ) ) );
+		$now = $stored();
+		$check( 'WPForms parts: a first-name edit answers 200 and writes it (control)', 200 === $st && 'Anne' === $part( $now, 1, 'first' ), $st . ' ' . wp_json_encode( 200 === $st ? $now[1] ?? null : $d ) );
+		$check( 'WPForms parts: and keeps the middle name the form no longer shows', 'Q.' === $part( $now, 1, 'middle' ), wp_json_encode( $now[1] ?? null ) );
+
+		list( $st, $d ) = $call( 'POST', "/minn-admin/v1/wpforms/entries/{$made['entry']}/answers", array( 'values' => array( '2.city' => 'Lyon' ), 'original' => array( '2.city' => 'Paris' ) ) );
+		$now = $stored();
+		$check( 'WPForms parts: a city edit answers 200 and writes it (control)', 200 === $st && 'Lyon' === $part( $now, 2, 'city' ), $st . ' ' . wp_json_encode( 200 === $st ? $now[2] ?? null : $d ) );
+		$check( 'WPForms parts: and keeps the hidden Address line 2', 'Suite 5' === $part( $now, 2, 'address2' ), wp_json_encode( $now[2] ?? null ) );
+	} finally {
+		$clean();
+	}
+} )();
+
+/*
+ * WPForms notifications and confirmations page. The page sends a changed
+ * confirmation with only its changed keys, but the save wrote all five back:
+ * the name through sanitize_text_field (their builder stores it as typed),
+ * a type the page reads as a message as one, a '0' page as '', a redirect
+ * trimmed; and it checked where visitors go on every save, so a message edit
+ * of a confirmation whose page was since deleted was refused.
+ */
+( function () use ( $check, $skip, $call, $once, $wpdb, $gone_page ) {
+	if ( ! function_exists( 'minn_admin_wpforms_emails_payload' ) || ! function_exists( 'minn_admin_wpforms_active' ) || ! minn_admin_wpforms_active() ) {
+		$skip( 'WPForms emails: WPForms inactive' );
+		return;
+	}
+	$gone = $gone_page();
+	$made = array( 'form' => 0 );
+	$clean = $once( function () use ( &$made ) {
+		if ( $made['form'] ) {
+			wp_delete_post( $made['form'], true );
+		}
+	} );
+	$stored = function ( $key ) use ( $wpdb, &$made ) {
+		$data = (array) wpforms_decode( (string) $wpdb->get_var( $wpdb->prepare( "SELECT post_content FROM {$wpdb->posts} WHERE ID = %d", $made['form'] ) ) );
+		return (array) ( $data['settings']['confirmations'][ $key ] ?? array() );
+	};
+	try {
+		$made['form'] = (int) wpforms()->obj( 'form' )->add( 'Minn prerc emails' );
+		if ( ! $made['form'] ) {
+			$skip( 'WPForms emails: WPForms would not store a test form' );
+			return;
+		}
+		$c1 = array( 'name' => 'Promo 50%DEAL <b>x</b>', 'type' => '', 'message' => 'Thanks', 'page' => '0', 'redirect' => ' https://example.com/x ' );
+		$c2 = array( 'name' => 'Page one', 'type' => 'page', 'message' => 'M', 'page' => (string) $gone, 'redirect' => '' );
+		wpforms()->obj( 'form' )->update( $made['form'], array(
+			'id'       => $made['form'],
+			'field_id' => 2,
+			'settings' => array(
+				'form_title'          => 'Minn prerc emails',
+				'notification_enable' => '1',
+				'notifications'       => array( 1 => array( 'notification_name' => 'Default', 'email' => '{admin_email}', 'subject' => 'New', 'message' => '{all_fields}' ) ),
+				'confirmations'       => array( 1 => $c1, 2 => $c2 ),
+			),
+			'fields'   => array( 1 => array( 'id' => 1, 'type' => 'text', 'label' => 'Text' ) ),
+		) );
+		if ( wp_json_encode( $c1 ) !== wp_json_encode( array_intersect_key( $stored( 1 ), $c1 ) ) ) {
+			$skip( 'WPForms emails: WPForms stored the confirmation cleaned, so these are not stored values there' );
+			return;
+		}
+		list( $st, $d ) = $call( 'POST', "/minn-admin/v1/wpforms/forms/{$made['form']}/emails", array( 'confirmations' => array( array( 'key' => '1', 'message' => 'Thanks!' ) ) ) );
+		$now = $stored( 1 );
+		$check( 'WPForms emails: a message-only edit answers 200 and writes the message (control)', 200 === $st && 'Thanks!' === ( $now['message'] ?? null ), $st . ' ' . wp_json_encode( 200 === $st ? $now['message'] ?? null : $d ) );
+		$check( 'WPForms emails: and keeps the stored name, type, page and redirect byte for byte', wp_json_encode( array( $c1['name'], $c1['type'], $c1['page'], $c1['redirect'] ) ) === wp_json_encode( array( $now['name'] ?? null, $now['type'] ?? null, $now['page'] ?? null, $now['redirect'] ?? null ) ), wp_json_encode( $now ) );
+
+		if ( $gone ) {
+			list( $st, $d ) = $call( 'POST', "/minn-admin/v1/wpforms/forms/{$made['form']}/emails", array( 'confirmations' => array( array( 'key' => '2', 'message' => 'M2' ) ) ) );
+			$now = $stored( 2 );
+			$check( 'WPForms emails: a message edit of a confirmation whose page was deleted is saved, and keeps the page', 200 === $st && 'M2' === ( $now['message'] ?? null ) && (string) $gone === (string) ( $now['page'] ?? '' ), $st . ' ' . wp_json_encode( 200 === $st ? $now : $d ) );
+		} else {
+			$skip( 'WPForms emails: could not make a deleted page id' );
+		}
+		$pre        = $stored( 1 );
+		list( $st ) = $call( 'POST', "/minn-admin/v1/wpforms/forms/{$made['form']}/emails", array( 'confirmations' => array( array( 'key' => '1', 'name' => 'Renamed <b>x</b>', 'type' => 'redirect', 'redirect' => 'not a url' ) ) ) );
+		$check( 'WPForms emails: a changed redirect is still checked, and a refused save writes nothing (control)', 400 === $st && $pre === $stored( 1 ), $st . ' ' . wp_json_encode( $stored( 1 ) ) );
+		list( $st ) = $call( 'POST', "/minn-admin/v1/wpforms/forms/{$made['form']}/emails", array( 'confirmations' => array( array( 'key' => '1', 'name' => 'Renamed <b>x</b>' ) ) ) );
+		$check( 'WPForms emails: an edited name is still written cleaned (control)', 200 === $st && 'Renamed x' === ( $stored( 1 )['name'] ?? null ), $st . ' ' . wp_json_encode( $stored( 1 )['name'] ?? null ) );
+	} finally {
+		$clean();
+	}
+} )();
+
 printf( "\nsecurity-v046-prerc-forms: %d/%d passed\n", count( array_filter( $results ) ), count( $results ) );
 exit( count( array_filter( $results ) ) === count( $results ) ? 0 : 1 );

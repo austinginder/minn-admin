@@ -404,7 +404,19 @@ add_action( 'rest_api_init', function () {
 					}
 				}
 				if ( 'parts' === $f['kind'] ) {
+					// Every part the answer holds goes back, not only those the
+					// form shows now: their format() writes '' for a part not
+					// submitted, so hiding Address line 2 or narrowing a name to
+					// first and last emptied that part of an entry on its next
+					// edit, whatever part was changed.
 					$parts = array();
+					$have  = isset( $stored_fields[ $f['id'] ] ) && is_array( $stored_fields[ $f['id'] ] ) ? $stored_fields[ $f['id'] ] : array();
+					$keys  = 'name' === ( $field['type'] ?? '' ) ? array( 'first', 'middle', 'last' ) : array( 'address1', 'address2', 'city', 'state', 'postal', 'country' );
+					foreach ( $keys as $key ) {
+						if ( isset( $have[ $key ] ) && is_scalar( $have[ $key ] ) && '' !== (string) $have[ $key ] ) {
+							$parts[ $key ] = (string) $have[ $key ];
+						}
+					}
 					foreach ( $f['inputs'] as $i ) {
 						$key           = substr( $i['id'], strlen( $f['id'] ) + 1 );
 						$parts[ $key ] = $next[ $f['id'] ][ $i['id'] ] ?? $i['value'];
