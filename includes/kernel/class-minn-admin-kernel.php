@@ -40,11 +40,15 @@
  *                 //           column many rows share multiplies rows: use 'first'); the main table is "e" and a
  *                 //           column anywhere may be "alias.col"; 'columns' => array( 'c.email' =>
  *                 //           'customer_email' ) names a joined column in the row
- *                 //           'where'   => conditions | callable(): conditions )
+ *                 //           'where'   => conditions | callable(): conditions,
+ *                 //           'viewer'  => true )   // the where is the viewer's own row scope
+ *                 //                                    (a provider's own bookings), not only a slice
  *                 // 'where' holds for every read of the source: the list, an item, a status
  *                 // card's counts (a site column, a vendor's own row scope); an array source
  *                 // is held to it in PHP. A callable that answers anything but an array
- *                 // matches nothing. A missing table is an empty list and a 404.
+ *                 // matches nothing. A missing table is an empty list and a 404. A reader of
+ *                 // whole tables (table_refused()) admits a 'viewer' source only to someone
+ *                 // its where answers array() for.
  *                 // or array( 'rows' => callable(): array[] )   // a vendor's list in memory (an option, an
  *                 //    API's queue), in the order to show it: the kernel applies the facets, search
  *                 //    (any declared column contains the term), range and page to it in PHP
@@ -162,7 +166,7 @@ class Minn_Admin_Kernel {
 	 */
 	const KEYS = array(
 		'resource' => array( 'active', 'gates', 'item_gate', 'labels', 'source', 'list', 'item', 'reads', 'create', 'actions', 'id', 'file' ),
-		'source'   => array( 'table', 'key', 'columns', 'detail', 'network', 'joins', 'where', 'rows', 'list', 'get', 'exists' ),
+		'source'   => array( 'table', 'key', 'columns', 'detail', 'network', 'joins', 'where', 'viewer', 'rows', 'list', 'get', 'exists' ),
 		'join'     => array( 'table', 'network', 'core', 'on', 'first' ),
 		'list'     => array( 'per_page', 'max', 'filter', 'tab', 'scope', 'facets', 'search', 'range', 'order', 'sort', 'keys', 'batch', 'row', 'fields' ),
 		'filter'   => array( 'param', 'column', 'values', 'default', 'order', 'many' ),
@@ -365,16 +369,23 @@ class Minn_Admin_Kernel {
 	 * the vendor rule an adapter applies to its own list holds there too.
 	 *
 	 * A table a resource reads as its source is refused when any resource
-	 * reading it so: its view gate says no, its scope admits less than every
-	 * row, it has a tab gate and no scope to say which tabs pass, or its fixed
-	 * condition cannot be read. A table a resource only joins or searches is
-	 * refused when every resource reading it says no at its view gate, since
-	 * one that says yes shows those rows. A fixed condition that can be read
-	 * is not asked: it is the resource's slice of the table (this site's rows,
-	 * its own kind of row), not who may see the rest; nor is a row gate, which
-	 * answers for one row. Core's tables are never refused here: a resource
-	 * reads only its slice of them. Asked whether or not the plugin is active,
-	 * since its tables outlive it; a gate that cannot answer without it says no.
+	 * reading it so does not show the viewer all of it: its view gate says no,
+	 * its scope admits less than every row, it has a tab gate and no scope to
+	 * say which tabs pass, its fixed condition cannot be read, or that
+	 * condition is the viewer's own scope ('viewer') and narrows anything. A
+	 * table a resource only joins or searches (its meta table) is refused
+	 * unless some resource reading it shows the viewer all of its own table,
+	 * since that one shows them these rows. A fixed condition that is not the
+	 * viewer's is not asked: it is the resource's slice of the table (this
+	 * site's rows, its own kind of row), not who may see the rest; nor is a
+	 * row gate, which answers for one row. Core's tables are never refused
+	 * here: a resource reads only its slice of them. A copy of a table (its
+	 * name under another prefix or with a word before or after, as
+	 * wp_amelia_appointments_old or wp_3_frm_items) answers as the table
+	 * does, for names of two words or more; a one-word name (stream,
+	 * redirects) is too common to find inside another. Asked whether or not
+	 * the plugin is active, since its tables outlive it; a gate that cannot
+	 * answer without it says no.
 	 *
 	 * @param string $table Table name as the database names it.
 	 * @return bool
@@ -382,23 +393,50 @@ class Minn_Admin_Kernel {
 	public static function table_refused( $table ) {
 		$claims = self::table_claims();
 		$name   = strtolower( (string) $table );
-		if ( ! isset( $claims[ $name ] ) ) {
-			return false;
-		}
-		if ( $claims[ $name ]['source'] ) {
-			foreach ( $claims[ $name ]['source'] as $id ) {
-				if ( ! self::admits_table( self::$resources[ $id ] ) ) {
-					return true;
+		$found  = isset( $claims['tables'][ $name ] ) ? array( $claims['tables'][ $name ] ) : self::copy_claims( $name, $claims );
+		foreach ( $found as $claim ) {
+			if ( $claim['source'] ) {
+				foreach ( $claim['source'] as $id ) {
+					if ( ! self::admits_table( self::$resources[ $id ] ) ) {
+						return true;
+					}
+				}
+				continue;
+			}
+			$shown = false;
+			foreach ( $claim['read'] as $id ) {
+				if ( self::admits_table( self::$resources[ $id ] ) ) {
+					$shown = true;
+					break;
 				}
 			}
-			return false;
-		}
-		foreach ( $claims[ $name ]['read'] as $id ) {
-			if ( self::yes( self::$resources[ $id ]['gates']['view'] ?? null ) ) {
-				return false;
+			if ( ! $shown ) {
+				return true;
 			}
 		}
-		return true;
+		return false;
+	}
+
+	/** The claims of every declared table a name holds whole, for a table no resource reads by that name. */
+	private static function copy_claims( $name, array $claims ) {
+		global $wpdb;
+		$base = $name;
+		foreach ( array_unique( array( strtolower( $wpdb->prefix ), strtolower( $wpdb->base_prefix ) ) ) as $prefix ) {
+			if ( '' !== $prefix && 0 === strpos( $base, $prefix ) ) {
+				$base = substr( $base, strlen( $prefix ) );
+				break;
+			}
+		}
+		$base  = preg_replace( '/^\d+_/', '', $base );
+		$found = array();
+		foreach ( $claims['bases'] as $declared => $full ) {
+			if ( false !== strpos( $declared, '_' ) && false !== strpos( $base, $declared ) ) {
+				foreach ( $full as $t ) {
+					$found[] = $claims['tables'][ $t ];
+				}
+			}
+		}
+		return $found;
 	}
 
 	/** Whether a resource shows the current user every row of its source table. */
@@ -410,14 +448,17 @@ class Minn_Admin_Kernel {
 		if ( null !== self::scope( $res ) || ( ! empty( $l['tab']['gate'] ) && empty( $l['scope'] ) ) ) {
 			return false;
 		}
-		return null !== self::fixed( (array) ( $res['source'] ?? array() ) );
+		$src   = (array) ( $res['source'] ?? array() );
+		$fixed = self::fixed( $src );
+		return null !== $fixed && ( empty( $src['viewer'] ) || array() === $fixed );
 	}
 
 	/**
 	 * Every table a declared resource reads, lowercased, with the resources
-	 * reading it as their source and those only joining or searching it.
+	 * reading it as their source and those only joining or searching it, and
+	 * each declared name without its prefix, for its copies.
 	 *
-	 * @return array<string, array{source: string[], read: string[]}>
+	 * @return array{tables: array<string, array{source: string[], read: string[]}>, bases: array<string, string[]>}
 	 */
 	private static function table_claims() {
 		global $wpdb;
@@ -428,8 +469,8 @@ class Minn_Admin_Kernel {
 			return $memo[ $key ];
 		}
 		$core = array_map( 'strtolower', array_values( $wpdb->tables( 'all', true ) ) );
-		$out  = array();
-		$add  = function ( $spec, $id, $as ) use ( &$out, $core ) {
+		$out  = array( 'tables' => array(), 'bases' => array() );
+		$add  = function ( $spec, $id, $as ) use ( &$out, $core, $wpdb ) {
 			try {
 				$name = strtolower( Minn_Admin_Kernel_SQL::table( $spec ) );
 			} catch ( \Throwable $e ) {
@@ -438,10 +479,18 @@ class Minn_Admin_Kernel {
 			if ( in_array( $name, $core, true ) ) {
 				return;
 			}
-			if ( ! isset( $out[ $name ] ) ) {
-				$out[ $name ] = array( 'source' => array(), 'read' => array() );
+			if ( ! isset( $out['tables'][ $name ] ) ) {
+				$out['tables'][ $name ] = array( 'source' => array(), 'read' => array() );
+				$base                   = $name;
+				foreach ( array_unique( array( strtolower( $wpdb->prefix ), strtolower( $wpdb->base_prefix ) ) ) as $prefix ) {
+					if ( '' !== $prefix && 0 === strpos( $base, $prefix ) ) {
+						$base = substr( $base, strlen( $prefix ) );
+						break;
+					}
+				}
+				$out['bases'][ $base ][] = $name;
 			}
-			$out[ $name ][ $as ][] = $id;
+			$out['tables'][ $name ][ $as ][] = $id;
 		};
 		foreach ( self::$resources as $id => $res ) {
 			$src = (array) ( $res['source'] ?? array() );

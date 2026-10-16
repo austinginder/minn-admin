@@ -2290,8 +2290,48 @@ if ( ! method_exists( 'Minn_Admin_Kernel', 'table_refused' ) ) {
 	$check( 'a whole table: a fixed condition that cannot be read is refused, one that can is the slice and not asked', $tr( $p . 'minn_conf_tr_wbad' ) && ! $tr( $p . 'minn_conf_tr_wok' ) );
 	$check( 'a whole table: a gate that throws refuses', $tr( $p . 'minn_conf_tr_throws' ) );
 	$check( "a whole table: an inactive plugin's resource still refuses, since its tables outlive it", $tr( $p . 'minn_conf_tr_off' ) );
-	$check( 'a whole table: a network table is the one on the base prefix', $tr( $wpdb->base_prefix . 'minn_conf_tr_net' ) && ( $wpdb->prefix === $wpdb->base_prefix || ! $tr( $wpdb->prefix . 'minn_conf_tr_net' ) ) );
+	$check( "a whole table: a network table is the one on the base prefix, and the same name under a site's prefix answers as its copy", $tr( $wpdb->base_prefix . 'minn_conf_tr_net' ) && $tr( $wpdb->prefix . 'minn_conf_tr_net' ) );
 	$check( 'a whole table: a table no resource reads is not refused', ! $tr( $p . 'minn_conf_tr_nobody' ) && ! $tr( '' ) );
+
+	// A fixed condition that is the viewer's own scope ('viewer'), and the
+	// tables such a resource joins.
+	$tr_mine = array();
+	Minn_Admin_Kernel::resource( 'minn-conformance/tr-viewer', $tr_def( 'minn_conf_tr_viewer', '__return_true', array(
+		'source' => array(
+			'joins'  => array( 'v' => array( 'table' => 'minn_conf_tr_vjoin', 'on' => array( 'id' => 'e.owner' ) ) ),
+			'where'  => function () use ( &$tr_mine ) {
+				return $tr_mine;
+			},
+			'viewer' => true,
+		),
+	) ) );
+	$tr_all      = ! $tr( $p . 'minn_conf_tr_viewer' ) && ! $tr( $p . 'minn_conf_tr_vjoin' );
+	$tr_mine     = array( 'owner' => 5 );
+	$tr_narrowed = $tr( $p . 'minn_conf_tr_viewer' ) && $tr( $p . 'minn_conf_tr_vjoin' );
+	$check( "a whole table: a viewer's own scope admits only someone it narrows nothing for, and its joins follow", $tr_all && $tr_narrowed, wp_json_encode( array( $tr_all, $tr_narrowed ) ) );
+	$check( "a whole table: a 'viewer' flag is a declaration key the kernel reads", ! in_array( true, array_map( function ( $m ) {
+		return false !== strpos( $m, 'tr-viewer' );
+	}, Minn_Admin_Kernel::refused() ), true ) );
+	// A join is shown only through a resource that shows all of its own table.
+	Minn_Admin_Kernel::resource( 'minn-conformance/tr-scopejoin', $tr_def( 'minn_conf_tr_scopejoin', '__return_true', array(
+		'source' => array( 'joins' => array( 'j' => array( 'table' => 'minn_conf_tr_sjoin', 'on' => array( 'id' => 'e.owner' ) ) ) ),
+		'list'   => array( 'scope' => array( 'column' => 'owner', 'allowed' => function () {
+			return array( 1 );
+		} ) ),
+	) ) );
+	$check( "a whole table: a join is refused when its only reader's scope is short, though that reader's gate says yes", $tr( $p . 'minn_conf_tr_sjoin' ) );
+	// Copies answer as the table does; a one-word name is matched whole only.
+	Minn_Admin_Kernel::resource( 'minn-conformance/tr-word', $tr_def( 'minnconfword', '__return_false' ) );
+	$tr_copies = array(
+		$tr( $p . 'minn_conf_tr_shut_old' ),
+		$tr( $p . 'bak_minn_conf_tr_shut' ),
+		$tr( strtoupper( $p ) . 'MINN_CONF_TR_SHUT2' ),
+		$tr( $wpdb->base_prefix . '7_minn_conf_tr_shut' ),
+		$tr( $p . 'minn_conf_tr_shutjoin_bak' ),
+	);
+	$check( 'a whole table: a copy of a refused table is refused, under a word before or after, another site\'s prefix, any case', ! in_array( false, $tr_copies, true ), wp_json_encode( $tr_copies ) );
+	$check( 'a whole table: a copy of a table shown whole is shown', ! $tr( $p . 'minn_conf_tr_open_bak' ) );
+	$check( 'a whole table: a one-word name is refused whole, never found inside another name', $tr( $p . 'minnconfword' ) && ! $tr( $p . 'minnconfword_old' ) && ! $tr( $p . 'old_minnconfword' ) );
 }
 
 // --- 2. Every real declaration ----------------------------------------------
