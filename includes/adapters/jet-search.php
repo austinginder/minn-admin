@@ -158,8 +158,14 @@ minn_admin_resource( 'jet-search/suggestions', function () {
 				'gate'   => 'view',
 				'run'    => function ( $id, array $row, WP_REST_Request $request ) {
 					$data = array();
-					if ( null !== $request->get_param( 'name' ) ) {
-						$name = sanitize_text_field( (string) $request->get_param( 'name' ) );
+					// The dialog sends every field, an untouched name as stored.
+					// JetSearch keeps an admin's name as typed (add-suggestion
+					// trims only), so a name sent back unchanged is left alone:
+					// cleaning it would rewrite '50%DEAL' or 'Shoes <50' on an
+					// edit of the weight.
+					$sent = $request->get_param( 'name' );
+					if ( null !== $sent && (string) $sent !== (string) $row['name'] ) {
+						$name = sanitize_text_field( (string) $sent );
 						if ( '' === $name ) {
 							return new WP_Error( 'missing_name', __( 'A suggestion needs some text.', 'minn-admin' ), array( 'status' => 400 ) );
 						}
