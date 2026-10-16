@@ -2025,9 +2025,10 @@ class Minn_Admin {
 			// Multisite-only: "Remove from this site" (per-site
 			// membership). Deletion stays a Network Admin job there.
 			'removeUsers'  => is_multisite() && current_user_can( 'remove_users' ),
-			// Network-wide activation of plugins and themes (super admin).
-			'networkPlugins' => is_multisite() && current_user_can( 'manage_network_plugins' ),
-			'networkThemes'  => is_multisite() && current_user_can( 'manage_network_themes' ),
+			// Network-wide activation of plugins and themes: the network's
+			// owner, asked on the main site (adapters/network.php).
+			'networkPlugins' => is_multisite() && function_exists( 'minn_admin_network_can_activate_plugins' ) && minn_admin_network_can_activate_plugins(),
+			'networkThemes'  => is_multisite() && function_exists( 'minn_admin_network_can_enable_themes' ) && minn_admin_network_can_enable_themes(),
 			// Drives Settings → Design (Additional CSS). Core maps this
 			// from unfiltered_html; multisite keeps it super-admin-only.
 			'editCss'      => current_user_can( 'edit_css' ),

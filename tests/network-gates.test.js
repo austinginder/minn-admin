@@ -29,8 +29,7 @@ const check = ( label, ok, detail = '' ) => {
 // capability literal, or is_super_admin() with no argument.
 const ALLOWED = {
 	'includes/class-minn-admin.php': {
-		"'manage_network_plugins'": [ 3, 'core: network activation in the plugins REST controller and Network Admin > Plugins' ],
-		"'manage_network_themes'": [ 1, 'core: Network Admin > Themes (boot flag for the menu)' ],
+		"'manage_network_plugins'": [ 2, 'core: network activation in the plugins REST controller and Network Admin > Plugins' ],
 		"'manage_network'": [ 1, "core: the admin bar's Network Admin link" ],
 		'is_super_admin()': [ 1, 'Minn_Admin::network_owner() itself' ],
 	},

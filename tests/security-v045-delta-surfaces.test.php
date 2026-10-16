@@ -138,7 +138,7 @@ if ( ! is_multisite() ) {
 		$check( 'NI-10 and, without delete_sites, is not offered Delete site', $ns_s && ! in_array( 'minn-admin/v1/network/sites/{id}', $action_routes( $ns_s ), true ) && false === $perm_for( '/minn-admin/v1/network/sites/(?P<id>\d+)', 'DELETE' ), wp_json_encode( $action_routes( $ns_s ) ) );
 		$check( 'NI-10 control: that holder keeps archive and spam, which their route allows', in_array( 'minn-admin/v1/network/sites/{id}/flag', $action_routes( $ns_s ), true ) );
 		$ns_caps = array( 'manage_sites', 'delete_sites' );
-		$check( 'NI-10 control: with delete_sites, Delete site is offered', in_array( 'minn-admin/v1/network/sites/{id}', $action_routes( $surface( 'network-sites' ) ), true ) && true === $perm_for( '/minn-admin/v1/network/sites/(?P<id>\d+)', 'DELETE' ) );
+		$check( 'NI-10 and with delete_sites, still not offered Delete site: the fence keeps the removal of its members\' roles for the network\'s owner (0.45.0 registry #3)', ! in_array( 'minn-admin/v1/network/sites/{id}', $action_routes( $surface( 'network-sites' ) ), true ) && false === $perm_for( '/minn-admin/v1/network/sites/(?P<id>\d+)', 'DELETE' ) );
 		$ns_caps = array( 'manage_network_users' );
 		$nu_s    = $surface( 'network-users' );
 		$check( 'NI-10 a network user manager without manage_network_options is not offered network administrator grants', $nu_s && ! in_array( 'minn-admin/v1/network/users/{id}/super', $action_routes( $nu_s ), true ) && false === $perm_for( '/minn-admin/v1/network/users/(?P<id>\d+)/super', 'POST' ), wp_json_encode( $action_routes( $nu_s ) ) );
