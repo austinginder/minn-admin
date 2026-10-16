@@ -27317,10 +27317,19 @@
 	}
 
 	async function removeLanguage( locale, name, btn ) {
+		// Code that hooks the site's language without being a multilingual
+		// plugin Minn can read keeps nothing; the confirmation names it.
+		const row = ( state.cache.installedLanguages || [] ).find( ( l ) => l.locale === locale );
+		const switchers = row && Array.isArray( row.switchers ) ? row.switchers.filter( ( n ) => 'string' === typeof n && n ) : [];
+		let body = __( 'WordPress keeps every installed language up to date on its own schedule, whether or not the site uses it. Removing this one stops those downloads.' );
+		if ( switchers.length ) {
+			/* translators: %s: one or more plugin names, separated by commas. */
+			body += ' ' + sprintf( __( '%s may switch the language for some visitors. Make sure it does not use this one.' ), switchers.join( ', ' ) );
+		}
 		const ok = await minnConfirm( {
 			/* translators: %s is a language name, e.g. Deutsch. */
 			title: sprintf( __( 'Remove %s from this site?' ), name ),
-			body: __( 'WordPress keeps every installed language up to date on its own schedule, whether or not the site uses it. Removing this one stops those downloads.' ),
+			body,
 			changes: [
 				__( 'Deletes this language’s WordPress, plugin and theme translation files' ),
 				__( 'Stops WordPress from downloading updates for them' ),

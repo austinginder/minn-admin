@@ -296,6 +296,7 @@ const PHP_PROSE_ALLOW = new Set( [
 	'already active', 'activation left', 'timed out',   // ACPT's activation replies
 	'tm public api',                                    // a vendor API's own error text
 	'error connecting',                                 // MonsterInsights license API's reply, matched by stripos
+	"doesn't exist",                                    // MySQL/MariaDB error 1146's text, matched by stripos (rest.php wpml_site_locales)
 	'Elementor MCP -',                                  // the name prefix Elementor's own setup gives its app passwords
 	'Save changes',                                     // POST sentinel mirroring wp-admin's Save button (never shown)
 	'extra RLIKE %s',                                   // SQL fragment (Gravity SMTP log search)
