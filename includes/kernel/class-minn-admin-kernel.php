@@ -359,6 +359,110 @@ class Minn_Admin_Kernel {
 		return self::$endpoints;
 	}
 
+	/**
+	 * Whether a declared resource keeps the current user out of a whole table
+	 * it reads, for a screen that shows tables raw (the database browser), so
+	 * the vendor rule an adapter applies to its own list holds there too.
+	 *
+	 * A table a resource reads as its source is refused when any resource
+	 * reading it so: its view gate says no, its scope admits less than every
+	 * row, it has a tab gate and no scope to say which tabs pass, or its fixed
+	 * condition cannot be read. A table a resource only joins or searches is
+	 * refused when every resource reading it says no at its view gate, since
+	 * one that says yes shows those rows. A fixed condition that can be read
+	 * is not asked: it is the resource's slice of the table (this site's rows,
+	 * its own kind of row), not who may see the rest; nor is a row gate, which
+	 * answers for one row. Core's tables are never refused here: a resource
+	 * reads only its slice of them. Asked whether or not the plugin is active,
+	 * since its tables outlive it; a gate that cannot answer without it says no.
+	 *
+	 * @param string $table Table name as the database names it.
+	 * @return bool
+	 */
+	public static function table_refused( $table ) {
+		$claims = self::table_claims();
+		$name   = strtolower( (string) $table );
+		if ( ! isset( $claims[ $name ] ) ) {
+			return false;
+		}
+		if ( $claims[ $name ]['source'] ) {
+			foreach ( $claims[ $name ]['source'] as $id ) {
+				if ( ! self::admits_table( self::$resources[ $id ] ) ) {
+					return true;
+				}
+			}
+			return false;
+		}
+		foreach ( $claims[ $name ]['read'] as $id ) {
+			if ( self::yes( self::$resources[ $id ]['gates']['view'] ?? null ) ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/** Whether a resource shows the current user every row of its source table. */
+	private static function admits_table( array $res ) {
+		if ( ! self::yes( $res['gates']['view'] ?? null ) ) {
+			return false;
+		}
+		$l = (array) ( $res['list'] ?? array() );
+		if ( null !== self::scope( $res ) || ( ! empty( $l['tab']['gate'] ) && empty( $l['scope'] ) ) ) {
+			return false;
+		}
+		return null !== self::fixed( (array) ( $res['source'] ?? array() ) );
+	}
+
+	/**
+	 * Every table a declared resource reads, lowercased, with the resources
+	 * reading it as their source and those only joining or searching it.
+	 *
+	 * @return array<string, array{source: string[], read: string[]}>
+	 */
+	private static function table_claims() {
+		global $wpdb;
+		static $memo = array();
+		self::resources();
+		$key = $wpdb->prefix . '|' . $wpdb->base_prefix . '|' . count( self::$resources );
+		if ( isset( $memo[ $key ] ) ) {
+			return $memo[ $key ];
+		}
+		$core = array_map( 'strtolower', array_values( $wpdb->tables( 'all', true ) ) );
+		$out  = array();
+		$add  = function ( $spec, $id, $as ) use ( &$out, $core ) {
+			try {
+				$name = strtolower( Minn_Admin_Kernel_SQL::table( $spec ) );
+			} catch ( \Throwable $e ) {
+				return;
+			}
+			if ( in_array( $name, $core, true ) ) {
+				return;
+			}
+			if ( ! isset( $out[ $name ] ) ) {
+				$out[ $name ] = array( 'source' => array(), 'read' => array() );
+			}
+			$out[ $name ][ $as ][] = $id;
+		};
+		foreach ( self::$resources as $id => $res ) {
+			$src = (array) ( $res['source'] ?? array() );
+			if ( ! isset( $src['table'] ) ) {
+				continue;
+			}
+			$add( array( 'table' => $src['table'], 'network' => ! empty( $src['network'] ) ), $id, 'source' );
+			foreach ( (array) ( $src['joins'] ?? array() ) as $j ) {
+				if ( is_array( $j ) && empty( $j['core'] ) && isset( $j['table'] ) ) {
+					$add( $j, $id, 'read' );
+				}
+			}
+			$meta = $res['list']['search']['meta'] ?? null;
+			if ( is_array( $meta ) && isset( $meta['table'] ) ) {
+				$add( array( 'table' => $meta['table'], 'network' => ! empty( $meta['network'] ) ), $id, 'read' );
+			}
+		}
+		$memo[ $key ] = $out;
+		return $out;
+	}
+
 	/** Whether a declaration's `active` holds: true when it has none, a boolean as it is, a callable only when it returns true. */
 	private static function active( array $def ) {
 		if ( ! array_key_exists( 'active', $def ) ) {

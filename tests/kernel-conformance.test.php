@@ -2220,6 +2220,80 @@ $dc_ago = Minn_Admin_Kernel::ago( $wpdb->get_var( "SELECT created FROM {$dt} WHE
 $check( "the database's clock: a window counts on it, and a last event's age reads it", 1 === Minn_Admin_Kernel::count( 'minn-conformance/dbclock', array( 'created' => Minn_Admin_Kernel::since( 'db', HOUR_IN_SECONDS ) ) ) && false === strpos( $dc_ago, 'hour' ), wp_json_encode( array( Minn_Admin_Kernel::count( 'minn-conformance/dbclock', array( 'created' => Minn_Admin_Kernel::since( 'db', HOUR_IN_SECONDS ) ) ), $dc_ago ) ) );
 $wpdb->query( $wpdb->prepare( 'SET time_zone = %s', '' === $dc_zone ? 'SYSTEM' : $dc_zone ) ); // phpcs:ignore
 
+// --- 1j. A whole table, for screens that show tables raw -------------------
+// The database browser leaves out a table a resource's own rule keeps the
+// viewer from (Minn_Admin_Kernel::table_refused()): its gate, a scope short
+// of everything, a tab gate with no scope, a fixed condition it cannot read.
+// None of these tables exist; the answer comes from the declarations alone.
+if ( ! method_exists( 'Minn_Admin_Kernel', 'table_refused' ) ) {
+	$check( 'a whole table: Minn_Admin_Kernel::table_refused() exists', false );
+} else {
+	$tr_list = array( 'fields' => array( 'id' => 'int' ) );
+	$tr_def  = function ( $table, $gate, array $more = array() ) use ( $tr_list ) {
+		return array_replace_recursive( array(
+			'gates'  => array( 'view' => $gate ),
+			'source' => array( 'table' => $table, 'key' => 'id', 'columns' => array( 'id', 'owner' ) ),
+			'list'   => $tr_list,
+		), $more );
+	};
+	$tr_scope = array( 1 );
+	Minn_Admin_Kernel::resource( 'minn-conformance/tr-open', $tr_def( 'minn_conf_tr_open', '__return_true', array(
+		'source' => array( 'joins' => array( 'j' => array( 'table' => 'minn_conf_tr_shared', 'on' => array( 'id' => 'e.owner' ) ) ) ),
+		'list'   => array( 'search' => array( 'meta' => array( 'table' => 'minn_conf_tr_meta', 'key' => 'thing_id', 'name' => 'k', 'value' => 'v' ) ) ),
+	) ) );
+	Minn_Admin_Kernel::resource( 'minn-conformance/tr-shut', $tr_def( 'minn_conf_tr_shut', '__return_false', array(
+		'source' => array( 'joins' => array(
+			'j' => array( 'table' => 'minn_conf_tr_shared', 'on' => array( 'id' => 'e.owner' ) ),
+			'k' => array( 'table' => 'minn_conf_tr_shutjoin', 'on' => array( 'id' => 'e.owner' ) ),
+			'u' => array( 'core' => 'users', 'on' => array( 'ID' => 'e.owner' ) ),
+		) ),
+	) ) );
+	Minn_Admin_Kernel::resource( 'minn-conformance/tr-scope', $tr_def( 'minn_conf_tr_scope', '__return_true', array(
+		'list' => array( 'scope' => array( 'column' => 'owner', 'allowed' => function () use ( &$tr_scope ) {
+			return $tr_scope;
+		} ) ),
+	) ) );
+	Minn_Admin_Kernel::resource( 'minn-conformance/tr-tab', $tr_def( 'minn_conf_tr_tab', '__return_true', array(
+		'list' => array( 'tab' => array( 'param' => 'owner', 'column' => 'owner', 'gate' => '__return_true' ) ),
+	) ) );
+	Minn_Admin_Kernel::resource( 'minn-conformance/tr-where-bad', $tr_def( 'minn_conf_tr_wbad', '__return_true', array(
+		'source' => array( 'where' => function () {
+			return 'not conditions';
+		} ),
+	) ) );
+	Minn_Admin_Kernel::resource( 'minn-conformance/tr-where-ok', $tr_def( 'minn_conf_tr_wok', '__return_true', array(
+		'source' => array( 'where' => function () {
+			return array( 'owner' => get_current_blog_id() );
+		} ),
+	) ) );
+	Minn_Admin_Kernel::resource( 'minn-conformance/tr-throws', $tr_def( 'minn_conf_tr_throws', function () {
+		throw new RuntimeException( 'vendor class renamed' );
+	} ) );
+	Minn_Admin_Kernel::resource( 'minn-conformance/tr-off', array_merge( $tr_def( 'minn_conf_tr_off', '__return_false' ), array( 'active' => false ) ) );
+	Minn_Admin_Kernel::resource( 'minn-conformance/tr-core', $tr_def( 'posts', '__return_false' ) );
+	Minn_Admin_Kernel::resource( 'minn-conformance/tr-net', $tr_def( 'minn_conf_tr_net', '__return_false', array( 'source' => array( 'network' => true ) ) ) );
+	$tr = function ( $name ) {
+		return Minn_Admin_Kernel::table_refused( $name );
+	};
+	$p  = $wpdb->prefix;
+	$check( 'a whole table: one a resource shows whole is shown, and so are its joins and meta', ! $tr( $p . 'minn_conf_tr_open' ) && ! $tr( $p . 'minn_conf_tr_meta' ) && ! $tr( $p . 'minn_conf_tr_shared' ) );
+	$check( "a whole table: one whose resource's gate says no is refused, in any case", $tr( $p . 'minn_conf_tr_shut' ) && $tr( strtoupper( $p . 'minn_conf_tr_shut' ) ) );
+	$check( 'a whole table: a join only a refusing resource reads is refused, one another resource admits is not', $tr( $p . 'minn_conf_tr_shutjoin' ) && ! $tr( $p . 'minn_conf_tr_shared' ) );
+	$check( 'a whole table: a core table a resource joins or reads a slice of is never refused', ! $tr( $wpdb->users ) && ! $tr( $wpdb->posts ) );
+	$tr_scope_some = $tr( $p . 'minn_conf_tr_scope' );
+	$tr_scope      = null;
+	$tr_scope_all  = $tr( $p . 'minn_conf_tr_scope' );
+	$tr_scope      = 'not a list';
+	$tr_scope_odd  = $tr( $p . 'minn_conf_tr_scope' );
+	$check( 'a whole table: a scope short of every row is refused, no restriction is not, an answer that is not a list is refused', $tr_scope_some && ! $tr_scope_all && $tr_scope_odd, wp_json_encode( array( $tr_scope_some, $tr_scope_all, $tr_scope_odd ) ) );
+	$check( 'a whole table: a tab gate with no scope to say which tabs pass is refused', $tr( $p . 'minn_conf_tr_tab' ) );
+	$check( 'a whole table: a fixed condition that cannot be read is refused, one that can is the slice and not asked', $tr( $p . 'minn_conf_tr_wbad' ) && ! $tr( $p . 'minn_conf_tr_wok' ) );
+	$check( 'a whole table: a gate that throws refuses', $tr( $p . 'minn_conf_tr_throws' ) );
+	$check( "a whole table: an inactive plugin's resource still refuses, since its tables outlive it", $tr( $p . 'minn_conf_tr_off' ) );
+	$check( 'a whole table: a network table is the one on the base prefix', $tr( $wpdb->base_prefix . 'minn_conf_tr_net' ) && ( $wpdb->prefix === $wpdb->base_prefix || ! $tr( $wpdb->prefix . 'minn_conf_tr_net' ) ) );
+	$check( 'a whole table: a table no resource reads is not refused', ! $tr( $p . 'minn_conf_tr_nobody' ) && ! $tr( '' ) );
+}
+
 // --- 2. Every real declaration ----------------------------------------------
 $real = array_filter( Minn_Admin_Kernel::resources(), function ( $r ) {
 	return 0 !== strpos( $r['id'], 'minn-conformance/' );
