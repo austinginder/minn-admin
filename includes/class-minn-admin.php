@@ -156,7 +156,7 @@ class Minn_Admin {
 		if ( ! current_user_can( $on ? 'activate_plugin' : 'deactivate_plugin', $file ) ) {
 			return new WP_Error( 'forbidden', __( 'Sorry, you are not allowed to manage this plugin.', 'minn-admin' ) );
 		}
-		if ( ! is_multisite() || current_user_can( 'manage_network_plugins' ) ) {
+		if ( ! is_multisite() || self::network_plugins_owner() ) {
 			return null;
 		}
 		if ( is_plugin_active_for_network( $file ) ) {
@@ -169,20 +169,34 @@ class Minn_Admin {
 	}
 
 	/**
+	 * Whether the current user may change a plugin for the whole network: the
+	 * network Plugins gate (adapters/network.php), which asks
+	 * manage_network_plugins on the main site and the network's owner. The
+	 * write fence keeps the network's plugin list for that owner but never
+	 * arms on admin-ajax, so this path refuses anyone else itself; a holder
+	 * of the capability who is not the owner gets the per-site answers.
+	 *
+	 * @return bool
+	 */
+	private static function network_plugins_owner() {
+		return function_exists( 'minn_admin_network_can_activate_plugins' ) && minn_admin_network_can_activate_plugins();
+	}
+
+	/**
 	 * The explicit $network_wide to hand activate_plugin()/deactivate_plugins().
 	 *
 	 * Never leave it at the default: deactivate_plugins() reads null as "yes,
 	 * network-wide" for a network-active plugin, and activate_plugin() lets
 	 * is_network_only_plugin() force it true. Passing the value outright means
-	 * a per-site request can only ever become a network write for someone who
-	 * holds manage_network_plugins, which plugin_toggle_denied() has confirmed.
+	 * a per-site request can only ever become a network write for the network's
+	 * owner, which plugin_toggle_denied() has confirmed.
 	 *
 	 * @param string $file       Plugin file relative to the plugins directory.
 	 * @param bool   $activating True when turning the plugin on.
 	 * @return bool
 	 */
 	public static function plugin_toggle_is_network( $file, $activating ) {
-		if ( ! is_multisite() || ! current_user_can( 'manage_network_plugins' ) ) {
+		if ( ! is_multisite() || ! self::network_plugins_owner() ) {
 			return false;
 		}
 		if ( ! function_exists( 'is_plugin_active_for_network' ) ) {
