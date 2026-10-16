@@ -358,10 +358,12 @@ function minn_admin_bricks_template_item( $post ) {
 	$modified = '0000-00-00 00:00:00' !== $post->post_modified_gmt ? strtotime( $post->post_modified_gmt . ' UTC' ) : false;
 	return array(
 		'id'         => (int) $post->ID,
-		// The stored title, empty included: the edit form seeds from it and
-		// sends it back, so a display fallback would be saved as the title
-		// (the list shows an empty one as a dash).
-		'title'      => html_entity_decode( $post->post_title, ENT_QUOTES ),
+		// The stored title, as stored, empty included: the edit form seeds
+		// from it and sends it back, so a display copy (decoded, or a
+		// fallback) would be saved as the title.
+		'title'      => (string) $post->post_title,
+		// What the list shows (an empty one as a dash).
+		'label'      => html_entity_decode( $post->post_title, ENT_QUOTES ),
 		'type'       => $type,
 		'typeLabel'  => isset( $types[ $type ] ) ? $types[ $type ] : ( '' !== $type ? $type : '—' ),
 		'conditions' => minn_admin_bricks_conditions_summary( $post->ID ),
@@ -841,7 +843,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'search'    => 'search={q}',
 			'sortQuery' => 'orderby={by}&order={dir}',
 			'columns'   => array(
-				array( 'key' => 'title', 'label' => __( 'Template', 'minn-admin' ), 'format' => 'title', 'sort' => 'title' ),
+				array( 'key' => 'label', 'label' => __( 'Template', 'minn-admin' ), 'format' => 'title', 'sort' => 'title' ),
 				array( 'key' => 'typeLabel', 'label' => __( 'Type', 'minn-admin' ), 'format' => 'pill', 'width' => '130px' ),
 				array( 'key' => 'conditions', 'label' => __( 'Conditions', 'minn-admin' ), 'width' => 'minmax(0,1.2fr)' ),
 				array( 'key' => 'modified', 'label' => __( 'Modified', 'minn-admin' ), 'format' => 'ago', 'utc' => true, 'sort' => 'modified' ),
@@ -862,7 +864,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				'hint'   => __( 'JSON exported from Bricks or from Minn. A zip of several files stays on Bricks\' own importer.', 'minn-admin' ),
 			) : null,
 			'detail'    => array(
-				'skip' => array( 'id', 'type', 'typeLabel', 'editUrl', 'inTrash', 'status' ),
+				'skip' => array( 'id', 'label', 'type', 'typeLabel', 'editUrl', 'inTrash', 'status' ),
 				'edit' => array(
 					'route'  => 'minn-admin/v1/bricks/templates/{id}',
 					'method' => 'PUT',
@@ -1016,7 +1018,9 @@ add_action( 'rest_api_init', function () {
 			if ( ! $post || BRICKS_DB_TEMPLATE_SLUG !== $post->post_type ) {
 				return new WP_Error( 'not_found', __( 'Template not found.', 'minn-admin' ), array( 'status' => 404 ) );
 			}
-			$title    = trim( (string) $request['title'] );
+			// An untouched title comes back as stored and writes nothing; only
+			// a new one is escaped the way Bricks stores titles.
+			$title    = (string) $request['title'] === (string) $post->post_title ? '' : trim( (string) $request['title'] );
 			$type     = sanitize_key( (string) $request['type'] );
 			$previous = (string) get_post_meta( $post->ID, BRICKS_DB_TEMPLATE_TYPE, true );
 			// The form sends the stored type back on every save, and a type

@@ -881,18 +881,26 @@ add_action( 'rest_api_init', function () {
 				$b     = (array) $req->get_json_params();
 				$types = minn_admin_novamira_memory_types();
 				$upd   = array( 'ID' => $post->ID );
-				if ( isset( $b['name'] ) ) {
+				// The dialog sends every field, an untouched one as stored: only
+				// a field that differs is cleaned and written, so changing the
+				// type never strips tags or code from the content.
+				$changed = function ( $key, $stored ) use ( $b ) {
+					return isset( $b[ $key ] ) && (string) $b[ $key ] !== (string) $stored;
+				};
+				if ( $changed( 'name', $post->post_title ) ) {
 					$upd['post_title'] = sanitize_text_field( (string) $b['name'] );
 				}
-				if ( isset( $b['description'] ) ) {
+				if ( $changed( 'description', $post->post_excerpt ) ) {
 					$upd['post_excerpt'] = sanitize_text_field( (string) $b['description'] );
 				}
-				if ( isset( $b['content'] ) ) {
+				if ( $changed( 'content', $post->post_content ) ) {
 					$upd['post_content'] = wp_strip_all_tags( (string) $b['content'] );
 				}
-				$r = wp_update_post( wp_slash( $upd ), true );
-				if ( is_wp_error( $r ) ) {
-					return $r;
+				if ( count( $upd ) > 1 ) {
+					$r = wp_update_post( wp_slash( $upd ), true );
+					if ( is_wp_error( $r ) ) {
+						return $r;
+					}
 				}
 				if ( isset( $b['type'] ) && isset( $types[ (string) $b['type'] ] ) ) {
 					update_post_meta( $post->ID, '_novamira_memory_type', (string) $b['type'] );

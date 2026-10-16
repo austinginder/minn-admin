@@ -58,6 +58,22 @@ if ( ! current_user_can( 'manage_options' ) ) {
 }
 global $wpdb;
 rest_get_server();
+// Novamira Pro registers its memory post type only with a licence. Where it
+// is active without one (the lab), the memory section stands the type in for
+// this process and runs the Novamira adapter's route registration once more,
+// so Minn's own memory routes (registered only when the type exists) are the
+// ones under test.
+if ( function_exists( 'minn_admin_novamira_active' ) && minn_admin_novamira_active() && ! post_type_exists( 'novamira_memory' ) ) {
+	register_post_type( 'novamira_memory', array( 'public' => false, 'supports' => array( 'title', 'editor', 'excerpt' ) ) );
+	global $wp_filter;
+	foreach ( (array) ( isset( $wp_filter['rest_api_init'] ) ? $wp_filter['rest_api_init']->callbacks : array() ) as $hooked ) {
+		foreach ( $hooked as $cb ) {
+			if ( $cb['function'] instanceof Closure && '/adapters/novamira.php' === substr( str_replace( '\\', '/', ( new ReflectionFunction( $cb['function'] ) )->getFileName() ), -22 ) ) {
+				call_user_func( $cb['function'] );
+			}
+		}
+	}
+}
 
 /*
  * #6: an edit of a post type or taxonomy that leaves the labels and the
@@ -142,14 +158,26 @@ rest_get_server();
 				$check( '#6 CPT UI: and keeps the description with its link and line break', $desc === ( $ck['description'] ?? null ), wp_json_encode( $ck['description'] ?? null ) );
 				$check( '#6 CPT UI: and keeps both labels entity-encoded as CPT UI stored them', 'Books &amp; Bits' === ( $ck['label'] ?? null ) && 'Book &amp; Bit' === ( $ck['singular_label'] ?? null ), wp_json_encode( array( $ck['label'] ?? null, $ck['singular_label'] ?? null ) ) );
 
-				// The modal's <input> drops line breaks and the client trims; the
-				// description it sends back like that is one nobody edited.
+				// The modal is a textarea and the client compares as textOf()
+				// does: a description sent back with CRLF endings and padding
+				// is one nobody edited, and keeps the stored bytes.
 				$reload();
-				$cb    = $row( 'type', $cpt );
-				$shown = trim( str_replace( array( "\r", "\n" ), '', (string) $cb['description'] ) );
-				list( $st ) = $call( 'POST', "/minn-admin/v1/post-types/{$cpt}", array( 'description' => $shown, 'show_in_rest' => 1, 'base' => $cb['stamp'] ?? '' ) );
+				$cb = $row( 'type', $cpt );
+				list( $st ) = $call( 'POST', "/minn-admin/v1/post-types/{$cpt}", array( 'description' => '  ' . str_replace( "\n", "\r\n", (string) $cb['description'] ) . "\n", 'show_in_rest' => 1, 'base' => $cb['stamp'] ?? '' ) );
 				$ck = (array) ( ( (array) get_option( 'cptui_post_types', array() ) )[ $cpt ] ?? array() );
-				$check( '#6 CPT UI: a description sent back as the input showed it keeps its line break', 200 === $st && $desc === ( $ck['description'] ?? null ), $st . ' ' . wp_json_encode( $ck['description'] ?? null ) );
+				$check( '#6 CPT UI: a description sent back with CRLF endings and padding keeps the stored bytes', 200 === $st && $desc === ( $ck['description'] ?? null ), $st . ' ' . wp_json_encode( $ck['description'] ?? null ) );
+
+				// N1: an edit that changes only the line breaks is an edit.
+				$reload();
+				$cb = $row( 'type', $cpt );
+				list( $st ) = $call( 'POST', "/minn-admin/v1/post-types/{$cpt}", array( 'description' => str_replace( "\n", "\n\n", (string) $cb['description'] ), 'base' => $cb['stamp'] ?? '' ) );
+				$ck = (array) ( ( (array) get_option( 'cptui_post_types', array() ) )[ $cpt ] ?? array() );
+				$check( 'N1 CPT UI: a description edit that only adds a line break is written', 200 === $st && str_replace( "\n", "\n\n", $desc ) === ( $ck['description'] ?? null ), $st . ' ' . wp_json_encode( $ck['description'] ?? null ) );
+				$reload();
+				$cb = $row( 'type', $cpt );
+				list( $st ) = $call( 'POST', "/minn-admin/v1/post-types/{$cpt}", array( 'description' => str_replace( "\n", '', $desc ), 'base' => $cb['stamp'] ?? '' ) );
+				$ck = (array) ( ( (array) get_option( 'cptui_post_types', array() ) )[ $cpt ] ?? array() );
+				$check( 'N1 CPT UI: a description edit that only removes the line breaks is written', 200 === $st && str_replace( "\n", '', $desc ) === ( $ck['description'] ?? null ), $st . ' ' . wp_json_encode( $ck['description'] ?? null ) );
 
 				// An edited description keeps its HTML, as CPT UI's own save does.
 				$reload();
@@ -574,6 +602,192 @@ rest_get_server();
 		} finally {
 			$clean();
 		}
+	}
+} )();
+
+/*
+ * N2 and I9 (review of ed4a8756): on a WPForms field with values shown,
+ * their format() rebuilds the answer's labels from the choices it still has,
+ * so a kept pick would stay in value_raw and leave what WPForms shows and
+ * exports. Such an answer stays in their editor. And the allow-unknown
+ * filter Minn sets for its save answers for this form only.
+ */
+( function () use ( $check, $skip, $call, $once ) {
+	if ( ! function_exists( 'minn_admin_wpforms_edit_supported' ) || ! minn_admin_wpforms_edit_supported() || ! function_exists( 'minn_admin_wpforms_edit_block' ) ) {
+		$skip( 'N2 WPForms Pro inactive' );
+		return;
+	}
+	$made  = array( 'form' => 0, 'entry' => 0 );
+	$clean = $once( function () use ( &$made ) {
+		if ( $made['entry'] ) {
+			wpforms()->obj( 'entry' )->delete( $made['entry'] );
+		}
+		if ( $made['form'] ) {
+			wp_delete_post( $made['form'], true );
+		}
+	} );
+	try {
+		$made['form'] = (int) wpforms()->obj( 'form' )->add( 'Minn registry writes N2' );
+		wpforms()->obj( 'form' )->update( $made['form'], array(
+			'id'       => $made['form'],
+			'field_id' => 3,
+			'settings' => array( 'form_title' => 'Minn registry writes N2' ),
+			'fields'   => array(
+				1 => array( 'id' => 1, 'type' => 'checkbox', 'label' => 'Coded', 'show_values' => '1', 'choices' => array( 1 => array( 'label' => 'News', 'value' => 'n' ), 2 => array( 'label' => 'Call', 'value' => 'c' ) ) ),
+				2 => array( 'id' => 2, 'type' => 'checkbox', 'label' => 'Plain', 'choices' => array( 1 => array( 'label' => 'News', 'value' => '' ), 2 => array( 'label' => 'Call', 'value' => '' ) ) ),
+			),
+		) );
+		$fields        = array(
+			1 => array( 'name' => 'Coded', 'value' => "News\nGone", 'value_raw' => "n\ng", 'id' => 1, 'type' => 'checkbox' ),
+			2 => array( 'name' => 'Plain', 'value' => "News\nGone", 'value_raw' => "News\nGone", 'id' => 2, 'type' => 'checkbox' ),
+		);
+		$made['entry'] = (int) wpforms()->obj( 'entry' )->add( array( 'form_id' => $made['form'], 'status' => '', 'fields' => wp_json_encode( $fields ) ) );
+		wpforms()->obj( 'entry_fields' )->save( $fields, wpforms()->obj( 'form' )->get( $made['form'], array( 'content_only' => true ) ), $made['entry'] );
+		$block = minn_admin_wpforms_edit_block( (object) Minn_Admin_Kernel_SQL::row( 'wpforms_entries', 'entry_id', $made['entry'] ) );
+		$ids   = wp_list_pluck( (array) ( $block['fields'] ?? array() ), 'id' );
+		$check( 'N2 WPForms: a values-shown answer holding a pick the form no longer offers stays in WPForms', ! in_array( '1', array_map( 'strval', $ids ), true ) && in_array( 'Coded', (array) ( $block['locked'] ?? array() ), true ), wp_json_encode( $block ) );
+		list( $st ) = $call( 'POST', "/minn-admin/v1/wpforms/entries/{$made['entry']}/answers", array( 'values' => array( '1' => array( 'n', 'c', 'g' ) ), 'original' => array( '1' => array( 'n', 'g' ) ) ) );
+		$check( 'N2 WPForms: and a save of it is refused', 400 === $st, (string) $st );
+		$check( 'N2 WPForms: a plain checkbox answer with a kept pick is still editable (control)', in_array( '2', array_map( 'strval', $ids ), true ), wp_json_encode( $ids ) );
+
+		// I9: inside Minn's save, the filter answers for this form only.
+		$seen  = array();
+		$probe = function () use ( &$seen, $made ) {
+			$seen['other'] = (bool) apply_filters( 'wpforms_field_choices_allow_unknown_value', false, array( 'Gone' ), array( 'id' => 2 ), array( 'id' => $made['form'] + 100000 ) );
+			$seen['own']   = (bool) apply_filters( 'wpforms_field_choices_allow_unknown_value', false, array( 'Gone' ), array( 'id' => 2 ), array( 'id' => $made['form'] ) );
+		};
+		add_action( 'wpforms_pro_admin_entries_edit_submit_before_processing', $probe );
+		$call( 'POST', "/minn-admin/v1/wpforms/entries/{$made['entry']}/answers", array( 'values' => array( '2' => array( 'News', 'Call', 'Gone' ) ), 'original' => array( '2' => array( 'News', 'Gone' ) ) ) );
+		remove_action( 'wpforms_pro_admin_entries_edit_submit_before_processing', $probe );
+		$check( 'I9 WPForms: the save\'s allow-unknown filter does not answer for another form\'s field of the same id', isset( $seen['other'] ) && false === $seen['other'], wp_json_encode( $seen ) );
+		$check( 'I9 WPForms: and still answers for its own form (control)', ! empty( $seen['own'] ), wp_json_encode( $seen ) );
+	} finally {
+		$clean();
+	}
+} )();
+
+/*
+ * L5/L6 (review): Custom CSS & JS served 'Untitled CSS' as the editable
+ * name and wrote the name through sanitize_text_field on every save; the
+ * edit dialog sends every field. Runs where Custom CSS & JS is loaded
+ * (on minnadmin: MINN_SWAP_ADD=custom-css-js/custom-css-js.php with
+ * --require=tests/lib/plugin-swap.php).
+ */
+( function () use ( $check, $skip, $call, $once ) {
+	if ( ! function_exists( 'minn_admin_ccj_item' ) || ! post_type_exists( 'custom-css-js' ) || ! defined( 'CCJ_UPLOAD_DIR' ) ) {
+		$skip( 'L5/L6 Custom CSS & JS not loaded' );
+		return;
+	}
+	$tree_was = get_option( 'custom-css-js-tree', array() );
+	$post     = 0;
+	$clean    = $once( function () use ( &$post, $tree_was ) {
+		if ( $post ) {
+			minn_admin_ccj_drop_files( $post );
+			wp_delete_post( $post, true );
+		}
+		update_option( 'custom-css-js-tree', $tree_was );
+		minn_admin_ccj_rebuild_tree();
+	} );
+	try {
+		$post = (int) wp_insert_post( array( 'post_type' => 'custom-css-js', 'post_status' => 'publish', 'post_title' => '', 'post_content' => '.minn-reg{color:red}' ) );
+		update_post_meta( $post, 'options', minn_admin_ccj_default_options( 'css' ) );
+		update_post_meta( $post, '_active', 'yes' );
+		foreach ( array( '', '50%DEAL tweaks' ) as $title ) {
+			global $wpdb;
+			$wpdb->update( $wpdb->posts, array( 'post_title' => $title ), array( 'ID' => $post ) );
+			clean_post_cache( $post );
+			list( , $row ) = $call( 'GET', "/minn-admin/v1/ccj/snippets/{$post}" );
+			$check( 'L6 CCJ: the row serves the stored name ' . wp_json_encode( $title ) . ' as stored, with a label to show', $title === ( $row['name'] ?? null ) && '' !== (string) ( $row['label'] ?? '' ), wp_json_encode( $row ) );
+			// What the dialog sends for a code-only edit: every field, the name as the row has it.
+			$body = array( 'name' => $row['name'] ?? '', 'code' => '.minn-reg{color:blue}' . strlen( $title ), 'language' => 'css', 'type' => 'header', 'side' => 'frontend', 'linking' => 'internal', 'priority' => 5 );
+			list( $st, $d ) = $call( 'PUT', "/minn-admin/v1/ccj/snippets/{$post}", $body );
+			$now = get_post( $post );
+			$check( 'L5 CCJ: a code-only edit answers 200 and writes the code (control)', 200 === $st && false !== strpos( $now->post_content, 'color:blue' ), $st . ' ' . wp_json_encode( $d ) );
+			$check( 'L5/L6 CCJ: and keeps the stored name ' . wp_json_encode( $title ), $title === $now->post_title, wp_json_encode( $now->post_title ) );
+		}
+		list( $st ) = $call( 'PUT', "/minn-admin/v1/ccj/snippets/{$post}", array( 'name' => 'Minn suite rename' ) );
+		$check( 'L5 CCJ: a real rename is written (control)', 200 === $st && 'Minn suite rename' === get_post( $post )->post_title, (string) $st );
+	} finally {
+		$clean();
+	}
+} )();
+
+/*
+ * L5 (review): a Novamira memory edit cleaned and wrote every field the
+ * dialog sent, so changing only the type ran the content through
+ * wp_strip_all_tags and the name and description through
+ * sanitize_text_field.
+ */
+( function () use ( $check, $skip, $once ) {
+	if ( ! function_exists( 'minn_admin_novamira_memory_ready' ) || ! minn_admin_novamira_memory_ready() || ! minn_admin_novamira_can() ) {
+		$skip( 'L5 Novamira memories inactive' );
+		return;
+	}
+	$post  = 0;
+	$clean = $once( function () use ( &$post ) {
+		if ( $post ) {
+			wp_delete_post( $post, true );
+		}
+	} );
+	$send  = function ( $id, array $body ) {
+		$r = new WP_REST_Request( 'POST', '/minn-admin/v1/novamira/memories/' . $id );
+		$r->set_header( 'content-type', 'application/json' );
+		$r->set_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
+		$r->set_body( wp_json_encode( $body ) );
+		return rest_do_request( $r )->get_status();
+	};
+	try {
+		$content = "Use <code>wp_kses_post()</code> on <b>output</b>.\nKeep 50%DEAL as typed.";
+		$post    = (int) wp_insert_post( wp_slash( array( 'post_type' => 'novamira_memory', 'post_status' => 'publish', 'post_title' => '50%DEAL rules', 'post_excerpt' => 'Shoes <50 & more', 'post_content' => $content ) ) );
+		update_post_meta( $post, '_novamira_memory_type', 'project' );
+		$p   = get_post( $post );
+		$row = minn_admin_novamira_memory_item( $p );
+		$st  = $send( $post, array( 'name' => $row['name'], 'description' => $row['description'], 'type' => 'reference', 'content' => $row['content'] ) );
+		$now = get_post( $post );
+		$check( 'L5 Novamira: a type-only edit answers 200 and writes the type (control)', 200 === $st && 'reference' === get_post_meta( $post, '_novamira_memory_type', true ), (string) $st );
+		$check( 'L5 Novamira: and keeps the content with its tags', $p->post_content === $now->post_content, wp_json_encode( $now->post_content ) );
+		$check( 'L5 Novamira: and keeps the name and description as stored', $p->post_title === $now->post_title && $p->post_excerpt === $now->post_excerpt, wp_json_encode( array( $now->post_title, $now->post_excerpt ) ) );
+		$st = $send( $post, array( 'name' => 'Minn suite rename' ) );
+		$check( 'L5 Novamira: a real rename is written (control)', 200 === $st && 'Minn suite rename' === get_post( $post )->post_title, (string) $st );
+	} finally {
+		$clean();
+	}
+} )();
+
+/*
+ * L6 (review): Bricks served html_entity_decode( post_title ) as the title
+ * its edit dialog round-trips, and a type-only edit wrote esc_html() of the
+ * decoded copy back, turning a stored title's tags into text. Runs where
+ * Bricks is the active theme (the builders lab).
+ */
+( function () use ( $check, $skip, $call, $once ) {
+	if ( ! defined( 'BRICKS_DB_TEMPLATE_SLUG' ) || ! function_exists( 'minn_admin_bricks_template_item' ) || ! minn_admin_bricks_can_view_templates() ) {
+		$skip( 'L6 Bricks inactive' );
+		return;
+	}
+	$post  = 0;
+	$clean = $once( function () use ( &$post ) {
+		if ( $post ) {
+			wp_delete_post( $post, true );
+		}
+	} );
+	try {
+		$post = (int) wp_insert_post( array( 'post_type' => BRICKS_DB_TEMPLATE_SLUG, 'post_status' => 'publish', 'post_title' => 'x', 'post_content' => '' ) );
+		update_post_meta( $post, BRICKS_DB_TEMPLATE_TYPE, 'section' );
+		foreach ( array( '', 'Fish &amp; Chips', '<b>Hot</b> &amp; fresh' ) as $title ) {
+			global $wpdb;
+			$wpdb->update( $wpdb->posts, array( 'post_title' => $title ), array( 'ID' => $post ) );
+			clean_post_cache( $post );
+			$row = minn_admin_bricks_template_item( get_post( $post ) );
+			$check( 'L6 Bricks: the row serves the stored title ' . wp_json_encode( $title ) . ' as stored', $title === ( $row['title'] ?? null ) && array_key_exists( 'label', $row ), wp_json_encode( $row ) );
+			// A type-only edit: the dialog sends the title as the row has it.
+			list( $st, $d ) = $call( 'PUT', "/minn-admin/v1/bricks/templates/{$post}", array( 'title' => $row['title'], 'type' => 'section' ) );
+			$check( 'L6 Bricks: a save that leaves it alone keeps the stored title ' . wp_json_encode( $title ), 200 === $st && $title === get_post( $post )->post_title, $st . ' ' . wp_json_encode( $d ) . ' ' . wp_json_encode( get_post( $post )->post_title ) );
+		}
+		list( $st ) = $call( 'PUT', "/minn-admin/v1/bricks/templates/{$post}", array( 'title' => 'Minn suite rename', 'type' => 'section' ) );
+		$check( 'L6 Bricks: a real rename is written (control)', 200 === $st && 'Minn suite rename' === get_post( $post )->post_title, (string) $st );
+	} finally {
+		$clean();
 	}
 } )();
 

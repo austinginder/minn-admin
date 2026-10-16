@@ -223,7 +223,12 @@ function minn_admin_ccj_item( $post ) {
 	$side     = isset( $opts['side'] ) ? (string) $opts['side'] : 'frontend';
 	return array(
 		'id'       => (int) $post->ID,
-		'name'     => $post->post_title ? $post->post_title : ( 'Untitled ' . strtoupper( $language ) ),
+		// The stored title, as stored ('' for an untitled snippet): the edit
+		// dialog sends an untouched name back as the row has it, so a
+		// display fallback here would be saved as the title.
+		'name'     => (string) $post->post_title,
+		// What the list shows when there is no name.
+		'label'    => '' !== (string) $post->post_title ? (string) $post->post_title : ( 'Untitled ' . strtoupper( $language ) ),
 		// The body only for callers the vendor's edit screen would open
 		// (edit_post on this snippet); a role holding the list cap alone
 		// sees the row, not a draft's code.
@@ -665,6 +670,11 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		array( 'key' => 'priority', 'label' => __( 'Priority', 'minn-admin' ), 'type' => 'number' ),
 	);
 
+	// The name column falls back to the display label for an untitled
+	// snippet: `name` itself is the stored title the edit dialog round-trips.
+	$columns              = minn_admin_snippets_columns( __( 'Type · where', 'minn-admin' ), array( 'width' => 'minmax(0,1.2fr)', 'utc' => true ) );
+	$columns[0]['altKey'] = 'label';
+
 	list( $actions, $bulk ) = minn_admin_snippets_actions( 'ccj/snippets', array(
 		'edit_in' => array(
 			'label' => __( 'Edit in Simple Custom CSS and JS ↗', 'minn-admin' ),
@@ -698,10 +708,10 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				),
 				'fields'   => $edit_fields,
 			),
-			'columns' => minn_admin_snippets_columns( __( 'Type · where', 'minn-admin' ), array( 'width' => 'minmax(0,1.2fr)', 'utc' => true ) ),
+			'columns' => $columns,
 			'detail'  => array(
 				'detailRoute' => 'minn-admin/v1/ccj/snippets/{id}',
-				'skip'        => array( 'code', 'name', 'scope', 'language', 'type', 'side', 'linking', 'priority', 'active' ),
+				'skip'        => array( 'code', 'name', 'label', 'scope', 'language', 'type', 'side', 'linking', 'priority', 'active' ),
 				'edit'        => array(
 					'route'  => 'minn-admin/v1/ccj/snippets/{id}',
 					'method' => 'PUT',
@@ -736,6 +746,7 @@ minn_admin_resource( 'ccj/snippets', function () {
 	$fields = array(
 		'id'       => 'int',
 		'name'     => 'text',
+		'label'    => 'text',
 		'code'     => 'text',
 		'language' => 'text',
 		'type'     => 'text',
@@ -874,7 +885,9 @@ minn_admin_resource( 'ccj/snippets', function () {
 					$code_changed   = array_key_exists( 'code', $body ) && $eol( $body['code'] ) !== $eol( $post->post_content );
 					$active_changed = array_key_exists( 'active', $body ) && ! empty( $body['active'] ) !== minn_admin_ccj_is_active( $id );
 					$update = array( 'ID' => $id );
-					if ( isset( $body['name'] ) ) {
+					// An untouched name comes back as stored: only a new one is
+					// cleaned and written, so '50%DEAL' survives a code edit.
+					if ( isset( $body['name'] ) && (string) $body['name'] !== (string) $post->post_title ) {
 						$update['post_title'] = sanitize_text_field( $body['name'] );
 					}
 					// Only a code change touches the body: an unchanged one would go
