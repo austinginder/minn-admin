@@ -418,6 +418,19 @@ function minn_admin_fluent_smtp_settings_save( WP_REST_Request $request ) {
 	$body = $request->get_json_params();
 	$vals = isset( $body['values'] ) && is_array( $body['values'] ) ? $body['values'] : array();
 
+	// The settings form sends a field once it is touched, even when it is
+	// put back, so a value sent as the page read it stays as stored: the
+	// clamp below turned a stored 0 ("keep logs forever") into 1 day.
+	$served = (array) ( minn_admin_fluent_smtp_settings_shape()['values'] ?? array() );
+	foreach ( $vals as $key => $v ) {
+		if ( array_key_exists( $key, $served ) && ( is_bool( $served[ $key ] ) ? (bool) $v === $served[ $key ] : is_scalar( $v ) && (string) $v === (string) $served[ $key ] ) ) {
+			unset( $vals[ $key ] );
+		}
+	}
+	if ( ! $vals ) {
+		return minn_admin_fluent_smtp_settings_shape();
+	}
+
 	$model = new \FluentMail\App\Models\Settings();
 	$misc  = (array) $model->getMisc();
 

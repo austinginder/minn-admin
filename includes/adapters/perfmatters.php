@@ -308,6 +308,13 @@ function minn_admin_perfmatters_save( $values ) {
 				continue;
 			}
 		}
+		// The settings form sends a field once it is touched, even when it
+		// is put back, so a value sent as the page read it stays as stored:
+		// the strip below rewrote one Perfmatters' own form had kept.
+		$was = minn_admin_perfmatters_value( $args, $type );
+		if ( 'toggle' === $type ? ( ! empty( $v ) && 'false' !== $v ) === $was : is_scalar( $v ) && (string) $v === $was ) {
+			continue;
+		}
 		if ( ! isset( $pending[ $option ] ) ) {
 			$stored             = get_option( $option, array() );
 			$pending[ $option ] = is_array( $stored ) ? $stored : array();

@@ -48,6 +48,22 @@ $once = function ( callable $fn ) {
 	register_shutdown_function( $run );
 	return $run;
 };
+// An option put back exactly as it was (or removed when it was not there).
+$keep_option = function ( $name ) use ( $once ) {
+	global $wpdb;
+	$had = $wpdb->get_row( $wpdb->prepare( "SELECT option_value, autoload FROM {$wpdb->options} WHERE option_name = %s", $name ) );
+	return $once( function () use ( $name, $had ) {
+		global $wpdb;
+		if ( $had ) {
+			$wpdb->update( $wpdb->options, array( 'option_value' => $had->option_value, 'autoload' => $had->autoload ), array( 'option_name' => $name ) );
+		} else {
+			$wpdb->delete( $wpdb->options, array( 'option_name' => $name ) );
+		}
+		wp_cache_delete( $name, 'options' );
+		wp_cache_delete( 'alloptions', 'options' );
+		wp_cache_delete( 'notoptions', 'options' );
+	} );
+};
 // A page id that no longer exists: one made and deleted for the check.
 $gone_page = function () {
 	$id = wp_insert_post( array( 'post_type' => 'page', 'post_status' => 'publish', 'post_title' => 'Minn prerc gone page' ), true );
@@ -607,6 +623,98 @@ rest_get_server();
 		$check( 'Fluent Forms emails: an edited redirect is still written trimmed (control)', 200 === $st && 'customUrl' === ( $now['redirectTo'] ?? null ) && 'https://example.com/thanks' === ( $now['customUrl'] ?? null ), $st . ' ' . wp_json_encode( $now ) );
 	} finally {
 		$clean();
+	}
+} )();
+
+/*
+ * FluentSMTP settings. The settings form sends a field once it is touched,
+ * even when it is put back, and the save clamped the log retention to at
+ * least one day, so a stored 0 (keep logs forever, which their pruner skips)
+ * became 1 day on a save that changed nothing.
+ */
+( function () use ( $check, $skip, $call, $keep_option ) {
+	if ( ! function_exists( 'minn_admin_fluent_smtp_settings_save' ) || ! class_exists( 'FluentMail\\App\\Models\\Settings' ) || ! function_exists( 'minn_admin_fluent_smtp_can' ) || ! minn_admin_fluent_smtp_can() ) {
+		$skip( 'FluentSMTP settings: FluentSMTP inactive' );
+		return;
+	}
+	$restore = $keep_option( 'fluentmail-settings' );
+	$days    = function () {
+		wp_cache_delete( 'fluentmail-settings', 'options' );
+		wp_cache_delete( 'alloptions', 'options' );
+		$s = get_option( 'fluentmail-settings', array() );
+		return isset( $s['misc']['log_saved_interval_days'] ) ? (string) $s['misc']['log_saved_interval_days'] : null;
+	};
+	try {
+		$s = get_option( 'fluentmail-settings', array() );
+		$s = is_array( $s ) ? $s : array();
+		$s['misc']                            = isset( $s['misc'] ) && is_array( $s['misc'] ) ? $s['misc'] : array();
+		$s['misc']['log_saved_interval_days'] = '0';
+		update_option( 'fluentmail-settings', $s );
+		// Their reader keeps a copy for the request; a request starts fresh.
+		if ( function_exists( 'fluentMailGetSettings' ) ) {
+			fluentMailGetSettings( array(), false );
+		}
+		list( $st, $d ) = $call( 'POST', '/minn-admin/v1/fluent-smtp/settings/general', array( 'values' => array( 'log_saved_interval_days' => '0' ) ) );
+		$check( 'FluentSMTP settings: a retention sent back as read answers 200 and keeps the stored 0', 200 === $st && '0' === $days(), $st . ' ' . wp_json_encode( 200 === $st ? $days() : $d ) );
+		list( $st ) = $call( 'POST', '/minn-admin/v1/fluent-smtp/settings/general', array( 'values' => array( 'log_saved_interval_days' => '30' ) ) );
+		$check( 'FluentSMTP settings: a changed retention is still written (control)', 200 === $st && '30' === $days(), $st . ' ' . wp_json_encode( $days() ) );
+	} finally {
+		$restore();
+	}
+} )();
+
+/*
+ * Perfmatters settings. The settings form sends a field once it is touched,
+ * even when it is put back, and the save stripped quotes and angle brackets
+ * from the fields Perfmatters prints raw, so a DNS prefetch line their own
+ * form had kept lost its quotes on a save that changed nothing.
+ */
+( function () use ( $check, $skip, $call, $keep_option ) {
+	if ( ! function_exists( 'minn_admin_perfmatters_save' ) || ! function_exists( 'minn_admin_perfmatters_can' ) || ! minn_admin_perfmatters_can() ) {
+		$skip( 'Perfmatters settings: Perfmatters inactive' );
+		return;
+	}
+	if ( ! current_user_can( 'unfiltered_html' ) || ! Minn_Admin::code_edits_allowed() ) {
+		$skip( 'Perfmatters settings: this account may not edit the fields Perfmatters prints raw here' );
+		return;
+	}
+	$tab = '';
+	foreach ( minn_admin_perfmatters_tabs() as $id => $t ) {
+		if ( in_array( 'preload', (array) ( $t['sections'] ?? array() ), true ) ) {
+			$tab = (string) $id;
+		}
+	}
+	if ( '' === $tab ) {
+		$skip( 'Perfmatters settings: no tab holds the preload section' );
+		return;
+	}
+	$key     = 'perfmatters_options:preload:dns_prefetch';
+	$restore = $keep_option( 'perfmatters_options' );
+	$lines   = function () {
+		wp_cache_delete( 'perfmatters_options', 'options' );
+		wp_cache_delete( 'alloptions', 'options' );
+		$o = get_option( 'perfmatters_options', array() );
+		return $o['preload']['dns_prefetch'] ?? null;
+	};
+	try {
+		$o = get_option( 'perfmatters_options', array() );
+		$o = is_array( $o ) ? $o : array();
+		$o['preload']                 = isset( $o['preload'] ) && is_array( $o['preload'] ) ? $o['preload'] : array();
+		$seed                         = array( "//cdn.example.com/?v='1'", '//fonts.example.com' );
+		$o['preload']['dns_prefetch'] = $seed;
+		update_option( 'perfmatters_options', $o );
+		if ( $seed !== $lines() ) {
+			$skip( 'Perfmatters settings: Perfmatters stores these lines cleaned, so they are not stored values there' );
+			return;
+		}
+		list( , $read ) = $call( 'GET', "/minn-admin/v1/perfmatters/settings/{$tab}" );
+		$served         = $read['values'][ $key ] ?? null;
+		list( $st, $d ) = $call( 'POST', "/minn-admin/v1/perfmatters/settings/{$tab}", array( 'values' => array( $key => $served ) ) );
+		$check( 'Perfmatters settings: a DNS prefetch list sent back as read answers 200 and keeps its quotes', 200 === $st && $seed === $lines(), $st . ' ' . wp_json_encode( 200 === $st ? $lines() : $d ) );
+		list( $st ) = $call( 'POST', "/minn-admin/v1/perfmatters/settings/{$tab}", array( 'values' => array( $key => "//a.example.com/?q='x'" ) ) );
+		$check( 'Perfmatters settings: a changed line is still written with the quotes stripped (control)', 200 === $st && array( '//a.example.com/?q=x' ) === $lines(), $st . ' ' . wp_json_encode( $lines() ) );
+	} finally {
+		$restore();
 	}
 } )();
 
