@@ -1002,10 +1002,20 @@ class Minn_Admin_DB {
 		array( 'elementor_pro_remote_info_api_data_', '' ),
 		array( '_site_transient_elementor_pro_api_request_', '' ),
 		array( 'wp-all-import-pro_', '' ),
-		// Formidable's Stripe and Square Connect: the passwords the site
-		// signs its Connect requests with.
+		// Formidable's Stripe, Square and PayPal Connect: the passwords the
+		// site signs its Connect requests with, and the one-time token its
+		// unauthenticated verify endpoint accepts for 15 minutes while a
+		// Connect onboarding runs (frm_{stripe,square,paypal}_lite_connect_verify).
 		array( 'frm_strp_connect_', '' ),
 		array( 'frm_square_connect_', '' ),
+		array( 'frm_paypal_connect_', '' ),
+		array( 'frm_', '_lite_connect_verify' ),
+		// Sucuri's freshly generated two-factor backup codes, in plain text
+		// for the five minutes it shows them (the user id ends the name).
+		array( '_transient_sucuriscan_backup_codes_reveal_', '' ),
+		// SureCart's hash of the account password a shopper typed at
+		// checkout, kept a day until the order creates the account.
+		array( '_transient_sc_checkout_password_hash_', '' ),
 	);
 
 	/**
@@ -1102,9 +1112,11 @@ class Minn_Admin_DB {
 
 	/**
 	 * usermeta keys whose value is a credential: sessions, app passwords,
-	 * TOTP seeds and emergency codes (core Two Factor, Sucuri, All In One
-	 * Security), and the plaintext one-time sign-in tokens the One Time
-	 * Login and WP Freighter routes mint (each signs in as that user).
+	 * TOTP seeds and emergency codes (core Two Factor and Solid Security,
+	 * Sucuri, All In One Security), the hash of the code an email second
+	 * factor sent (core Two Factor and Solid Security), and the plaintext
+	 * one-time sign-in tokens the One Time Login and WP Freighter routes
+	 * mint (each signs in as that user).
 	 */
 	/**
 	 * usermeta rows redacted by name shape. Elementor Connect keeps each
@@ -1116,7 +1128,7 @@ class Minn_Admin_DB {
 		array( '', 'elementor_connect_common_data' ),
 	);
 
-	const SECRET_USERMETA_KEYS = array( 'session_tokens', '_application_passwords', '_two_factor_totp_key', '_two_factor_backup_codes', 'one_time_login_token', 'captaincore_login_token', 'sucuriscan_topt_secret_key', 'tfa_priv_key_64', 'simba_tfa_emergency_codes_64', 'tfa_trusted_devices', 'updraftcentral_login_key', 'wpmdb_licence_key' );
+	const SECRET_USERMETA_KEYS = array( 'session_tokens', '_application_passwords', '_two_factor_totp_key', '_two_factor_backup_codes', 'one_time_login_token', 'captaincore_login_token', 'sucuriscan_topt_secret_key', 'sucuriscan_topt_backup_codes', '_two_factor_email_token', 'tfa_priv_key_64', 'simba_tfa_emergency_codes_64', 'tfa_trusted_devices', 'updraftcentral_login_key', 'wpmdb_licence_key' );
 
 	/**
 	 * Option and network option rows redacted whole: core's keys and salts,
@@ -1130,7 +1142,18 @@ class Minn_Admin_DB {
 	 * Post SMTP's settings and its plaintext OAuth access and refresh tokens,
 	 * Freemius accounts (user, install and licence secret keys), the WPMU DEV
 	 * key (the HMAC secret its Hub's remote commands are verified with) and
-	 * Smush's validation cache, which is keyed by that same key. Core's plugin
+	 * Smush's validation cache, which is keyed by that same key. Formidable
+	 * Lite's usage uuid is the password it signs Connect requests with when
+	 * no licence is active; Solid Security keeps its Network Brute Force API
+	 * key and secret in itsec-storage; OttoKit's settings row holds the
+	 * secret its SaaS signs every call to the site with; WP Statistics keeps
+	 * its MaxMind and DB-IP licence keys in its settings row, its add-on
+	 * licences apart and, on a site without salts, its encryption key;
+	 * Independent Analytics signs tracking payloads with one salt and hashes
+	 * visitors with another; SureCart keeps its reCAPTCHA secret and its
+	 * webhook signing secret (sealed with a key that may not exist); and
+	 * CleanTalk's self-call tokens let a request skip its remote-call rate
+	 * limit for two minutes. Core's plugin
 	 * and theme update caches hold every premium vendor's download link, and
 	 * some links carry the licence key; Gravity Forms' telemetry snapshot
 	 * copies its key. Freemius' API cache keeps its licence answers, secret keys
@@ -1138,7 +1161,7 @@ class Minn_Admin_DB {
 	 * secret keys in its settings row and its Square tokens in their own row,
 	 * sealed with the key in wpforms_crypto_secret_key.
 	 */
-	const SECRET_OPTION_KEYS = array( 'auth_key', 'secure_auth_key', 'logged_in_key', 'nonce_key', 'auth_salt', 'secure_auth_salt', 'logged_in_salt', 'nonce_salt', 'secret_key', 'jetpack_private_options', 'woocommerce_helper_data', 'wp_mail_smtp', 'wp_mail_smtp_mail_key', '_transient_wp_mail_smtp_connect_token', 'aio_wp_security_configs', 'postman_options', 'postman_auth_token', 'fs_accounts', 'wpmudev_apikey', 'wp_smush_api_auth', 'jetpack_secrets', '_site_transient_update_plugins', '_site_transient_update_themes', 'gf_telemetry_data', '_site_transient_wp_rocket_update_data', 'fs_api_cache', 'fs_dbg_api_cache', 'wpforms_settings', 'wpforms_crypto_secret_key', 'wpforms_square_connections' );
+	const SECRET_OPTION_KEYS = array( 'auth_key', 'secure_auth_key', 'logged_in_key', 'nonce_key', 'auth_salt', 'secure_auth_salt', 'logged_in_salt', 'nonce_salt', 'secret_key', 'jetpack_private_options', 'woocommerce_helper_data', 'wp_mail_smtp', 'wp_mail_smtp_mail_key', '_transient_wp_mail_smtp_connect_token', 'aio_wp_security_configs', 'postman_options', 'postman_auth_token', 'fs_accounts', 'wpmudev_apikey', 'wp_smush_api_auth', 'jetpack_secrets', '_site_transient_update_plugins', '_site_transient_update_themes', 'gf_telemetry_data', '_site_transient_wp_rocket_update_data', 'fs_api_cache', 'fs_dbg_api_cache', 'wpforms_settings', 'wpforms_crypto_secret_key', 'wpforms_square_connections', 'frm-usage-uuid', 'itsec-storage', 'suretrigger_options', 'wp_statistics', 'wp_statistics_licenses', 'wp_statistics_cipher_key', 'iawp_salt', 'iawp_request_payload_salt', 'surecart_recaptcha_secret_key', 'surecart_registered_webhook', 'surecart_previous_webhook', 'cleantalk_sfw_worker_self_tokens' );
 
 	/**
 	 * Whether a whole COLUMN can hold a credential on some row, so it must
@@ -1365,6 +1388,19 @@ class Minn_Admin_DB {
 	/** The option names the browser treats as credential rows, for guards outside it. */
 	public static function credential_option_names() {
 		return self::secret_option_names();
+	}
+
+	/**
+	 * Whether the browser redacts an option row by its name (a listed name or
+	 * a name shape), for another screen that shows option rows, such as the
+	 * transients list: a value the egress fence cannot recognise as a key (a
+	 * password hash, eight-character backup codes) is hidden only by name.
+	 *
+	 * @param string $name Option name.
+	 * @return bool
+	 */
+	public static function is_credential_option( $name ) {
+		return self::keyed_match( (string) $name, array( 'option_name', self::secret_option_names(), self::secret_option_shapes() ) );
 	}
 
 	/**

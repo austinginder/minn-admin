@@ -19,6 +19,9 @@
  * keys JetEngine reads an object from are set aside while the preview
  * renders and put back after.
  *
+ * The redaction section seeds credential rows the database browser and the
+ * egress fence must hide, and checks each is hidden.
+ *
  * Every section runs inside a database transaction that is rolled back.
  * Sections SKIP when their plugin is inactive.
  *
@@ -572,6 +575,124 @@ rest_get_server();
 	} finally {
 		wp_set_current_user( $admin );
 		$wpdb->query( 'ROLLBACK' );
+	}
+} )();
+
+/*
+ * Redaction: rows the fixture sweep found the database browser printing in
+ * the clear (Formidable's PayPal Connect passwords and Connect verify token,
+ * Sucuri's backup codes and their five-minute plain copy) and the sweep of
+ * the freshly updated vendors that followed (Formidable Lite's Connect uuid,
+ * Solid Security's Network Brute Force secret, OttoKit's SaaS secret, WP
+ * Statistics' licence and encryption keys, Independent Analytics' salts,
+ * SureCart's reCAPTCHA and webhook secrets and a shopper's password hash,
+ * CleanTalk's self-call tokens, the email second factor's code hash). Each
+ * row is seeded in a transaction where the lab has none, and a failing check
+ * prints only whether a cell showed, never the cell.
+ */
+( function () use ( $check, $wpdb, $admin ) {
+	$rows   = function ( $table, $col, $value ) {
+		$r = new WP_REST_Request( 'GET', '/minn-admin/v1/db/rows' );
+		foreach ( array( 'table' => $table, 'fcol' => $col, 'fq' => $value ) as $k => $v ) {
+			$r->set_param( $k, $v );
+		}
+		return json_decode( wp_json_encode( rest_do_request( $r )->get_data() ), true );
+	};
+	$cell   = function ( $d, $col, $by, $val ) {
+		$cols = wp_list_pluck( (array) ( $d['columns'] ?? array() ), 'name' );
+		$ci   = array_search( $col, $cols, true );
+		$bi   = array_search( $by, $cols, true );
+		foreach ( (array) ( $d['rows'] ?? array() ) as $r ) {
+			if ( false !== $bi && (string) $r[ $bi ] === (string) $val ) {
+				return $r[ $ci ];
+			}
+		}
+		return 'missing';
+	};
+	$hidden = function ( $c ) {
+		return is_array( $c ) && ! empty( $c['redacted'] );
+	};
+	$shape  = function ( $c ) use ( $hidden ) {
+		return $hidden( $c ) ? 'redacted' : ( 'missing' === $c ? 'missing' : 'shown, ' . strlen( is_array( $c ) ? wp_json_encode( $c ) : (string) $c ) . ' bytes' );
+	};
+	$opt    = function ( $name ) use ( $rows, $cell, $wpdb ) {
+		return $cell( $rows( $wpdb->options, 'option_name', $name ), 'option_value', 'option_name', $name );
+	};
+	$token  = 'MinnPrerc' . wp_rand( 100000, 999999 ) . 'tok7Q2xZ' . wp_rand( 1000, 9999 );
+	$wpdb->query( 'START TRANSACTION' );
+	try {
+		$seed = array(
+			'frm_paypal_connect_server_password_live'           => 'srv_' . $token,
+			'frm_paypal_connect_client_password_test'           => 'p@ss-Wd!12',
+			'frm_stripe_lite_connect_verify'                    => array( 'token' => $token, 'time' => time() ),
+			'frm_paypal_lite_connect_verify'                    => array( 'token' => 'pp' . $token, 'time' => time() ),
+			'_transient_sucuriscan_backup_codes_reveal_' . $admin => array( '23456789', 'ABCDEFGH', 'K2M3N4P5' ),
+			'_transient_sc_checkout_password_hash_minnprerc'    => '$wp$2y$10$abcdefghijklmnopqrstuuJ8xQ0Yq1Zb2Cc3Dd4Ee5Ff6Gg7Hh8',
+			'frm-usage-uuid'                                    => md5( $token ),
+			'itsec-storage'                                     => array( 'network-brute-force' => array( 'api_key' => 'k_' . $token, 'api_secret' => 's_' . $token ) ),
+			'suretrigger_options'                               => array( 'secret_key' => 'st_' . $token ),
+			'wp_statistics'                                     => array( 'geoip_license_key' => 'mm_' . $token ),
+			'wp_statistics_licenses'                            => array( 'data-plus' => array( 'license' => 'lic_' . $token ) ),
+			'wp_statistics_cipher_key'                          => base64_encode( 'minn prerc cipher key 32 bytes!!' ),
+			'iawp_salt'                                         => 'Ab3.De4/Gh5Ij6Kl7Mn8Op9Qr0St1Uv2Wx3Yz4Ab5Cd6E',
+			'iawp_request_payload_salt'                         => 'Zy9.Xw8/Vu7Ts6Rq5Po4Nm3Lk2Ji1Hg0Fe9Dc8Ba7Zy6X',
+			'surecart_recaptcha_secret_key'                     => 'rc_' . $token,
+			'surecart_registered_webhook'                       => base64_encode( 'sealed ' . $token ),
+			'surecart_previous_webhook'                         => base64_encode( 'sealed old ' . $token ),
+			'cleantalk_sfw_worker_self_tokens'                  => array( md5( 'cleantalk' . $token ) => time() + 120 ),
+		);
+		foreach ( $seed as $name => $value ) {
+			if ( false === get_option( $name ) ) {
+				add_option( $name, $value, '', false );
+			}
+		}
+		foreach ( array_keys( $seed ) as $name ) {
+			$c = $opt( $name );
+			$check( "redaction: the database browser hides {$name}", $hidden( $c ), $shape( $c ) );
+		}
+		add_option( 'frm_stripe_lite_connect_verify_time', '1700000000', '', false );
+		add_option( 'iawp_visitor_salt_refresh_interval', 'daily', '', false );
+		$check( 'redaction: control: a row that only starts like one still shows', ! $hidden( $opt( 'frm_stripe_lite_connect_verify_time' ) ) && ! $hidden( $opt( 'iawp_visitor_salt_refresh_interval' ) ), $shape( $opt( 'iawp_visitor_salt_refresh_interval' ) ) );
+
+		foreach ( array( 'sucuriscan_topt_backup_codes' => array( wp_hash_password( '23456789' ) ), '_two_factor_email_token' => array( 'hash' => wp_hash( '12345678' ), 'created' => time() ) ) as $key => $value ) {
+			$umid = add_user_meta( $admin, $key, $value );
+			$c    = $cell( $rows( $wpdb->usermeta, 'meta_key', $key ), 'meta_value', 'umeta_id', $umid );
+			$check( "redaction: the database browser hides usermeta {$key}", $umid && $hidden( $c ), $shape( $c ) );
+		}
+
+		$check( 'redaction: other screens can ask whether a row is one, by name or by shape', method_exists( 'Minn_Admin_DB', 'is_credential_option' )
+			&& Minn_Admin_DB::is_credential_option( '_transient_sc_checkout_password_hash_x1' ) && Minn_Admin_DB::is_credential_option( 'itsec-storage' )
+			&& ! Minn_Admin_DB::is_credential_option( 'iawp_visitor_salt_refresh_interval' ) );
+
+		// The egress fence takes its credentials from the same rows: a
+		// token-shaped value from one never leaves a minn-admin/v1 response.
+		if ( class_exists( 'Minn_Admin_Egress' ) ) {
+			Minn_Admin_Egress::reset();
+			$server = rest_get_server();
+			register_rest_route( 'minn-admin/v1', '/minn-prerc-egress/leak', array( 'methods' => 'GET', 'permission_callback' => '__return_true', 'callback' => function () {
+				$verify = get_option( 'frm_stripe_lite_connect_verify' );
+				$st     = get_option( 'suretrigger_options' );
+				return array(
+					'verify' => is_array( $verify ) ? (string) ( $verify['token'] ?? '' ) : '',
+					'uuid'   => (string) get_option( 'frm-usage-uuid' ),
+					'saas'   => is_array( $st ) ? (string) ( $st['secret_key'] ?? '' ) : '',
+				);
+			} ) );
+			$req  = new WP_REST_Request( 'GET', '/minn-admin/v1/minn-prerc-egress/leak' );
+			$res  = apply_filters( 'rest_post_dispatch', rest_ensure_response( rest_do_request( $req ) ), $server, $req );
+			$data = apply_filters( 'rest_pre_echo_response', $server->response_to_data( $res, false ), $server, $req );
+			$out  = (string) wp_json_encode( $data );
+			$raw  = $res->get_data();
+			$check( 'redaction: a Connect verify token, a Connect uuid and a SaaS secret never leave a Minn response', '' !== ( $raw['verify'] ?? '' ) && false === strpos( $out, (string) $raw['verify'] ) && false === strpos( $out, (string) $raw['uuid'] ) && false === strpos( $out, (string) $raw['saas'] ), substr_count( $out, '[redacted' ) . ' redacted' );
+		}
+	} finally {
+		$wpdb->query( 'ROLLBACK' );
+		wp_cache_delete( 'alloptions', 'options' );
+		wp_cache_delete( 'notoptions', 'options' );
+		wp_cache_delete( $admin, 'user_meta' );
+		if ( class_exists( 'Minn_Admin_Egress' ) ) {
+			Minn_Admin_Egress::reset();
+		}
 	}
 } )();
 
