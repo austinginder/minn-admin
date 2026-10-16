@@ -111,7 +111,7 @@ run security-v045-registry single --user=admin
 run security-v046-kernel single --user=admin
 run security-v046-registry-rest single --user=admin
 run security-v046-registry-reads single --user=admin
-run security-v046-registry-writes single --user=admin
+MINN_SWAP_ADD=custom-css-js/custom-css-js.php run security-v046-registry-writes single --user=admin --require=tests/lib/plugin-swap.php
 run sweep-v044 single --user=admin
 run write-fences single --user=admin
 
