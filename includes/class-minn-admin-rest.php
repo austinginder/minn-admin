@@ -6250,8 +6250,12 @@ class Minn_Admin_REST {
 	}
 
 	/**
-	 * Accounts that picked their own palette instead of the site default:
-	 * the ids of every saved appearance whose scheme is not 'site'.
+	 * Accounts that picked their own palette instead of the site default and
+	 * whose choice the current user may change: every saved appearance whose
+	 * scheme is not 'site', of an account the current user may edit_user
+	 * (what each account's own appearance route asks). On a network the
+	 * record is the account's own on every site, so a site's administrator
+	 * may not reset a super admin's, or another site's administrator's.
 	 *
 	 * @return int[]
 	 */
@@ -6266,7 +6270,7 @@ class Minn_Admin_REST {
 		$out = array();
 		foreach ( $ids as $id ) {
 			$ap = Minn_Admin::get_user_appearance( (int) $id );
-			if ( 'site' !== $ap['scheme'] ) {
+			if ( 'site' !== $ap['scheme'] && current_user_can( 'edit_user', (int) $id ) ) {
 				$out[] = (int) $id;
 			}
 		}
@@ -6288,9 +6292,9 @@ class Minn_Admin_REST {
 
 	/**
 	 * POST minn-admin/v1/site-appearance { scheme, custom, mode, resetUsers }.
-	 * resetUsers moves every account that picked its own palette back to the
-	 * site default; their other preferences (default admin, Minn bar, font)
-	 * stay as they are.
+	 * resetUsers moves every account that picked its own palette, and that
+	 * the caller may edit, back to the site default; their other preferences
+	 * (default admin, Minn bar, font) stay as they are.
 	 */
 	public static function update_site_appearance( WP_REST_Request $request ) {
 		$json = $request->get_json_params();
