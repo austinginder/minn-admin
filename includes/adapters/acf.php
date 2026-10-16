@@ -2471,8 +2471,14 @@ function minn_admin_acf_display_value( $f, $v ) {
 			if ( ! $id ) {
 				return $empty;
 			}
-			$title = get_the_title( (int) $id );
-			return '' !== $title ? $title : '#' . (int) $id;
+			// ACF stores any number here, and core's Custom Fields box lets
+			// the post's author write one, so the id can name any post. Its
+			// title shows only for an attachment the viewer may read, as
+			// minn_admin_attachment_in() rules; anything else is the number,
+			// which is all ACF's own comparison shows.
+			$id    = (int) $id;
+			$title = $id > 0 && 'attachment' === get_post_type( $id ) && current_user_can( 'read_post', $id ) ? get_the_title( $id ) : '';
+			return '' !== $title ? $title : '#' . $id;
 		case 'link':
 			$v = (array) $v;
 			return ( $v['url'] ?? '' ) ? (string) $v['url'] : $empty;
