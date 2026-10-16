@@ -996,7 +996,11 @@ function minn_admin_wc_settings_api_schema( $obj, $admin_url, $fields = null, $r
 		if ( ! isset( $wf['desc_tip'] ) ) {
 			$wf['desc_tip'] = true;
 		}
-		$wf['value']       = call_user_func( $read, $key, isset( $f['default'] ) ? $f['default'] : '' );
+		// The stored value as their own form reads it (get_option( $key ),
+		// a null empty value): passing the default as the empty value turned
+		// a field someone cleared on purpose back into the default text,
+		// shown here and saved by the next edit of any other field.
+		$wf['value']       = call_user_func( $read, $key, null );
 		$wf['minn_object'] = true;
 		// WC_Settings_API keys by get_field_key( id ); a field_name would
 		// re-key the result away from the id this loop maps back.
@@ -1076,7 +1080,8 @@ function minn_admin_wc_settings_api_post_data( $obj, $edited, $fields = null, $r
 		$wf          = $f;
 		$wf['id']    = (string) $key;
 		$wf['type']  = $type;
-		$wf['value']       = call_user_func( $read, $key, isset( $f['default'] ) ? $f['default'] : '' );
+		// As stored, a null empty value: see minn_admin_wc_settings_api_schema().
+		$wf['value']       = call_user_func( $read, $key, null );
 		$wf['minn_object'] = true;
 		// WC_Settings_API keys by get_field_key( id ); a field_name would
 		// re-key the result away from the id this loop maps back.
