@@ -387,10 +387,12 @@ minn_admin_endpoint( 'fluent-snippets/(?P<file>[^/]+)', array(
 			return $now;
 		}
 		list( , $meta, $code ) = $now;
-		if ( null !== $request['name'] ) {
+		// A field the dialog sends back as stored is left as stored: cleaning
+		// an untouched value rewrites it ("50%DEAL" loses "%DE").
+		if ( null !== $request['name'] && (string) $request['name'] !== (string) ( $meta['name'] ?? '' ) ) {
 			$meta['name'] = sanitize_text_field( (string) $request['name'] );
 		}
-		if ( null !== $request['desc'] ) {
+		if ( null !== $request['desc'] && (string) $request['desc'] !== (string) ( $meta['description'] ?? '' ) ) {
 			$meta['description'] = sanitize_textarea_field( (string) $request['desc'] );
 		}
 		if ( null !== $request['code'] ) {
@@ -405,7 +407,7 @@ minn_admin_endpoint( 'fluent-snippets/(?P<file>[^/]+)', array(
 		if ( null !== $request['priority'] ) {
 			$meta['priority'] = (int) $request['priority'];
 		}
-		if ( null !== $request['tags'] ) {
+		if ( null !== $request['tags'] && ( is_array( $request['tags'] ) ? implode( ', ', array_map( 'strval', $request['tags'] ) ) : (string) $request['tags'] ) !== (string) ( $meta['tags'] ?? '' ) ) {
 			$tags         = $request['tags'];
 			$meta['tags'] = is_array( $tags )
 				? implode( ', ', array_map( 'sanitize_text_field', $tags ) )

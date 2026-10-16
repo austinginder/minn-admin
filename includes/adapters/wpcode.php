@@ -883,7 +883,10 @@ minn_admin_resource( 'wpcode/snippets', function () {
 						? (int) rest_sanitize_boolean( $request['auto_insert'] )
 						: $was_auto;
 					$patch = array( 'auto_insert' => $want_auto );
-					if ( null !== $request['name'] ) {
+					// A field the dialog sends back as stored is left as stored:
+					// cleaning an untouched value rewrites it ("50%DEAL" loses
+					// "%DE"). Only a changed one is cleaned and written.
+					if ( null !== $request['name'] && (string) $request['name'] !== (string) $snippet->get_title() ) {
 						$patch['title'] = sanitize_text_field( (string) $request['name'] );
 					}
 					if ( null !== $request['code'] ) {
@@ -904,10 +907,10 @@ minn_admin_resource( 'wpcode/snippets', function () {
 					if ( null !== $request['priority'] ) {
 						$patch['priority'] = (int) $request['priority'];
 					}
-					if ( null !== $request['tags'] ) {
+					if ( null !== $request['tags'] && array_map( 'strval', array_values( (array) $request['tags'] ) ) !== array_map( 'strval', array_values( (array) $snippet->get_tags() ) ) ) {
 						$patch['tags'] = array_map( 'sanitize_text_field', (array) $request['tags'] );
 					}
-					if ( null !== $request['desc'] ) {
+					if ( null !== $request['desc'] && (string) $request['desc'] !== (string) $snippet->get_note() ) {
 						$patch['note'] = sanitize_textarea_field( (string) $request['desc'] );
 					}
 					if ( null !== $request['active'] && current_user_can( 'wpcode_activate_snippets' ) ) {

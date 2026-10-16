@@ -803,5 +803,108 @@ if ( function_exists( 'minn_admin_novamira_active' ) && minn_admin_novamira_acti
 	}
 } )();
 
+/*
+ * Found by the seeded round trip (roundtrip.sh, lib/roundtrip-seed.php),
+ * the #14 class in three more snippet stores: WPCode, Header Footer Code
+ * Manager and FluentSnippets cleaned the name, the description and the tags
+ * on every save, so an edit that changed only another field rewrote them
+ * ("50%DEAL" lost "%DE", inline markup was stripped).
+ */
+$awkward = "Minn 50%DEAL &amp; <em>Fish</em> 'chips' é";
+( function () use ( $check, $skip, $call, $wpdb, $awkward ) {
+	if ( ! function_exists( 'minn_admin_hfcm_active' ) || ! minn_admin_hfcm_active() ) {
+		$skip( 'seeded HFCM inactive' );
+		return;
+	}
+	$table = $wpdb->prefix . 'hfcm_scripts';
+	$id    = (int) $wpdb->get_var( "SELECT script_id FROM {$table} ORDER BY script_id ASC LIMIT 1" ); // phpcs:ignore
+	if ( ! $id ) {
+		$skip( 'seeded HFCM has no snippet' );
+		return;
+	}
+	$wpdb->query( 'START TRANSACTION' );
+	try {
+		$wpdb->update( $table, array( 'name' => $awkward ), array( 'script_id' => $id ) );
+		$row  = $wpdb->get_row( $wpdb->prepare( "SELECT device_type FROM {$table} WHERE script_id = %d", $id ), ARRAY_A ); // phpcs:ignore
+		$next = 'mobile' === $row['device_type'] ? 'desktop' : 'mobile';
+		list( $st, $d ) = $call( 'PUT', "/minn-admin/v1/hfcm/snippets/{$id}", array( 'name' => $awkward, 'device_type' => $next ) );
+		$now = $wpdb->get_row( $wpdb->prepare( "SELECT name, device_type FROM {$table} WHERE script_id = %d", $id ), ARRAY_A ); // phpcs:ignore
+		$check( 'seeded HFCM: a device-only edit answers 200 and writes the device', 200 === $st && $next === $now['device_type'], $st . ' ' . wp_json_encode( $d ) );
+		$check( 'seeded HFCM: and keeps the stored name', $awkward === $now['name'], wp_json_encode( $now['name'] ) );
+		list( $st ) = $call( 'PUT', "/minn-admin/v1/hfcm/snippets/{$id}", array( 'name' => 'Minn <b>rename</b>' ) );
+		$check( 'seeded HFCM: a real rename is cleaned and written (control)', 200 === $st && 'Minn rename' === $wpdb->get_var( $wpdb->prepare( "SELECT name FROM {$table} WHERE script_id = %d", $id ) ), (string) $st ); // phpcs:ignore
+	} finally {
+		$wpdb->query( 'ROLLBACK' );
+		wp_cache_flush();
+	}
+} )();
+
+( function () use ( $check, $skip, $call, $wpdb, $awkward ) {
+	if ( ! function_exists( 'wpcode' ) || ! class_exists( 'WPCode_Snippet' ) ) {
+		$skip( 'seeded WPCode inactive' );
+		return;
+	}
+	$ids = get_posts( array( 'post_type' => 'wpcode', 'post_status' => 'any', 'numberposts' => 1, 'orderby' => 'ID', 'order' => 'ASC', 'fields' => 'ids' ) );
+	if ( ! $ids ) {
+		$skip( 'seeded WPCode has no snippet' );
+		return;
+	}
+	$id   = (int) $ids[0];
+	$note = "Line one 50%DEAL &amp; é\n\nLine two <b>bold</b>";
+	$wpdb->query( 'START TRANSACTION' );
+	try {
+		$wpdb->update( $wpdb->posts, array( 'post_title' => $awkward ), array( 'ID' => $id ) );
+		update_post_meta( $id, '_wpcode_note', wp_slash( $note ) );
+		clean_post_cache( $id );
+		$prio = (int) get_post_meta( $id, '_wpcode_priority', true );
+		list( $st, $d ) = $call( 'PUT', "/minn-admin/v1/wpcode/snippets/{$id}", array( 'name' => $awkward, 'desc' => $note, 'priority' => $prio + 3 ) );
+		clean_post_cache( $id );
+		$check( 'seeded WPCode: a priority-only edit answers 200 and writes the priority', 200 === $st && $prio + 3 === (int) get_post_meta( $id, '_wpcode_priority', true ), $st . ' ' . wp_json_encode( $d ) );
+		$check( 'seeded WPCode: and keeps the stored title', $awkward === get_post( $id )->post_title, wp_json_encode( get_post( $id )->post_title ) );
+		$check( 'seeded WPCode: and keeps the stored note', $note === get_post_meta( $id, '_wpcode_note', true ), wp_json_encode( get_post_meta( $id, '_wpcode_note', true ) ) );
+		list( $st ) = $call( 'PUT', "/minn-admin/v1/wpcode/snippets/{$id}", array( 'name' => 'Minn <b>rename</b>' ) );
+		clean_post_cache( $id );
+		$check( 'seeded WPCode: a real rename is cleaned and written (control)', 200 === $st && 'Minn rename' === get_post( $id )->post_title, (string) $st . ' ' . wp_json_encode( get_post( $id )->post_title ) );
+	} finally {
+		$wpdb->query( 'ROLLBACK' );
+		wp_cache_flush();
+	}
+} )();
+
+( function () use ( $check, $skip, $call, $once, $awkward ) {
+	if ( ! function_exists( 'minn_admin_fluent_ready' ) || ! minn_admin_fluent_ready() ) {
+		$skip( 'seeded FluentSnippets inactive' );
+		return;
+	}
+	// A draft PHP snippet, so nothing it holds ever runs; its file goes
+	// however the section ends.
+	list( $st, $made ) = $call( 'POST', '/minn-admin/v1/fluent-snippets', array( 'name' => 'Minn seeded', 'desc' => 'x', 'code' => '// minn suite', 'type' => 'PHP', 'run_at' => 'all', 'active' => false ) );
+	$file = is_array( $made ) ? (string) ( $made['id'] ?? $made['file'] ?? '' ) : '';
+	if ( 201 !== $st && 200 !== $st || '' === $file ) {
+		$check( 'seeded FluentSnippets: a draft snippet is created for the check', false, $st . ' ' . wp_json_encode( $made ) );
+		return;
+	}
+	$clean = $once( function () use ( $call, $file ) {
+		$call( 'DELETE', '/minn-admin/v1/fluent-snippets/' . rawurlencode( $file ) );
+	} );
+	try {
+		list( , $meta, $code ) = minn_admin_fluent_load( $file );
+		$meta['name']        = $awkward;
+		$meta['description'] = "Line one 50%DEAL &amp; é\n\nLine two <b>bold</b>";
+		minn_admin_fluent_save( $file, $meta, $code );
+		list( , $stored ) = minn_admin_fluent_load( $file );
+		if ( (string) ( $stored['name'] ?? '' ) !== $awkward ) {
+			$skip( 'seeded FluentSnippets stores names cleaned by its own updater, so an awkward name is not a stored value there' );
+			return;
+		}
+		list( $st, $d ) = $call( 'PUT', '/minn-admin/v1/fluent-snippets/' . rawurlencode( $file ), array( 'name' => $stored['name'], 'desc' => $stored['description'], 'priority' => 15 ) );
+		list( , $now ) = minn_admin_fluent_load( $file );
+		$check( 'seeded FluentSnippets: a priority-only edit answers 200 and writes the priority', 200 === $st && 15 === (int) ( $now['priority'] ?? 0 ), $st . ' ' . wp_json_encode( $d ) );
+		$check( 'seeded FluentSnippets: and keeps the stored name and description', $stored['name'] === ( $now['name'] ?? null ) && $stored['description'] === ( $now['description'] ?? null ), wp_json_encode( array( $now['name'] ?? null, $now['description'] ?? null ) ) );
+	} finally {
+		$clean();
+	}
+} )();
+
 printf( "\nsecurity-v046-registry-writes: %d/%d passed\n", count( array_filter( $results ) ), count( $results ) );
 exit( count( array_filter( $results ) ) === count( $results ) ? 0 : 1 );

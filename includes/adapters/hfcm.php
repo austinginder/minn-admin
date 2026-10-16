@@ -201,7 +201,9 @@ function minn_admin_hfcm_edit( array $item, WP_REST_Request $request ) {
 	$body = $request->get_json_params();
 	$body = is_array( $body ) ? $body : array();
 	$data = array( 'last_revision_date' => current_time( 'mysql' ), 'last_modified_by' => minn_admin_hfcm_who() );
-	if ( isset( $body['name'] ) ) {
+	// A name the dialog sends back as stored is left as stored: cleaning an
+	// untouched value rewrites it ("50%DEAL" loses "%DE").
+	if ( isset( $body['name'] ) && (string) $body['name'] !== (string) $item['name'] ) {
 		$data['name'] = sanitize_text_field( $body['name'] );
 	}
 	$retargets = ( isset( $body['snippet_type'] ) && in_array( $body['snippet_type'], MINN_ADMIN_HFCM_TYPES, true ) && (string) $body['snippet_type'] !== (string) $item['snippet_type'] )
