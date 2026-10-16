@@ -94,7 +94,12 @@ function minn_admin_jet_tc_item( $post ) {
 	}
 	return array(
 		'id'           => (int) $post->ID,
-		'title'        => '' !== $post->post_title ? $post->post_title : __( '(no title)', 'minn-admin' ),
+		// The stored title, as stored ('' for an untitled template): the
+		// rename dialog sends an untouched title back as the row has it, so
+		// a display fallback here would be saved as the title.
+		'title'        => (string) $post->post_title,
+		// What the list shows.
+		'label'        => '' !== $post->post_title ? $post->post_title : __( '(no title)', 'minn-admin' ),
 		'type'         => $type,
 		'typeLabel'    => $type ? ( $types[ $type ] ?? $type ) : __( 'Unassigned', 'minn-admin' ),
 		'contentType'  => $ctypes[ $ctype ] ?? ( $ctype ? $ctype : $ctypes['default'] ),
@@ -144,7 +149,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'tabs'      => array( 'param' => 'type', 'static' => $type_tabs, 'allLabel' => __( 'All', 'minn-admin' ) ),
 			'search'    => 'search={q}',
 			'columns'   => array(
-				array( 'key' => 'title', 'label' => __( 'Template', 'minn-admin' ), 'format' => 'title' ),
+				array( 'key' => 'label', 'label' => __( 'Template', 'minn-admin' ), 'format' => 'title' ),
 				array( 'key' => 'typeLabel', 'label' => __( 'Type', 'minn-admin' ), 'format' => 'pill', 'width' => '120px' ),
 				array( 'key' => 'contentType', 'label' => __( 'Canvas', 'minn-admin' ), 'width' => '120px' ),
 				array( 'key' => 'conditions', 'label' => __( 'Conditions', 'minn-admin' ), 'width' => 'minmax(0,1.2fr)' ),
@@ -161,7 +166,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				),
 			),
 			'detail'    => array(
-				'skip' => array( 'id', 'type', 'typeLabel', 'editUrl', 'status' ),
+				'skip' => array( 'id', 'label', 'type', 'typeLabel', 'editUrl', 'status' ),
 				'edit' => array(
 					'route'  => 'minn-admin/v1/jet-theme-core/templates/{id}',
 					'method' => 'PUT',
@@ -280,7 +285,14 @@ add_action( 'rest_api_init', function () {
 			if ( ! $p || ! current_user_can( 'edit_post', $p->ID ) ) {
 				return new WP_Error( 'not_found', __( 'Template not found', 'minn-admin' ), array( 'status' => 404 ) );
 			}
-			$title = sanitize_text_field( (string) $request->get_param( 'title' ) );
+			// The dialog sends the title as the row has it when it is left
+			// alone: that writes nothing, so cleaning never rewrites a title
+			// Jet's own screen stored (a '50%DEAL' footer, an untitled draft).
+			$sent = $request->get_param( 'title' );
+			if ( null === $sent || (string) $sent === (string) $p->post_title ) {
+				return rest_ensure_response( minn_admin_jet_tc_item( $p ) );
+			}
+			$title = sanitize_text_field( (string) $sent );
 			if ( '' === $title ) {
 				return new WP_Error( 'missing_title', __( 'A template needs a title.', 'minn-admin' ), array( 'status' => 400 ) );
 			}

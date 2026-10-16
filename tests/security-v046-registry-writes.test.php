@@ -1,12 +1,14 @@
 <?php
 /**
  * Regressions for the v0.45.0 shipped-zip registry scan: saves that rewrote
- * a field the person did not change (findings #6, #13, #14, #15, #16).
+ * a field the person did not change (findings #6, #13, #14, #15, #16, and
+ * the siblings their sweep found in the Gravity Forms and WPForms entry
+ * editors and the JetThemeCore and Elementor template renames).
  *
  * Each section seeds a stored value the old save path changed (a description
  * with a link and line breaks, labels CPT UI keeps entity-encoded, a JetSearch
  * name '50%DEAL', a multi-choice answer holding a choice the form no longer
- * offers, an unnamed WP Freighter tenant), replays what Minn's client sends
+ * offers, an unnamed WP Freighter tenant or template), replays what Minn's client sends
  * for an edit that leaves that field alone, and checks the stored bytes.
  * Sections SKIP when their plugin is inactive; the Freighter section runs on
  * a WP Freighter host.
@@ -411,6 +413,168 @@ rest_get_server();
 		$restore();
 	}
 	$check( '#16 the tenant ends with its own name', $orig === (string) ( \WPFreighter\Site::get( $id )['name'] ?? '' ) );
+} )();
+
+/*
+ * Sibling of #13/#15: the Gravity Forms and WPForms entry editors dropped a
+ * stored multi-choice pick the form no longer offers on the first edit of
+ * that answer. WPForms' own save drops any value outside the field's choices
+ * too, so Minn's save admits the entry's own stored picks through their
+ * wpforms_field_choices_allow_unknown_value filter for that save.
+ */
+( function () use ( $check, $skip, $call, $once ) {
+	if ( ! class_exists( 'GFAPI' ) || ! function_exists( 'minn_admin_gf_entry_edit_block' ) || ! GFCommon::current_user_can_any( array( 'gravityforms_edit_entries', 'gform_full_access' ) ) ) {
+		$skip( 'GF multi-choice: Gravity Forms inactive' );
+		return;
+	}
+	$form_id = 0;
+	$clean   = $once( function () use ( &$form_id ) {
+		if ( $form_id ) {
+			GFAPI::delete_form( $form_id );
+		}
+	} );
+	try {
+		$form_id = GFAPI::add_form( array(
+			'title'  => 'Minn registry writes ' . wp_rand( 1000, 9999 ),
+			'fields' => array(
+				array( 'id' => 1, 'type' => 'multiselect', 'label' => 'Picks', 'storageType' => 'json', 'choices' => array( array( 'text' => 'A', 'value' => 'A' ), array( 'text' => 'B', 'value' => 'B' ) ) ),
+			),
+		) );
+		if ( is_wp_error( $form_id ) || ! $form_id ) {
+			$form_id = 0;
+			$skip( 'GF multi-choice: Gravity Forms would not store a test form' );
+			return;
+		}
+		$entry_id = GFAPI::add_entry( array( 'form_id' => $form_id, '1' => wp_json_encode( array( 'A', 'Gone' ) ) ) );
+		$block    = minn_admin_gf_entry_edit_block( GFAPI::get_form( $form_id ), GFAPI::get_entry( $entry_id ) );
+		$row      = $block['fields'][0] ?? null;
+		$values   = $row ? array_map( 'strval', wp_list_pluck( (array) ( $row['choices'] ?? array() ), 0 ) ) : array();
+		$served   = $row ? $row['inputs'][0]['value'] : null;
+		$check( 'GF multi-choice: the pick the form no longer offers has a box', $row && 'multi' === $row['kind'] && in_array( 'Gone', $values, true ), wp_json_encode( $row ) );
+		list( $st, $d ) = $call( 'POST', "/minn-admin/v1/gf/entries/{$entry_id}/answers", array( 'values' => array( '1' => array( 'A', 'B', 'Gone' ) ), 'original' => array( '1' => $served ) ) );
+		$now = array_map( 'strval', (array) GFAPI::get_field( GFAPI::get_form( $form_id ), 1 )->to_array( rgar( GFAPI::get_entry( $entry_id ), '1' ) ) );
+		$check( 'GF multi-choice: ticking B answers 200 and stores B (control)', 200 === $st && in_array( 'B', $now, true ), $st . ' ' . wp_json_encode( $d ) . ' ' . wp_json_encode( $now ) );
+		$check( 'GF multi-choice: and keeps the pick the form no longer offers', in_array( 'Gone', $now, true ), wp_json_encode( $now ) );
+		list( $st ) = $call( 'POST', "/minn-admin/v1/gf/entries/{$entry_id}/answers", array( 'values' => array( '1' => array( 'A', 'Q' ) ), 'original' => array( '1' => $now ) ) );
+		$after = array_map( 'strval', (array) GFAPI::get_field( GFAPI::get_form( $form_id ), 1 )->to_array( rgar( GFAPI::get_entry( $entry_id ), '1' ) ) );
+		$check( 'GF multi-choice: a pick that is neither offered nor stored is not written (control)', ! in_array( 'Q', $after, true ), wp_json_encode( $after ) );
+	} finally {
+		$clean();
+	}
+} )();
+
+( function () use ( $check, $skip, $call, $once ) {
+	if ( ! function_exists( 'minn_admin_wpforms_edit_supported' ) || ! minn_admin_wpforms_edit_supported() || ! function_exists( 'minn_admin_wpforms_edit_block' ) ) {
+		$skip( 'WPForms multi-choice: WPForms Pro inactive' );
+		return;
+	}
+	$made  = array( 'form' => 0, 'entry' => 0 );
+	$clean = $once( function () use ( &$made ) {
+		if ( $made['entry'] ) {
+			wpforms()->obj( 'entry' )->delete( $made['entry'] );
+		}
+		if ( $made['form'] ) {
+			wp_delete_post( $made['form'], true );
+		}
+	} );
+	try {
+		$made['form'] = (int) wpforms()->obj( 'form' )->add( 'Minn registry writes' );
+		wpforms()->obj( 'form' )->update( $made['form'], array(
+			'id'       => $made['form'],
+			'field_id' => 2,
+			'settings' => array( 'form_title' => 'Minn registry writes' ),
+			'fields'   => array(
+				1 => array( 'id' => 1, 'type' => 'checkbox', 'label' => 'Extras', 'choices' => array( 1 => array( 'label' => 'News', 'value' => '' ), 2 => array( 'label' => 'Call', 'value' => '' ) ) ),
+			),
+		) );
+		$fields        = array( 1 => array( 'name' => 'Extras', 'value' => "News\nGone", 'value_raw' => "News\nGone", 'id' => 1, 'type' => 'checkbox' ) );
+		$made['entry'] = (int) wpforms()->obj( 'entry' )->add( array( 'form_id' => $made['form'], 'status' => '', 'fields' => wp_json_encode( $fields ) ) );
+		wpforms()->obj( 'entry_fields' )->save( $fields, wpforms()->obj( 'form' )->get( $made['form'], array( 'content_only' => true ) ), $made['entry'] );
+		$stored = function () use ( &$made ) {
+			$e = wpforms()->obj( 'entry' )->get( $made['entry'] );
+			$f = (array) wpforms_decode( (string) ( $e->fields ?? '' ) );
+			return array_values( array_filter( explode( "\n", (string) ( $f[1]['value_raw'] ?? $f['1']['value_raw'] ?? '' ) ), 'strlen' ) );
+		};
+		$block  = minn_admin_wpforms_edit_block( (object) Minn_Admin_Kernel_SQL::row( 'wpforms_entries', 'entry_id', $made['entry'] ) );
+		$row    = null;
+		foreach ( (array) ( $block['fields'] ?? array() ) as $f ) {
+			if ( '1' === (string) $f['id'] ) {
+				$row = $f;
+			}
+		}
+		$values = $row ? array_map( 'strval', wp_list_pluck( (array) ( $row['choices'] ?? array() ), 0 ) ) : array();
+		$served = $row ? $row['inputs'][0]['value'] : null;
+		$check( 'WPForms multi-choice: the pick the form no longer offers has a box', $row && 'multi' === $row['kind'] && in_array( 'Gone', $values, true ), wp_json_encode( $row ) );
+		list( $st, $d ) = $call( 'POST', "/minn-admin/v1/wpforms/entries/{$made['entry']}/answers", array( 'values' => array( '1' => array( 'News', 'Call', 'Gone' ) ), 'original' => array( '1' => $served ) ) );
+		$now = $stored();
+		$check( 'WPForms multi-choice: ticking Call answers 200 and stores Call (control)', 200 === $st && in_array( 'Call', $now, true ), $st . ' ' . wp_json_encode( $d ) . ' ' . wp_json_encode( $now ) );
+		$check( 'WPForms multi-choice: and keeps the pick the form no longer offers', in_array( 'Gone', $now, true ), wp_json_encode( $now ) );
+		list( $st ) = $call( 'POST', "/minn-admin/v1/wpforms/entries/{$made['entry']}/answers", array( 'values' => array( '1' => array( 'News', 'Q' ) ), 'original' => array( '1' => $now ) ) );
+		$check( 'WPForms multi-choice: a pick that is neither offered nor stored is not written (control)', ! in_array( 'Q', $stored(), true ), wp_json_encode( $stored() ) );
+	} finally {
+		$clean();
+	}
+} )();
+
+/*
+ * Sibling of #16: the JetThemeCore and Elementor template rename dialogs
+ * round-trip the stored title. The row served '(no title)' (Elementor: the
+ * entity-decoded title too) as `title`, the dialog sent it back as the
+ * untouched value, and the route wrote it, through sanitize_text_field on
+ * JetThemeCore.
+ */
+( function () use ( $check, $skip, $call, $once ) {
+	$cases = array();
+	if ( function_exists( 'minn_admin_jet_tc_active' ) && minn_admin_jet_tc_active() && minn_admin_jet_tc_can() ) {
+		$cases['JetThemeCore'] = array(
+			'type'  => 'jet-theme-core',
+			'meta'  => array( '_jet_template_type' => 'jet_footer' ),
+			'route' => '/minn-admin/v1/jet-theme-core/templates/',
+			'item'  => 'minn_admin_jet_tc_item',
+		);
+	} else {
+		$skip( 'template titles: JetThemeCore inactive' );
+	}
+	if ( function_exists( 'minn_admin_elementor_templates_ready' ) && minn_admin_elementor_templates_ready() && minn_admin_elementor_can_manage() ) {
+		$cases['Elementor'] = array(
+			'type'  => 'elementor_library',
+			'meta'  => array( '_elementor_template_type' => 'section', '_elementor_edit_mode' => 'builder' ),
+			'route' => '/minn-admin/v1/elementor/templates/',
+			'item'  => 'minn_admin_elementor_template_item',
+		);
+	} else {
+		$skip( 'template titles: Elementor templates inactive' );
+	}
+	foreach ( $cases as $name => $c ) {
+		$post  = 0;
+		$clean = $once( function () use ( &$post ) {
+			if ( $post ) {
+				wp_delete_post( $post, true );
+			}
+		} );
+		try {
+			foreach ( array( '', '50%DEAL footer', 'Fish &amp; Chips' ) as $title ) {
+				if ( ! $post ) {
+					$post = (int) wp_insert_post( array( 'post_type' => $c['type'], 'post_status' => 'publish', 'post_title' => $title, 'post_content' => '<!-- minn registry writes -->', 'meta_input' => $c['meta'] ) );
+				} else {
+					global $wpdb;
+					$wpdb->update( $wpdb->posts, array( 'post_title' => $title ), array( 'ID' => $post ) );
+					clean_post_cache( $post );
+				}
+				$row = call_user_func( $c['item'], get_post( $post ) );
+				$check( "{$name}: the row serves the stored title " . wp_json_encode( $title ) . ' as stored, with a label to show', $title === ( $row['title'] ?? null ) && '' !== (string) ( $row['label'] ?? '' ), wp_json_encode( $row ) );
+				// What the rename dialog sends for an untouched title: the row's value.
+				list( $st, $d ) = $call( 'PUT', $c['route'] . $post, array( 'title' => $row['title'] ) );
+				$check( "{$name}: a save that leaves it alone keeps the stored title " . wp_json_encode( $title ), 200 === $st && $title === get_post( $post )->post_title, $st . ' ' . wp_json_encode( $d ) . ' ' . wp_json_encode( get_post( $post )->post_title ) );
+			}
+			list( $st ) = $call( 'PUT', $c['route'] . $post, array( 'title' => 'Minn suite rename' ) );
+			$check( "{$name}: a real rename is written (control)", 200 === $st && 'Minn suite rename' === get_post( $post )->post_title, (string) $st );
+			list( $st ) = $call( 'PUT', $c['route'] . $post, array( 'title' => '' ) );
+			$check( "{$name}: clearing a title is still refused (control)", 400 === $st && 'Minn suite rename' === get_post( $post )->post_title, (string) $st );
+		} finally {
+			$clean();
+		}
+	}
 } )();
 
 printf( "\nsecurity-v046-registry-writes: %d/%d passed\n", count( array_filter( $results ) ), count( $results ) );

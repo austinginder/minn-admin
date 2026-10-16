@@ -247,7 +247,12 @@ function minn_admin_elementor_template_item( $post ) {
 	$modified = '0000-00-00 00:00:00' !== $post->post_modified_gmt ? strtotime( $post->post_modified_gmt . ' UTC' ) : false;
 	return array(
 		'id'         => (int) $post->ID,
-		'title'      => '' !== $post->post_title ? html_entity_decode( $post->post_title, ENT_QUOTES ) : __( '(no title)', 'minn-admin' ),
+		// The stored title, as stored ('' for an untitled template): the
+		// rename dialog sends an untouched title back as the row has it, so
+		// a decoded copy or a display fallback here would be saved.
+		'title'      => (string) $post->post_title,
+		// What the list shows.
+		'label'      => '' !== $post->post_title ? html_entity_decode( $post->post_title, ENT_QUOTES ) : __( '(no title)', 'minn-admin' ),
 		'type'       => $type,
 		'typeLabel'  => isset( $types[ $type ] ) ? $types[ $type ] : ( '' !== $type ? $type : '—' ),
 		'conditions' => minn_admin_elementor_conditions_summary( $post->ID ),
@@ -349,7 +354,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 			'search'    => 'search={q}',
 			'sortQuery' => 'orderby={by}&order={dir}',
 			'columns'   => array(
-				array( 'key' => 'title', 'label' => __( 'Template', 'minn-admin' ), 'format' => 'title', 'sort' => 'title' ),
+				array( 'key' => 'label', 'label' => __( 'Template', 'minn-admin' ), 'format' => 'title', 'sort' => 'title' ),
 				array( 'key' => 'typeLabel', 'label' => __( 'Type', 'minn-admin' ), 'format' => 'pill', 'width' => '130px' ),
 				array( 'key' => 'conditions', 'label' => __( 'Conditions', 'minn-admin' ), 'width' => 'minmax(0,1.2fr)' ),
 				array( 'key' => 'status', 'label' => __( 'Status', 'minn-admin' ), 'format' => 'pill', 'width' => '110px' ),
@@ -365,7 +370,7 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 				),
 			) : null,
 			'detail'    => array(
-				'skip' => array( 'id', 'type', 'typeLabel', 'editUrl' ),
+				'skip' => array( 'id', 'label', 'type', 'typeLabel', 'editUrl' ),
 				'edit' => array(
 					'route'  => 'minn-admin/v1/elementor/templates/{id}',
 					'method' => 'PUT',
@@ -576,7 +581,13 @@ add_action( 'rest_api_init', function () {
 			if ( is_wp_error( $post ) ) {
 				return $post;
 			}
-			$title = trim( (string) $request['title'] );
+			// The dialog sends the title as the row has it when it is left
+			// alone: that writes nothing (an untitled template stays untitled).
+			$sent = $request->get_param( 'title' );
+			if ( null === $sent || (string) $sent === (string) $post->post_title ) {
+				return rest_ensure_response( minn_admin_elementor_template_item( $post ) );
+			}
+			$title = trim( (string) $sent );
 			if ( '' === $title ) {
 				return new WP_Error( 'invalid', __( 'A template needs a title.', 'minn-admin' ), array( 'status' => 400 ) );
 			}
