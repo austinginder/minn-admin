@@ -178,7 +178,8 @@ if ( ! $admin || ! current_user_can( 'manage_options' ) || ( is_multisite() && !
 	remove_role( $role );
 	add_role( $role, 'Minn v046 system admin', array( 'read' => true, 'edit_posts' => true, 'manage_options' => true, 'install_plugins' => true ) );
 	$uid = $make_user( 'minn_v046_sys', $role );
-	$wpml_was = array_key_exists( 'wpml_settings', $GLOBALS ) ? $GLOBALS['wpml_settings'] : null;
+	$wpml_was    = array_key_exists( 'wpml_settings', $GLOBALS ) ? $GLOBALS['wpml_settings'] : null;
+	$made_tables = array();
 	try {
 		if ( ! $uid ) {
 			$check( '#7 setup', false, 'no user' );
@@ -205,6 +206,23 @@ if ( ! $admin || ! current_user_can( 'manage_options' ) || ( is_multisite() && !
 			list( $a ) = $call( 'GET', '/minn-admin/v1/db/rows', null, array( 'table' => $t ) );
 			return is_array( $names ) && in_array( strtolower( $t ), $names, true ) && 200 === $a;
 		};
+
+		// Copies the review's round two asks about, made before anything
+		// lists the tables: the browser reads the schema once per process.
+		$copy = function ( $from, $to ) use ( $wpdb, $exists, &$made_tables ) {
+			$src = $exists( $from );
+			if ( ! $src || $exists( $to ) ) {
+				return '';
+			}
+			$wpdb->query( 'CREATE TABLE `' . $wpdb->prefix . $to . '` LIKE `' . $src . '`' ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- test-made names.
+			$t = $exists( $to );
+			if ( $t ) {
+				$made_tables[] = $t;
+			}
+			return $t;
+		};
+		$frm_copy = $copy( 'frm_items', 'minn_v046_frm_items_old' );
+		$st_copy  = $copy( 'stream', 'minn_v046_activity_bak' );
 
 		$become( $uid );
 		if ( ! Minn_Admin_REST::can_read_system() ) {
@@ -298,6 +316,73 @@ if ( ! $admin || ! current_user_can( 'manage_options' ) || ( is_multisite() && !
 			$become( $uid );
 		}
 
+		// Round two of the review: copies of a kernel table, Stream's copies
+		// by their columns, Gravity Forms' entries and the analytics tables
+		// each plugin keeps behind its own capability.
+		{
+			if ( $frm_copy && ! minn_admin_formidable_can() ) {
+				$check( "#7 a copy of a kernel resource's table is left out where the resource refuses (Formidable's items)", $hidden( $frm_copy ) );
+				$become( $admin );
+				$check( '#7 control: and shown to an administrator the resource admits', $shown( $frm_copy ) );
+				$become( $uid );
+			} else {
+				$skip( '#7 Formidable has no table here, or admits the probe role' );
+			}
+			if ( $st_copy && ! class_exists( 'WP_Stream\\Plugin' ) ) {
+				$become( $admin );
+				$check( "#7 a copy of Stream's records under a name without \"stream\" is known by its columns and left out like Stream's own", $hidden( $st_copy ) );
+				$become( $uid );
+			} else {
+				$skip( '#7 Stream is active, or has no table here' );
+			}
+			$gf = $exists( 'gf_entry' );
+			if ( $gf && class_exists( 'GFCommon' ) && ! GFCommon::current_user_can_any( array( 'gravityforms_view_entries', 'gform_full_access' ) ) ) {
+				$gfm = $exists( 'gf_entry_meta' );
+				$check( "#7 Gravity Forms' entries and their answers are left out for a role its own entries view refuses", $hidden( $gf ) && ( ! $gfm || $hidden( $gfm ) ) );
+				$become( $admin );
+				$check( '#7 Gravity Forms control: an administrator it admits still browses them', $shown( $gf ) );
+				$become( $uid );
+			} else {
+				$skip( '#7 Gravity Forms has no entries table here, or admits the probe role' );
+			}
+			foreach ( array( 'koko_analytics_site_stats' => 'view_koko_analytics', 'burst_statistics' => 'view_burst_statistics' ) as $base => $cap ) {
+				$t = $exists( $base );
+				if ( ! $t || current_user_can( $cap ) ) {
+					$skip( "#7 {$base}: no table, or the probe role holds {$cap}" );
+					continue;
+				}
+				$check( "#7 {$base} is left out for a role without {$cap}", $hidden( $t ) );
+			}
+			foreach ( array( 'redirection_logs' => 'minn_admin_redirection_can', 'itsec_logs' => 'minn_admin_solid_security_can' ) as $base => $gate ) {
+				$t = $exists( $base );
+				if ( $t && function_exists( $gate ) && call_user_func( $gate ) ) {
+					$check( "#7 control: {$base} stays for a role its plugin's own gate admits", $shown( $t ) );
+				}
+			}
+			// The System page's database checks share one cached run: a row
+			// naming a table this viewer may not open offers no button for it.
+			$health_was = get_transient( 'minn_admin_db_health' );
+			$hidden_t   = $gf ? $gf : ( $exists( 'pimwick_gift_card' ) ? $exists( 'pimwick_gift_card' ) : '' );
+			if ( $hidden_t ) {
+				set_transient( 'minn_admin_db_health', array(
+					'checks'   => array(
+						array( 'id' => 'minn_v046_a', 'label' => 'Probe', 'severity' => 'warn', 'table' => $hidden_t ),
+						array( 'id' => 'minn_v046_b', 'label' => 'Probe', 'severity' => 'warn', 'table' => $wpdb->posts ),
+					),
+					'warnings' => 2,
+					'scan_max' => 1,
+				), 60 );
+				list( $hs, $hd ) = $call( 'GET', '/minn-admin/v1/db/health' );
+				$by = array_column( (array) ( $hd['checks'] ?? array() ), 'table', 'id' );
+				$check( "#7 a database check names no table the viewer cannot open, and keeps the rest", 200 === $hs && array_key_exists( 'minn_v046_a', $by ) && null === $by['minn_v046_a'] && $wpdb->posts === ( $by['minn_v046_b'] ?? null ), wp_json_encode( $by ) );
+				if ( false === $health_was ) {
+					delete_transient( 'minn_admin_db_health' );
+				} else {
+					set_transient( 'minn_admin_db_health', $health_was, 600 );
+				}
+			}
+		}
+
 		// WooCommerce's rule is unchanged.
 		$wc = $exists( 'wc_orders' );
 		if ( $wc ) {
@@ -312,6 +397,82 @@ if ( ! $admin || ! current_user_can( 'manage_options' ) || ( is_multisite() && !
 			unset( $GLOBALS['wpml_settings'] );
 		} else {
 			$GLOBALS['wpml_settings'] = $wpml_was;
+		}
+		foreach ( $made_tables as $t ) {
+			if ( 0 === strpos( $t, $wpdb->prefix . 'minn_v046_' ) ) {
+				$wpdb->query( 'DROP TABLE IF EXISTS `' . $t . '`' ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- test-made names.
+			}
+		}
+		$drop_user( $uid );
+		remove_role( $role );
+	}
+} )();
+
+// --- #7 round two: a booking list held to the viewer's own rows is a table
+// the browser does not show them whole ---
+// Amelia keeps a provider without amelia_read_others_appointments to their
+// own appointments (providerId = them), in the resource's fixed condition.
+// A provider who also holds the System page's caps read every appointment,
+// customer and service in the browser, and the joined customer table passed
+// on the reader's gate alone.
+( function () use ( $check, $skip, $call, $admin, $make_user, $drop_user ) {
+	global $wpdb;
+	if ( is_multisite() || ! function_exists( 'minn_admin_amelia_scope' ) || ! minn_admin_amelia_has_tables() ) {
+		$skip( '#7 round two: Amelia has no tables here (single site only)' );
+		return;
+	}
+	$role = 'minn_v046_provider';
+	remove_role( $role );
+	add_role( $role, 'Minn v046 provider', array( 'read' => true, 'edit_posts' => true, 'manage_options' => true, 'install_plugins' => true, 'amelia_read_appointments' => true ) );
+	$uid = $make_user( 'minn_v046_prov', $role );
+	$row = 0;
+	try {
+		if ( ! $uid ) {
+			$check( '#7 round two setup', false, 'no user' );
+			return;
+		}
+		$wpdb->insert( $wpdb->prefix . 'amelia_users', array( 'type' => 'provider', 'externalId' => $uid, 'firstName' => 'Minn', 'lastName' => 'v046 provider', 'email' => 'minn.v046.' . wp_generate_password( 8, false, false ) . '@example.com' ) );
+		$row = (int) $wpdb->insert_id;
+		wp_set_current_user( $uid );
+		if ( ! $row || ! minn_admin_amelia_can_read() || ! Minn_Admin_REST::can_read_system() || array() === minn_admin_amelia_scope() ) {
+			$check( '#7 round two setup: a provider held to their own appointments who may open the System page', false, wp_json_encode( array( $row, minn_admin_amelia_can_read(), minn_admin_amelia_scope() ) ) );
+			return;
+		}
+		list( $own ) = $call( 'GET', '/minn-admin/v1/amelia/appointments' );
+		$names = function () use ( $call ) {
+			list( , $d ) = $call( 'GET', '/minn-admin/v1/db/tables', null, array( 'all' => true ) );
+			return array_map( 'strtolower', array_column( (array) ( $d['tables'] ?? array() ), 'name' ) );
+		};
+		$listed = $names();
+		$out    = array();
+		foreach ( array( 'amelia_appointments', 'amelia_users', 'amelia_customer_bookings', 'amelia_services' ) as $b ) {
+			if ( in_array( $wpdb->prefix . $b, $listed, true ) ) {
+				$out[] = $b;
+			}
+		}
+		list( $rows ) = $call( 'GET', '/minn-admin/v1/db/rows', null, array( 'table' => $wpdb->prefix . 'amelia_appointments' ) );
+		$check( "#7 round two: a provider Amelia holds to their own appointments (Minn's list: {$own}) browses none of its appointments, customers or services whole", 200 === $own && ! $out && 404 === $rows, implode( ', ', $out ) . ' rows=' . $rows );
+		wp_set_current_user( $admin );
+		$listed = $names();
+		$check( '#7 round two control: an administrator Amelia shows every appointment still browses them and their customers', in_array( $wpdb->prefix . 'amelia_appointments', $listed, true ) && in_array( $wpdb->prefix . 'amelia_users', $listed, true ) );
+		// Every source that declares its where the viewer's own: an
+		// administrator it narrows nothing for is shown the table.
+		$narrowed = array();
+		foreach ( Minn_Admin_Kernel::resources() as $id => $res ) {
+			if ( empty( $res['source']['viewer'] ) || ! is_string( $res['source']['table'] ?? null ) ) {
+				continue;
+			}
+			$w = $res['source']['where'];
+			$w = is_callable( $w ) ? call_user_func( $w ) : $w;
+			if ( array() !== $w ) {
+				$narrowed[] = $id;
+			}
+		}
+		$check( '#7 round two control: no viewer-scoped booking list narrows anything for an administrator', ! $narrowed, implode( ', ', $narrowed ) );
+	} finally {
+		wp_set_current_user( $admin );
+		if ( $row ) {
+			$wpdb->delete( $wpdb->prefix . 'amelia_users', array( 'id' => $row ), array( '%d' ) );
 		}
 		$drop_user( $uid );
 		remove_role( $role );
@@ -406,6 +567,29 @@ if ( ! $admin || ! current_user_can( 'manage_options' ) || ( is_multisite() && !
 		}
 		$check( '#3 the Sites list does not offer the account Delete', ! in_array( 'DELETE minn-admin/v1/network/sites/{id}', $offered, true ), implode( ' | ', $offered ) );
 		$check( '#3 the gates the Extensions switches ask say no', ! minn_admin_network_can_activate_plugins() && ! minn_admin_network_can_enable_themes() && ! minn_admin_network_can_grant_super() && ! minn_admin_network_can_delete_sites() );
+		// The site's own plugin switch runs over admin-ajax, where the write
+		// fence never arms: on the main site, where the account's role is, a
+		// network-active plugin is not theirs to turn off, nor is any switch
+		// of theirs network-wide.
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		switch_to_blog( get_main_site_id() );
+		$net_on = '';
+		foreach ( array_keys( get_plugins() ) as $f ) {
+			if ( is_plugin_active_for_network( $f ) && plugin_basename( MINN_ADMIN_FILE ) !== $f ) {
+				$net_on = $f;
+				break;
+			}
+		}
+		if ( '' === $net_on ) {
+			$skip( '#3 L1 no network-active plugin to ask about' );
+		} else {
+			$denied = Minn_Admin::plugin_toggle_denied( $net_on, false );
+			$check( "#3 L1 the site's own plugin switch refuses to turn a network-active plugin off for the account, and is never network-wide for them", is_wp_error( $denied ) && 'network_active' === $denied->get_error_code() && false === Minn_Admin::plugin_toggle_is_network( $net_on, false ), $net_on . ' ' . ( is_wp_error( $denied ) ? $denied->get_error_code() : 'allowed' ) );
+			wp_set_current_user( $admin );
+			$check( "#3 L1 control: the network's owner turns it off network-wide from there", null === Minn_Admin::plugin_toggle_denied( $net_on, false ) && true === Minn_Admin::plugin_toggle_is_network( $net_on, false ) );
+			wp_set_current_user( $holder );
+		}
+		restore_current_blog();
 
 		wp_set_current_user( $admin );
 		$check( "#3 control: the network's owner passes every one of these gates", minn_admin_network_can_activate_plugins() && minn_admin_network_can_enable_themes() && minn_admin_network_can_grant_super() && minn_admin_network_can_delete_sites() );
