@@ -1760,17 +1760,15 @@ class Minn_Admin_REST {
 		);
 
 		// Multisite only: re-run every subsite's DB migration (see
-		// core_network_upgrade). upgrade_network is core's own cap for
-		// exactly this screen.
+		// core_network_upgrade), for whoever core's own Upgrade Network
+		// screen admits (can_upgrade_network).
 		register_rest_route(
 			self::NS,
 			'/core/network-upgrade',
 			array(
 				'methods'             => 'POST',
 				'callback'            => array( __CLASS__, 'core_network_upgrade' ),
-				'permission_callback' => function () {
-					return is_multisite() && current_user_can( 'upgrade_network' );
-				},
+				'permission_callback' => array( __CLASS__, 'can_upgrade_network' ),
 			)
 		);
 
@@ -11256,7 +11254,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		// walk covers every subsite, and core's own wpmu_upgrade_site stamp
 		// (network/upgrade.php line-for-line) says whether it finished.
 		$db_stale = (int) get_option( 'db_version' ) < (int) $wp_db_version;
-		if ( ! $db_stale && is_multisite() && current_user_can( 'upgrade_network' )
+		if ( ! $db_stale && self::can_upgrade_network()
 			&& (int) get_site_option( 'wpmu_upgrade_site' ) !== (int) $wp_db_version ) {
 			$db_stale = true;
 		}
@@ -11319,6 +11317,24 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				'version' => $wp_version,
 			)
 		);
+	}
+
+	/**
+	 * Whether the current user may run the network's database upgrade:
+	 * core's upgrade_network, asked on the main site, which is where core
+	 * asks it (network/admin.php moves every request there before
+	 * network/upgrade.php checks). upgrade_network maps to itself, so a
+	 * role plugin can put it in a subsite's role, where it never counts.
+	 *
+	 * @return bool
+	 */
+	public static function can_upgrade_network() {
+		if ( ! is_multisite() ) {
+			return false;
+		}
+		return function_exists( 'minn_admin_network_user_can' )
+			? minn_admin_network_user_can( 'upgrade_network' )
+			: Minn_Admin::network_owner();
 	}
 
 	/**
