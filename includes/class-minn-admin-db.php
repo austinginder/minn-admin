@@ -49,6 +49,9 @@ class Minn_Admin_DB {
 	/** The credentials themselves behind credential_needles(), for the egress fence. */
 	private static $credentials = null;
 
+	/** store_table_hidden() answers, by table and viewer, for one request (resolve_table() and tables() start it over). */
+	private static $hidden = array();
+
 	/**
 	 * A path segment that holds credentials whatever its entries are keyed by:
 	 * licences, keys, tokens, secrets, credentials, codes, alone or after a
@@ -344,6 +347,7 @@ class Minn_Admin_DB {
 	 * report names in drifting case).
 	 */
 	private static function resolve_table( $name ) {
+		self::$hidden = array();
 		foreach ( self::table_index() as $t ) {
 			if ( 0 === strcasecmp( (string) $t->name, (string) $name ) ) {
 				return self::store_table_hidden( $t->name ) ? null : $t;
@@ -353,20 +357,45 @@ class Minn_Admin_DB {
 	}
 
 	/**
+	 * Whether a table's own plugin keeps the viewer out of it, so the browser
+	 * leaves it out of the list and answers 404 for it, as that plugin's own
+	 * screen and Minn's view of it refuse. A role can hold the System page's
+	 * caps and still be refused there: WooCommerce without
+	 * manage_woocommerce, an activity log set to "only me", a gift card
+	 * plugin whose privilege an agency raised. Three sources, any of which
+	 * refuses: WooCommerce's rule, the gate and scope each kernel resource
+	 * declares for the tables it reads (Minn_Admin_Kernel::table_refused()),
+	 * and the logs and stores whose rule lives outside those declarations
+	 * (viewer_refused()). Asked whether or not the plugin is active, since
+	 * its tables outlive it.
+	 *
+	 * @param string $table Table name as resolved (prefix included).
+	 * @return bool
+	 */
+	private static function store_table_hidden( $table ) {
+		$key = strtolower( (string) $table ) . '|' . get_current_user_id();
+		if ( ! isset( self::$hidden[ $key ] ) ) {
+			self::$hidden[ $key ] = self::woocommerce_hidden( $table )
+				|| ( class_exists( 'Minn_Admin_Kernel' ) && Minn_Admin_Kernel::table_refused( $table ) )
+				|| self::viewer_refused( $table );
+		}
+		return self::$hidden[ $key ];
+	}
+
+	/**
 	 * Whether a table is WooCommerce's own and the viewer is someone
 	 * WooCommerce keeps out of it. Its tables hold orders, addresses,
 	 * sessions and customer records, and its logs when they are kept in the
 	 * database, and a role can hold the System page's caps without
 	 * manage_woocommerce: the log viewer leaves WooCommerce's channels out
 	 * for that role (Minn_Admin_Logs), so the browser leaves these out too.
-	 * Asked whether or not WooCommerce is active, since its tables outlive it,
-	 * and of copies under any leading word or separator (wp_bak_wc_orders,
+	 * Asked of copies under any leading word or separator (wp_bak_wc_orders,
 	 * wp_old_woocommerce_log, wp_wp_wc_order_addresses, wp_woocommerce-log).
 	 *
 	 * @param string $table Table name as resolved (prefix included).
 	 * @return bool
 	 */
-	private static function store_table_hidden( $table ) {
+	private static function woocommerce_hidden( $table ) {
 		if ( current_user_can( 'manage_woocommerce' ) ) {
 			return false;
 		}
@@ -384,6 +413,130 @@ class Minn_Admin_DB {
 	 * tables). A copy of one is left to the rule above.
 	 */
 	const WPDISCUZ_TABLES = array( 'wc_users_voted', 'wc_phrases', 'wc_comments_subscription', 'wc_follow_users', 'wc_feedback_forms', 'wc_users_rated', 'wc_avatars_cache', 'wc_flagged', 'wc_online_users' );
+
+	/**
+	 * Activity logs, mail logs and gift card stores whose plugin keeps
+	 * viewers out by its own rule, for the tables no kernel resource declares
+	 * whole: every table under the plugin's own name (its meta and context
+	 * tables, its other tables, a copy under any leading word), asked through
+	 * the helper Minn's adapter for that plugin uses, or a rule of this
+	 * class's own (self::). Pattern on the base name => helper; a helper that
+	 * is not there refuses. Stream's names are too common a word to match
+	 * inside another name, so only its own two.
+	 */
+	const VIEWER_RULES = array(
+		'/(^|[^a-z0-9])wsal_/'             => 'minn_admin_wsal_can_view',
+		'/(^|[^a-z0-9])simple_history/'    => 'self::simple_history_admits',
+		'/^stream(_meta)?$/'               => 'minn_admin_stream_can',
+		'/(^|[^a-z0-9])aryo_activity_log/' => 'self::aryo_admits',
+		'/(^|[^a-z0-9])pimwick_gift_card/' => 'minn_admin_pwgc_can',
+		'/(^|[^a-z0-9])wpml_mails/'        => 'minn_admin_wpml_can',
+	);
+
+	/**
+	 * Whether a VIEWER_RULES plugin keeps the viewer out of this table.
+	 *
+	 * @param string $table Table name as resolved (prefix included).
+	 * @return bool
+	 */
+	private static function viewer_refused( $table ) {
+		$base = self::secret_base( $table );
+		foreach ( self::VIEWER_RULES as $pattern => $admits ) {
+			if ( ! preg_match( $pattern, $base ) ) {
+				continue;
+			}
+			try {
+				if ( 0 === strpos( $admits, 'self::' ) ) {
+					$method = substr( $admits, 6 );
+					$yes    = true === self::$method();
+				} else {
+					$yes = function_exists( $admits ) && true === call_user_func( $admits );
+				}
+			} catch ( \Throwable $e ) {
+				$yes = false;
+			}
+			if ( ! $yes ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Simple History shows its log only to whoever its stealth mode lets see
+	 * the screen, and each logger's events only to whoever may read that
+	 * logger (the user logger asks edit_users). Its tables hold every
+	 * logger's events, so they are shown only to a viewer who passes the
+	 * first and may read every logger it runs.
+	 *
+	 * @return bool
+	 */
+	private static function simple_history_admits() {
+		if ( ! function_exists( 'minn_admin_simple_history_can' ) || ! function_exists( 'minn_admin_simple_history_loggers' )
+			|| ! minn_admin_simple_history_can() ) {
+			return false;
+		}
+		$readable = minn_admin_simple_history_loggers();
+		if ( null === $readable || ! method_exists( '\\Simple_History\\Simple_History', 'get_instance' ) ) {
+			return false;
+		}
+		$sh = \Simple_History\Simple_History::get_instance();
+		if ( ! method_exists( $sh, 'get_instantiated_loggers' ) ) {
+			return false;
+		}
+		foreach ( (array) $sh->get_instantiated_loggers() as $logger ) {
+			$slug = isset( $logger['instance'] ) && is_object( $logger['instance'] ) && method_exists( $logger['instance'], 'get_slug' )
+				? (string) $logger['instance']->get_slug() : '';
+			if ( '' === $slug || ! in_array( $slug, $readable, true ) ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Activity Log (Aryo) shows each viewer the rows its role scoping admits
+	 * (minn_admin_aryo_scope(), the rule its own query applies): the object
+	 * types the viewer's capabilities cover, and the actors whose role theirs
+	 * outranks. The table is shown only to a viewer whose scope is all of it,
+	 * the scope Aryo gives the accounts it lets see everything (super admins,
+	 * view_all_aryo_activity_log), asked the same way.
+	 *
+	 * @return bool
+	 */
+	private static function aryo_admits() {
+		if ( ! function_exists( 'minn_admin_aryo_can_view' ) || ! function_exists( 'minn_admin_aryo_scope' ) || ! minn_admin_aryo_can_view() ) {
+			return false;
+		}
+		$mine = minn_admin_aryo_scope();
+		if ( ! is_array( $mine ) ) {
+			return false;
+		}
+		// The everything scope: the same question with their see-everything
+		// capability held for this one call, and nothing else changed.
+		$uid = get_current_user_id();
+		$all = function ( $allcaps, $caps, $args ) use ( $uid ) {
+			if ( 'view_all_aryo_activity_log' === ( $args[0] ?? '' ) && $uid === (int) ( $args[1] ?? 0 ) ) {
+				$allcaps['view_all_aryo_activity_log'] = true;
+			}
+			return $allcaps;
+		};
+		add_filter( 'user_has_cap', $all, PHP_INT_MAX, 3 );
+		try {
+			$max = minn_admin_aryo_scope();
+		} finally {
+			remove_filter( 'user_has_cap', $all, PHP_INT_MAX );
+		}
+		if ( ! is_array( $max ) ) {
+			return false;
+		}
+		foreach ( array( 'object_type', 'user_caps' ) as $k ) {
+			if ( isset( $mine[ $k ] ) && ( ! isset( $max[ $k ] ) || array_diff( (array) $max[ $k ], (array) $mine[ $k ] ) ) ) {
+				return false;
+			}
+		}
+		return true;
+	}
 
 	private static function quote_ident( $name ) {
 		return '`' . str_replace( '`', '``', $name ) . '`';
@@ -965,7 +1118,8 @@ class Minn_Admin_DB {
 	 */
 	private static function is_activity_log( $table ) {
 		$base = self::secret_base( $table );
-		return 0 === strpos( $base, 'wsal_' ) || 0 === strpos( $base, 'simple_history' );
+		// Only for a viewer that screen admits (store_table_hidden()).
+		return ( 0 === strpos( $base, 'wsal_' ) || 0 === strpos( $base, 'simple_history' ) ) && ! self::store_table_hidden( $table );
 	}
 
 	/** Whether a cell holds a copy of a credential the browser redacts elsewhere. */
@@ -1385,6 +1539,7 @@ class Minn_Admin_DB {
 		$tables  = array();
 		$total   = 0;
 		$foreign = 0;
+		self::$hidden = array();
 		foreach ( $index as $t ) {
 			$own    = 0 === stripos( $t->name, $prefix );
 			$total += (int) $t->size;
