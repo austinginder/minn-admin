@@ -35,6 +35,33 @@ function minn_admin_fluent_utc_iso( $stamp ) {
 }
 
 /**
+ * A snippet's tags as a list. FluentSnippets keeps them in one docblock line
+ * joined with "," (its own tag input joins without a space); the edit dialog
+ * sends this list back as served, so a save compares lists, never the
+ * joined text.
+ *
+ * @param mixed $tags The stored line, or a list.
+ * @return string[]
+ */
+function minn_admin_fluent_tag_list( $tags ) {
+	$list = is_array( $tags ) ? $tags : explode( ',', (string) $tags );
+	return array_values( array_filter( array_map( 'trim', array_map( 'strval', $list ) ), 'strlen' ) );
+}
+
+/**
+ * A PHP snippet's code without the "<?php" line FluentSnippets writes in
+ * front of it (its updater stores "<?php" . PHP_EOL . code). Only that line
+ * comes off: a wider strip ate the first line's indentation and any blank
+ * lines, and every save wrote the shortened code back.
+ *
+ * @param string $code The code as their store reads it.
+ * @return string
+ */
+function minn_admin_fluent_code_body( $code ) {
+	return (string) preg_replace( '/^<\?php(?:\r\n|\n|\r)?/', '', (string) $code );
+}
+
+/**
  * Map a Fluent snippet (list index row or full find result) to the shared shape.
  *
  * @param array $row List row or full snippet with meta/code.
@@ -48,7 +75,7 @@ function minn_admin_fluent_item( $row ) {
 		$code = isset( $row['code'] ) ? (string) $row['code'] : '';
 		// Strip the leading <?php Fluent prepends for PHP files.
 		if ( ! empty( $meta['type'] ) && 'PHP' === $meta['type'] ) {
-			$code = preg_replace( '/^<\?php\s*/', '', $code );
+			$code = minn_admin_fluent_code_body( $code );
 		}
 		$status = isset( $meta['status'] ) ? $meta['status'] : 'draft';
 		$tags   = isset( $meta['tags'] ) ? $meta['tags'] : '';
@@ -57,7 +84,7 @@ function minn_admin_fluent_item( $row ) {
 			'name'     => isset( $meta['name'] ) ? (string) $meta['name'] : $file,
 			'desc'     => isset( $meta['description'] ) ? (string) $meta['description'] : '',
 			'code'     => $code,
-			'tags'     => is_array( $tags ) ? $tags : array_filter( array_map( 'trim', explode( ',', (string) $tags ) ) ),
+			'tags'     => minn_admin_fluent_tag_list( $tags ),
 			'scope'    => trim( ( isset( $meta['type'] ) ? $meta['type'] : '' ) . ' · ' . ( isset( $meta['run_at'] ) ? $meta['run_at'] : '' ), ' ·' ),
 			'type'     => isset( $meta['type'] ) ? (string) $meta['type'] : 'PHP',
 			'run_at'   => isset( $meta['run_at'] ) ? (string) $meta['run_at'] : 'all',
@@ -73,7 +100,7 @@ function minn_admin_fluent_item( $row ) {
 		'name'     => isset( $row['name'] ) ? (string) $row['name'] : '',
 		'desc'     => isset( $row['description'] ) ? (string) $row['description'] : '',
 		'code'     => '',
-		'tags'     => is_array( $tags ) ? $tags : array_filter( array_map( 'trim', explode( ',', (string) $tags ) ) ),
+		'tags'     => minn_admin_fluent_tag_list( $tags ),
 		'scope'    => trim( ( isset( $row['type'] ) ? $row['type'] : '' ) . ' · ' . ( isset( $row['run_at'] ) ? $row['run_at'] : '' ), ' ·' ),
 		'type'     => isset( $row['type'] ) ? (string) $row['type'] : 'PHP',
 		'run_at'   => isset( $row['run_at'] ) ? (string) $row['run_at'] : 'all',
@@ -242,7 +269,7 @@ function minn_admin_fluent_load( $file ) {
 	$meta              = isset( $full['meta'] ) && is_array( $full['meta'] ) ? $full['meta'] : array();
 	$code              = isset( $full['code'] ) ? (string) $full['code'] : '';
 	if ( isset( $meta['type'] ) && 'PHP' === $meta['type'] ) {
-		$code = preg_replace( '/^<\?php\s*/', '', $code );
+		$code = minn_admin_fluent_code_body( $code );
 	}
 	return array( $full, $meta, $code );
 }
@@ -395,7 +422,9 @@ minn_admin_endpoint( 'fluent-snippets/(?P<file>[^/]+)', array(
 		if ( null !== $request['desc'] && (string) $request['desc'] !== (string) ( $meta['description'] ?? '' ) ) {
 			$meta['description'] = sanitize_textarea_field( (string) $request['desc'] );
 		}
-		if ( null !== $request['code'] ) {
+		// Code sent back as the item served it stays as their file holds it
+		// (a textarea may hand back its line breaks as \n).
+		if ( null !== $request['code'] && ! Minn_Admin::unchanged( $request['code'], $code ) ) {
 			$code = (string) $request['code'];
 		}
 		if ( null !== $request['type'] && '' !== (string) $request['type'] ) {
@@ -407,7 +436,9 @@ minn_admin_endpoint( 'fluent-snippets/(?P<file>[^/]+)', array(
 		if ( null !== $request['priority'] ) {
 			$meta['priority'] = (int) $request['priority'];
 		}
-		if ( null !== $request['tags'] && ( is_array( $request['tags'] ) ? implode( ', ', array_map( 'strval', $request['tags'] ) ) : (string) $request['tags'] ) !== (string) ( $meta['tags'] ?? '' ) ) {
+		// Tags compare as lists: the stored line is joined the vendor's way
+		// (",") and the dialog sends back the list the item served.
+		if ( null !== $request['tags'] && minn_admin_fluent_tag_list( $request['tags'] ) !== minn_admin_fluent_tag_list( $meta['tags'] ?? '' ) ) {
 			$tags         = $request['tags'];
 			$meta['tags'] = is_array( $tags )
 				? implode( ', ', array_map( 'sanitize_text_field', $tags ) )

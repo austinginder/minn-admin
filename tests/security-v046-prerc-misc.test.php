@@ -316,5 +316,64 @@ rest_get_server();
 	}
 } )();
 
+/*
+ * FluentSnippets: an edit of the priority, or the /active switch, writes the
+ * code and the tags back as their file holds them. The read took every
+ * whitespace character after "<?php" (the first line's indentation and any
+ * blank lines) and each save wrote the shortened code back; the tags compare
+ * joined the served list with ", " while their own form stores ",".
+ */
+( function () use ( $check, $skip, $call, $once ) {
+	if ( ! function_exists( 'minn_admin_fluent_ready' ) || ! minn_admin_fluent_ready() ) {
+		$skip( 'FluentSnippets inactive' );
+		return;
+	}
+	// A draft, so nothing it holds ever runs; its file goes however the
+	// section ends.
+	list( $st, $made ) = $call( 'POST', '/minn-admin/v1/fluent-snippets', array( 'name' => 'Minn prerc', 'desc' => 'x', 'code' => '// minn suite', 'type' => 'PHP', 'run_at' => 'all', 'active' => false ) );
+	$file = is_array( $made ) ? (string) ( $made['id'] ?? $made['file'] ?? '' ) : '';
+	if ( ( 201 !== $st && 200 !== $st ) || '' === $file ) {
+		$check( 'FluentSnippets: a draft snippet is created for the check', false, $st . ' ' . wp_json_encode( $made ) );
+		return;
+	}
+	$clean = $once( function () use ( $call, $file ) {
+		$call( 'DELETE', '/minn-admin/v1/fluent-snippets/' . rawurlencode( $file ) );
+	} );
+	try {
+		$model  = new \FluentSnippets\App\Model\Snippet();
+		$stored = $model->findByFileName( $file );
+		$code   = '<?php' . PHP_EOL . "    // minn prerc: an indented first line\n\n// and a blank line before this one";
+		$meta   = (array) $stored['meta'];
+		// Their own form's shape: the tag list joined with ",", the file
+		// written as their status switch writes it.
+		$meta['tags'] = 'alpha,beta';
+		$model->updateSnippet( $file, $code, $meta );
+		$read = function () use ( $model, $file ) {
+			$s = $model->findByFileName( $file );
+			return is_wp_error( $s ) ? array( array(), '' ) : array( (array) $s['meta'], (string) $s['code'] );
+		};
+		list( , $item ) = $call( 'GET', '/minn-admin/v1/fluent-snippets/' . rawurlencode( $file ) );
+		$check( 'FluentSnippets: the item serves the code with its first-line indentation', "    // minn prerc: an indented first line\n\n// and a blank line before this one" === ( $item['code'] ?? null ), wp_json_encode( $item['code'] ?? null ) );
+		$body = array();
+		foreach ( array( 'name', 'desc', 'code', 'type', 'run_at', 'tags' ) as $k ) {
+			$body[ $k ] = $item[ $k ] ?? null;
+		}
+		list( $st, $d ) = $call( 'PUT', '/minn-admin/v1/fluent-snippets/' . rawurlencode( $file ), $body + array( 'priority' => 15 ) );
+		list( $m, $c ) = $read();
+		$check( 'FluentSnippets: a priority-only edit answers 200 and writes the priority (control)', 200 === $st && 15 === (int) ( $m['priority'] ?? 0 ), $st . ' ' . wp_json_encode( $d ) );
+		$check( 'FluentSnippets: and keeps the stored code byte for byte', $code === $c, wp_json_encode( $c ) );
+		$check( 'FluentSnippets: and keeps the stored tags line', 'alpha,beta' === ( $m['tags'] ?? null ), wp_json_encode( $m['tags'] ?? null ) );
+		$model->updateSnippet( $file, $code, $meta );
+		list( $st ) = $call( 'POST', '/minn-admin/v1/fluent-snippets/' . rawurlencode( $file ) . '/active', array( 'active' => false ) );
+		list( , $c ) = $read();
+		$check( 'FluentSnippets: the active switch answers 200 and keeps the stored code byte for byte', 200 === $st && $code === $c, $st . ' ' . wp_json_encode( $c ) );
+		list( $st ) = $call( 'PUT', '/minn-admin/v1/fluent-snippets/' . rawurlencode( $file ), array( 'tags' => array( 'gamma <b>x</b>' ) ) );
+		list( $m ) = $read();
+		$check( 'FluentSnippets: a real tag edit is cleaned and written (control)', 200 === $st && 'gamma x' === ( $m['tags'] ?? null ), $st . ' ' . wp_json_encode( $m['tags'] ?? null ) );
+	} finally {
+		$clean();
+	}
+} )();
+
 printf( "\nsecurity-v046-prerc-misc: %d/%d passed\n", count( array_filter( $results ) ), count( $results ) );
 exit( count( array_filter( $results ) ) === count( $results ) ? 0 : 1 );
