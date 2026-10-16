@@ -9,3 +9,5 @@ tests/.release-*
 dist/
 # parity captures describe a lab (tests/parity/capture.js)
 tests/.parity/
+# the round trip's seed state between runs (tests/roundtrip.sh)
+tests/.roundtrip/

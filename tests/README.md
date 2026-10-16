@@ -101,10 +101,10 @@ stores nothing, and a change to one field leaves the rest.
    capture then opens that item. Every seeded cell is backed up first and put back after
    the run and on any exit; a save that writes files instead of rows is put back and not
    seeded. A seeded run reports as `<surface> [rich]` or `[empty]`. The backup lives at
-   one path per site (`$TMPDIR/minn-roundtrip-seed-<checksum of the site root>.json`), not
-   in the run's temp folder, so a run that never reached its restore (SIGKILL, a crash)
-   is put back by the next run before its first pass; the file stays only when a
-   restore fails.
+   one path per site (`tests/.roundtrip/seed-<checksum of the site root>.json`, gitignored),
+   not in the run's temp folder or under `$TMPDIR`, which differs between shells, so
+   a run that never reached its restore (SIGKILL, a crash) is put back by the next run
+   before its first pass; the file stays only when a restore fails.
 4. **Minn's own pages**: `roundtrip-pages-capture.js` does the same for settings
    sections, the builders, the email pages, membership plans, orders, products, users
    and store settings, and the same PHP harness replays them. A page whose clean save

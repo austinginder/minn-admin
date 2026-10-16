@@ -26,8 +26,11 @@ set -u
 cd "$(dirname "$0")"
 WP_PATH="${MINN_TEST_WP:-$(cd ../../../.. && pwd)}"
 TMP="$(mktemp -d)"
-STATE_DIR="${TMPDIR:-/tmp}"
-SEED_STATE="${STATE_DIR%/}/minn-roundtrip-seed-$(printf %s "$WP_PATH" | cksum | cut -d' ' -f1).json"
+# Inside tests/ (gitignored), not under $TMPDIR, which differs between shells:
+# a run started from another terminal must still find a killed run's seeds.
+STATE_DIR="$(pwd)/.roundtrip"
+mkdir -p "$STATE_DIR"
+SEED_STATE="$STATE_DIR/seed-$(printf %s "$WP_PATH" | cksum | cut -d' ' -f1).json"
 export MINN_RT_COVERED="$TMP/covered.txt"
 : >"$MINN_RT_COVERED"
 status=0
