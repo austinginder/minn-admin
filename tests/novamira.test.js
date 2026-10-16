@@ -33,6 +33,28 @@ const evalPhp = ( php ) => {
 	return '';
 };
 
+// The same, in a process that loads only these plugins (and no theme), so
+// nothing but the code under test loads the Abilities API before REST does.
+// `exec` runs before WordPress loads (WP-CLI's --exec).
+const evalPhpOnly = ( php, keep, exec = '' ) => {
+	let active = [];
+	try {
+		// A list WordPress re-keyed comes back as an object.
+		active = Object.values( JSON.parse( execSync( `wp --path=${ JSON.stringify( WP ) } option get active_plugins --format=json 2>/dev/null`, { encoding: 'utf8', timeout: 60000 } ).trim() ) || {} );
+	} catch ( e ) { /* reported by the caller */ }
+	const skip = active.map( ( p ) => String( p ).split( '/' )[ 0 ] ).filter( ( slug ) => ! keep.includes( slug ) );
+	const file = path.join( os.tmpdir(), `minn-novamira-only-${ process.pid }.php` );
+	fs.writeFileSync( file, '<?php ' + php );
+	try {
+		const shq = ( v ) => "'" + String( v ).replace( /'/g, "'\\''" ) + "'";
+		return execSync( `wp --path=${ JSON.stringify( WP ) } eval-file ${ JSON.stringify( file ) } --user=admin --skip-themes --skip-plugins=${ JSON.stringify( skip.join( ',' ) ) }${ exec ? ' --exec=' + shq( exec ) : '' } 2>/dev/null`, { encoding: 'utf8', timeout: 120000 } ).trim();
+	} catch ( e ) {
+		return ( e.stdout || '' ).trim();
+	} finally {
+		try { fs.unlinkSync( file ); } catch ( e ) { /* ignore */ }
+	}
+};
+
 ( async () => {
 	const t = reporter( 'novamira' );
 	const { browser, page, errors } = await launch();
@@ -145,8 +167,12 @@ const evalPhp = ( php ) => {
 		// The Hub exemption lifts Novamira's ability policy for this adapter's
 		// own routes only. A request to the MCP server (or an ability's run
 		// route) that merely names the path in its query string must leave
-		// the owner's kill-switch enforced.
+		// the owner's kill-switch enforced. The policy is attached as the
+		// installed Novamira attaches it: up to 1.12.8 itself at PHP_INT_MAX,
+		// from 1.12.9 a sweep at PHP_INT_MAX - 1 that adds it while
+		// wp_abilities_api_init runs. Either one left attached runs it.
 		const lift = evalPhp( `
+			$sweep = function_exists( 'novamira_attach_ability_policy_sweep' );
 			$out = array();
 			foreach ( array(
 				'mcp'     => array( '/wp-json/mcp/novamira?x=minn-admin/v1/novamira/', 'mcp/novamira' ),
@@ -155,9 +181,14 @@ const evalPhp = ( php ) => {
 			) as $k => $c ) {
 				$_SERVER['REQUEST_URI'] = $c[0];
 				$GLOBALS['wp']->query_vars['rest_route'] = '/' . $c[1];
-				add_action( 'wp_abilities_api_init', 'novamira_apply_ability_policy', PHP_INT_MAX );
+				if ( $sweep ) {
+					add_action( 'wp_abilities_api_init', 'novamira_attach_ability_policy_sweep', PHP_INT_MAX - 1 );
+				} else {
+					add_action( 'wp_abilities_api_init', 'novamira_apply_ability_policy', PHP_INT_MAX );
+				}
 				do_action( 'rest_api_init', rest_get_server() );
-				$out[ $k ] = false !== has_action( 'wp_abilities_api_init', 'novamira_apply_ability_policy' );
+				$out[ $k ] = false !== has_action( 'wp_abilities_api_init', 'novamira_apply_ability_policy' )
+					|| false !== has_action( 'wp_abilities_api_init', 'novamira_attach_ability_policy_sweep' );
 			}
 			echo wp_json_encode( $out );
 		` );
@@ -165,6 +196,70 @@ const evalPhp = ( php ) => {
 		try { liftState = JSON.parse( lift.split( '\n' ).pop() ); } catch ( e ) { /* reported below */ }
 		t.check( 'ability policy stays enforced for a poisoned MCP or run request', !! liftState && liftState.mcp === true && liftState.run === true, lift.slice( -200 ) );
 		t.check( 'ability policy lifts for the adapter\'s own route as an admin', !! liftState && liftState.genuine === false, lift.slice( -200 ) );
+
+		// When the abilities route is the first to load the Abilities API in
+		// a request, its listing still reads every ability as registered
+		// before a policy run (one the lift did not take off), so a
+		// switched-off ability keeps its own label and description. That is
+		// a request with Novamira's AI abilities off and no other early
+		// loader: only Minn and Novamira load, abilities read as off, the
+		// rules switching core's own abilities off live in this process, and
+		// an MCP adapter another plugin's autoloader still boots on init
+		// (Jetpack's autoloader reaches skipped plugins) is kept from
+		// starting, since its server reads every ability at init.
+		const order = evalPhpOnly( `
+			if ( did_action( 'wp_abilities_api_init' ) ) {
+				echo wp_json_encode( array( 'skip' => 'the Abilities API loaded before REST' ) );
+				return;
+			}
+			$names = array( 'core/get-site-info', 'core/get-user-info', 'core/get-environment-info' );
+			add_filter( 'pre_option_novamira_ability_rules', function () use ( $names ) {
+				return array_fill_keys( $names, array( 'disabled' => true ) );
+			} );
+			$GLOBALS['wp']->query_vars['rest_route'] = '/minn-admin/v1/novamira/abilities/context';
+			rest_get_server();
+			if ( did_action( 'wp_abilities_api_init' ) ) {
+				echo wp_json_encode( array( 'skip' => 'rest_api_init loaded the Abilities API' ) );
+				return;
+			}
+			if ( function_exists( 'novamira_attach_ability_policy_sweep' ) ) {
+				add_action( 'wp_abilities_api_init', 'novamira_attach_ability_policy_sweep', PHP_INT_MAX - 1 );
+			} else {
+				add_action( 'wp_abilities_api_init', 'novamira_apply_ability_policy', PHP_INT_MAX );
+			}
+			$rows = array();
+			foreach ( minn_admin_novamira_abilities( true ) as $r ) {
+				$rows[ $r['name'] ] = $r;
+			}
+			$held = array_intersect( $names, array_keys( minn_admin_novamira_preregistered() ) );
+			$out  = array( 'checked' => array(), 'policy_ran' => false );
+			foreach ( $held as $name ) {
+				$out['policy_ran']       = $out['policy_ran'] || ! wp_get_ability( $name );
+				$out['checked'][ $name ] = isset( $rows[ $name ] ) ? (string) $rows[ $name ]['description'] : null;
+			}
+			echo wp_json_encode( $out );
+		`, [ 'minn-admin', 'novamira', 'novamira-pro' ], [
+			'WP_CLI::add_wp_hook( "pre_option_novamira_ai_abilities_enabled", function () { return "0"; } );',
+			'WP_CLI::add_wp_hook( "init", function () {',
+			'	foreach ( $GLOBALS["wp_filter"]["init"]->callbacks as $p => $cbs ) {',
+			'		foreach ( $cbs as $cb ) {',
+			'			if ( is_array( $cb["function"] ) && is_object( $cb["function"][0] ) && "McpAdapter" === substr( (string) strrchr( get_class( $cb["function"][0] ), chr( 92 ) ), 1 ) ) {',
+			'				remove_action( "init", $cb["function"], $p );',
+			'			}',
+			'		}',
+			'	}',
+			'}, -2147483648 );',
+		].join( ' ' ) );
+		let orderState = null;
+		try { orderState = JSON.parse( order.split( '\n' ).pop() ); } catch ( e ) { /* reported below */ }
+		if ( orderState && orderState.skip ) {
+			console.log( 'SKIP  the abilities listing read order: ' + orderState.skip );
+		} else {
+			const described = orderState ? Object.values( orderState.checked || {} ) : [];
+			t.check( 'a listing that loads the Abilities API itself keeps switched-off abilities\' descriptions',
+				!! orderState && orderState.policy_ran === true && described.length > 0 && described.every( ( d ) => 'string' === typeof d && '' !== d ),
+				order.slice( -300 ) );
+		}
 	} catch ( e ) {
 		t.check( 'suite ran without throwing', false, e.message );
 	} finally {

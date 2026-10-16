@@ -383,8 +383,14 @@ function minn_admin_novamira_abilities( $fresh = false ) {
 		}
 	};
 	if ( function_exists( 'wp_get_abilities' ) ) {
+		// The registry first: when this handler is the first to load it in
+		// the request, wp_get_abilities() is what fires wp_abilities_api_init
+		// and fills the pre-policy snapshot, so reading the snapshot before it
+		// copied an empty one, and switched-off abilities showed only through
+		// the rule fallback below (an ability whose feature is off vanished).
+		$live       = wp_get_abilities();
 		$registered = minn_admin_novamira_preregistered();
-		foreach ( wp_get_abilities() as $ability ) {
+		foreach ( $live as $ability ) {
 			$registered[ $ability->get_name() ] = $ability;
 		}
 		foreach ( $registered as $ability ) {
@@ -820,10 +826,14 @@ add_action( 'rest_api_init', function () {
 	// request to the MCP server or an ability's own run route could name this
 	// path in a query arg and lift the owner's kill-switch for itself. The
 	// lift also needs the vendor's manage capability, the same gate every
-	// route below carries.
+	// route below carries. Novamira up to 1.12.8 attaches the policy itself
+	// at PHP_INT_MAX when it loads; 1.12.9 attaches a sweep at PHP_INT_MAX - 1
+	// that adds the policy only while wp_abilities_api_init runs, so the
+	// lift takes both off.
 	$perm = 'minn_admin_novamira_can';
 	if ( minn_admin_novamira_lifts_policy() && function_exists( 'novamira_apply_ability_policy' ) && $perm() ) {
 		remove_action( 'wp_abilities_api_init', 'novamira_apply_ability_policy', PHP_INT_MAX );
+		remove_action( 'wp_abilities_api_init', 'novamira_attach_ability_policy_sweep', PHP_INT_MAX - 1 );
 	}
 
 	minn_admin_endpoint( '/novamira/status', array(
