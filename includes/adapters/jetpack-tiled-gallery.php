@@ -16,6 +16,11 @@
  * is theirs to make, and a gallery built there keeps whatever it has — Minn
  * only rebuilds when the writer adds or removes a photo.
  *
+ * A rebuild writes every photo in the gallery, so a photo that was already
+ * there goes back as the gallery holds it, its whole opening byte for byte
+ * (alt text, file, links, a custom link): only a photo being added is read
+ * from the media library. The block keeps every attribute but the layout.
+ *
  * @package Minn_Admin
  */
 
@@ -47,10 +52,11 @@ add_filter(
 );
 
 /**
- * Attributes worth carrying from an existing gallery into its rebuilt self.
+ * Attributes carried from an existing gallery into its rebuilt self.
  *
- * Everything here is a CHOICE the writer made (style, filter, link behaviour);
- * the layout attributes are recomputed and deliberately not carried.
+ * Everything but the layout is a CHOICE the writer made (style, filter, link
+ * behaviour, imageCrop, an attribute a later Jetpack adds), so all of it is
+ * carried; the layout attributes are recomputed and deliberately not.
  *
  * @param string $raw Existing block markup, empty when creating one.
  * @return array{attrs:array,class:string}
@@ -70,16 +76,41 @@ function minn_admin_tiled_gallery_existing( $raw ) {
 	if ( ! is_array( $attrs ) ) {
 		$attrs = array();
 	}
-	$keep = array( 'align', 'className', 'columns', 'imageFilter', 'linkTo', 'roundedCorners', 'style', 'backgroundColor', 'gradient' );
-	foreach ( $keep as $k ) {
-		if ( isset( $attrs[ $k ] ) ) {
-			$out['attrs'][ $k ] = $attrs[ $k ];
-		}
-	}
+	unset( $attrs['columnWidths'], $attrs['ids'], $attrs['images'] );
+	$out['attrs'] = $attrs;
 	// The wrapper's own classes are markup, not attributes — reuse them so a
 	// rebuilt gallery keeps the style it was wearing.
 	if ( preg_match( '#<div class="(wp-block-jetpack-tiled-gallery[^"]*)"#', $raw, $cm ) ) {
 		$out['class'] = $cm[1];
+	}
+	return $out;
+}
+
+/**
+ * The photos a gallery already holds, by attachment id, in order: each one's
+ * whole opening as the markup has it, and its size from the block's own
+ * data-width / data-height (what Jetpack's save lays the row out with).
+ *
+ * @param string $raw Existing block markup.
+ * @return array[] id => list of { html, width, height }
+ */
+function minn_admin_tiled_gallery_held( $raw ) {
+	$out = array();
+	if ( '' === trim( (string) $raw ) || ! preg_match_all( '#<figure\b[^>]*\bclass="tiled-gallery__item\b[^"]*"[^>]*>.*?</figure>#s', (string) $raw, $m ) ) {
+		return $out;
+	}
+	foreach ( $m[0] as $html ) {
+		if ( ! preg_match( '#<img\b[^>]*>#', $html, $img ) || ! preg_match( '#\sdata-id="(\d+)"#', $img[0], $id ) ) {
+			continue;
+		}
+		$dim               = function ( $name ) use ( $img ) {
+			return preg_match( '#\sdata-' . $name . '="(\d+)"#', $img[0], $d ) ? (int) $d[1] : 0;
+		};
+		$out[ (int) $id[1] ][] = array(
+			'html'   => $html,
+			'width'  => $dim( 'width' ),
+			'height' => $dim( 'height' ),
+		);
 	}
 	return $out;
 }
@@ -255,6 +286,21 @@ function minn_admin_tiled_gallery_col_ratio( $ratios ) {
 function minn_admin_tiled_gallery_rebuild( $images, $raw = '' ) {
 	$prev    = minn_admin_tiled_gallery_existing( $raw );
 	$attrs   = $prev['attrs'];
+	// A photo the gallery already holds keeps its opening and its size; the
+	// library's values are for photos being added.
+	$held = minn_admin_tiled_gallery_held( $raw );
+	foreach ( $images as &$img ) {
+		$was = isset( $held[ (int) $img['id'] ] ) ? array_shift( $held[ (int) $img['id'] ] ) : null;
+		if ( ! $was ) {
+			continue;
+		}
+		$img['figure'] = $was['html'];
+		if ( $was['width'] > 0 && $was['height'] > 0 ) {
+			$img['width']  = $was['width'];
+			$img['height'] = $was['height'];
+		}
+	}
+	unset( $img );
 	$columns = isset( $attrs['columns'] ) ? max( 1, min( 6, (int) $attrs['columns'] ) ) : 3;
 	$filter  = isset( $attrs['imageFilter'] ) && is_string( $attrs['imageFilter'] ) ? $attrs['imageFilter'] : '';
 	$link_to = isset( $attrs['linkTo'] ) && is_string( $attrs['linkTo'] ) ? $attrs['linkTo'] : '';
@@ -327,6 +373,9 @@ function minn_admin_tiled_gallery_rebuild( $images, $raw = '' ) {
  * @return string
  */
 function minn_admin_tiled_gallery_item( $img, $filter, $link_to ) {
+	if ( isset( $img['figure'] ) && is_string( $img['figure'] ) ) {
+		return $img['figure'];
+	}
 	$class = 'tiled-gallery__item' . ( $filter ? ' filter__' . sanitize_html_class( $filter ) : '' );
 	$tag   = '<img alt="' . esc_attr( $img['alt'] ) . '"'
 		. ' data-height="' . (int) $img['height'] . '"'

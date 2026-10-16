@@ -499,5 +499,48 @@ rest_get_server();
 	}
 } )();
 
+/*
+ * Jetpack tiled gallery: adding a photo rebuilds the gallery with the photos
+ * it already held as it held them (alt text, link, file, a custom link) and
+ * every block attribute but the layout. The rebuild re-read each photo from
+ * the media library and dropped the custom link and imageCrop.
+ */
+( function () use ( $check, $skip, $call ) {
+	if ( ! function_exists( 'minn_admin_tiled_gallery_rebuild' ) || ! class_exists( 'WP_Block_Type_Registry' ) ) {
+		$skip( 'tiled gallery adapter not loaded' );
+		return;
+	}
+	$ids = get_posts( array( 'post_type' => 'attachment', 'post_mime_type' => 'image', 'post_status' => 'inherit', 'numberposts' => 2, 'orderby' => 'ID', 'order' => 'ASC', 'fields' => 'ids' ) );
+	if ( count( $ids ) < 2 ) {
+		$skip( 'tiled gallery: fewer than two images in the library' );
+		return;
+	}
+	// Without Jetpack the adapter offers nothing; a bare block of that name
+	// stands in for this process so the real route answers.
+	$registry = WP_Block_Type_Registry::get_instance();
+	$stub     = ! $registry->get_registered( 'jetpack/tiled-gallery' );
+	if ( $stub ) {
+		register_block_type( 'jetpack/tiled-gallery', array() );
+	}
+	try {
+		list( $a, $b ) = array_map( 'intval', $ids );
+		$fig = '<figure class="tiled-gallery__item"><a href="https://example.com/minn?a=1&amp;b=2"><img alt="Tom\'s &quot;best&quot; &amp; co" data-height="600" data-id="' . $a . '" data-link="https://example.com/?attachment_id=' . $a . '" data-url="https://example.com/minn-a-800x600.jpg" data-width="800" src="https://example.com/minn-a-800x600.jpg" data-amp-layout="responsive"/></a></figure>';
+		$raw = '<!-- wp:jetpack/tiled-gallery {"columnWidths":[["100.00000"]],"ids":[' . $a . '],"imageCrop":false,"linkTo":"custom"} -->' . "\n"
+			. '<div class="wp-block-jetpack-tiled-gallery aligncenter is-style-rectangular"><div class=""><div class="tiled-gallery__gallery"><div class="tiled-gallery__row"><div class="tiled-gallery__col" style="flex-basis:100.00000%">' . $fig . '</div></div></div></div></div>' . "\n"
+			. '<!-- /wp:jetpack/tiled-gallery -->';
+		list( $st, $d ) = $call( 'POST', '/minn-admin/v1/image-block', array( 'block' => 'jetpack/tiled-gallery', 'ids' => array( $a, $b ), 'raw' => $raw ) );
+		$markup = (string) ( $d['markup'] ?? '' );
+		$attrs  = preg_match( '#^<!-- wp:jetpack/tiled-gallery (\{.*?\}) -->#', $markup, $m ) ? json_decode( $m[1], true ) : null;
+		$check( 'tiled gallery: adding a photo answers 200 with both photos laid out (control)', 200 === $st && array( $a, $b ) === ( $attrs['ids'] ?? null ), $st . ' ' . wp_json_encode( $d ) );
+		$check( 'tiled gallery: and the photo it held comes back byte for byte (alt, link, file, custom link)', false !== strpos( $markup, $fig ), $markup );
+		$check( 'tiled gallery: and the block keeps imageCrop and the custom link mode', is_array( $attrs ) && false === ( $attrs['imageCrop'] ?? null ) && 'custom' === ( $attrs['linkTo'] ?? null ), wp_json_encode( $attrs ) );
+		$check( 'tiled gallery: and the added photo is read from the library (control)', 1 === preg_match( '#<img alt="' . preg_quote( esc_attr( (string) get_post_meta( $b, '_wp_attachment_image_alt', true ) ), '#' ) . '"[^>]* data-id="' . $b . '"#', $markup ), $markup );
+	} finally {
+		if ( $stub ) {
+			unregister_block_type( 'jetpack/tiled-gallery' );
+		}
+	}
+} )();
+
 printf( "\nsecurity-v046-prerc-misc: %d/%d passed\n", count( array_filter( $results ) ), count( $results ) );
 exit( count( array_filter( $results ) ) === count( $results ) ? 0 : 1 );
