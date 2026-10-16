@@ -341,14 +341,23 @@ const PHP_PROSE_ALLOW = new Set( [
 	// Surface-contract validation diagnostics are developer-facing by design:
 	// they quote literal descriptor keys at extension authors.
 	const DIAG = /^[a-z_]+(\[\])?:? ?[a-z]/;
+	// The kernel's declaration diagnostics are developer-facing too (the
+	// reasons a declaration is refused, and the *_problem() checks that
+	// name them): logged for adapter authors, never shown to a person, and
+	// composed while a declaration registers, which can be before
+	// translations may load.
+	const KERNEL_DIAG = /\$why\s*=|self::(wrong|refused)\(|\$at\(\s*'|^\s*array\(\s*'the (resource|endpoint)'/;
 	const bad = [];
 	for ( const f of walkPhp( path.join( ROOT, 'includes' ) ).concat( [ path.join( ROOT, 'minn-admin.php' ) ] ) ) {
 		const rel = path.relative( ROOT, f );
 		let text = fs.readFileSync( f, 'utf8' );
 		text = text.replace( /\/\*[\s\S]*?\*\//g, ( c ) => c.replace( /[^\n]/g, ' ' ) );
 		const lines = text.split( '\n' );
+		let fn = '';
 		for ( let i = 0; i < lines.length; i++ ) {
 			const line = lines[ i ].replace( /(^|\s)\/\/.*$/, '$1' ).replace( /(^|\s)#.*$/, '$1' );
+			const named = /\bfunction\s+(\w+)\s*\(/.exec( line );
+			if ( named ) fn = named[ 1 ];
 			if ( WRAP.test( line ) ) continue;
 			// Multi-line gettext: an open __()/_n() on a recent line owns this literal.
 			const back = lines.slice( Math.max( 0, i - 3 ), i ).join( '\n' );
@@ -359,6 +368,7 @@ const PHP_PROSE_ALLOW = new Set( [
 				const v = m[ 1 ] != null ? m[ 1 ] : m[ 2 ];
 				if ( ! prose( v ) || skip( v ) ) continue;
 				if ( 'includes/class-minn-admin-surfaces.php' === rel && DIAG.test( v ) ) continue;
+				if ( 'includes/kernel/class-minn-admin-kernel.php' === rel && ( KERNEL_DIAG.test( line ) || /_problem$/.test( fn ) ) ) continue;
 				bad.push( `${ rel }:${ i + 1 }  '${ v.slice( 0, 60 ) }'` );
 			}
 		}
