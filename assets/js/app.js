@@ -17601,19 +17601,28 @@
 			} );
 
 		const nameInput = editor.querySelector( '[data-tf="name"]' );
+		const descInput = editor.querySelector( '[data-tf="description"]' );
+		const slugInput = editor.querySelector( '[data-tf="slug"]' );
+		// An edit sends only the boxes the person changed: WordPress cleans a
+		// description on its way in for anyone without unfiltered_html, so
+		// resending one untouched strips the markup another account wrote.
+		const seed = { name: nameInput.value, description: descInput.value, slug: slugInput.value, parent: parentVal };
 		nameInput.focus();
 		const save = async () => {
 			const name = nameInput.value.trim();
 			if ( ! name ) { nameInput.focus(); return; }
 			const btn = editor.querySelector( '[data-tsave]' );
+			const body = {};
+			if ( ! term || nameInput.value !== seed.name ) body.name = name;
+			if ( ! term || descInput.value !== seed.description ) body.description = descInput.value;
+			const slug = slugInput.value.trim();
+			if ( term ? slugInput.value !== seed.slug : slug ) body.slug = slug;
+			if ( pWrap && ( ! term || parentVal !== seed.parent ) ) body.parent = parentVal;
+			if ( term && ! Object.keys( body ).length ) {
+				editor.remove();
+				return;
+			}
 			btn.disabled = true;
-			const body = {
-				name,
-				description: editor.querySelector( '[data-tf="description"]' ).value,
-			};
-			const slug = editor.querySelector( '[data-tf="slug"]' ).value.trim();
-			if ( slug || term ) body.slug = slug;
-			if ( pWrap ) body.parent = parentVal;
 			try {
 				await api( `wp/v2/${ tax.rest }${ term ? '/' + term.id : '' }`, { method: 'POST', body: JSON.stringify( body ) } );
 				/* translators: %s: the new term's name. */
@@ -20871,10 +20880,15 @@
 	 * Arm a rendered settings form. `save( payload )` receives only the
 	 * edited keys and is expected to repaint on success; a thrown error
 	 * toasts and re-enables the button so the typed values survive.
+	 *
+	 * Edited means the control now reads differently from what it was armed
+	 * with. A key someone typed into and put back is not sent: the vendor
+	 * would clean the stored value on its way back and rewrite it.
 	 */
 	function bindSettingsForm( host, data, fields, save ) {
 		const values = data.values || {};
 		const dirty = {};
+		const seeds = new Map();
 		// Row visibility follows the controlling fields LIVE, reading current
 		// control values, not saved ones. Two dialects: showWhen ({ key,
 		// equals }, the adapter-settings contract) and cond (ACF conditional
@@ -20987,12 +21001,17 @@
 				input.addEventListener( 'input', mark );
 			}
 		} );
+		// Read after every control is armed (a combobox's value is set by
+		// its binder), through the same reader the save uses.
+		const read = ( input ) => JSON.stringify( formControlValue( input ) );
+		$$( '[data-sset]', host ).forEach( ( input ) => seeds.set( input, read( input ) ) );
+		const edited = () => $$( '[data-sset]', host ).filter( ( input ) =>
+			dirty[ input.dataset.sset ] && ( ! seeds.has( input ) || seeds.get( input ) !== read( input ) ) );
 		const saveBtn = $( '#minn-sset-save', host );
 		if ( saveBtn ) saveBtn.addEventListener( 'click', async () => {
 			const payload = {};
-			$$( '[data-sset]', host ).forEach( ( input ) => {
-				if ( dirty[ input.dataset.sset ] ) payload[ input.dataset.sset ] = formControlValue( input );
-			} );
+			const sent = edited();
+			sent.forEach( ( input ) => { payload[ input.dataset.sset ] = formControlValue( input ); } );
 			if ( ! Object.keys( payload ).length ) {
 				toast( __( 'Nothing changed yet' ) );
 				return;
@@ -21000,12 +21019,15 @@
 			saveBtn.disabled = true;
 			try {
 				await save( payload );
+				// What was sent is what is stored now, for a host that keeps
+				// this form on screen instead of repainting it.
+				sent.forEach( ( input ) => seeds.set( input, JSON.stringify( payload[ input.dataset.sset ] ) ) );
 			} catch ( e ) {
 				toast( e.message, true );
 				saveBtn.disabled = false;
 			}
 		} );
-		const isDirty = () => Object.keys( dirty ).length > 0;
+		const isDirty = () => edited().length > 0;
 		activeSettingsForm = { route: state.route, host, isDirty };
 		return { isDirty };
 	}
@@ -21692,6 +21714,15 @@
 			p.editing = null;
 			renderEntryPage();
 		} );
+		// What each control showed when editing began (the first paint, drawn
+		// from the stored answers). A control that reads as it did holds the
+		// answer as stored, whatever it shows of it: a text box drops line
+		// breaks, an "other" box shows a choice's label, and a blur or a
+		// re-pick must not turn either into a change.
+		const firstBind = ! p.editing.shown;
+		const shown = p.editing.shown = p.editing.shown || {};
+		const asStored = ( id ) => JSON.parse( JSON.stringify( p.editing.original[ id ] ) );
+		const unchanged = ( id, now ) => undefined !== shown[ id ] && now === shown[ id ];
 		// Choices: the themed strict combobox, or free text where the field
 		// takes its own "other" answer.
 		ed.fields.filter( ( f ) => 'choice' === f.kind ).forEach( ( f ) => {
@@ -21704,8 +21735,13 @@
 				const input = $( '.minn-ac-input', wrap );
 				const cur = ( f.choices || [] ).find( ( c ) => String( c[ 0 ] ) === String( vals[ i.id ] ) );
 				input.value = cur ? cur[ 1 ] : String( vals[ i.id ] || '' );
+				if ( firstBind ) shown[ i.id ] = input.value;
 				bindAutocomplete( wrap, ( f.choices || [] ).map( ( c ) => ( { value: c[ 1 ], label: c[ 1 ] } ) ), {} );
 				const sync = () => {
+					if ( unchanged( i.id, input.value ) ) {
+						vals[ i.id ] = asStored( i.id );
+						return;
+					}
 					const pick = ( f.choices || [] ).find( ( c ) => c[ 1 ] === input.value );
 					vals[ i.id ] = pick ? String( pick[ 0 ] ) : input.value;
 				};
@@ -21714,19 +21750,32 @@
 				input.addEventListener( 'blur', sync );
 				return;
 			}
-			bindAutocomplete( wrap, opts, { strict: true, value: String( vals[ i.id ] || '' ), onPick: ( v ) => { vals[ i.id ] = v; clearErr( wrap ); } } );
+			if ( firstBind ) shown[ i.id ] = String( vals[ i.id ] || '' );
+			bindAutocomplete( wrap, opts, { strict: true, value: String( vals[ i.id ] || '' ), onPick: ( v ) => {
+				vals[ i.id ] = unchanged( i.id, v ) ? asStored( i.id ) : v;
+				clearErr( wrap );
+			} } );
 		} );
 		const form = $( '.minn-ep-edit', view );
 		if ( form ) {
+			const picks = ( id ) => $$( `[data-epm="${ CSS.escape( id ) }"]`, form ).filter( ( x ) => x.checked ).map( ( x ) => x.value );
+			if ( firstBind ) {
+				$$( '[data-epf]', form ).forEach( ( el ) => { shown[ el.dataset.epf ] = el.value; } );
+				$$( '[data-epm]', form ).forEach( ( el ) => { shown[ el.dataset.epm ] = JSON.stringify( picks( el.dataset.epm ) ); } );
+			}
 			form.addEventListener( 'input', ( e ) => {
 				const t = e.target;
-				if ( t.dataset.epf != null ) { vals[ t.dataset.epf ] = t.value; clearErr( t ); }
+				if ( t.dataset.epf != null ) {
+					vals[ t.dataset.epf ] = unchanged( t.dataset.epf, t.value ) ? asStored( t.dataset.epf ) : t.value;
+					clearErr( t );
+				}
 			} );
 			form.addEventListener( 'change', ( e ) => {
 				const t = e.target;
 				if ( t.dataset.epc != null ) vals[ t.dataset.epc ] = t.checked;
 				if ( t.dataset.epm != null ) {
-					vals[ t.dataset.epm ] = $$( `[data-epm="${ CSS.escape( t.dataset.epm ) }"]`, form ).filter( ( x ) => x.checked ).map( ( x ) => x.value );
+					const now = picks( t.dataset.epm );
+					vals[ t.dataset.epm ] = unchanged( t.dataset.epm, JSON.stringify( now ) ) ? asStored( t.dataset.epm ) : now;
 				}
 			} );
 		}
@@ -24322,22 +24371,37 @@
 			} )
 		);
 		const saveBtn = $( '[data-navsave]', view );
+		// What the two boxes showed: only one the person changed is written,
+		// so a label edit keeps the address as stored and a Save with nothing
+		// changed rewrites nothing.
+		const naviLabel = $( '#minn-navi-label', view );
+		const naviUrl = $( '#minn-navi-url', view );
+		const naviSeed = naviLabel && naviUrl ? { label: naviLabel.value, url: naviUrl.value } : null;
 		if ( saveBtn ) saveBtn.addEventListener( 'click', () => {
 			const token = saveBtn.dataset.navsave;
-			const label = $( '#minn-navi-label', view ).value;
-			const raw = $( '#minn-navi-url', view ).value.trim();
-			// A menu link renders on every page. Hold it to the same schemes
-			// as every other author-supplied URL in the app rather than
-			// leaving it to esc_url at render time.
-			const url = safeLinkHref( raw );
-			if ( raw && ! url ) {
-				toast( __( 'That link needs a web address (https://…), a path, or mailto:/tel:.' ), true );
+			const changes = {};
+			if ( ! naviSeed || naviLabel.value !== naviSeed.label ) changes.label = naviLabel.value;
+			if ( ! naviSeed || naviUrl.value !== naviSeed.url ) {
+				const raw = naviUrl.value.trim();
+				// A menu link renders on every page. Hold it to the same schemes
+				// as every other author-supplied URL in the app rather than
+				// leaving it to esc_url at render time.
+				const url = safeLinkHref( raw );
+				if ( raw && ! url ) {
+					toast( __( 'That link needs a web address (https://…), a path, or mailto:/tel:.' ), true );
+					return;
+				}
+				changes.url = url;
+			}
+			if ( ! Object.keys( changes ).length ) {
+				ns.editing = null;
+				renderNavEdit();
 				return;
 			}
 			navAction( ns, () => {
 				const node = nodeAt( token );
 				if ( ! node ) throw new Error( __( 'That item moved. Try again.' ) );
-				navSetAttrs( node, { label, url } );
+				navSetAttrs( node, changes );
 			}, __( 'Item saved' ) );
 		} );
 		const cancel = $( '#minn-navi-cancel', view );
@@ -31869,16 +31933,24 @@
 		const OPEN_CLOSED = [ 'default_comment_status', 'default_ping_status' ];
 		// Options stored as "0"/"1" strings in wp_options — registered as integer.
 		const INT_TOGGLES = [ 'blog_public', 'users_can_register', 'comment_moderation', 'comment_registration', 'show_avatars' ];
-		$$( '[data-setting]', view ).forEach( ( btn ) =>
+		// A switch flipped and flipped back is no change: sending it would put
+		// this page's copy back over one made since in another tab or plugin.
+		const toggleSeed = {};
+		$$( '[data-setting]', view ).forEach( ( btn ) => {
+			toggleSeed[ btn.dataset.setting ] = btn.classList.contains( 'on' );
 			btn.addEventListener( 'click', () => {
 				btn.classList.toggle( 'on' );
 				const on = btn.classList.contains( 'on' );
 				btn.setAttribute( 'aria-checked', on );
 				const id = btn.dataset.setting;
+				if ( on === toggleSeed[ id ] ) {
+					delete pending[ id ];
+					return;
+				}
 				pending[ id ] = OPEN_CLOSED.includes( id ) ? ( on ? 'open' : 'closed' )
 					: ( INT_TOGGLES.includes( id ) ? ( on ? 1 : 0 ) : on );
-			} )
-		);
+			} );
+		} );
 
 		// Visibility section: turn a plugin's maintenance/coming-soon mode off
 		// in place (refreshVisibility re-renders this route, so the row goes
@@ -32258,10 +32330,14 @@
 				// Only the fields changed since the tab loaded: a setting changed
 				// meanwhile (another tab, a plugin) is not put back. Toggles in
 				// `pending` are already change-only; the logo and language are
-				// judged below.
+				// judged below. Compared with the values as last saved, and with
+				// a stored value as its text box shows it: a box drops line
+				// breaks, so an untouched one never reads as the stored value.
+				const sv = cache.values || s;
+				const asShown = ( v ) => String( v ?? '' ).replace( /[\r\n]/g, '' );
 				Object.keys( payload ).forEach( ( k ) => {
 					if ( k in pending || k === 'minn_site_logo' || k === 'minn_language' ) return;
-					if ( s && k in s && String( s[ k ] ?? '' ) === String( payload[ k ] ?? '' ) ) delete payload[ k ];
+					if ( sv && k in sv && ( String( sv[ k ] ?? '' ) === String( payload[ k ] ?? '' ) || asShown( sv[ k ] ) === String( payload[ k ] ?? '' ) ) ) delete payload[ k ];
 				} );
 				// Custom logo is a theme_mod — its own route, gated on theme
 				// support server-side.
@@ -32311,6 +32387,13 @@
 				if ( Object.keys( payload ).length ) {
 					try {
 						cache.values = await api( 'wp/v2/settings', { method: 'POST', body: JSON.stringify( payload ) } );
+						// A switch this save sent now reads as stored, for a
+						// partly refused save that keeps the tab on screen.
+						Object.keys( payload ).forEach( ( k ) => {
+							if ( ! ( k in toggleSeed ) ) return;
+							toggleSeed[ k ] = payload[ k ] === 'open' || payload[ k ] === 1 || payload[ k ] === true;
+							if ( pending[ k ] === payload[ k ] ) delete pending[ k ];
+						} );
 						cache.homepageMode = null;
 						// Maintenance mode / search-engine visibility live here —
 						// refresh the banner + chip without a reload.
@@ -36429,7 +36512,7 @@
 		if ( ed.parentDirty ) payload.parent = ed.parent || 0;
 		if ( ed.templateDirty ) payload.template = ed.template || '';
 		if ( ed.orderDirty ) payload.menu_order = ed.menuOrder || 0;
-		if ( ed.excerptDirty ) payload.excerpt = ed.excerpt;
+		if ( ed.excerptDirty && ( ! ed.id || ed.excerpt !== ed.excerptSeed ) ) payload.excerpt = ed.excerpt;
 		// A first save also carries the format when the site default is not
 		// 'standard'. Core applies that option in wp-admin only (it writes it
 		// onto the auto-draft in get_default_post_to_edit), so a REST create
@@ -36625,6 +36708,7 @@
 			ed.templateDirty = false;
 			ed.orderDirty = false;
 			ed.excerptDirty = false;
+			if ( 'excerpt' in payload ) ed.excerptSeed = payload.excerpt;
 			ed.formatDirty = false;
 			ed.slugDirty = false;
 			ed.commentDirty = false;
@@ -38598,6 +38682,10 @@
 
 	function bindEditorSettingsFields( root, ed ) {
 		const excerptInput = $( '#minn-editor-excerpt', root );
+		// The excerpt as loaded (or last saved): one typed into and put back
+		// is not sent, since WordPress cleans it on the way in for anyone
+		// without unfiltered_html and would strip what another account wrote.
+		if ( undefined === ed.excerptSeed ) ed.excerptSeed = ed.excerpt;
 		if ( excerptInput ) excerptInput.addEventListener( 'input', () => {
 			ed.excerpt = excerptInput.value;
 			ed.excerptDirty = true;
@@ -42052,6 +42140,7 @@
 		( tbPop.querySelector( 'input[data-inspdf]:not(.minn-ac-input), textarea[data-inspdf]' ) || tbPop.querySelector( '[data-close]' ) ).setAttribute( 'data-tb-focus', '' );
 		armBlockPopA11y( tbPop, { label: acfToolbarTitle( el ), onClose: hideTbPop, focus: '[data-tb-focus]' } );
 		bindFormComboboxes( tbPop, 'data-inspdf', [] );
+		seedInspectorControls( tbPop );
 		tbPop.addEventListener( 'click', ( e ) => {
 			const sw = e.target.closest( '[data-ftype="toggle"]' );
 			if ( ! sw ) return;
@@ -43194,6 +43283,7 @@
 			$$( 'select[data-insp]', bodyEl ).forEach( comboifySelect );
 			const addType = $( '#minn-cted-add-type', overlay );
 			if ( addType ) comboifySelect( addType );
+			seedInspectorControls( bodyEl );
 		};
 		renderCards();
 
@@ -43489,6 +43579,23 @@
 		return rows + locked;
 	}
 
+	// What each inspector control reads as the value the block holds. A
+	// collect folds back only a control that now reads differently, so an
+	// Apply leaves every field the person did not change as stored ("1" stays
+	// "1", a number stays a number, a line break a text box cannot show stays).
+	// Seeded when the controls are drawn, and again for each control a collect
+	// folds, since the block then holds what the control shows.
+	const inspSeeds = new WeakMap();
+	const inspRead = ( el ) => JSON.stringify( formControlValue( el ) );
+	function seedInspectorControls( root ) {
+		if ( ! root ) return;
+		$$( '[data-insp], [data-inspdf]', root ).forEach( ( el ) => {
+			if ( ! inspSeeds.has( el ) ) inspSeeds.set( el, inspRead( el ) );
+		} );
+	}
+	const inspUntouched = ( el ) => inspSeeds.has( el ) && inspSeeds.get( el ) === inspRead( el );
+	const inspFolded = ( el ) => inspSeeds.set( el, inspRead( el ) );
+
 	// Fold data-inspdf inputs back into the object attribute. Unknown and
 	// underscore keys in the existing object are preserved untouched; a field
 	// that never existed and is still empty injects nothing.
@@ -43501,6 +43608,8 @@
 			const name = input.dataset.inspdf.slice( sep + 1 );
 			const fdef = df.fields.find( ( f ) => f.name === name );
 			if ( ! fdef ) return;
+			if ( inspUntouched( input ) ) return;
+			inspFolded( input );
 			let v = formControlValue( input );
 			const obj = ( attrs && typeof attrs[ df.attr ] === 'object' && attrs[ df.attr ] ) || {};
 			const had = name in obj;
@@ -43637,7 +43746,9 @@
 	function inspectorModel( raw ) {
 		const parts = blockParts( raw );
 		if ( ! parts ) return null;
-		const model = { parts, ownAttrs: { ...parts.attrs }, head: '', tail: '', children: [], mode: 'none', segments: null, sep: null };
+		// openAttrs: the attributes as the comment holds them, so a rebuild
+		// that changed none of them keeps the comment's own bytes.
+		const model = { parts, ownAttrs: { ...parts.attrs }, openAttrs: JSON.stringify( parts.attrs ), head: '', tail: '', children: [], mode: 'none', segments: null, sep: null };
 		if ( ! parts.inner ) return model;
 		const segments = tokenizeBlocks( parts.inner );
 		if ( ! segments ) return model;
@@ -43650,6 +43761,8 @@
 				model.children.push( {
 					name: p.name,
 					attrs: { ...p.attrs },
+					open: p.open,
+					openAttrs: JSON.stringify( p.attrs ),
 					selfClosing: p.selfClosing,
 					tail: seg.raw.slice( p.open.length ), // inner + close comment for wrapped children
 					segIdx: i,
@@ -43747,6 +43860,9 @@
 			$$( '[data-insp]', root ).forEach( ( input ) => {
 				const [ t, key ] = input.dataset.insp.split( ':' );
 				if ( t !== target ) return;
+				// A field left alone keeps the attribute as the block holds it.
+				if ( inspUntouched( input ) ) return;
+				inspFolded( input );
 				// Engine read; fold's contract is undefined = cleared (remove
 				// the attribute), and the engine reads an empty number as null.
 				let v = formControlValue( input );
@@ -43958,6 +44074,7 @@
 				<button class="minn-btn-soft danger" id="minn-insp-remove" type="button" title="${ esc( __( 'Remove this block' ) ) }">${ icon( 'trash' ) }${ editable ? '' : ' ' + esc( __( 'Remove block' ) ) }</button>
 			</div>`;
 		bindFormComboboxes( inspectorEl, 'data-inspdf', [] );
+		seedInspectorControls( inspectorEl );
 		positionInspector( insp.islandEl );
 	}
 
@@ -44411,7 +44528,9 @@
 		const { model } = insp;
 
 		const childRaw = ( c ) => {
-			const open = buildOpenComment( c.name, c.attrs, c.selfClosing );
+			// A child whose attributes nothing changed keeps its comment as
+			// written (a value stored escaped stays escaped).
+			const open = c.open && JSON.stringify( c.attrs ) === c.openAttrs ? c.open : buildOpenComment( c.name, c.attrs, c.selfClosing );
 			let tail = c.tail;
 			// Edited child text splices into the saved HTML — only when it
 			// actually changed, so untouched children stay byte-identical.
@@ -44456,7 +44575,7 @@
 			} );
 			inner = model.segments.map( ( s ) => s.raw ).join( '' );
 		}
-		const open = buildOpenComment( model.parts.name, model.ownAttrs, model.parts.selfClosing );
+		const open = JSON.stringify( model.ownAttrs ) === model.openAttrs ? model.parts.open : buildOpenComment( model.parts.name, model.ownAttrs, model.parts.selfClosing );
 		let newRaw = model.parts.selfClosing ? open : open + inner + model.parts.close;
 		// core/spacer keeps its height in BOTH the attrs and an inline style in
 		// the saved HTML — regenerate the block so a height edit actually
@@ -45298,6 +45417,21 @@
 		document.removeEventListener( 'mousedown', linkPopAway, true );
 	}
 
+	// The new-tab switch owns target and the noreferrer/noopener rel tokens,
+	// nothing else: a nofollow or sponsored token on the link stays.
+	function linkNewTab( el, on ) {
+		if ( ! el ) return;
+		const keep = ( el.getAttribute( 'rel' ) || '' ).split( /\s+/ ).filter( ( tok ) => tok && ! /^(noreferrer|noopener)$/i.test( tok ) );
+		if ( on ) {
+			el.setAttribute( 'target', '_blank' );
+			el.setAttribute( 'rel', [ ...keep, 'noreferrer', 'noopener' ].join( ' ' ) );
+		} else {
+			el.removeAttribute( 'target' );
+			if ( keep.length ) el.setAttribute( 'rel', keep.join( ' ' ) );
+			else el.removeAttribute( 'rel' );
+		}
+	}
+
 	// Open on an existing <a> (edit/unlink) or on a selection Range (create).
 	function openLinkPop( a, range ) {
 		hideLinkPop();
@@ -45347,16 +45481,7 @@
 			} );
 		}
 		// Match image-link / core buttons: target=_blank + noreferrer noopener.
-		const applyNewTab = ( el, on ) => {
-			if ( ! el ) return;
-			if ( on ) {
-				el.setAttribute( 'target', '_blank' );
-				el.setAttribute( 'rel', 'noreferrer noopener' );
-			} else {
-				el.removeAttribute( 'target' );
-				el.removeAttribute( 'rel' );
-			}
-		};
+		const applyNewTab = linkNewTab;
 		const apply = () => {
 			// An author types this, and wp_kses_post strips a javascript: href
 			// on save for anyone without unfiltered_html, but the vocabulary the
@@ -45364,10 +45489,15 @@
 			const url = safeLinkHref( urlInput.value );
 			const newTab = !!( newTabBtn && newTabBtn.classList.contains( 'on' ) );
 			if ( a && a.isConnected ) {
-				if ( url ) {
-					a.setAttribute( 'href', url );
-					applyNewTab( a, newTab );
-				} else unlink();
+				// Only what the person changed: an href left alone stays as
+				// written, and a switch left alone keeps the link's own target
+				// and rel (a nofollow the popover has no control for).
+				const urlChanged = urlInput.value !== href;
+				if ( urlChanged && ! url ) unlink();
+				else {
+					if ( urlChanged ) a.setAttribute( 'href', url );
+					if ( newTab !== newTabSeed ) applyNewTab( a, newTab );
+				}
 			} else if ( url && linkPopSaved && linkPopSaved.startContainer.isConnected ) {
 				// preventScroll matters on every editor-body focus: focusing the
 				// contenteditable scrolls its TOP into view BEFORE the saved
@@ -45531,17 +45661,30 @@
 		};
 		linkInput.addEventListener( 'input', syncLb );
 		syncLb();
+		// What each control showed. Apply changes only what the person
+		// changed: a caption left alone keeps its links and emphasis (the box
+		// shows its text only), and a link left alone keeps its address, its
+		// rel and the block's link and lightbox attributes.
+		const altInput = imgPop.querySelector( '[data-img-alt]' );
+		const capInput = imgPop.querySelector( '[data-img-caption]' );
+		const tabBox = imgPop.querySelector( '[data-img-newtab]' );
+		const seed = { alt: altInput.value, cap: capInput.value, link: linkInput.value, tab: tabBox.checked, lb: lbBox.checked };
 
 		imgPop.querySelector( '[data-img-apply]' ).addEventListener( 'click', () => {
-			img.alt = imgPop.querySelector( '[data-img-alt]' ).value.trim();
-			const cap = imgPop.querySelector( '[data-img-caption]' ).value.trim();
+			if ( altInput.value !== seed.alt ) img.alt = altInput.value.trim();
+			const capChanged = capInput.value !== seed.cap;
+			const cap = capInput.value.trim();
 			// Same allowlist as the text-link popover: an image link is still
 			// an href an author typed.
 			const url = safeLinkHref( linkInput.value );
-			const newTab = imgPop.querySelector( '[data-img-newtab]' ).checked;
+			const newTab = tabBox.checked;
+			const urlChanged = linkInput.value !== seed.link;
+			const tabChanged = newTab !== seed.tab;
+			const lbChanged = lbBox.checked !== seed.lb;
+			const linkTouched = urlChanged || tabChanged || lbChanged;
 			const wantLb = ! url && lbBox.checked;
 			let fig = img.closest( 'figure' );
-			if ( ! fig && ( cap || url || wantLb ) ) {
+			if ( ! fig && ( ( capChanged && cap ) || ( linkTouched && ( url || wantLb ) ) ) ) {
 				// Bare img — give it the standard figure wrapper (caption,
 				// link and parked attrs all live on the figure).
 				fig = document.createElement( 'figure' );
@@ -45550,14 +45693,14 @@
 				fig.appendChild( img );
 			}
 			let fc = fig ? fig.querySelector( ':scope > figcaption' ) : null;
-			if ( cap ) {
+			if ( capChanged && cap ) {
 				if ( ! fc ) {
 					fc = document.createElement( 'figcaption' );
 					fc.className = 'wp-element-caption';
 					fig.appendChild( fc );
 				}
 				fc.textContent = cap;
-			} else if ( fc ) {
+			} else if ( capChanged && fc ) {
 				// Keep the (typable) caption element — empty ones are the
 				// inline affordance and never serialize.
 				fc.textContent = '';
@@ -45566,7 +45709,7 @@
 			// the attribute; linkDestination/lightbox ride the parked comment
 			// attrs. Direct-DOM, so ⌘Z is a safe no-op here (the undo
 			// decision), like island and table structure ops.
-			if ( fig ) {
+			if ( fig && linkTouched ) {
 				let a = fig.querySelector( ':scope > a' );
 				const attrs = ( () => {
 					try { return JSON.parse( fig.dataset.minnAttrs || '{}' ) || {}; } catch ( e ) { return {}; }
@@ -45577,27 +45720,27 @@
 					const idm = img.className.match( /wp-image-(\d+)/ );
 					if ( idm ) attrs.id = parseInt( idm[ 1 ], 10 );
 				}
-				if ( url ) {
-					if ( ! a ) {
+				// An address left alone keeps the link it is, whatever the
+				// allowlist would make of a new one.
+				const linked = urlChanged ? !! url : !! a;
+				if ( linked ) {
+					const made = ! a;
+					if ( made ) {
 						a = document.createElement( 'a' );
 						fig.insertBefore( a, img );
 						a.appendChild( img );
 					}
-					a.setAttribute( 'href', url );
-					if ( newTab ) {
-						a.setAttribute( 'target', '_blank' );
-						a.setAttribute( 'rel', 'noreferrer noopener' );
-					} else {
-						a.removeAttribute( 'target' );
-						a.removeAttribute( 'rel' );
+					if ( urlChanged ) {
+						a.setAttribute( 'href', url );
+						attrs.linkDestination = 'custom';
 					}
-					attrs.linkDestination = 'custom';
-					delete attrs.lightbox;
+					if ( made || tabChanged ) linkNewTab( a, newTab );
+					if ( urlChanged || lbChanged ) delete attrs.lightbox;
 				} else {
 					if ( a ) a.replaceWith( img );
-					delete attrs.linkDestination;
-					if ( wantLb ) attrs.lightbox = { enabled: true };
-					else delete attrs.lightbox;
+					if ( urlChanged ) delete attrs.linkDestination;
+					if ( wantLb ) attrs.lightbox = Object.assign( {}, attrs.lightbox, { enabled: true } );
+					else if ( urlChanged || lbChanged ) delete attrs.lightbox;
 				}
 				if ( Object.keys( attrs ).length ) fig.dataset.minnAttrs = JSON.stringify( attrs );
 				else fig.removeAttribute( 'data-minn-attrs' );
