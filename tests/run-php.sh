@@ -109,6 +109,9 @@ run security-v045-delta-routes single --user=admin
 run security-v045-delta-surfaces single --user=admin
 run security-v045-registry single --user=admin
 run security-v046-kernel single --user=admin
+run security-v046-registry-rest single --user=admin
+run security-v046-registry-reads single --user=admin
+run security-v046-registry-writes single --user=admin
 run sweep-v044 single --user=admin
 run write-fences single --user=admin
 
@@ -129,8 +132,11 @@ run security-v045-rc subsite --user=admin
 run security-v045-delta-data subsite --user=admin
 run security-v045-delta-routes subsite --user=admin
 run security-v045-delta-surfaces subsite --user=admin
+run security-v046-registry-rest subsite --user=admin
+run security-v046-registry-reads subsite --user=admin
 run security-v045-delta-surfaces net2
 run multi-network-system net2
+run security-v046-registry-rest net2
 
 # roundtrip-surfaces replays bodies a browser run captured; see its header.
 echo "SKIP  roundtrip-surfaces: needs a browser capture first; run ./roundtrip.sh" | tee -a "$OUT/summary.txt"
