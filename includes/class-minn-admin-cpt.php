@@ -448,9 +448,9 @@ class Minn_Admin_CPT {
 
 	/**
 	 * Whether a save left a text field as the modal showed it: not sent, or
-	 * sent back unchanged. The modal's single-line input drops line breaks
-	 * and the client trims, so a stored multi-line description comes back
-	 * without them although nobody typed in it.
+	 * sent back unchanged, compared the way the client's textOf() decides
+	 * what changed (line endings as \n, trimmed). Any other difference, a
+	 * line break added or removed included, is an edit.
 	 *
 	 * @param WP_REST_Request $request The save.
 	 * @param array           $now     The definition the modal was built from.
@@ -462,7 +462,7 @@ class Minn_Admin_CPT {
 			return true;
 		}
 		$shown = function ( $v ) {
-			return trim( str_replace( array( "\r", "\n" ), '', (string) $v ) );
+			return trim( preg_replace( '/\r\n?/', "\n", (string) $v ) );
 		};
 		return $shown( $request[ $key ] ) === $shown( $now[ $key ] ?? '' );
 	}
