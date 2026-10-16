@@ -13478,10 +13478,10 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			return array( 'kind' => 'absent', 'offset' => null, 'length' => 0 );
 		}
 		$literal = "/^define\\(\\s*(['\"])" . preg_quote( $name, '/' ) . "\\1\\s*,\\s*(true|false)\\s*\\)\\s*;$/i";
-		if ( null === $hit || ! preg_match( $literal, $hit[0] ) ) {
+		if ( null === $hit || ! preg_match( $literal, $hit[0], $lit ) ) {
 			return $custom;
 		}
-		return array( 'kind' => 'bool', 'offset' => $hit[1], 'length' => strlen( $hit[0] ) );
+		return array( 'kind' => 'bool', 'offset' => $hit[1], 'length' => strlen( $hit[0] ), 'value' => 'true' === strtolower( $lit[2] ) );
 	}
 
 	/**
@@ -13606,6 +13606,51 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	}
 
 	/**
+	 * One debug switch as the System page shows it: its value now, whether
+	 * wp-config.php defines it, and whether it is locked, with why:
+	 * 'elsewhere' (defined outside wp-config.php, or by a literal there
+	 * that is not what WordPress runs with: dead code under an if, a define
+	 * something earlier overrides), 'custom' or 'multiple' (see
+	 * config_define_kind()).
+	 *
+	 * @param string $name     Constant name.
+	 * @param string $contents wp-config.php source ('' when unreadable).
+	 * @return array
+	 */
+	public static function config_switch( $name, $contents ) {
+		$scan    = '' !== (string) $contents ? self::config_define_scan( $name, $contents ) : array( 'kind' => 'absent' );
+		$kind    = $scan['kind'];
+		$defined = defined( $name );
+		if ( 'absent' === $kind ) {
+			$lock = $defined ? 'elsewhere' : '';
+		} elseif ( 'bool' === $kind ) {
+			$lock = self::config_define_live( $name, $scan ) ? '' : 'elsewhere';
+		} else {
+			$lock = $kind;
+		}
+		return array(
+			'value'     => $defined ? (bool) constant( $name ) : false,
+			'in_config' => 'absent' !== $kind,
+			'locked'    => '' !== $lock,
+			'lock'      => $lock,
+		);
+	}
+
+	/**
+	 * Whether the one literal define config_define_scan() found is the value
+	 * WordPress runs with. A literal under a branch that did not run, or
+	 * after something that defined the constant first, is not: rewriting it
+	 * would change nothing.
+	 *
+	 * @param string $name Constant name.
+	 * @param array  $scan config_define_scan()'s answer, kind 'bool'.
+	 * @return bool
+	 */
+	private static function config_define_live( $name, array $scan ) {
+		return defined( $name ) && isset( $scan['value'] ) && constant( $name ) === $scan['value'];
+	}
+
+	/**
 	 * Whether editing wp-config is possible here, and the current state of each
 	 * debug constant. A constant defined OUTSIDE wp-config (a mu-plugin, the
 	 * host's prepend) is 'locked' — editing wp-config wouldn't change it.
@@ -13629,21 +13674,13 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 
 		$constants = array();
 		foreach ( self::debug_constants() as $name => $meta ) {
-			$kind      = '' !== $contents ? self::config_define_kind( $name, $contents ) : 'absent';
-			$in_config = 'absent' !== $kind;
-			$defined   = defined( $name );
-			$constants[] = array(
-				'name'      => $name,
-				'label'     => $meta['label'],
-				'desc'      => $meta['desc'],
-				'value'     => $defined ? (bool) constant( $name ) : false,
-				'in_config' => $in_config,
-				// Defined elsewhere, or in wp-config.php any way but one
-				// literal true or false (a custom value the switch would
-				// flatten, or more than one define).
-				'locked'    => ( $defined && ! $in_config ) || ( $in_config && 'bool' !== $kind ),
-				// Why: 'elsewhere', 'custom' or 'multiple'.
-				'lock'      => ( $defined && ! $in_config ) ? 'elsewhere' : ( $in_config && 'bool' !== $kind ? $kind : '' ),
+			$constants[] = array_merge(
+				array(
+					'name'  => $name,
+					'label' => $meta['label'],
+					'desc'  => $meta['desc'],
+				),
+				self::config_switch( $name, $contents )
 			);
 		}
 
@@ -13691,6 +13728,11 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			return new WP_Error( 'read_failed', __( 'Could not read wp-config.php.', 'minn-admin' ), array( 'status' => 500 ) );
 		}
 
+		$scan = self::config_define_scan( $name, $contents );
+		if ( 'bool' === $scan['kind'] && ! self::config_define_live( $name, $scan ) ) {
+			/* translators: %s: a wp-config.php constant name, such as WP_DEBUG_LOG. */
+			return new WP_Error( 'not_live', sprintf( __( 'The %s line in wp-config.php is not the one WordPress runs with, so it can only be changed there.', 'minn-admin' ), $name ), array( 'status' => 400 ) );
+		}
 		$new = self::config_rewrite( $name, $value, $contents );
 		if ( is_wp_error( $new ) ) {
 			return $new;
