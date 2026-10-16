@@ -286,6 +286,12 @@ function minn_admin_tm_row( $row, $timeout, $now ) {
 	if ( in_array( $type, array( 'array', 'object', 'serialized' ), true ) ) {
 		$preview = '(' . $type . ', ' . size_format( strlen( (string) $row->option_value ), 1 ) . ')';
 	}
+	// A row the database browser redacts (a password hash, a token) is
+	// hidden here too: the egress fence only recognises values shaped like
+	// a key.
+	if ( method_exists( 'Minn_Admin_DB', 'is_credential_option' ) && Minn_Admin_DB::is_credential_option( $row->option_name ) ) {
+		$preview = __( '(hidden)', 'minn-admin' );
+	}
 
 	$status = 'persistent';
 	$expires = '';
@@ -330,6 +336,9 @@ function minn_admin_tm_detail( $id ) {
 		// Opaque by design — length only, so Minn never materializes the payload.
 		/* translators: 1: value type (array, object or serialized), 2: formatted byte count. */
 		$show = sprintf( __( '(serialized %1$s, %2$s bytes — open Transients Manager to inspect)', 'minn-admin' ), $item['type'], number_format_i18n( strlen( $raw ) ) );
+	}
+	if ( method_exists( 'Minn_Admin_DB', 'is_credential_option' ) && Minn_Admin_DB::is_credential_option( $row->option_name ) ) {
+		$show = __( '(hidden)', 'minn-admin' );
 	}
 
 	$meta = array(

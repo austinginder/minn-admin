@@ -696,5 +696,41 @@ rest_get_server();
 	}
 } )();
 
+/*
+ * The Transients list and detail print a row's string value in full, and
+ * the egress fence hides only values shaped like a key, so a SureCart
+ * shopper's checkout password hash (_transient_sc_checkout_password_hash_*,
+ * a row the database browser hides) was printed there. A row the browser
+ * counts as a credential shows "(hidden)" on both.
+ */
+( function () use ( $check, $skip, $call ) {
+	if ( ! function_exists( 'minn_admin_tm_ready' ) || ! minn_admin_tm_ready() ) {
+		$skip( 'Transients: Transients Manager inactive' );
+		return;
+	}
+	list( $st ) = $call( 'GET', '/minn-admin/v1/transients' );
+	if ( 200 !== $st ) {
+		$skip( 'Transients: list route not available here (' . $st . ')' );
+		return;
+	}
+	global $wpdb;
+	$name = 'sc_checkout_password_hash_minnsuite';
+	$hash = '$P$Bminnsuite0123456789abcdefghij';
+	set_transient( $name, $hash, 600 );
+	try {
+		list( $st, $d ) = $call( 'GET', '/minn-admin/v1/transients' );
+		$check( 'Transients: the list does not print a stored checkout password hash', 200 === $st && false === strpos( wp_json_encode( $d ), 'minnsuite0123456789' ), (string) $st );
+		$id = (int) $wpdb->get_var( $wpdb->prepare( "SELECT option_id FROM {$wpdb->options} WHERE option_name = %s", '_transient_' . $name ) );
+		list( $st, $d ) = $call( 'GET', '/minn-admin/v1/transients/' . $id );
+		$check( 'Transients: nor does the detail', 200 === $st && false === strpos( wp_json_encode( $d ), 'minnsuite0123456789' ), (string) $st );
+		set_transient( 'minn_suite_plain', 'plain visible value', 600 );
+		list( , $d ) = $call( 'GET', '/minn-admin/v1/transients' );
+		$check( 'Transients: an ordinary value is still shown (control)', false !== strpos( wp_json_encode( $d ), 'plain visible value' ) );
+	} finally {
+		delete_transient( $name );
+		delete_transient( 'minn_suite_plain' );
+	}
+} )();
+
 printf( "\nsecurity-v046-prerc-core: %d/%d passed\n", count( array_filter( $results ) ), count( $results ) );
 exit( count( array_filter( $results ) ) === count( $results ) ? 0 : 1 );
