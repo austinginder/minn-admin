@@ -122,6 +122,21 @@ function minn_admin_acf_schema_groups() {
 	return $out;
 }
 
+/**
+ * Write a group through ACF's own updater without Minn's own key. ACF stores
+ * every key of the array it is given in the group's settings, so writing
+ * the array minn_admin_acf_schema_groups() returns stored `minn_source`
+ * into the group on every save, and its exports carried it.
+ *
+ * @param array $group ACF group array (may carry minn_source).
+ * @return array|false What acf_update_field_group() returns.
+ */
+function minn_admin_acf_schema_group_store( $group ) {
+	unset( $group['minn_source'] );
+	// Slashed for the unslash inside; see the create route.
+	return acf_update_field_group( wp_slash( $group ) );
+}
+
 /** Resolve one group by key; null when unknown. */
 function minn_admin_acf_schema_group( $key ) {
 	foreach ( minn_admin_acf_schema_groups() as $g ) {
@@ -146,16 +161,30 @@ function minn_admin_acf_schema_group_item( $g ) {
 	);
 }
 
+/**
+ * A field's choices as the edit forms show them: "value : Label" per line,
+ * the value alone when the two match (ACF's own convention). A save
+ * compares the text it is sent with this text for the stored choices, so
+ * choices nobody touched are never parsed back: a label holding " : " or a
+ * line break does not survive the round trip.
+ *
+ * @param mixed $choices Stored choices.
+ * @return string
+ */
+function minn_admin_acf_schema_choices_text( $choices ) {
+	if ( empty( $choices ) || ! is_array( $choices ) ) {
+		return '';
+	}
+	$lines = array();
+	foreach ( $choices as $value => $label ) {
+		$lines[] = (string) $value === (string) $label ? (string) $value : $value . ' : ' . $label;
+	}
+	return implode( "\n", $lines );
+}
+
 /** List-row shape for the Fields view (includes the edit-form seed values). */
 function minn_admin_acf_schema_field_item( $f, $group ) {
-	$choices = '';
-	if ( ! empty( $f['choices'] ) && is_array( $f['choices'] ) ) {
-		$lines = array();
-		foreach ( $f['choices'] as $value => $label ) {
-			$lines[] = (string) $value === (string) $label ? (string) $value : $value . ' : ' . $label;
-		}
-		$choices = implode( "\n", $lines );
-	}
+	$choices = minn_admin_acf_schema_choices_text( $f['choices'] ?? null );
 	return array(
 		'id'            => $f['key'],
 		'label'         => (string) $f['label'],
@@ -524,7 +553,7 @@ add_action( 'rest_api_init', function () {
 			} else {
 				$group['active'] = 'activate' === $verb;
 			}
-			acf_update_field_group( wp_slash( $group ) );
+			minn_admin_acf_schema_group_store( $group );
 			return rest_ensure_response( array( 'ok' => true ) );
 		},
 	) );
@@ -659,17 +688,23 @@ add_action( 'rest_api_init', function () {
 				if ( is_wp_error( $found ) ) {
 					return $found;
 				}
-				$field          = $found['field'];
-				$field['label'] = trim( (string) $request['label'] ) ?: $field['label'];
-				if ( null !== $request['default_value'] ) {
+				$field = $found['field'];
+				// The dialog sends every field, an untouched one as the row
+				// serves it; that one stays as stored. Parsed back from its
+				// text, a choice label holding " : " lost its tail.
+				$served = minn_admin_acf_schema_field_item( $field, $found['group'] + array( 'minn_source' => 'db' ) );
+				if ( null !== $request['label'] && (string) $request['label'] !== $served['label'] ) {
+					$field['label'] = trim( (string) $request['label'] ) ?: $field['label'];
+				}
+				if ( null !== $request['default_value'] && (string) $request['default_value'] !== $served['default_value'] ) {
 					$field['default_value'] = (string) $request['default_value'];
 				}
-				if ( null !== $request['required'] ) {
+				if ( null !== $request['required'] && (string) $request['required'] !== $served['required'] ) {
 					$field['required'] = 'Yes' === (string) $request['required'] ? 1 : 0;
 				}
 				// Choices only mean something on choice fields; an edit form
 				// shared across types must not bolt them onto a text field.
-				if ( null !== $request['choices'] && in_array( $field['type'], array( 'select', 'radio' ), true ) ) {
+				if ( null !== $request['choices'] && (string) $request['choices'] !== $served['choices'] && in_array( $field['type'], array( 'select', 'radio' ), true ) ) {
 					$choices = minn_admin_acf_schema_parse_choices( (string) $request['choices'] );
 					if ( ! $choices ) {
 						return new WP_Error( 'invalid', __( 'Select and radio fields need at least one choice.', 'minn-admin' ), array( 'status' => 400 ) );
@@ -785,14 +820,7 @@ function minn_admin_acf_builder_field( $f, $depth = 0 ) {
 	if ( 'repeater' === $type && $depth > 0 ) {
 		$edit = false;
 	}
-	$choices = '';
-	if ( ! empty( $f['choices'] ) && is_array( $f['choices'] ) ) {
-		$lines = array();
-		foreach ( $f['choices'] as $value => $label ) {
-			$lines[] = (string) $value === (string) $label ? (string) $value : $value . ' : ' . $label;
-		}
-		$choices = implode( "\n", $lines );
-	}
+	$choices = minn_admin_acf_schema_choices_text( $f['choices'] ?? null );
 	$out = array(
 		'key'           => (string) $f['key'],
 		'label'         => (string) $f['label'],
@@ -1016,8 +1044,10 @@ function minn_admin_acf_builder_plan_row( $row, $stored, &$names, $order, $sub =
 	}
 	$names[ $name ] = true;
 	// New choice fields must arrive with choices; an existing row may omit
-	// the key entirely (absent = keep what's stored).
-	if ( in_array( $type, array( 'select', 'radio' ), true ) && ( ! $key || array_key_exists( 'choices', $row ) ) ) {
+	// the key entirely, or send it back as served (both keep what's stored,
+	// see minn_admin_acf_builder_overlay()).
+	$as_served = $cur && array_key_exists( 'choices', $row ) && is_scalar( $row['choices'] ) && (string) $row['choices'] === minn_admin_acf_schema_choices_text( $cur['choices'] ?? null );
+	if ( in_array( $type, array( 'select', 'radio' ), true ) && ( ! $key || array_key_exists( 'choices', $row ) ) && ! $as_served ) {
 		if ( ! minn_admin_acf_schema_parse_choices( (string) ( $row['choices'] ?? '' ) ) ) {
 			return new WP_Error( 'invalid', __( 'Select and radio fields need at least one choice.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
@@ -1035,11 +1065,24 @@ function minn_admin_acf_builder_plan_row( $row, $stored, &$names, $order, $sub =
  * @return array
  */
 function minn_admin_acf_builder_overlay( $field, $row, $settings ) {
+	// The builder sends every setting of every row, an untouched one as the
+	// payload served it. That one keeps its stored value: parsed back, a
+	// choice label holding " : " lost its tail, a step of 'any' became 0 and
+	// a min of '0.5' became a float.
+	$served = ! empty( $field['ID'] ) ? minn_admin_acf_builder_field( $field ) : null;
 	foreach ( $settings as $setting ) {
 		if ( ! array_key_exists( $setting, $row ) ) {
 			continue;
 		}
 		$v = $row[ $setting ];
+		if ( $served && array_key_exists( $setting, $served ) ) {
+			$same = 'required' === $setting
+				? ( ! empty( $v ) && 'false' !== $v ) === (bool) $served['required']
+				: ( null === $v || is_scalar( $v ) ) && (string) $v === (string) $served[ $setting ];
+			if ( $same ) {
+				continue;
+			}
+		}
 		if ( 'required' === $setting ) {
 			$field['required'] = ! empty( $v ) && 'false' !== $v ? 1 : 0;
 		} elseif ( 'choices' === $setting ) {
@@ -1117,7 +1160,10 @@ function minn_admin_acf_builder_save( $group, $body ) {
 	}
 
 	// ---- Group settings. ----
-	$group['title'] = $title;
+	// A title sent back as stored keeps its stored bytes (edge spaces too).
+	if ( ! isset( $body['title'] ) || (string) $body['title'] !== (string) $group['title'] ) {
+		$group['title'] = $title;
+	}
 	if ( array_key_exists( 'active', $body ) ) {
 		$group['active'] = ! empty( $body['active'] );
 	}
@@ -1128,8 +1174,7 @@ function minn_admin_acf_builder_save( $group, $body ) {
 		}
 		$group['location'] = $loc;
 	}
-	// Slashed for the unslash inside; see the create route.
-	acf_update_field_group( wp_slash( $group ) );
+	minn_admin_acf_schema_group_store( $group );
 
 	// ---- Fields: update / create in payload order, then delete the absent. ----
 	$kept = array();

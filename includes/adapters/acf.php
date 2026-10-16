@@ -170,6 +170,37 @@ function minn_admin_acf_choices_in( $value, $field, $scope = 'post' ) {
 }
 
 /**
+ * A multi-choice value as written, with the stored picks the field does not
+ * offer put back where they were stored. The panel draws a switch for each
+ * of the field's current choices only, so a stored pick outside them (a
+ * choice removed since, an "Allow Custom" entry, a value written by code)
+ * cannot be unticked in Minn, and turning another switch in the same list
+ * dropped it. A repeater row comes back whole, so the same happened there to
+ * a sub nobody touched. ACF's own updater stores the list it is given.
+ *
+ * @param array $field  Mapped field.
+ * @param mixed $value  What minn_admin_acf_value_in() made of the sent value.
+ * @param mixed $stored The raw stored value (null when there is none).
+ * @return mixed
+ */
+function minn_admin_acf_choices_keep( $field, $value, $stored ) {
+	if ( ! is_array( $value ) || 'multicheck' !== ( $field['type'] ?? '' ) || null === $stored || false === $stored || '' === $stored ) {
+		return $value;
+	}
+	$offered = array_map( 'strval', array_keys( is_array( $field['choices'] ?? null ) ? $field['choices'] : array() ) );
+	$value   = array_values( $value );
+	$sent    = array_map( 'strval', $value );
+	foreach ( array_values( (array) $stored ) as $pos => $v ) {
+		if ( ! is_scalar( $v ) || '' === (string) $v || in_array( (string) $v, $offered, true ) || in_array( (string) $v, $sent, true ) ) {
+			continue;
+		}
+		array_splice( $value, min( $pos, count( $value ) ), 0, array( $v ) );
+		$sent[] = (string) $v;
+	}
+	return $value;
+}
+
+/**
  * Stored file value (attachment id) → { id, url, name } for the file
  * control, or '' when unset. Writes reuse minn_admin_acf_image_in — a file
  * is the same validated attachment id.
@@ -1768,7 +1799,7 @@ function minn_admin_acf_row_overlay_in( $subs, $vals, $base, $scope = 'post' ) {
 				continue; // the stored value as served, not an edit
 			}
 		} else {
-			$v = minn_admin_acf_value_in( $sub, $vals[ $sub['name'] ], $scope );
+			$v = minn_admin_acf_choices_keep( $sub, minn_admin_acf_value_in( $sub, $vals[ $sub['name'] ], $scope ), $held ? $was : null );
 		}
 		if ( null === $v && ! $held ) {
 			$v = minn_admin_acf_value_in( $sub, '', $scope );
@@ -2208,6 +2239,7 @@ function minn_admin_acf_write_values( $post_id, $values ) {
 			$sent  = $value;
 			$value = minn_admin_acf_value_in( $field, $value );
 			$value = minn_admin_acf_relation_preserve( $field, $value, $stored, $sent );
+			$value = minn_admin_acf_choices_keep( $field, $value, $stored );
 		}
 		if ( null === $value ) {
 			continue; // invalid input never clobbers a stored value
@@ -3312,6 +3344,7 @@ function minn_admin_acf_options_save( $page, $values ) {
 			$sent = $v;
 			$v    = minn_admin_acf_value_in( $f, $v, 'options' );
 			$v    = minn_admin_acf_relation_preserve( $f, $v, $stored, $sent );
+			$v    = minn_admin_acf_choices_keep( $f, $v, $stored );
 		}
 		if ( null === $v ) {
 			continue; // invalid input never clobbers a stored value
