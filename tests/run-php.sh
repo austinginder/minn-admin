@@ -111,6 +111,11 @@ run security-v045-registry single --user=admin
 run security-v046-kernel single --user=admin
 run security-v046-registry-rest single --user=admin
 run security-v046-registry-reads single --user=admin
+run security-v046-prerc-core single --user=admin
+run security-v046-prerc-fields single --user=admin
+run security-v046-prerc-forms single --user=admin
+# 301 Redirects, Simple 301 Redirects and PowerPress stay inactive on the lab; the swap loads them, and the suite passed to --require switches Rank Math's redirections module on, for this process only.
+MINN_SWAP_ADD=eps-301-redirects/eps-301-redirects.php,simple-301-redirects/wp-simple-301-redirects.php,powerpress/powerpress.php run security-v046-prerc-misc single --user=admin --require=tests/lib/plugin-swap.php --require=tests/security-v046-prerc-misc.test.php
 MINN_SWAP_ADD=custom-css-js/custom-css-js.php run security-v046-registry-writes single --user=admin --require=tests/lib/plugin-swap.php
 run sweep-v044 single --user=admin
 run write-fences single --user=admin
