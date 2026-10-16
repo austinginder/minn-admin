@@ -167,5 +167,106 @@ rest_get_server();
 	}
 } )();
 
+/*
+ * 301 Redirects (WebFactory): a source and target the edit leaves alone keep
+ * their stored bytes. Their CSV import and their v1 migration store them
+ * undecoded, and the save decoded and cleaned both sides ('caf%C3%A9' became
+ * 'café', '?q=c%2B%2B' became '?q=c++').
+ */
+( function () use ( $check, $skip, $call, $wpdb ) {
+	if ( ! function_exists( 'minn_admin_eps301_active' ) || ! minn_admin_eps301_active() ) {
+		$skip( '301 Redirects inactive (load it with MINN_SWAP_ADD=eps-301-redirects/eps-301-redirects.php)' );
+		return;
+	}
+	if ( ! Minn_Admin_Kernel_SQL::exists( 'redirects' ) ) {
+		$skip( '301 Redirects has no table here' );
+		return;
+	}
+	$table = $wpdb->prefix . 'redirects';
+	$from  = 'minn-prerc/caf%C3%A9';
+	$to    = 'https://example.com/find?q=c%2B%2B&amp;x=1';
+	$wpdb->query( 'START TRANSACTION' );
+	try {
+		$wpdb->insert( $table, array( 'url_from' => $from, 'url_to' => $to, 'status' => '301', 'type' => 'url', 'count' => 0 ) );
+		$id = (int) $wpdb->insert_id;
+		if ( $id <= 0 ) {
+			$check( '301 Redirects: a rule is seeded for the check', false, $wpdb->last_error );
+			return;
+		}
+		$served = null;
+		list( , $list ) = $call( 'GET', '/minn-admin/v1/eps301/redirects', null, array( 'search' => 'minn-prerc', 'per_page' => 50 ) );
+		foreach ( (array) ( $list['items'] ?? array() ) as $row ) {
+			if ( (int) ( $row['id'] ?? 0 ) === $id ) {
+				$served = $row;
+			}
+		}
+		$check( '301 Redirects: the list serves the seeded rule', is_array( $served ), wp_json_encode( $list ) );
+		$served = is_array( $served ) ? $served : minn_admin_eps301_item( $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $id ) ) ); // phpcs:ignore
+		$route  = '/' . str_replace( '{id}', (string) $id, Minn_Admin_Kernel::action_path( 'eps301/redirects', 'edit' ) );
+		$row    = function () use ( $wpdb, $table, $id ) {
+			return $wpdb->get_row( $wpdb->prepare( "SELECT url_from, url_to, status, type FROM {$table} WHERE id = %d", $id ), ARRAY_A ); // phpcs:ignore
+		};
+		list( $st, $d ) = $call( 'PUT', $route, array( 'from' => $served['from'], 'to' => $served['to'], 'status' => '302' ) );
+		$now = $row();
+		$check( '301 Redirects: a status-only edit answers 200 and writes the status (control)', 200 === $st && '302' === $now['status'], $st . ' ' . wp_json_encode( $d ) );
+		$check( '301 Redirects: and keeps the stored source byte for byte', $from === $now['url_from'], wp_json_encode( $now['url_from'] ) );
+		$check( '301 Redirects: and keeps the stored target byte for byte', $to === $now['url_to'], wp_json_encode( $now['url_to'] ) );
+		list( $st, $d ) = $call( 'PUT', $route, array( 'status' => 'inactive' ) );
+		$now = $row();
+		$check( '301 Redirects: a body naming only the status keeps the source and target as stored', 200 === $st && 'inactive' === $now['status'] && $from === $now['url_from'] && $to === $now['url_to'], $st . ' ' . wp_json_encode( $now ?: $d ) );
+		list( $st ) = $call( 'PUT', $route, array( 'from' => $served['from'], 'to' => '/minn <b>new</b>%20page', 'status' => '302' ) );
+		$now = $row();
+		$check( '301 Redirects: a changed target is decoded and cleaned as their form does (control)', 200 === $st && '/minn new page' === $now['url_to'], $st . ' ' . wp_json_encode( $now ) );
+	} finally {
+		$wpdb->query( 'ROLLBACK' );
+		wp_cache_flush();
+	}
+} )();
+
+/*
+ * Simple 301 Redirects: a source or target the edit leaves alone keeps its
+ * stored bytes. sanitize_text_field() takes percent octets out, so an
+ * untouched '/caf%C3%A9' became '/caf', renaming the rule.
+ */
+( function () use ( $check, $skip, $call, $once ) {
+	if ( ! function_exists( 'minn_admin_s301_active' ) || ! minn_admin_s301_active() ) {
+		$skip( 'Simple 301 Redirects inactive (load it with MINN_SWAP_ADD=simple-301-redirects/wp-simple-301-redirects.php)' );
+		return;
+	}
+	$sentinel = new stdClass();
+	$was      = get_option( '301_redirects', $sentinel );
+	$restore  = $once( function () use ( $was, $sentinel ) {
+		if ( $was === $sentinel ) {
+			delete_option( '301_redirects' );
+		} else {
+			update_option( '301_redirects', $was );
+		}
+	} );
+	try {
+		$from = '/minn-prerc/caf%C3%A9';
+		$to   = '/menu?deal=50%DEAL';
+		$rows = is_array( $was ) ? $was : array();
+		unset( $rows['/minn-prerc/moved'] );
+		$rows[ $from ] = $to;
+		update_option( '301_redirects', $rows );
+		$id = minn_admin_s301_encode_id( $from );
+		list( $st, $d ) = $call( 'PUT', "/minn-admin/v1/s301/redirects/{$id}", array( 'from' => $from, 'to' => 'https://example.com/new' ) );
+		$now = (array) get_option( '301_redirects', array() );
+		$check( 'Simple 301: a target-only edit answers 200 and writes the target (control)', 200 === $st && in_array( 'https://example.com/new', $now, true ), $st . ' ' . wp_json_encode( $d ) );
+		$check( 'Simple 301: and keeps the stored source as the rule key', array_key_exists( $from, $now ) && ! array_key_exists( '/minn-prerc/caf', $now ), wp_json_encode( array_keys( $now ) ) );
+		$now[ $from ] = $to;
+		update_option( '301_redirects', $now );
+		list( $st ) = $call( 'PUT', "/minn-admin/v1/s301/redirects/{$id}", array( 'from' => '/minn-prerc/moved', 'to' => $to ) );
+		$now = (array) get_option( '301_redirects', array() );
+		$check( 'Simple 301: a source-only edit answers 200 and renames the rule (control)', 200 === $st && array_key_exists( '/minn-prerc/moved', $now ) && ! array_key_exists( $from, $now ), $st . ' ' . wp_json_encode( array_keys( $now ) ) );
+		$check( 'Simple 301: and keeps the stored target byte for byte', $to === ( $now['/minn-prerc/moved'] ?? null ), wp_json_encode( $now['/minn-prerc/moved'] ?? null ) );
+		list( $st, $d ) = $call( 'PUT', '/minn-admin/v1/s301/redirects/' . minn_admin_s301_encode_id( '/minn-prerc/moved' ), array( 'to' => '/menu?deal=50%DEAL&v=2' ) );
+		$now = (array) get_option( '301_redirects', array() );
+		$check( 'Simple 301: a body naming only the target keeps the source as stored', 200 === $st && array_key_exists( '/minn-prerc/moved', $now ), $st . ' ' . wp_json_encode( $d ) );
+	} finally {
+		$restore();
+	}
+} )();
+
 printf( "\nsecurity-v046-prerc-misc: %d/%d passed\n", count( array_filter( $results ) ), count( $results ) );
 exit( count( array_filter( $results ) ) === count( $results ) ? 0 : 1 );

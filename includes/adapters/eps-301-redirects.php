@@ -62,31 +62,50 @@ function minn_admin_eps301_item( $row ) {
 	);
 }
 
-/** Validate + coerce a submitted rule; WP_Error on bad input. */
-function minn_admin_eps301_payload( WP_REST_Request $request ) {
+/**
+ * Validate + coerce a submitted rule; WP_Error on bad input.
+ *
+ * @param WP_REST_Request $request The request.
+ * @param array|null      $row     The stored row on an edit. The dialog sends
+ *                                 every field, an untouched one as the row
+ *                                 serves it; that one, or one the request
+ *                                 leaves out, keeps its stored bytes. Their
+ *                                 CSV import and their v1 migration store
+ *                                 sources and targets undecoded
+ *                                 ('caf%C3%A9', '?q=c%2B%2B'), so decoding
+ *                                 and cleaning an untouched one changed what
+ *                                 the rule matches or where it sends.
+ * @return array|WP_Error
+ */
+function minn_admin_eps301_payload( WP_REST_Request $request, $row = null ) {
+	$served = is_array( $row ) ? minn_admin_eps301_item( $row ) : null;
+	$keep   = function ( $key ) use ( $request, $served ) {
+		return null !== $served && ( null === $request[ $key ] || (string) $request[ $key ] === (string) $served[ $key ] );
+	};
 	// sanitize_text_field( urldecode( … ) ) on both sides, matching their own
 	// writer, the same rule the Simple 301 Redirects adapter already follows.
 	// Without it this table ends up holding values the plugin itself would
 	// never store, and a percent-encoded source that their form would have
 	// decoded is kept encoded here and then never matches.
-	$from   = sanitize_text_field( urldecode( trim( (string) $request['from'] ) ) );
-	$to     = sanitize_text_field( urldecode( trim( (string) $request['to'] ) ) );
-	$status = trim( (string) $request['status'] );
+	$from   = $keep( 'from' ) ? (string) $row['url_from'] : sanitize_text_field( urldecode( trim( (string) $request['from'] ) ) );
+	$to     = $keep( 'to' ) ? (string) $row['url_to'] : sanitize_text_field( urldecode( trim( (string) $request['to'] ) ) );
+	$status = $keep( 'status' ) ? (string) $row['status'] : trim( (string) $request['status'] );
 	if ( '' === $from || '' === $to ) {
 		return new WP_Error( 'invalid', __( 'Source and target are both required.', 'minn-admin' ), array( 'status' => 400 ) );
 	}
-	if ( ! in_array( $status, array( '301', '302', '307', 'inactive' ), true ) ) {
+	if ( ! $keep( 'status' ) && ! in_array( $status, array( '301', '302', '307', 'inactive' ), true ) ) {
 		$status = '301';
 	}
 	// Exactly their _save_redirects normalization: strip this site's root
-	// from the source, then the leading slash (see the header note).
+	// from the source, then the leading slash (see the header note). A
+	// source kept as stored is already in their shape.
 	$root = get_bloginfo( 'url' ) . '/';
 	return array(
-		'url_from' => trim( ltrim( str_replace( $root, '', $from ), '/' ) ),
+		'url_from' => $keep( 'from' ) ? $from : trim( ltrim( str_replace( $root, '', $from ), '/' ) ),
 		'url_to'   => $to,
 		'status'   => $status,
 		// Their convention: a numeric target is a post ID.
-		'type'     => is_numeric( $to ) ? 'post' : 'url',
+		'type'     => $keep( 'to' ) ? (string) $row['type'] : ( is_numeric( $to ) ? 'post' : 'url' ),
 	);
 }
 
@@ -132,7 +151,7 @@ minn_admin_resource( 'eps301/redirects', function () {
 				'method' => 'PUT',
 				'gate'   => 'view',
 				'run'    => function ( $id, array $row, WP_REST_Request $request ) {
-					$data = minn_admin_eps301_payload( $request );
+					$data = minn_admin_eps301_payload( $request, $row );
 					if ( is_wp_error( $data ) ) {
 						return $data;
 					}

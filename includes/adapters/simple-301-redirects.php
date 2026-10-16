@@ -67,10 +67,24 @@ function minn_admin_s301_can() {
 	return current_user_can( 'manage_options' );
 }
 
-/** A submitted rule, sanitized as their own writer (Admin/Ajax.php) does, or why not. */
-function minn_admin_s301_rule( WP_REST_Request $request ) {
-	$from = sanitize_text_field( trim( (string) $request['from'] ) );
-	$to   = sanitize_text_field( trim( (string) $request['to'] ) );
+/**
+ * A submitted rule, sanitized as their own writer (Admin/Ajax.php) does, or
+ * why not. On an edit the dialog sends both fields, an untouched one as
+ * stored: that one, or one the request leaves out, is kept as stored, since
+ * cleaning it rewrites a source or target an older version or an import
+ * left ('/caf%C3%A9' became '/caf', which also renamed the rule).
+ *
+ * @param WP_REST_Request $request The request.
+ * @param string|null     $from_was The stored source on an edit.
+ * @param string|null     $to_was   The stored target on an edit.
+ * @return array|WP_Error array( from, to )
+ */
+function minn_admin_s301_rule( WP_REST_Request $request, $from_was = null, $to_was = null ) {
+	$keep = function ( $key, $was ) use ( $request ) {
+		return null !== $was && ( null === $request[ $key ] || (string) $request[ $key ] === (string) $was );
+	};
+	$from = $keep( 'from', $from_was ) ? (string) $from_was : sanitize_text_field( trim( (string) $request['from'] ) );
+	$to   = $keep( 'to', $to_was ) ? (string) $to_was : sanitize_text_field( trim( (string) $request['to'] ) );
 	if ( '' === $from || '' === $to ) {
 		return new WP_Error( 'invalid', __( 'Source and target are both required.', 'minn-admin' ), array( 'status' => 400 ) );
 	}
@@ -147,16 +161,16 @@ minn_admin_endpoint( 's301/redirects/(?P<id>[A-Za-z0-9\-_]+)', array(
 	'active'  => 'minn_admin_s301_active',
 	'gate'    => 'minn_admin_s301_can',
 	'run'     => function ( WP_REST_Request $request, array $ctx ) {
-		$rule = minn_admin_s301_rule( $request );
+		$old  = minn_admin_s301_decode_id( $ctx['id'] );
+		$rows = (array) get_option( '301_redirects', array() );
+		if ( ! array_key_exists( $old, $rows ) ) {
+			return new WP_Error( 'not_found', __( 'Redirect not found.', 'minn-admin' ), array( 'status' => 404 ) );
+		}
+		$rule = minn_admin_s301_rule( $request, (string) $old, (string) $rows[ $old ] );
 		if ( is_wp_error( $rule ) ) {
 			return $rule;
 		}
 		list( $from, $to ) = $rule;
-		$old               = minn_admin_s301_decode_id( $ctx['id'] );
-		$rows              = (array) get_option( '301_redirects', array() );
-		if ( ! array_key_exists( $old, $rows ) ) {
-			return new WP_Error( 'not_found', __( 'Redirect not found.', 'minn-admin' ), array( 'status' => 404 ) );
-		}
 		// Renaming the source: drop the old key, write the new one; never onto
 		// a source another rule already has, which that write would replace.
 		if ( $old !== $from ) {
