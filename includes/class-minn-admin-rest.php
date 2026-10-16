@@ -2706,6 +2706,72 @@ class Minn_Admin_REST {
 		return rest_ensure_response( array( 'tags' => $tags, 'hints' => (object) $hints ) );
 	}
 
+	/**
+	 * Take every one of Otter's dynamic-content resolvers off the hooks they
+	 * run on, and say which came off: [ hook, callback, priority ] each. A
+	 * resolver is any callback of an Otter (ThemeIsle) class named Dynamic,
+	 * so one a later Otter adds comes off too.
+	 *
+	 * @return array[]
+	 */
+	private static function park_otter_resolvers() {
+		global $wp_filter;
+		$parked = array();
+		foreach ( array( 'render_block', 'otter_apply_dynamic_image' ) as $hook ) {
+			if ( ! isset( $wp_filter[ $hook ] ) || ! $wp_filter[ $hook ] instanceof WP_Hook ) {
+				continue;
+			}
+			foreach ( $wp_filter[ $hook ]->callbacks as $priority => $callbacks ) {
+				foreach ( $callbacks as $cb ) {
+					$fn    = $cb['function'];
+					$owner = is_array( $fn ) && isset( $fn[0] ) ? $fn[0] : ( is_string( $fn ) && false !== strpos( $fn, '::' ) ? strstr( $fn, '::', true ) : null );
+					$class = is_object( $owner ) ? get_class( $owner ) : ( is_string( $owner ) ? ltrim( $owner, '\\' ) : '' );
+					if ( 0 === stripos( $class, 'ThemeIsle\\' ) && false !== stripos( $class, 'Dynamic' ) ) {
+						$parked[] = array( $hook, $fn, $priority );
+					}
+				}
+			}
+		}
+		foreach ( $parked as $p ) {
+			remove_filter( $p[0], $p[1], $p[2] );
+		}
+		return $parked;
+	}
+
+	/**
+	 * Whether block markup carries anything Otter's dynamic content reads:
+	 * its <o-dynamic> and <o-dynamic-link> elements, {otterDynamic?…} magic
+	 * tags, #otterDynamicLink targets and otter/v1/dynamic image sources.
+	 * Each is looked for as written, with entities and percent-escapes
+	 * decoded, and in every block attribute as parsed (a block comment's
+	 * JSON may spell one with \u escapes). Any letter case counts.
+	 *
+	 * @param string $raw Block markup.
+	 * @return bool
+	 */
+	private static function otter_marked( $raw ) {
+		$hay  = array( $raw );
+		$walk = function ( $blocks ) use ( &$walk, &$hay ) {
+			foreach ( (array) $blocks as $b ) {
+				if ( ! empty( $b['attrs'] ) ) {
+					$hay[] = (string) wp_json_encode( $b['attrs'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+				}
+				if ( ! empty( $b['innerBlocks'] ) ) {
+					$walk( $b['innerBlocks'] );
+				}
+			}
+		};
+		$walk( parse_blocks( $raw ) );
+		foreach ( $hay as $h ) {
+			foreach ( array( $h, html_entity_decode( $h, ENT_QUOTES | ENT_HTML5, 'UTF-8' ), rawurldecode( $h ) ) as $s ) {
+				if ( preg_match( '#<\s*o-dynamic|otterdynamic|otter\\\\?/v1\\\\?/dynamic#i', $s ) ) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
 	public static function render_blocks( WP_REST_Request $request ) {
 		$blocks = $request['blocks'];
 		if ( ! is_array( $blocks ) ) {
@@ -2808,9 +2874,11 @@ class Minn_Admin_REST {
 		// renders unsaved markup the caller wrote, which is that same trust,
 		// so for such a caller no vendor dynamic data resolves here.
 		// GenerateBlocks answers who may author it (before 2.4, its 2.4
-		// default rule stands in); its own stripper empties the tags. Otter's
-		// text and image resolvers are taken off for the render, so its
-		// elements show their placeholder text.
+		// default rule stands in); its own stripper empties the tags. Otter
+		// has no such rule to ask, and its resolvers take each other off and
+		// put each other back while they run, so for this caller a block
+		// carrying any of Otter's dynamic markup previews empty, and none of
+		// its resolvers stays on for the render.
 		$gb_untrusted = false;
 		if ( class_exists( 'GenerateBlocks_Dynamic_Content' ) ) {
 			$gb_untrusted = class_exists( 'GenerateBlocks_Dynamic_Tag_Security' )
@@ -2818,18 +2886,9 @@ class Minn_Admin_REST {
 				? ! GenerateBlocks_Dynamic_Tag_Security::user_can_author_dynamic_data()
 				: ! current_user_can( 'unfiltered_html' ) && ! current_user_can( 'manage_options' );
 		}
-		$otter_parked = array();
-		if ( ! current_user_can( 'unfiltered_html' ) && ! current_user_can( 'manage_options' )
-			&& class_exists( '\ThemeIsle\GutenbergBlocks\Plugins\Dynamic_Content' ) ) {
-			$otter = \ThemeIsle\GutenbergBlocks\Plugins\Dynamic_Content::instance();
-			foreach ( array( 'apply_dynamic_content', 'apply_dynamic_images' ) as $method ) {
-				$priority = has_filter( 'render_block', array( $otter, $method ) );
-				if ( false !== $priority ) {
-					remove_filter( 'render_block', array( $otter, $method ), $priority );
-					$otter_parked[] = array( array( $otter, $method ), $priority );
-				}
-			}
-		}
+		$otter_untrusted = ! current_user_can( 'unfiltered_html' ) && ! current_user_can( 'manage_options' )
+			&& ( defined( 'OTTER_BLOCKS_VERSION' ) || class_exists( '\ThemeIsle\GutenbergBlocks\Plugins\Dynamic_Content' ) );
+		$otter_parked = $otter_untrusted ? self::park_otter_resolvers() : array();
 
 		$queue_before = wp_styles()->queue;
 		$rendered     = array();
@@ -2854,7 +2913,19 @@ class Minn_Admin_REST {
 					$raw = GenerateBlocks_Dynamic_Tag_Security::replace_dynamic_tags_with_empty( $raw );
 				}
 			}
+			if ( $otter_untrusted && self::otter_marked( $raw ) ) {
+				$rendered[] = '';
+				continue;
+			}
 			$html = do_blocks( $raw );
+			// A resolver something put back while this block rendered (Otter's
+			// own excerpt reader does exactly that) may have run on part of
+			// it: that block previews empty, and the resolver comes off again
+			// before the next one.
+			if ( $otter_untrusted && self::park_otter_resolvers() ) {
+				$rendered[] = '';
+				continue;
+			}
 			// Embed blocks keep a bare URL in their saved HTML; the front end
 			// converts it via WP_Embed::autoembed on the_content — run the same
 			// pass here so island previews show the real embed.
@@ -2872,8 +2943,13 @@ class Minn_Admin_REST {
 			$html       = apply_filters( 'minn_admin_rendered_html', $html, $raw, $post_id );
 			$rendered[] = $html;
 		}
+		// Back exactly as they were: whatever came back mid-render is taken
+		// off first, so nothing is left on twice.
+		if ( $otter_untrusted ) {
+			self::park_otter_resolvers();
+		}
 		foreach ( $otter_parked as $parked ) {
-			add_filter( 'render_block', $parked[0], $parked[1] );
+			add_filter( $parked[0], $parked[1], $parked[2] );
 		}
 		remove_filter( 'render_block_data', $clamp_preview_query );
 		remove_action( 'pre_get_posts', $cap_preview_posts, PHP_INT_MAX );
