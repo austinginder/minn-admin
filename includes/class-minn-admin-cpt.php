@@ -397,6 +397,106 @@ class Minn_Admin_CPT {
 	}
 
 	/**
+	 * The labels and description a post type's own store holds, exactly as
+	 * stored (CPT UI keeps its labels entity-encoded and its description as
+	 * HTML), or null for one the store does not hold.
+	 *
+	 * @param string $source minn, acf, cptui or jet.
+	 * @param string $slug   Post type.
+	 * @return array{plural: ?string, singular: ?string, description: ?string}
+	 */
+	private static function stored_type_text( $source, $slug ) {
+		if ( 'cptui' === $source ) {
+			$row  = (array) ( ( (array) get_option( 'cptui_post_types', array() ) )[ $slug ] ?? array() );
+			$text = array( $row['label'] ?? null, $row['singular_label'] ?? null, $row['description'] ?? null );
+		} elseif ( 'acf' === $source ) {
+			$row  = (array) ( self::acf_types()[ $slug ] ?? array() );
+			$text = array( $row['labels']['name'] ?? null, $row['labels']['singular_name'] ?? null, $row['description'] ?? null );
+		} elseif ( 'jet' === $source ) {
+			// JetEngine's model has no description for Minn to write.
+			$edit = (array) ( self::jet_types()[ $slug ]['edit'] ?? array() );
+			$text = array( $edit['labels']['name'] ?? null, $edit['labels']['singular_name'] ?? null, null );
+		} else {
+			$row  = (array) ( ( (array) get_option( self::OPTION, array() ) )[ $slug ] ?? array() );
+			$text = array( $row['plural'] ?? null, $row['singular'] ?? null, $row['description'] ?? null );
+		}
+		return array_combine( array( 'plural', 'singular', 'description' ), array_map( array( __CLASS__, 'stored_string' ), $text ) );
+	}
+
+	/** A taxonomy's labels as its own store holds them (see stored_type_text()). */
+	private static function stored_tax_text( $source, $slug ) {
+		if ( 'cptui' === $source ) {
+			$row  = (array) ( ( (array) get_option( 'cptui_taxonomies', array() ) )[ $slug ] ?? array() );
+			$text = array( $row['label'] ?? null, $row['singular_label'] ?? null );
+		} elseif ( 'acf' === $source ) {
+			$row  = (array) ( self::acf_taxonomies()[ $slug ] ?? array() );
+			$text = array( $row['labels']['name'] ?? null, $row['labels']['singular_name'] ?? null );
+		} elseif ( 'jet' === $source ) {
+			$edit = (array) ( self::jet_taxonomies()[ $slug ]['edit'] ?? array() );
+			$text = array( $edit['labels']['name'] ?? null, $edit['labels']['singular_name'] ?? null );
+		} else {
+			$row  = (array) ( ( (array) get_option( self::OPTION_TAX, array() ) )[ $slug ] ?? array() );
+			$text = array( $row['plural'] ?? null, $row['singular'] ?? null );
+		}
+		return array_combine( array( 'plural', 'singular' ), array_map( array( __CLASS__, 'stored_string' ), $text ) );
+	}
+
+	/** A stored text setting, or null when there is none to keep. */
+	private static function stored_string( $v ) {
+		return is_string( $v ) ? $v : null;
+	}
+
+	/**
+	 * Whether a save left a text field as the modal showed it: not sent, or
+	 * sent back unchanged. The modal's single-line input drops line breaks
+	 * and the client trims, so a stored multi-line description comes back
+	 * without them although nobody typed in it.
+	 *
+	 * @param WP_REST_Request $request The save.
+	 * @param array           $now     The definition the modal was built from.
+	 * @param string          $key     plural, singular or description.
+	 * @return bool
+	 */
+	private static function untouched( WP_REST_Request $request, array $now, $key ) {
+		if ( ! $request->has_param( $key ) ) {
+			return true;
+		}
+		$shown = function ( $v ) {
+			return trim( str_replace( array( "\r", "\n" ), '', (string) $v ) );
+		};
+		return $shown( $request[ $key ] ) === $shown( $now[ $key ] ?? '' );
+	}
+
+	/**
+	 * The labels and description a save keeps: each one the person did not
+	 * change is written back exactly as the vendor stored it, never rebuilt
+	 * from the registered copy (filtered, translated, entity-decoded) and
+	 * run through a sanitizer. Only a store with no value of its own falls
+	 * back to the registered one.
+	 *
+	 * @param array           $def     The definition from the request.
+	 * @param WP_REST_Request $request The save.
+	 * @param array           $now     The definition the modal was built from.
+	 * @param array           $stored  stored_type_text() or stored_tax_text().
+	 * @return array
+	 */
+	private static function keep_untouched_text( array $def, WP_REST_Request $request, array $now, array $stored ) {
+		foreach ( $stored as $k => $kept ) {
+			if ( ! self::untouched( $request, $now, $k ) ) {
+				continue;
+			}
+			// An empty description is a stored value; an empty label is not
+			// one a type can register with.
+			if ( null !== $kept && ( '' !== $kept || 'description' === $k ) ) {
+				$def[ $k ] = $kept;
+			} else {
+				$def[ $k ] = 'description' === $k ? wp_kses_post( (string) ( $now[ $k ] ?? '' ) ) : sanitize_text_field( (string) ( $now[ $k ] ?? '' ) );
+			}
+		}
+		return $def;
+	}
+
+	/**
 	 * The post types a taxonomy's own store attaches it to.
 	 *
 	 * @param string $source minn, acf, cptui or jet.
@@ -597,7 +697,9 @@ class Minn_Admin_CPT {
 		return array(
 			'singular'     => sanitize_text_field( (string) $request['singular'] ),
 			'plural'       => sanitize_text_field( (string) $request['plural'] ),
-			'description'  => sanitize_text_field( (string) $request['description'] ),
+			// HTML the vendors' own screens keep (CPT UI: wp_kses_post), shown
+			// on the type's archive page.
+			'description'  => wp_kses_post( (string) $request['description'] ),
 			'public'       => ! empty( $request['public'] ),
 			'hierarchical' => ! empty( $request['hierarchical'] ),
 			'has_archive'  => ! empty( $request['has_archive'] ),
@@ -694,11 +796,11 @@ class Minn_Admin_CPT {
 		$def = self::def_from_request( $request );
 		// A field the save leaves out keeps what the modal showed for it, so
 		// a save that sends only what changed stores the same as one that
-		// sends everything.
-		foreach ( array( 'singular', 'plural', 'description', 'public', 'hierarchical', 'has_archive', 'show_in_rest' ) as $k ) {
+		// sends everything. Labels and the description keep the stored text.
+		$def = self::keep_untouched_text( $def, $request, $now, self::stored_type_text( $source, $slug ) );
+		foreach ( array( 'public', 'hierarchical', 'has_archive', 'show_in_rest' ) as $k ) {
 			if ( ! $request->has_param( $k ) ) {
-				// Through the same cleaning as a sent value.
-				$def[ $k ] = is_bool( $now[ $k ] ) ? $now[ $k ] : sanitize_text_field( (string) $now[ $k ] );
+				$def[ $k ] = $now[ $k ];
 			}
 		}
 		if ( ! $request->has_param( 'supports' ) ) {
@@ -929,10 +1031,12 @@ class Minn_Admin_CPT {
 			return self::stale_error( 'taxonomy' );
 		}
 		$def = self::tax_def_from_request( $request );
-		// A field the save leaves out keeps what the modal showed for it.
-		foreach ( array( 'singular', 'plural', 'public', 'hierarchical', 'show_in_rest' ) as $k ) {
+		// A field the save leaves out keeps what the modal showed for it;
+		// labels keep the stored text.
+		$def = self::keep_untouched_text( $def, $request, $now, self::stored_tax_text( $source, $slug ) );
+		foreach ( array( 'public', 'hierarchical', 'show_in_rest' ) as $k ) {
 			if ( ! $request->has_param( $k ) ) {
-				$def[ $k ] = is_bool( $now[ $k ] ) ? $now[ $k ] : sanitize_text_field( (string) $now[ $k ] );
+				$def[ $k ] = $now[ $k ];
 			}
 		}
 		if ( ! $request->has_param( 'object_types' ) ) {

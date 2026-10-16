@@ -1,0 +1,417 @@
+<?php
+/**
+ * Regressions for the v0.45.0 shipped-zip registry scan: saves that rewrote
+ * a field the person did not change (findings #6, #13, #14, #15, #16).
+ *
+ * Each section seeds a stored value the old save path changed (a description
+ * with a link and line breaks, labels CPT UI keeps entity-encoded, a JetSearch
+ * name '50%DEAL', a multi-choice answer holding a choice the form no longer
+ * offers, an unnamed WP Freighter tenant), replays what Minn's client sends
+ * for an edit that leaves that field alone, and checks the stored bytes.
+ * Sections SKIP when their plugin is inactive; the Freighter section runs on
+ * a WP Freighter host.
+ *
+ * Run: wp eval-file tests/security-v046-registry-writes.test.php --user=admin --path=<site>
+ *      wp eval-file tests/security-v046-registry-writes.test.php --user=<freighter admin> --path=<WP Freighter site>
+ *
+ * @package minn-admin
+ */
+
+$results = array();
+$check   = function ( $label, $ok, $detail = '' ) use ( &$results ) {
+	set_time_limit( 0 );
+	$results[] = (bool) $ok;
+	printf( "%s  %s%s\n", $ok ? 'PASS' : 'FAIL', $label, ( $ok || '' === $detail ) ? '' : ' — ' . $detail );
+};
+$skip    = function ( $label ) {
+	printf( "SKIP  %s\n", $label );
+};
+$call    = function ( $method, $route, $body = null ) {
+	$r = new WP_REST_Request( $method, $route );
+	if ( null !== $body ) {
+		$r->set_header( 'content-type', 'application/json' );
+		$r->set_body( wp_json_encode( $body ) );
+	}
+	$res = rest_do_request( $r );
+	return array( $res->get_status(), json_decode( wp_json_encode( $res->get_data() ), true ) );
+};
+// Cleanup that runs once, from the section's finally or at shutdown when a
+// fatal error ends the run first.
+$once = function ( callable $fn ) {
+	$done = false;
+	$run  = function () use ( &$done, $fn ) {
+		if ( $done ) {
+			return;
+		}
+		$done = true;
+		$fn();
+	};
+	register_shutdown_function( $run );
+	return $run;
+};
+
+if ( ! current_user_can( 'manage_options' ) ) {
+	echo "SKIP  run with --user=<an administrator>\n";
+	return;
+}
+global $wpdb;
+rest_get_server();
+
+/*
+ * #6: an edit of a post type or taxonomy that leaves the labels and the
+ * description alone keeps them as the vendor stored them. The modal sends
+ * only what changed, but the route filled a field it left out from the
+ * registered type, entity-decoded, through sanitize_text_field: the link and
+ * line break went out of the description and CPT UI's encoded labels came
+ * back decoded. A description the modal's single-line input sends back
+ * without its line breaks counts as untouched too.
+ */
+( function () use ( $check, $skip, $call, $wpdb ) {
+	$row = function ( $kind, $slug ) use ( $call ) {
+		list( , $d ) = $call( 'GET', '/minn-admin/v1/' . ( 'type' === $kind ? 'post-types' : 'taxonomies' ) );
+		foreach ( (array) ( $d[ 'type' === $kind ? 'types' : 'taxonomies' ] ?? array() ) as $r ) {
+			if ( $slug === $r['slug'] ) {
+				return $r;
+			}
+		}
+		return null;
+	};
+	$desc = "Read <a href=\"/shop\">our shop</a>.\nSecond line.";
+
+	$wpdb->query( 'START TRANSACTION' );
+	try {
+		// Minn's own store.
+		$slug = 'minnregw' . wp_rand( 100, 999 );
+		$call( 'POST', '/minn-admin/v1/post-types', array( 'slug' => $slug, 'singular' => 'Dish', 'plural' => 'Dishes', 'description' => 'x', 'public' => 1, 'backend' => 'minn' ) );
+		$types                     = (array) get_option( Minn_Admin_CPT::OPTION, array() );
+		$types[ $slug ]['plural']  = 'Fish &amp; Chips';
+		$types[ $slug ]['description'] = $desc;
+		update_option( Minn_Admin_CPT::OPTION, $types );
+		if ( post_type_exists( $slug ) ) {
+			unregister_post_type( $slug );
+		}
+		Minn_Admin_CPT::register_native_types();
+		$before = $row( 'type', $slug );
+		list( $st ) = $call( 'POST', "/minn-admin/v1/post-types/{$slug}", array( 'show_in_rest' => 1, 'base' => $before['stamp'] ?? '' ) );
+		$kept = (array) ( ( (array) get_option( Minn_Admin_CPT::OPTION, array() ) )[ $slug ] ?? array() );
+		$check( '#6 a Minn post type save of one switch answers 200', 200 === $st, (string) $st );
+		$check( '#6 and keeps the stored description with its link and line break', $desc === ( $kept['description'] ?? null ), wp_json_encode( $kept['description'] ?? null ) );
+		$check( '#6 and keeps the stored plural label byte for byte', 'Fish &amp; Chips' === ( $kept['plural'] ?? null ), wp_json_encode( $kept['plural'] ?? null ) );
+		$check( '#6 and writes the switch it sent (control)', ! empty( $kept['show_in_rest'] ) );
+
+		// Minn taxonomy: labels only.
+		$tax = 'minnregx' . wp_rand( 100, 999 );
+		$call( 'POST', '/minn-admin/v1/taxonomies', array( 'slug' => $tax, 'singular' => 'Pot', 'plural' => 'Pots', 'object_types' => array( 'post' ), 'backend' => 'minn' ) );
+		$taxes                     = (array) get_option( Minn_Admin_CPT::OPTION_TAX, array() );
+		$taxes[ $tax ]['plural']   = 'Pots &amp; Pans';
+		update_option( Minn_Admin_CPT::OPTION_TAX, $taxes );
+		if ( taxonomy_exists( $tax ) ) {
+			unregister_taxonomy( $tax );
+		}
+		Minn_Admin_CPT::register_native_taxonomies();
+		$tb = $row( 'tax', $tax );
+		list( $st ) = $call( 'POST', "/minn-admin/v1/taxonomies/{$tax}", array( 'hierarchical' => 1, 'base' => $tb['stamp'] ?? '' ) );
+		$tk = (array) ( ( (array) get_option( Minn_Admin_CPT::OPTION_TAX, array() ) )[ $tax ] ?? array() );
+		$check( '#6 a taxonomy save of one switch keeps the stored plural label', 200 === $st && 'Pots &amp; Pans' === ( $tk['plural'] ?? null ), $st . ' ' . wp_json_encode( $tk['plural'] ?? null ) );
+
+		// CPT UI's store, as its own screen leaves it.
+		if ( defined( 'CPTUI_VERSION' ) && function_exists( 'cptui_register_single_post_type' ) ) {
+			$cpt = 'minnregc' . wp_rand( 100, 999 );
+			list( $st ) = $call( 'POST', '/minn-admin/v1/post-types', array( 'slug' => $cpt, 'singular' => 'Book', 'plural' => 'Books', 'description' => 'x', 'public' => 1, 'backend' => 'cptui' ) );
+			$cptui = (array) get_option( 'cptui_post_types', array() );
+			if ( 200 !== $st || ! isset( $cptui[ $cpt ] ) ) {
+				$skip( '#6 CPT UI would not take a test post type (' . $st . ')' );
+			} else {
+				$cptui[ $cpt ]['label']          = 'Books &amp; Bits';
+				$cptui[ $cpt ]['singular_label'] = 'Book &amp; Bit';
+				$cptui[ $cpt ]['description']    = $desc;
+				update_option( 'cptui_post_types', $cptui );
+				$reload = function () use ( $cpt ) {
+					if ( post_type_exists( $cpt ) ) {
+						unregister_post_type( $cpt );
+					}
+					cptui_register_single_post_type( ( (array) get_option( 'cptui_post_types', array() ) )[ $cpt ] );
+				};
+				$reload();
+				$cb = $row( 'type', $cpt );
+				list( $st ) = $call( 'POST', "/minn-admin/v1/post-types/{$cpt}", array( 'has_archive' => 1, 'base' => $cb['stamp'] ?? '' ) );
+				$ck = (array) ( ( (array) get_option( 'cptui_post_types', array() ) )[ $cpt ] ?? array() );
+				$check( '#6 CPT UI: a save of one switch answers 200 and writes it (control)', 200 === $st && 'true' === ( $ck['has_archive'] ?? null ), $st . ' ' . wp_json_encode( $ck['has_archive'] ?? null ) );
+				$check( '#6 CPT UI: and keeps the description with its link and line break', $desc === ( $ck['description'] ?? null ), wp_json_encode( $ck['description'] ?? null ) );
+				$check( '#6 CPT UI: and keeps both labels entity-encoded as CPT UI stored them', 'Books &amp; Bits' === ( $ck['label'] ?? null ) && 'Book &amp; Bit' === ( $ck['singular_label'] ?? null ), wp_json_encode( array( $ck['label'] ?? null, $ck['singular_label'] ?? null ) ) );
+
+				// The modal's <input> drops line breaks and the client trims; the
+				// description it sends back like that is one nobody edited.
+				$reload();
+				$cb    = $row( 'type', $cpt );
+				$shown = trim( str_replace( array( "\r", "\n" ), '', (string) $cb['description'] ) );
+				list( $st ) = $call( 'POST', "/minn-admin/v1/post-types/{$cpt}", array( 'description' => $shown, 'show_in_rest' => 1, 'base' => $cb['stamp'] ?? '' ) );
+				$ck = (array) ( ( (array) get_option( 'cptui_post_types', array() ) )[ $cpt ] ?? array() );
+				$check( '#6 CPT UI: a description sent back as the input showed it keeps its line break', 200 === $st && $desc === ( $ck['description'] ?? null ), $st . ' ' . wp_json_encode( $ck['description'] ?? null ) );
+
+				// An edited description keeps its HTML, as CPT UI's own save does.
+				$reload();
+				$cb = $row( 'type', $cpt );
+				list( $st ) = $call( 'POST', "/minn-admin/v1/post-types/{$cpt}", array( 'description' => 'See <a href="/new">the new page</a>', 'base' => $cb['stamp'] ?? '' ) );
+				$ck = (array) ( ( (array) get_option( 'cptui_post_types', array() ) )[ $cpt ] ?? array() );
+				$check( '#6 CPT UI: an edited description keeps its link (wp_kses_post, as CPT UI)', 200 === $st && 'See <a href="/new">the new page</a>' === ( $ck['description'] ?? null ), $st . ' ' . wp_json_encode( $ck['description'] ?? null ) );
+				list( $st ) = $call( 'POST', "/minn-admin/v1/post-types/{$cpt}", array( 'description' => 'Bad <script>alert(1)</script>', 'base' => $row( 'type', $cpt )['stamp'] ?? '' ) );
+				$ck = (array) ( ( (array) get_option( 'cptui_post_types', array() ) )[ $cpt ] ?? array() );
+				$check( '#6 CPT UI: an edited description still loses a script tag (control)', false === strpos( (string) ( $ck['description'] ?? '' ), '<script' ), wp_json_encode( $ck['description'] ?? null ) );
+			}
+		} else {
+			$skip( '#6 CPT UI inactive' );
+		}
+	} finally {
+		$wpdb->query( 'ROLLBACK' );
+	}
+} )();
+
+/*
+ * #14: a JetSearch suggestion edit that changes only the weight leaves the
+ * name alone. The dialog sends every field, the name as stored, and the
+ * route ran it through sanitize_text_field: '50%DEAL' became '50AL', 'Shoes
+ * <50' 'Shoes &lt;50', and a name that cleaned into another suggestion's
+ * answered 409.
+ */
+( function () use ( $check, $skip, $call, $wpdb ) {
+	if ( ! function_exists( 'minn_admin_jet_search_active' ) || ! minn_admin_jet_search_active() || ! minn_admin_jet_search_has_table() ) {
+		$skip( '#14 JetSearch inactive' );
+		return;
+	}
+	$table = minn_admin_jet_search_table();
+	$wpdb->query( 'START TRANSACTION' );
+	try {
+		$ids = array();
+		foreach ( array( '50%DEAL', 'Shoes <50', 'C%2B%2B guide', 'C guide' ) as $name ) {
+			$wpdb->insert( $table, array( 'name' => $name, 'weight' => 3, 'parent' => '', 'term' => '' ) );
+			$ids[ $name ] = (int) $wpdb->insert_id;
+		}
+		foreach ( array( '50%DEAL', 'Shoes <50', 'C%2B%2B guide' ) as $name ) {
+			list( $st, $d ) = $call( 'POST', '/minn-admin/v1/jet-search/suggestions/' . $ids[ $name ], array( 'weight_seen' => 3, 'name' => $name, 'weight' => 5 ) );
+			$now = $wpdb->get_row( $wpdb->prepare( "SELECT name, weight FROM {$table} WHERE id = %d", $ids[ $name ] ), ARRAY_A ); // phpcs:ignore
+			$check( "#14 a weight-only edit of '{$name}' answers 200 and writes the weight", 200 === $st && 5 === (int) ( $now['weight'] ?? 0 ), $st . ' ' . wp_json_encode( $d ) );
+			$check( "#14 and keeps the name '{$name}' as stored", $name === ( $now['name'] ?? null ), wp_json_encode( $now['name'] ?? null ) );
+		}
+		list( $st ) = $call( 'POST', '/minn-admin/v1/jet-search/suggestions/' . $ids['50%DEAL'], array( 'weight_seen' => 5, 'name' => 'C guide', 'weight' => 5 ) );
+		$check( '#14 a real rename onto another suggestion is still refused with 409 (control)', 409 === $st, (string) $st );
+		list( $st ) = $call( 'POST', '/minn-admin/v1/jet-search/suggestions/' . $ids['50%DEAL'], array( 'weight_seen' => 5, 'name' => 'Deals', 'weight' => 5 ) );
+		$check( '#14 a real rename is written (control)', 200 === $st && 'Deals' === $wpdb->get_var( $wpdb->prepare( "SELECT name FROM {$table} WHERE id = %d", $ids['50%DEAL'] ) ), (string) $st ); // phpcs:ignore
+	} finally {
+		$wpdb->query( 'ROLLBACK' );
+	}
+} )();
+
+/*
+ * #13: an Elementor multi-choice answer keeps a pick the form no longer
+ * offers. The entry page drew boxes for the form's current options only and
+ * the save kept only those, so the first edit of the answer dropped the
+ * visitor's renamed or removed choice; an option whose own text holds ', '
+ * was split in two.
+ */
+( function () use ( $check, $skip, $call, $once ) {
+	if ( ! function_exists( 'minn_admin_elementor_forms_ready' ) || ! minn_admin_elementor_forms_ready() || ! class_exists( '\ElementorPro\Modules\Forms\Submissions\Database\Repositories\Form_Snapshot_Repository' ) ) {
+		$skip( '#13 Elementor Pro forms inactive' );
+		return;
+	}
+	$query = \ElementorPro\Modules\Forms\Submissions\Database\Query::get_instance();
+	$post  = wp_insert_post( array( 'post_title' => 'Minn registry writes', 'post_status' => 'draft', 'post_type' => 'post' ) );
+	$sub   = 0;
+	$clean = $once( function () use ( &$sub, $post, $query ) {
+		if ( $sub ) {
+			$query->delete_submission( $sub );
+		}
+		if ( $post ) {
+			wp_delete_post( $post, true );
+		}
+	} );
+	try {
+		\ElementorPro\Modules\Forms\Submissions\Database\Repositories\Form_Snapshot_Repository::instance()->create_or_update( $post, 'minnreg', array(
+			'name'   => 'Registry writes',
+			'fields' => array( array( 'id' => 'picks', 'type' => 'checkbox', 'label' => 'Picks', 'options' => array( 'A', 'B', 'D', 'Red, dark' ) ) ),
+		) );
+		$sub = (int) $query->add_submission(
+			array( 'post_id' => $post, 'element_id' => 'minnreg', 'form_name' => 'Registry writes', 'referer' => home_url( '/' ), 'referer_title' => 'Home' ),
+			array( array( 'id' => 'picks', 'type' => 'checkbox', 'value' => 'A, C, Red, dark' ) )
+		);
+		if ( ! $sub ) {
+			$skip( '#13 Elementor would not store a test submission' );
+			return;
+		}
+		$block  = minn_admin_elementor_edit_block( $query->get_submission( $sub )['data'] );
+		$field  = null;
+		foreach ( (array) ( $block['fields'] ?? array() ) as $f ) {
+			if ( 'picks' === $f['id'] ) {
+				$field = $f;
+			}
+		}
+		$served = $field ? $field['inputs'][0]['value'] : null;
+		$values = $field ? array_map( 'strval', wp_list_pluck( $field['choices'], 0 ) ) : array();
+		$check( '#13 the answer serves as a multi-choice field', $field && 'multi' === $field['kind'], wp_json_encode( $field ) );
+		$check( "#13 an option holding ', ' is read as one pick", array( 'A', 'C', 'Red, dark' ) === $served, wp_json_encode( $served ) );
+		$check( '#13 the pick the form no longer offers has a box', in_array( 'C', $values, true ), wp_json_encode( $values ) );
+		// What the page sends when the person ticks B: every ticked box.
+		$send = array();
+		foreach ( $values as $v ) {
+			if ( in_array( $v, array( 'A', 'B', 'C', 'Red, dark' ), true ) ) {
+				$send[] = $v;
+			}
+		}
+		list( $st, $d ) = $call( 'POST', "/minn-admin/v1/elementor/submissions/{$sub}/answers", array( 'values' => array( 'picks' => $send ), 'original' => array( 'picks' => $served ) ) );
+		$stored = '';
+		foreach ( (array) ( $query->get_submission( $sub )['data']['values'] ?? array() ) as $v ) {
+			if ( 'picks' === ( $v['key'] ?? '' ) ) {
+				$stored = (string) $v['value'];
+			}
+		}
+		$picks = array_map( 'trim', explode( ', ', $stored ) );
+		$check( '#13 ticking B answers 200 and stores B (control)', 200 === $st && in_array( 'B', $picks, true ), $st . ' ' . wp_json_encode( $d ) . ' ' . $stored );
+		$check( '#13 and keeps the pick the form no longer offers', in_array( 'C', $picks, true ), $stored );
+		$check( "#13 and keeps the option holding ', ' whole", false !== strpos( $stored, 'Red, dark' ), $stored );
+		list( $st ) = $call( 'POST', "/minn-admin/v1/elementor/submissions/{$sub}/answers", array( 'values' => array( 'picks' => array( 'A', 'Z' ) ), 'original' => array( 'picks' => minn_admin_elementor_edit_block( $query->get_submission( $sub )['data'] )['fields'][0]['inputs'][0]['value'] ) ) );
+		$stored = '';
+		foreach ( (array) ( $query->get_submission( $sub )['data']['values'] ?? array() ) as $v ) {
+			if ( 'picks' === ( $v['key'] ?? '' ) ) {
+				$stored = (string) $v['value'];
+			}
+		}
+		$check( '#13 a pick that is neither offered nor stored is not written (control)', false === strpos( $stored, 'Z' ), $stored );
+	} finally {
+		$clean();
+	}
+} )();
+
+/*
+ * #15: a Ninja Forms multi-choice answer keeps the picks that came from the
+ * list a site fills at render time (ninja_forms_render_options) and the ones
+ * the form no longer offers. Their own entry editor draws the filtered list;
+ * Minn offered only the saved options and kept only those on save.
+ */
+( function () use ( $check, $skip, $call, $once ) {
+	if ( ! function_exists( 'Ninja_Forms' ) || ! function_exists( 'minn_admin_ninja_forms_edit_block' ) || ! minn_admin_ninja_forms_can_edit() ) {
+		$skip( '#15 Ninja Forms inactive' );
+		return;
+	}
+	$form_id  = 0;
+	$sub_id   = 0;
+	$field_id = 0;
+	$key      = 'minnregw_picks';
+	$filter   = function ( $options, $settings ) use ( $key ) {
+		if ( $key === ( $settings['key'] ?? '' ) ) {
+			$options   = (array) $options;
+			$options[] = array( 'label' => 'C', 'value' => 'C', 'calc' => '', 'selected' => 0 );
+		}
+		return $options;
+	};
+	$clean    = $once( function () use ( &$form_id, &$sub_id, &$field_id, $filter ) {
+		remove_filter( 'ninja_forms_render_options', $filter, 10 );
+		if ( $sub_id ) {
+			wp_delete_post( $sub_id, true );
+		}
+		if ( $form_id && $field_id ) {
+			Ninja_Forms()->form( $form_id )->field( $field_id )->get()->delete();
+		}
+		if ( $form_id ) {
+			Ninja_Forms()->form( $form_id )->get()->delete();
+			delete_option( 'nf_form_' . $form_id );
+		}
+	} );
+	try {
+		$form = Ninja_Forms()->form()->get();
+		$form->update_setting( 'title', 'Minn registry writes' );
+		$form->save();
+		$form_id = (int) $form->get_id();
+		$field   = Ninja_Forms()->form( $form_id )->field()->get();
+		$field->update_settings( array(
+			'type'    => 'listcheckbox',
+			'label'   => 'Picks',
+			'key'     => $key,
+			'order'   => 1,
+			'options' => array(
+				array( 'label' => 'A', 'value' => 'A', 'calc' => '', 'selected' => 0, 'order' => 0 ),
+				array( 'label' => 'B', 'value' => 'B', 'calc' => '', 'selected' => 0, 'order' => 1 ),
+			),
+		) );
+		$field->save();
+		$field_id = (int) $field->get_id();
+		if ( ! $form_id || ! $field_id ) {
+			$skip( '#15 Ninja Forms would not store a test form' );
+			return;
+		}
+		add_filter( 'ninja_forms_render_options', $filter, 10, 2 );
+		$sub = Ninja_Forms()->form( $form_id )->sub()->get();
+		$sub->update_field_value( $field_id, array( 'A', 'C', 'Z' ) );
+		$sub->save();
+		$sub_id = (int) $sub->get_id();
+
+		$block = minn_admin_ninja_forms_edit_block( get_post( $sub_id ), $form_id );
+		$row   = null;
+		foreach ( (array) ( $block['fields'] ?? array() ) as $f ) {
+			if ( (string) $field_id === $f['id'] ) {
+				$row = $f;
+			}
+		}
+		$values = $row ? array_map( 'strval', wp_list_pluck( $row['choices'], 0 ) ) : array();
+		$served = $row ? $row['inputs'][0]['value'] : null;
+		$check( '#15 the answer serves as a multi-choice field with its stored picks', $row && 'multi' === $row['kind'] && array( 'A', 'C', 'Z' ) === $served, wp_json_encode( $row ) );
+		$check( '#15 the pick from the render-time list has a box, as in Ninja Forms\' own editor', in_array( 'C', $values, true ), wp_json_encode( $values ) );
+		$check( '#15 the pick the form no longer offers has a box', in_array( 'Z', $values, true ), wp_json_encode( $values ) );
+		list( $st, $d ) = $call( 'POST', "/minn-admin/v1/ninja-forms/entries/{$sub_id}/answers", array( 'values' => array( (string) $field_id => array( 'A', 'B', 'C', 'Z' ) ), 'original' => array( (string) $field_id => $served ) ) );
+		$now = minn_admin_ninja_forms_edit_value( $sub_id, $field_id, 'multi' );
+		$check( '#15 ticking B answers 200 and stores B (control)', 200 === $st && in_array( 'B', $now, true ), $st . ' ' . wp_json_encode( $d ) . ' ' . wp_json_encode( $now ) );
+		$check( '#15 and keeps the render-time pick and the one the form no longer offers', in_array( 'C', $now, true ) && in_array( 'Z', $now, true ), wp_json_encode( $now ) );
+		list( $st ) = $call( 'POST', "/minn-admin/v1/ninja-forms/entries/{$sub_id}/answers", array( 'values' => array( (string) $field_id => array( 'A', 'Q' ) ), 'original' => array( (string) $field_id => $now ) ) );
+		$check( '#15 a pick that is neither offered nor stored is not written (control)', ! in_array( 'Q', minn_admin_ninja_forms_edit_value( $sub_id, $field_id, 'multi' ), true ), wp_json_encode( minn_admin_ninja_forms_edit_value( $sub_id, $field_id, 'multi' ) ) );
+	} finally {
+		$clean();
+	}
+} )();
+
+/*
+ * #16: the WP Freighter tenant edit dialog round-trips an empty name. The
+ * row served the display fallback (the hostname, or 'Tenant N') as `name`,
+ * the dialog sent it back as the untouched value, and the route stored it.
+ * A stored name with an entity came back decoded the same way.
+ */
+( function () use ( $check, $skip, $call ) {
+	if ( ! function_exists( 'minn_admin_freighter_active' ) || ! minn_admin_freighter_active() || ! minn_admin_freighter_can() ) {
+		$skip( '#16 WP Freighter inactive' );
+		return;
+	}
+	$sites = array();
+	foreach ( (array) \WPFreighter\Sites::fetch() as $s ) {
+		$id = (int) $s['stacked_site_id'];
+		if ( ! minn_admin_freighter_is_primary_id( $id ) ) {
+			$sites[ $id ] = $s;
+		}
+	}
+	if ( ! $sites ) {
+		$skip( '#16 no tenant to edit' );
+		return;
+	}
+	$id   = (int) array_key_first( $sites );
+	$orig = (string) ( $sites[ $id ]['name'] ?? '' );
+	$restore = function () use ( $id, $orig ) {
+		\WPFreighter\Site::update( $id, array( 'name' => $orig ) );
+	};
+	register_shutdown_function( $restore );
+	try {
+		foreach ( array( '', 'Fish &amp; Chips' ) as $name ) {
+			\WPFreighter\Site::update( $id, array( 'name' => $name ) );
+			$row = minn_admin_freighter_row( \WPFreighter\Site::get( $id ) );
+			$check( '#16 the row serves the stored name ' . wp_json_encode( $name ) . ' as stored, with a title to show', $name === $row['name'] && '' !== (string) ( $row['title'] ?? '' ), wp_json_encode( $row ) );
+			// What the dialog sends for an untouched name: the row's value.
+			list( $st ) = $call( 'POST', "/minn-admin/v1/freighter/sites/{$id}", array( 'name' => $row['name'] ) );
+			$now = (string) ( \WPFreighter\Site::get( $id )['name'] ?? '' );
+			$check( '#16 a save that leaves it alone keeps the stored name ' . wp_json_encode( $name ), 200 === $st && $name === $now, $st . ' ' . wp_json_encode( $now ) );
+		}
+		list( $st ) = $call( 'POST', "/minn-admin/v1/freighter/sites/{$id}", array( 'name' => 'Minn suite rename' ) );
+		$check( '#16 a real rename is written (control)', 200 === $st && 'Minn suite rename' === ( \WPFreighter\Site::get( $id )['name'] ?? '' ), (string) $st );
+	} finally {
+		$restore();
+	}
+	$check( '#16 the tenant ends with its own name', $orig === (string) ( \WPFreighter\Site::get( $id )['name'] ?? '' ) );
+} )();
+
+printf( "\nsecurity-v046-registry-writes: %d/%d passed\n", count( array_filter( $results ) ), count( $results ) );
+exit( count( array_filter( $results ) ) === count( $results ) ? 0 : 1 );
