@@ -41,8 +41,11 @@ A few properties worth knowing before auditing (details in
   (the one place it runs, a check of which blocks render cleanly enough to
   offer for insertion, discards the output); values are escaped at the
   render edge. Preview CSS that exists only once a page has run comes from a
-  sandboxed copy of that page (an opaque origin with no cookies, network or
-  storage), and only stylesheet URLs and CSS text come back from it.
+  sandboxed copy of that page: an opaque origin with no cookies, no storage
+  and no reach into the app, which can still load the page's scripts and
+  stylesheets. A published page is fetched as a visitor sees it; only a
+  draft's preview carries the editor's session. Only stylesheet URLs and CSS
+  text come back from it.
 - When a shim must read third-party serialized storage, it uses a bounded
   parser or constrained decoding, validates the resulting shape, and does
   not instantiate arbitrary classes. An exact vendor class allowlist is

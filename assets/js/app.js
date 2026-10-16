@@ -34729,7 +34729,11 @@
 		};
 		const bail = setTimeout( done, ms );
 		window.addEventListener( 'message', onMessage );
-		fetch( src, { credentials: 'same-origin' } )
+		// A published page is fetched as a visitor sees it, so the copy holds
+		// no nonce or account detail of the person editing. Only a draft's
+		// preview, which renders for its editors alone, carries the session.
+		const preview = /[?&](preview|preview_id)=/.test( src );
+		fetch( src, { credentials: preview ? 'same-origin' : 'omit' } )
 			.then( ( r ) => ( r.ok ? r.text().then( ( html ) => ( { html, base: r.url || src } ) ) : null ) )
 			.then( ( page ) => {
 				if ( settled || ! page || ! page.html ) { done(); return; }
