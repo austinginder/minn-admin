@@ -260,6 +260,15 @@ $same = function ( $type, $a, $b ) {
 // caches go; definitions vendors cache at boot (ACPT's field groups) stay,
 // as they would at the start of a real request.
 $rt_post = 0;
+// The fixture post goes however the run ends: finally covers a throw, this
+// covers exit(), a fatal error and (through lib/roundtrip.php's handlers)
+// INT, TERM and HUP, none of which run finally.
+( require __DIR__ . '/lib/roundtrip.php' );
+register_shutdown_function( function () use ( &$rt_post ) {
+	if ( $rt_post && get_post( $rt_post ) ) {
+		wp_delete_post( $rt_post, true );
+	}
+} );
 $fresh   = function () use ( &$rt_post ) {
 	// A request starts with no global post; vendors that fall back to it
 	// (ACPT's visibility rules) must not see the last request's.

@@ -15,6 +15,26 @@ if ( ! defined( 'REST_REQUEST' ) ) {
 	define( 'REST_REQUEST', true );
 }
 
+/*
+ * A harness that writes live state puts it back from a shutdown function
+ * (the settings pass's options, the panels pass's fixture post). PHP runs
+ * those on exit() and after a fatal error, but a signal's default action
+ * ends the process without them, and a Ctrl-C on roundtrip.sh reaches the
+ * running wp first. So INT, TERM and HUP end the harness through exit(),
+ * which runs them; an open transaction is rolled back as the connection
+ * closes. SIGKILL cannot be caught.
+ */
+if ( function_exists( 'pcntl_async_signals' ) && ! defined( 'MINN_RT_SIGNALS' ) ) {
+	define( 'MINN_RT_SIGNALS', true );
+	pcntl_async_signals( true );
+	foreach ( array( SIGINT => 'SIGINT', SIGTERM => 'SIGTERM', SIGHUP => 'SIGHUP' ) as $minn_rt_sig => $minn_rt_name ) {
+		pcntl_signal( $minn_rt_sig, function () use ( $minn_rt_sig, $minn_rt_name ) {
+			printf( "FAIL  interrupted by %s: putting back what the harness changed\n", $minn_rt_name );
+			exit( 128 + $minn_rt_sig );
+		} );
+	}
+}
+
 return ( function ( $name, $known ) {
 	$results = array();
 
