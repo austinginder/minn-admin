@@ -5377,6 +5377,16 @@
 	let appearanceSaveTimer = null;
 	let appearanceSaveSeq = 0;
 	let appearancePending = new Set();
+	// Palette colors a slot editor changed, by mode and slot, waiting for the
+	// next save. A slot edit sends only these: the route merges them onto the
+	// stored palette, so another session's colors are never put back.
+	let appearanceSlotDelta = {};
+
+	// Fold one mode/slot map into another; the later map wins a slot.
+	function mergeSlotDelta( into, from ) {
+		Object.keys( from || {} ).forEach( ( m ) => { into[ m ] = { ...( into[ m ] || {} ), ...from[ m ] }; } );
+		return into;
+	}
 
 	// Only the named keys of an appearance record. A save sends what the click
 	// changed and the route keeps every key a body leaves out, so a choice
@@ -5396,11 +5406,16 @@
 		const seq = ++appearanceSaveSeq;
 		appearanceSaveTimer = setTimeout( async () => {
 			const sent = Array.from( appearancePending );
+			const slots = appearanceSlotDelta;
 			appearancePending = new Set();
+			appearanceSlotDelta = {};
+			const body = appearancePick( norm, sent );
+			// A whole palette (a Custom swatch pick) already carries the slots.
+			if ( ! ( 'custom' in body ) && Object.keys( slots ).length ) body.custom = slots;
 			try {
 				const saved = await api( 'minn-admin/v1/me/appearance', {
 					method: 'POST',
-					body: JSON.stringify( appearancePick( norm, sent ) ),
+					body: JSON.stringify( body ),
 				} );
 				// A newer click superseded this write — don't clobber state.
 				if ( seq !== appearanceSaveSeq ) return;
@@ -5408,6 +5423,7 @@
 			} catch ( e ) {
 				// What did not save goes with the next save.
 				sent.forEach( ( k ) => appearancePending.add( k ) );
+				appearanceSlotDelta = mergeSlotDelta( mergeSlotDelta( {}, slots ), appearanceSlotDelta );
 				if ( seq !== appearanceSaveSeq ) return;
 				// Keep the painted scheme; only warn. Next successful pick re-saves.
 				toast( e.message || __( 'Could not save scheme to your profile' ), true );
@@ -5607,26 +5623,10 @@
 				// No toast on every flip — felt laggy with the network wait.
 			} );
 		} );
-		// Per-slot custom editors: live paint on input, debounced background save.
-		const flushSlots = () => {
-			const prev = appearanceOf( B.user && B.user.appearance );
-			const mode = document.documentElement.getAttribute( 'data-theme' ) || 'dark';
-			const nextMode = { ...normalizeModeTokens( prev.custom[ mode ], mode ) };
-			$$( '[data-scheme-slot]', wrap ).forEach( ( input ) => {
-				const key = input.dataset.schemeSlot;
-				const hex = sanitizeHex( input.value );
-				if ( key && hex ) nextMode[ key ] = hex;
-			} );
-			commitAppearance( {
-				scheme: 'custom',
-				custom: {
-					dark: mode === 'dark' ? nextMode : prev.custom.dark,
-					light: mode === 'light' ? nextMode : prev.custom.light,
-				},
-			} );
-		};
+		// Per-slot custom editors: live paint on input, debounced background
+		// save of the slot changed (never the whole palette as this page has it).
 		$$( '[data-scheme-slot]', wrap ).forEach( ( input ) => {
-			input.addEventListener( 'input', () => {
+			const onSlot = () => {
 				const prev = appearanceOf( B.user && B.user.appearance );
 				const mode = document.documentElement.getAttribute( 'data-theme' ) || 'dark';
 				const nextMode = { ...normalizeModeTokens( prev.custom[ mode ], mode ) };
@@ -5641,9 +5641,11 @@
 					light: mode === 'light' ? nextMode : prev.custom.light,
 				};
 				applyAppearance( { ...prev, scheme: 'custom', custom } );
-				queueAppearanceSave( { ...prev, scheme: 'custom', custom }, [ 'scheme', 'custom' ] );
-			} );
-			input.addEventListener( 'change', flushSlots );
+				if ( key && hex ) mergeSlotDelta( appearanceSlotDelta, { [ mode ]: { [ key ]: hex } } );
+				queueAppearanceSave( { ...prev, scheme: 'custom', custom }, [ 'scheme' ] );
+			};
+			input.addEventListener( 'input', onSlot );
+			input.addEventListener( 'change', onSlot );
 		} );
 		// Theme mode (System / Light / Dark) — localStorage, instant.
 		$$( '[data-theme-pref]', wrap ).forEach( ( btn ) => {
@@ -5780,7 +5782,10 @@
 
 	let overviewMetricSaveSeq = 0;
 
-	function persistOverviewMetricKeys( keys, o ) {
+	// base: the layout the page showed before this pick. A slot sent as
+	// shown keeps the card the store holds there, which may be one this
+	// account cannot see right now and the page filled from the fallback.
+	function persistOverviewMetricKeys( keys, o, base ) {
 		const defaults = overviewMetricDefaults( o );
 		const asDefault = overviewMetricKeysEqual( keys, defaults );
 		const next = asDefault ? defaults.slice() : keys.slice();
@@ -5792,7 +5797,7 @@
 		const seq = ++overviewMetricSaveSeq;
 		api( 'minn-admin/v1/overview/metrics', {
 			method: 'POST',
-			body: JSON.stringify( { keys: asDefault ? [] : next } ),
+			body: JSON.stringify( asDefault ? { keys: [] } : ( base ? { keys: next, base } : { keys: next } ) ),
 		} ).then( ( r ) => {
 			if ( seq !== overviewMetricSaveSeq ) return;
 			const cur = state.cache.overview;
@@ -5837,7 +5842,7 @@
 	}
 
 	function setOverviewMetric( slot, key, o ) {
-		persistOverviewMetricKeys( overviewMetricKeysWithPick( o, slot, key ), o );
+		persistOverviewMetricKeys( overviewMetricKeysWithPick( o, slot, key ), o, readOverviewMetricKeys( o ) );
 		closeModal();
 		renderOverview();
 	}
@@ -5847,7 +5852,7 @@
 		const defaults = overviewMetricDefaults( o );
 		if ( slot < 0 || slot >= keys.length ) return;
 		keys[ slot ] = defaults[ slot ];
-		persistOverviewMetricKeys( keys, o );
+		persistOverviewMetricKeys( keys, o, readOverviewMetricKeys( o ) );
 		renderOverview();
 	}
 
@@ -5870,7 +5875,7 @@
 		try {
 			await api( 'minn-admin/v1/overview/metric-defaults', {
 				method: 'POST',
-				body: JSON.stringify( { keys } ),
+				body: JSON.stringify( { keys, base: readOverviewMetricKeys( o ) } ),
 			} );
 			if ( o ) {
 				o.metricDefaults = keys.slice();
@@ -17940,7 +17945,7 @@
 			bindUsersTabs( view );
 			api( 'minn-admin/v1/role-defaults' )
 				.then( ( data ) => {
-					state.cache.roleDefaults = { roles: data.roles || [], policies: data.policies || {}, edits: null };
+					state.cache.roleDefaults = { roles: data.roles || [], policies: data.policies || {}, stamp: data.stamp || '', edits: null };
 				} )
 				.then( renderIfCurrent( 'users' ) )
 				.catch( showErr );
@@ -18062,9 +18067,9 @@
 			try {
 				const data = await api( 'minn-admin/v1/role-defaults', {
 					method: 'POST',
-					body: JSON.stringify( { policies } ),
+					body: JSON.stringify( { policies, base: c.stamp || '' } ),
 				} );
-				state.cache.roleDefaults = { roles: data.roles || [], policies: data.policies || {}, edits: null };
+				state.cache.roleDefaults = { roles: data.roles || [], policies: data.policies || {}, stamp: data.stamp || '', edits: null };
 				toast( __( 'Role defaults saved.' ) );
 				renderRoleDefaults();
 			} catch ( e ) {
@@ -32355,7 +32360,7 @@
 				const cssWas = String( ( cache.customCss && cache.customCss.css ) || '' ).replace( /\r\n?/g, '\n' );
 				if ( cssEl && cssEl.value.replace( /\r\n?/g, '\n' ) !== cssWas ) {
 					try {
-						cache.customCss = await api( 'minn-admin/v1/custom-css', { method: 'POST', body: JSON.stringify( { css: cssEl.value } ) } );
+						cache.customCss = await api( 'minn-admin/v1/custom-css', { method: 'POST', body: JSON.stringify( { css: cssEl.value, base: ( cache.customCss && cache.customCss.stamp ) || '' } ) } );
 					} catch ( err ) {
 						// Early return: the tail re-render would rebuild the
 						// textarea from the cached (old) CSS and wipe the typed
@@ -53717,9 +53722,23 @@
 		} );
 		const save = async ( resetUsers ) => {
 			try {
+				// Only what changed since the page loaded: the route keeps every
+				// key a body leaves out and merges palette colors onto the
+				// stored palette, so another administrator's choice made
+				// meanwhile is not put back.
+				const loaded = siteAppearanceOf( state.cache.settings && state.cache.settings.siteAppearance && state.cache.settings.siteAppearance.appearance );
+				const d = draft();
+				const body = { resetUsers: !! resetUsers };
+				if ( d.scheme !== loaded.scheme ) body.scheme = d.scheme;
+				if ( d.mode !== loaded.mode ) body.mode = d.mode;
+				const custom = {};
+				[ 'dark', 'light' ].forEach( ( m ) => Object.keys( d.custom[ m ] || {} ).forEach( ( k ) => {
+					if ( d.custom[ m ][ k ] !== ( loaded.custom[ m ] || {} )[ k ] ) ( custom[ m ] = custom[ m ] || {} )[ k ] = d.custom[ m ][ k ];
+				} ) );
+				if ( Object.keys( custom ).length ) body.custom = custom;
 				const r = await api( 'minn-admin/v1/site-appearance', {
 					method: 'POST',
-					body: JSON.stringify( { ...draft(), resetUsers: !! resetUsers } ),
+					body: JSON.stringify( body ),
 				} );
 				if ( state.cache.settings ) state.cache.settings.siteAppearance = r;
 				B.siteAppearance = r.appearance;
@@ -53790,6 +53809,25 @@
 				save( id === 'custom' ? [ 'scheme', 'custom' ] : [ 'scheme' ], flips );
 			} );
 		} );
+		// A slot edit sends the colors changed, by mode and slot; the route
+		// merges them onto the stored palette, so a color the person (or
+		// another administrator) changed meanwhile stays.
+		let slotDelta = {};
+		const saveSlots = async () => {
+			const custom = slotDelta;
+			slotDelta = {};
+			if ( ! Object.keys( custom ).length ) return;
+			try {
+				const saved = await api( `minn-admin/v1/users/${ ue.id }/appearance`, {
+					method: 'POST',
+					body: JSON.stringify( { scheme: 'custom', custom } ),
+				} );
+				ue.appearance = appearanceOf( saved );
+			} catch ( e ) {
+				slotDelta = mergeSlotDelta( mergeSlotDelta( {}, custom ), slotDelta );
+				toast( e.message, true );
+			}
+		};
 		$$( '[data-scheme-slot]', wrap ).forEach( ( input ) => {
 			input.addEventListener( 'input', () => {
 				const prev = appearanceOf( ue.appearance );
@@ -53807,8 +53845,9 @@
 						light: m === 'light' ? nextMode : prev.custom.light,
 					},
 				} );
+				if ( input.dataset.schemeSlot && hex ) mergeSlotDelta( slotDelta, { [ m ]: { [ input.dataset.schemeSlot ]: hex } } );
 				clearTimeout( ueAppearanceSaveTimer );
-				ueAppearanceSaveTimer = setTimeout( () => save( [ 'scheme', 'custom' ], false ), 250 );
+				ueAppearanceSaveTimer = setTimeout( saveSlots, 250 );
 			} );
 		} );
 		const defBtn = $( '#minn-ue-default-admin', view );
