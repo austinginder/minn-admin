@@ -13,24 +13,38 @@
 # that every write route either had a save replayed here or is listed in
 # fixtures/roundtrip-coverage.json with the reason it has none.
 #
+# The seed state (every cell a seed wrote, with what it held) lives at one
+# path per site, outside the run's temp folder, so a run that never reached
+# its restore (SIGKILL, a crash, a closed laptop) is put back by the next
+# run before anything else. Cleanup keeps the file only when a restore fails.
+#
 # Run from tests/: MINN_TEST_PASS=… ./roundtrip.sh   (MINN_TEST_WP points at the site root)
 set -u
 cd "$(dirname "$0")"
 WP_PATH="${MINN_TEST_WP:-$(cd ../../../.. && pwd)}"
 TMP="$(mktemp -d)"
-SEED_STATE="$TMP/seed.json"
+STATE_DIR="${TMPDIR:-/tmp}"
+SEED_STATE="${STATE_DIR%/}/minn-roundtrip-seed-$(printf %s "$WP_PATH" | cksum | cut -d' ' -f1).json"
 export MINN_RT_COVERED="$TMP/covered.txt"
 : >"$MINN_RT_COVERED"
 status=0
 run() { echo "== $1"; shift; "$@" || status=1; }
 seed() { MINN_RT_SEED="$1" MINN_RT_SEED_SET="${2:-}" MINN_RT_SEED_FILE="$SEED_STATE" wp eval-file lib/roundtrip-seed.php --user=admin --path="$WP_PATH"; }
 cleanup() {
-	# A seed still in place is put back before anything else goes.
+	# A seed still in place is put back before anything else goes; its state
+	# file stays only if that fails, for the next run (or a hand) to finish.
 	if [ -f "$SEED_STATE" ]; then seed restore || echo "FAIL  seeds not restored: state kept in $SEED_STATE"; fi
-	[ -f "$SEED_STATE" ] || rm -rf "$TMP"
+	rm -rf "$TMP"
 }
 trap cleanup EXIT
 trap 'exit 130' INT TERM HUP
+
+if [ -f "$SEED_STATE" ]; then
+	# A run that was killed before its restore left seeded values in the
+	# lab: every pass below would read them as the lab's own.
+	echo "== restore a seed an earlier run left in place ($SEED_STATE)"
+	seed restore || { echo "FAIL  the earlier run's seeds could not be put back: state kept in $SEED_STATE"; exit 1; }
+fi
 
 run panels   wp eval-file roundtrip-panels.test.php --user=admin --path="$WP_PATH"
 run settings wp eval-file roundtrip-settings.test.php --user=admin --path="$WP_PATH"
