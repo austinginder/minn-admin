@@ -375,5 +375,56 @@ rest_get_server();
 	}
 } )();
 
+/*
+ * WPCode: a text snippet's code the edit leaves alone is not run through
+ * kses for a caller without unfiltered_html. Their own form compensates for
+ * the kses it turns off only on code that is submitted; Minn's dialog always
+ * sends the code, so an untouched embed an administrator wrote was stripped
+ * on an edit of the priority, and so was the stored code when the type came
+ * back unchanged without it.
+ */
+( function () use ( $check, $skip, $call, $wpdb ) {
+	if ( ! function_exists( 'wpcode' ) || ! class_exists( 'WPCode_Snippet' ) ) {
+		$skip( 'WPCode inactive' );
+		return;
+	}
+	$frame = '<iframe src="https://www.youtube.com/embed/minn" width="560" height="315"></iframe>';
+	$embed = "<p>Watch:</p>\r\n" . $frame;
+	$deny  = function ( $caps, $cap ) {
+		return 'unfiltered_html' === $cap ? array( 'do_not_allow' ) : $caps;
+	};
+	$wpdb->query( 'START TRANSACTION' );
+	try {
+		$snippet = new WPCode_Snippet( array( 'title' => 'Minn prerc text', 'code' => wp_slash( $embed ), 'code_type' => 'text', 'active' => false, 'priority' => 10 ) );
+		$id      = (int) $snippet->save();
+		if ( $id <= 0 || $embed !== get_post( $id )->post_content ) {
+			$check( 'WPCode: a text snippet holding an embed is seeded for the check', false, wp_json_encode( $id ? get_post( $id )->post_content : $id ) );
+			return;
+		}
+		add_filter( 'map_meta_cap', $deny, 10, 2 );
+		list( , $item ) = $call( 'GET', "/minn-admin/v1/wpcode/snippets/{$id}" );
+		$body = array();
+		foreach ( array( 'name', 'desc', 'code', 'code_type', 'auto_insert', 'location', 'tags' ) as $k ) {
+			$body[ $k ] = $item[ $k ] ?? null;
+		}
+		// A textarea hands its line breaks back as \n.
+		$body['code'] = str_replace( "\r\n", "\n", (string) $body['code'] );
+		list( $st, $d ) = $call( 'PUT', "/minn-admin/v1/wpcode/snippets/{$id}", $body + array( 'priority' => 13 ) );
+		clean_post_cache( $id );
+		$check( 'WPCode: a priority-only edit without unfiltered_html answers 200 and writes it (control)', 200 === $st && 13 === (int) get_post_meta( $id, '_wpcode_priority', true ), $st . ' ' . wp_json_encode( $d ) );
+		$check( 'WPCode: and keeps the stored code byte for byte, line breaks included', $embed === get_post( $id )->post_content, wp_json_encode( get_post( $id )->post_content ) );
+		list( $st ) = $call( 'PUT', "/minn-admin/v1/wpcode/snippets/{$id}", array( 'code_type' => 'text', 'priority' => 14 ) );
+		clean_post_cache( $id );
+		$check( 'WPCode: an unchanged type sent without code keeps the stored code', 200 === $st && $embed === get_post( $id )->post_content, $st . ' ' . wp_json_encode( get_post( $id )->post_content ) );
+		list( $st ) = $call( 'PUT', "/minn-admin/v1/wpcode/snippets/{$id}", array( 'code' => '<p>New</p>' . $frame ) );
+		clean_post_cache( $id );
+		$check( 'WPCode: changed code without unfiltered_html is still filtered (control)', 200 === $st && '<p>New</p>' === get_post( $id )->post_content, $st . ' ' . wp_json_encode( get_post( $id )->post_content ) );
+	} finally {
+		remove_filter( 'map_meta_cap', $deny, 10 );
+		$wpdb->query( 'ROLLBACK' );
+		wp_cache_flush();
+	}
+} )();
+
 printf( "\nsecurity-v046-prerc-misc: %d/%d passed\n", count( array_filter( $results ) ), count( $results ) );
 exit( count( array_filter( $results ) ) === count( $results ) ? 0 : 1 );

@@ -889,9 +889,16 @@ minn_admin_resource( 'wpcode/snippets', function () {
 					if ( null !== $request['name'] && (string) $request['name'] !== (string) $snippet->get_title() ) {
 						$patch['title'] = sanitize_text_field( (string) $request['name'] );
 					}
-					if ( null !== $request['code'] ) {
+					// The dialog always sends the code, an untouched one as
+					// stored (a textarea may hand back its line breaks as \n).
+					// It is filtered and written only when it or its type
+					// changes: kses on a text snippet's stored code (for a caller
+					// without unfiltered_html) took out an embed someone allowed
+					// to store it had written, on an edit of the priority.
+					$retyped = null !== $new_type && $new_type !== (string) $snippet->get_code_type();
+					if ( null !== $request['code'] && ( $retyped || ! Minn_Admin::unchanged( $request['code'], (string) $snippet->get_code() ) ) ) {
 						$patch['code'] = minn_admin_wpcode_clean_code( $eff_type, (string) $request['code'] );
-					} elseif ( null !== $new_type && minn_admin_wpcode_type_is_markup( $eff_type ) ) {
+					} elseif ( $retyped && minn_admin_wpcode_type_is_markup( $eff_type ) ) {
 						// Retyping is a write even when no code is sent. Creating a
 						// css snippet (never filtered, since css is not markup) and
 						// then flipping it to text would otherwise promote bytes
