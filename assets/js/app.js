@@ -27294,10 +27294,10 @@
 	// on it, so the row says which one rather than just disabling a button.
 	// Why a wp-config switch is shown locked: the constant is defined outside
 	// wp-config.php, or wp-config.php sets it to something other than true or
-	// false (a log path), or sets it more than once. A switch would rewrite
-	// the last two, so they stay as the file has them.
+	// false (a log path), inside a condition, or more than once. A switch
+	// would rewrite those, so they stay as the file has them.
 	function configLockLabel( c ) {
-		if ( c.lock === 'custom' ) return __( 'set in wp-config.php' );
+		if ( c.lock === 'custom' || c.lock === 'branch' ) return __( 'set in wp-config.php' );
 		if ( c.lock === 'multiple' ) return __( 'set more than once in wp-config.php' );
 		return __( 'defined elsewhere' );
 	}
@@ -27334,11 +27334,13 @@
 				__( 'Deletes this language’s WordPress, plugin and theme translation files' ),
 				__( 'Stops WordPress from downloading updates for them' ),
 			],
+			// WordPress reinstalls a language the site or a user selects, not
+			// one a plugin switches to on its own, so the promise holds only
+			// when the confirmation names no such plugin.
 			keeps: [
 				__( 'Your content, settings and the site language' ),
 				__( 'Every other installed language' ),
-				__( 'Nothing is permanent: WordPress reinstalls the language if it is ever selected again' ),
-			],
+			].concat( switchers.length ? [] : [ __( 'Nothing is permanent: WordPress reinstalls the language if it is ever selected again' ) ] ),
 			danger: true,
 			confirmLabel: __( 'Remove language' ),
 		} );
