@@ -462,5 +462,42 @@ rest_get_server();
 	}
 } )();
 
+/*
+ * PowerPress: an edit of the season leaves an extra holding a backslash
+ * readable. The blob went to update_post_meta() unslashed, so the backslash
+ * came out of 'AC\DC live', its serialized length no longer matched, and
+ * every extra (duration, chapters, hosting) stopped reading back. A file URL
+ * sent back as stored is not run through esc_url_raw() either.
+ */
+( function () use ( $check, $skip, $call, $wpdb ) {
+	if ( ! function_exists( 'minn_admin_powerpress_active' ) || ! minn_admin_powerpress_active() || ! minn_admin_powerpress_can_podcast() ) {
+		$skip( 'PowerPress inactive (load it with MINN_SWAP_ADD=powerpress/powerpress.php)' );
+		return;
+	}
+	$file   = 'https://example.com/minn prerc.mp3';
+	$head   = $file . "\n12345\naudio/mpeg\n";
+	$extras = array( 'duration' => '00:30:00', 'episode_title' => 'AC\\DC live', 'season' => '1' );
+	$wpdb->query( 'START TRANSACTION' );
+	try {
+		$pid = wp_insert_post( array( 'post_title' => 'Minn prerc episode', 'post_status' => 'draft', 'post_type' => 'post' ) );
+		if ( ! is_int( $pid ) || $pid <= 0 ) {
+			$check( 'PowerPress: a post is seeded for the check', false, wp_json_encode( $pid ) );
+			return;
+		}
+		$wpdb->insert( $wpdb->postmeta, array( 'post_id' => $pid, 'meta_key' => 'enclosure', 'meta_value' => $head . serialize( $extras ) ) ); // phpcs:ignore -- their storage format
+		wp_cache_delete( $pid, 'post_meta' );
+		// The file URL rides along as stored, as a whole-panel resend has it.
+		list( $st, $d ) = $call( 'POST', "/wp/v2/posts/{$pid}", array( 'minn_powerpress' => array( 'url' => $file, 'season' => '2' ) ) );
+		$blob = (string) $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = 'enclosure'", $pid ) );
+		$enc  = minn_admin_powerpress_parse( $blob );
+		$check( 'PowerPress: a season edit answers 200 and writes the season (control)', 200 === $st && false !== strpos( $blob, 's:6:"season";s:1:"2";' ), $st . ' ' . wp_json_encode( $blob ) );
+		$check( 'PowerPress: and every extra still reads back', 'AC\\DC live' === ( $enc['extras']['episode_title'] ?? null ) && '00:30:00' === ( $enc['extras']['duration'] ?? null ), wp_json_encode( $enc['extras'] ) );
+		$check( 'PowerPress: and the file URL and every other extra are stored byte for byte', $head . serialize( array_merge( $extras, array( 'season' => '2' ) ) ) === $blob, wp_json_encode( $blob ) ); // phpcs:ignore
+	} finally {
+		$wpdb->query( 'ROLLBACK' );
+		wp_cache_flush();
+	}
+} )();
+
 printf( "\nsecurity-v046-prerc-misc: %d/%d passed\n", count( array_filter( $results ) ), count( $results ) );
 exit( count( array_filter( $results ) ) === count( $results ) ? 0 : 1 );

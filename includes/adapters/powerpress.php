@@ -105,7 +105,10 @@ function minn_admin_powerpress_write_values( $post_id, $values ) {
 
 	// Clearing the URL removes the episode entirely (their remove flow,
 	// including the legacy itunes:duration meta).
-	if ( array_key_exists( 'url', $values ) ) {
+	// A URL sent back as stored is left alone before any cleaning: esc_url_raw()
+	// would rewrite a stored one ('my ep.mp3' to 'my%20ep.mp3') and re-derive
+	// its content type.
+	if ( array_key_exists( 'url', $values ) && ! Minn_Admin::unchanged( $values['url'], $enc['url'] ) ) {
 		$url = esc_url_raw( trim( (string) $values['url'] ) );
 		if ( '' === $url && '' !== $enc['url'] ) {
 			delete_post_meta( $post_id, 'enclosure' );
@@ -196,10 +199,14 @@ function minn_admin_powerpress_write_values( $post_id, $values ) {
 	if ( ! $changed ) {
 		return;
 	}
+	// Slashed: update_post_meta() unslashes, and a backslash taken out of an
+	// extras string nobody edited ('AC\DC live') left its serialized length
+	// wrong, so the whole extras array (duration, chapters, hosting) stopped
+	// reading back.
 	update_post_meta(
 		$post_id,
 		'enclosure',
-		"{$enc['url']}\n{$enc['size']}\n{$enc['type']}\n" . serialize( $enc['extras'] ) // phpcs:ignore -- their exact storage format
+		wp_slash( "{$enc['url']}\n{$enc['size']}\n{$enc['type']}\n" . serialize( $enc['extras'] ) ) // phpcs:ignore -- their exact storage format
 	);
 }
 
