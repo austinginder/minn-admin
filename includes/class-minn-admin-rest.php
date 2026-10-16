@@ -13380,9 +13380,10 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	/**
 	 * How wp-config.php defines a constant: 'absent', 'bool' (one literal
 	 * true or false, which a switch may rewrite), 'custom' (anything else: a
-	 * log file path for WP_DEBUG_LOG, an expression) or 'multiple' (defined
+	 * log file path for WP_DEBUG_LOG, an expression), 'multiple' (defined
 	 * more than once in a way that leaves which define wins to the file's
-	 * own branches). A switch writes only true or false, so it must never
+	 * own branches) or 'branch' (one define, inside a condition or a
+	 * function, so it may not be the one that ran). A switch writes only true or false, so it must never
 	 * replace a custom value: a private log path would become true and move
 	 * the log to the public wp-content/debug.log.
 	 *
@@ -13504,10 +13505,30 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		};
 
 		// Every define( 'NAME', … ) PHP would run, and every comment's span.
+		// A define inside braces (an if, else, switch, function) or right
+		// after a condition runs only sometimes; alternative syntax
+		// (if: … endif;) is not followed, so a file using it counts every
+		// define as conditional.
 		$real     = array();
 		$comments = array();
+		$depth    = 0;
+		$alt      = false;
+		foreach ( $tokens as $t ) {
+			if ( is_array( $t ) && in_array( $t[0], array( T_ENDIF, T_ENDWHILE, T_ENDFOR, T_ENDFOREACH, T_ENDSWITCH, T_ENDDECLARE ), true ) ) {
+				$alt = true;
+				break;
+			}
+		}
 		for ( $i = 0; $i < $count; $i++ ) {
 			$t = $tokens[ $i ];
+			if ( '{' === $t || ( is_array( $t ) && in_array( $t[0], array( T_CURLY_OPEN, T_DOLLAR_OPEN_CURLY_BRACES ), true ) ) ) {
+				++$depth;
+				continue;
+			}
+			if ( '}' === $t ) {
+				--$depth;
+				continue;
+			}
 			if ( ! is_array( $t ) ) {
 				continue;
 			}
@@ -13544,7 +13565,16 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				return $custom;
 			}
 			if ( $named( $j ) ) {
-				$real[] = array( 'offset' => $starts[ $at ], 'fallback' => $fallback( $at ) );
+				$before = $prev( $at );
+				while ( $is( $before, '@' ) ) {
+					$before = $prev( $before );
+				}
+				$real[] = array(
+					'offset'   => $starts[ $at ],
+					'fallback' => $fallback( $at ),
+					// A statement of its own at the top of the file.
+					'branch'   => $alt || $depth > 0 || ! ( $before < 0 || $is( $before, ';' ) || $is( $before, '}' ) || $is( $before, T_OPEN_TAG ) ),
+				);
 			}
 		}
 
@@ -13567,6 +13597,10 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			return array( 'kind' => 'multiple', 'offset' => null, 'length' => 0 );
 		} else {
 			$target = $real ? $real[0] : null;
+		}
+		if ( $target && ! $target['fallback'] && $target['branch'] ) {
+			// It may not be the define that ran, whatever the running value.
+			return array( 'kind' => 'branch', 'offset' => null, 'length' => 0 );
 		}
 
 		// The pattern must see that same define, and nothing PHP would not
@@ -13619,6 +13653,10 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		if ( 'multiple' === $scan['kind'] ) {
 			/* translators: %s: a wp-config.php constant name, such as WP_DEBUG_LOG. */
 			return new WP_Error( 'defined_twice', sprintf( __( '%s is defined more than once in wp-config.php, so it can only be changed there.', 'minn-admin' ), $name ), array( 'status' => 400 ) );
+		}
+		if ( 'branch' === $scan['kind'] ) {
+			/* translators: %s: a wp-config.php constant name, such as WP_DEBUG_LOG. */
+			return new WP_Error( 'in_branch', sprintf( __( '%s is set inside a condition in wp-config.php, so it can only be changed there.', 'minn-admin' ), $name ), array( 'status' => 400 ) );
 		}
 		if ( 'bool' === $scan['kind'] ) {
 			return substr_replace( $contents, $line, $scan['offset'], $scan['length'] );
@@ -13723,7 +13761,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	 * wp-config.php defines it, and whether it is locked, with why:
 	 * 'elsewhere' (defined outside wp-config.php, or by a literal there
 	 * that is not what WordPress runs with: dead code under an if, a define
-	 * something earlier overrides), 'custom' or 'multiple' (see
+	 * something earlier overrides), 'custom', 'multiple' or 'branch' (see
 	 * config_define_kind()).
 	 *
 	 * @param string $name     Constant name.
@@ -13879,6 +13917,16 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		// parses before dropping the copy: if anything truncated the write,
 		// keep the copy and say so rather than leaving the site with a broken
 		// wp-config.php and nothing to restore from.
+		// The next request must run the new file, not OPcache's copy of the
+		// old one, as core's own file editors make sure.
+		if ( ! function_exists( 'wp_opcache_invalidate' ) && is_file( ABSPATH . 'wp-admin/includes/file.php' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/file.php';
+		}
+		if ( function_exists( 'wp_opcache_invalidate' ) ) {
+			wp_opcache_invalidate( $path, true );
+		} elseif ( function_exists( 'opcache_invalidate' ) ) {
+			@opcache_invalidate( $path, true ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		}
 		$written = @file_get_contents( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 		$intact  = false !== $written && $written === $new;
 		if ( $intact ) {
