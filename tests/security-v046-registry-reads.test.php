@@ -7,7 +7,7 @@
  * Each section calls the route Minn's client calls, as the role the finding
  * named, with a control where the fix could over-block. Sections SKIP when
  * their plugin is inactive or the site is the wrong shape: run it on a single
- * site (the browser, ACF) and on a network's main site (the network gates).
+ * site (the browser, ACF) and on any site of a network (the network gates).
  *
  * Run: wp eval-file tests/security-v046-registry-reads.test.php --user=admin --path=<site>
  *
@@ -326,18 +326,18 @@ if ( ! $admin || ! current_user_can( 'manage_options' ) || ( is_multisite() && !
 // was gone or the plugin's network activation had run.
 ( function () use ( $check, $skip, $call, $admin, $make_user, $drop_user ) {
 	if ( ! is_multisite() || ! function_exists( 'minn_admin_network_can_delete_sites' ) ) {
-		$skip( '#3 not a network: run this part on a network\'s main site' );
+		$skip( '#3 not a network' );
 		return;
 	}
-	if ( ! is_main_site() ) {
-		$skip( '#3 run on the main site' );
-		return;
-	}
+	// The role lives on the main site, where core's Network Admin reads it;
+	// the routes are called from whichever site this runs on.
 	$role = 'minn_v046_netrole';
+	switch_to_blog( get_main_site_id() );
 	remove_role( $role );
 	add_role( $role, 'Minn v046 network role', array_fill_keys( array( 'read', 'edit_posts', 'manage_options', 'activate_plugins', 'manage_sites', 'delete_sites', 'manage_network_plugins', 'manage_network_themes', 'manage_network_options', 'manage_network_users' ), true ) );
-	$holder  = $make_user( 'minn_v046_net', $role );
-	$target  = $make_user( 'minn_v046_tgt', 'subscriber' );
+	$holder = $make_user( 'minn_v046_net', $role );
+	$target = $make_user( 'minn_v046_tgt', 'subscriber' );
+	restore_current_blog();
 	$site    = 0;
 	$plugin  = 'hello-dolly/hello.php';
 	$theme   = '';
@@ -372,7 +372,7 @@ if ( ! $admin || ! current_user_can( 'manage_options' ) || ( is_multisite() && !
 		}
 
 		wp_set_current_user( $holder );
-		$check( '#3 the probe account is not the network\'s owner', ! Minn_Admin::network_owner() && current_user_can( 'delete_sites' ) );
+		$check( '#3 the probe account is not the network\'s owner', ! Minn_Admin::network_owner() && minn_admin_network_user_can( 'delete_sites' ) );
 		if ( $site ) {
 			list( $st, $d ) = $call( 'DELETE', '/minn-admin/v1/network/sites/' . $site );
 			$check( '#3 Delete site is refused before the site is touched', 403 === $st && 'rest_forbidden' === ( $d['code'] ?? '' ) && get_site( $site ) && ! array_intersect( array( 'wp_uninitialize_site', 'wp_delete_site' ), $fired ), $st . ' ' . ( $d['code'] ?? '' ) . ' site=' . ( get_site( $site ) ? 'kept' : 'GONE' ) . ' ' . implode( ',', $fired ) );
@@ -447,7 +447,9 @@ if ( ! $admin || ! current_user_can( 'manage_options' ) || ( is_multisite() && !
 		}
 		$drop_user( $holder );
 		$drop_user( $target );
+		switch_to_blog( get_main_site_id() );
 		remove_role( $role );
+		restore_current_blog();
 	}
 } )();
 
