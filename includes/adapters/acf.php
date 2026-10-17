@@ -1000,14 +1000,6 @@ function minn_admin_acf_relation_kind( $acf_field ) {
 }
 
 /**
- * One stored relational id → the picker's { value, label } row, or null when
- * the object is gone. Non-published posts carry their status in the label.
- *
- * @param string $kind post | term | user.
- * @param mixed  $id   Stored id.
- * @return array|null
- */
-/**
  * May the current user be shown this account through a relational field?
  *
  * Mirrors the picker's own rule: browsing a directory IS `list_users`, and
@@ -1036,10 +1028,58 @@ function minn_admin_acf_may_see_user( $u ) {
 	return (bool) count_user_posts( $u->ID );
 }
 
-function minn_admin_acf_relation_entry( $kind, $id ) {
+/**
+ * May a relational post field name this post at all, by ACF's own reading?
+ *
+ * ACF resolves a stored id only through acf_get_posts(): the field's post
+ * types, or, when it names none, acf_get_post_types(), which leaves out
+ * core's internal types (user_request, whose title is a privacy requester's
+ * email address, customize_changeset, oembed_cache...), and post_status
+ * 'any', which leaves out the statuses kept out of search (trash,
+ * auto-draft, the request-* states). A stored id outside that reads as
+ * nothing on ACF's screen, so it is neither offered nor resolved here.
+ *
+ * @param WP_Post    $p   Post.
+ * @param array|null $acf Raw ACF field array.
+ * @return bool
+ */
+function minn_admin_acf_post_in_field( $p, $acf ) {
+	$status = get_post_status_object( $p->post_status );
+	if ( $status && ! empty( $status->exclude_from_search ) ) {
+		return false;
+	}
+	$types = is_array( $acf ) && ! empty( $acf['post_type'] ) ? (array) $acf['post_type'] : ( function_exists( 'acf_get_post_types' ) ? acf_get_post_types() : array() );
+	return in_array( $p->post_type, $types, true );
+}
+
+/**
+ * The taxonomy a relational term field names (ACF's default is category).
+ *
+ * @param array|null $acf Raw ACF field array.
+ * @return string
+ */
+function minn_admin_acf_field_taxonomy( $acf ) {
+	return is_array( $acf ) && ! empty( $acf['taxonomy'] ) && is_string( $acf['taxonomy'] ) ? $acf['taxonomy'] : 'category';
+}
+
+/**
+ * One stored relational id → the picker's { value, label } row, or null when
+ * the object is gone or withheld from this field or this user. Non-published
+ * posts carry their status in the label.
+ *
+ * @param string     $kind post | term | user.
+ * @param mixed      $id   Stored id.
+ * @param array|null $acf  Raw ACF field array: the post types and taxonomy
+ *                         an id must belong to.
+ * @return array|null
+ */
+function minn_admin_acf_relation_entry( $kind, $id, $acf = null ) {
 	if ( 'post' === $kind ) {
 		$p = get_post( (int) $id );
 		if ( ! $p || in_array( $p->post_status, array( 'trash', 'auto-draft' ), true ) ) {
+			return null;
+		}
+		if ( ! minn_admin_acf_post_in_field( $p, $acf ) ) {
 			return null;
 		}
 		// The picker withholds other people's unpublished posts and applies a
@@ -1059,8 +1099,10 @@ function minn_admin_acf_relation_entry( $kind, $id ) {
 		return array( 'value' => (string) $p->ID, 'label' => $label );
 	}
 	if ( 'term' === $kind ) {
-		$t = get_term( (int) $id );
-		return ( $t && ! is_wp_error( $t ) ) ? array( 'value' => (string) $t->term_id, 'label' => $t->name ) : null;
+		// Within the field's own taxonomy, as ACF resolves it: an id from
+		// another taxonomy (a menu, a private classification) shows nothing.
+		$t = get_term( (int) $id, minn_admin_acf_field_taxonomy( $acf ) );
+		return ( $t instanceof WP_Term ) ? array( 'value' => (string) $t->term_id, 'label' => $t->name ) : null;
 	}
 	if ( 'user' === $kind ) {
 		$u = get_userdata( (int) $id );
@@ -1093,7 +1135,7 @@ function minn_admin_acf_suggest_out( $key, $val ) {
 	if ( 'post' === $kind && ! is_numeric( $val ) ) {
 		return array( 'value' => (string) $val, 'label' => (string) $val );
 	}
-	$entry = minn_admin_acf_relation_entry( $kind, $val );
+	$entry = minn_admin_acf_relation_entry( $kind, $val, $acf );
 	return $entry ? $entry : '';
 }
 
@@ -1116,7 +1158,7 @@ function minn_admin_acf_relation_list_out( $key, $val ) {
 			$out[] = array( 'value' => (string) $id, 'label' => (string) $id );
 			continue;
 		}
-		$entry = minn_admin_acf_relation_entry( $kind, $id );
+		$entry = minn_admin_acf_relation_entry( $kind, $id, $acf );
 		if ( $entry ) {
 			$out[] = $entry;
 		}
@@ -1156,7 +1198,7 @@ function minn_admin_acf_relation_id_in( $acf, $value ) {
 		if ( ! $p || in_array( $p->post_status, array( 'trash', 'auto-draft' ), true ) ) {
 			return null;
 		}
-		if ( ! empty( $acf['post_type'] ) && ! in_array( $p->post_type, (array) $acf['post_type'], true ) ) {
+		if ( ! minn_admin_acf_post_in_field( $p, $acf ) ) {
 			return null;
 		}
 		// Refuse an id the caller could not have been offered, so a hand-written
@@ -1171,11 +1213,8 @@ function minn_admin_acf_relation_id_in( $acf, $value ) {
 		if ( ! is_numeric( $value ) ) {
 			return null;
 		}
-		$t = get_term( (int) $value );
-		if ( ! $t || is_wp_error( $t ) ) {
-			return null;
-		}
-		if ( ! empty( $acf['taxonomy'] ) && $t->taxonomy !== $acf['taxonomy'] ) {
+		$t = get_term( (int) $value, minn_admin_acf_field_taxonomy( $acf ) );
+		if ( ! $t instanceof WP_Term ) {
 			return null;
 		}
 		return (int) $t->term_id; // ACF's own taxonomy save stores ints
@@ -2158,7 +2197,7 @@ function minn_admin_acf_relation_preserve( $field, $value, $stored, $sent = null
 	if ( '' === $kind ) {
 		return $value;
 	}
-	$withheld = function ( $id ) use ( $kind ) {
+	$withheld = function ( $id ) use ( $kind, $acf ) {
 		if ( ! is_scalar( $id ) || '' === (string) $id || ! is_numeric( $id ) ) {
 			return false;
 		}
@@ -2171,7 +2210,7 @@ function minn_admin_acf_relation_preserve( $field, $value, $stored, $sent = null
 		if ( 'user' === $kind && ! get_userdata( (int) $id ) ) {
 			return false;
 		}
-		return null === minn_admin_acf_relation_entry( $kind, $id );
+		return null === minn_admin_acf_relation_entry( $kind, $id, $acf );
 	};
 	if ( 'suggest' === $field['type'] ) {
 		if ( '' === $value && $withheld( is_array( $stored ) ? reset( $stored ) : $stored ) ) {
@@ -2796,7 +2835,7 @@ add_action( 'rest_api_init', function () {
 				} );
 				$multi_type = ! is_array( $base['post_type'] ) || count( $base['post_type'] ) > 1;
 				foreach ( array_slice( $posts, 0, 20 ) as $p ) {
-					$entry = minn_admin_acf_relation_entry( 'post', $p->ID );
+					$entry = minn_admin_acf_relation_entry( 'post', $p->ID, $acf );
 					if ( ! $entry ) {
 						continue;
 					}

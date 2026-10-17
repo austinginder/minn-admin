@@ -11,6 +11,9 @@
  *    (an application password), where the post is stored before the exit.
  *  - 09-2 ACPT: box visibility conditions (a USER condition, a post status)
  *    were ignored by the post panel and the option-page walk.
+ *  - 09-3 ACF: a taxonomy field resolved a stored term id from any taxonomy.
+ *  - 09-4 ACF: a post field with no type filter stored and resolved core's
+ *    user_request posts (a privacy requester's email is the title).
  *  - The held-refusal store every panel shares (ACPT, Pods).
  *
  * Sections SKIP when their plugin is inactive. Everything a section makes
@@ -526,6 +529,136 @@ $tag   = (string) wp_rand( 1000, 9999 );
 			$check( 'ACPT options: the kept box is not written from the Editor', $before === $after && 'sk_from_editor' !== $after, wp_json_encode( $after ) );
 			$check( 'ACPT options: the open field in the same save is written (control)', 'Editor note' === $note, wp_json_encode( $note ) );
 		}
+	} finally {
+		$clean();
+	}
+} )();
+
+/*
+ * 09-3 and 09-4 ACF. A local group on posts: a taxonomy field (category,
+ * one pick), a relationship and a post object field with no type filter.
+ */
+( function () use ( $check, $skip, $call, $as, $once, $user, $drop_user, $tag, $admin ) {
+	if ( ! function_exists( 'acf_add_local_field_group' ) || ! function_exists( 'minn_admin_acf_relation_entry' ) ) {
+		$skip( 'ACF: inactive' );
+		return;
+	}
+	$clogin = 'minnrc_acf_c' . $tag;
+	$elogin = 'minnrc_acf_e' . $tag;
+	$cid    = 0;
+	$eid    = 0;
+	$posts  = array();
+	$menu   = 0;
+	$cat    = 0;
+	$reqid  = 0;
+	$clean  = $once( function () use ( &$cid, &$eid, &$posts, &$menu, &$cat, &$reqid, $clogin, $elogin, $drop_user, $tag ) {
+		foreach ( $posts as $pid ) {
+			$p = $pid > 0 ? get_post( $pid ) : null;
+			if ( $p && 0 === strpos( $p->post_title, 'Minn rc ACF' ) ) {
+				wp_delete_post( $pid, true );
+			}
+		}
+		$r = $reqid > 0 ? get_post( $reqid ) : null;
+		if ( $r && 'user_request' === $r->post_type && 'minnrc-' . $tag . '@example.invalid' === $r->post_title ) {
+			wp_delete_post( $reqid, true );
+		}
+		$m = $menu > 0 ? get_term( $menu, 'nav_menu' ) : null;
+		if ( $m instanceof WP_Term && 'Minn rc menu ' . $tag === $m->name ) {
+			wp_delete_nav_menu( $menu );
+		}
+		$c = $cat > 0 ? get_term( $cat, 'category' ) : null;
+		if ( $c instanceof WP_Term && 'Minn rc cat ' . $tag === $c->name ) {
+			wp_delete_term( $cat, 'category' );
+		}
+		acf_remove_local_field_group( 'group_minnrc' . $tag );
+		$drop_user( $cid, $clogin );
+		$drop_user( $eid, $elogin );
+	} );
+	try {
+		acf_add_local_field_group( array(
+			'key'      => 'group_minnrc' . $tag,
+			'title'    => 'Minn rc relations',
+			'location' => array( array( array( 'param' => 'post_type', 'operator' => '==', 'value' => 'post' ) ) ),
+			'fields'   => array(
+				array( 'key' => 'field_minnrc_topic', 'name' => 'minnrc_topic', 'label' => 'Topic', 'type' => 'taxonomy', 'taxonomy' => 'category', 'field_type' => 'select', 'save_terms' => 0, 'load_terms' => 0, 'return_format' => 'id' ),
+				array( 'key' => 'field_minnrc_related', 'name' => 'minnrc_related', 'label' => 'Related', 'type' => 'relationship', 'post_type' => array(), 'return_format' => 'id' ),
+				array( 'key' => 'field_minnrc_obj', 'name' => 'minnrc_obj', 'label' => 'Object', 'type' => 'post_object', 'post_type' => array(), 'multiple' => 0, 'return_format' => 'id' ),
+				array( 'key' => 'field_minnrc_note', 'name' => 'minnrc_note', 'label' => 'Note', 'type' => 'text' ),
+			),
+		) );
+		$cid   = $user( $clogin, 'contributor' );
+		$eid   = $user( $elogin, 'editor' );
+		$mk    = wp_create_nav_menu( 'Minn rc menu ' . $tag );
+		$menu  = is_int( $mk ) ? $mk : 0;
+		$ct    = wp_insert_term( 'Minn rc cat ' . $tag, 'category' );
+		$cat   = is_array( $ct ) ? (int) $ct['term_id'] : 0;
+		$rq    = wp_create_user_request( 'minnrc-' . $tag . '@example.invalid', 'export_personal_data' );
+		$reqid = is_int( $rq ) ? $rq : 0;
+		$cpost = (int) wp_insert_post( array( 'post_title' => 'Minn rc ACF contributor', 'post_status' => 'draft', 'post_type' => 'post', 'post_author' => $cid ) );
+		$epost = (int) wp_insert_post( array( 'post_title' => 'Minn rc ACF editor', 'post_status' => 'draft', 'post_type' => 'post', 'post_author' => $eid ) );
+		$other = (int) wp_insert_post( array( 'post_title' => 'Minn rc ACF target', 'post_status' => 'publish', 'post_type' => 'post', 'post_author' => $admin ) );
+		$posts = array( $cpost, $epost, $other );
+		$check( 'ACF: two accounts, a menu, a category, a privacy request and three posts exist', $cid && $eid && $menu > 0 && $cat > 0 && $reqid > 0 && $cpost > 0 && $epost > 0 && $other > 0, wp_json_encode( array( $cid, $eid, $menu, $cat, $reqid, $cpost, $epost, $other ) ) );
+		if ( ! ( $cid && $eid && $menu > 0 && $cat > 0 && $reqid > 0 && $cpost > 0 && $epost > 0 && $other > 0 ) ) {
+			return;
+		}
+		$store = function ( $pid, $name, $value ) {
+			update_post_meta( $pid, $name, $value );
+			update_post_meta( $pid, '_' . $name, 'field_' . $name );
+		};
+		$meta  = function ( $pid, $name ) {
+			wp_cache_delete( $pid, 'post_meta' );
+			return get_post_meta( $pid, $name, true );
+		};
+		$read  = function ( $uid, $pid ) use ( $as, $call ) {
+			return $as( $uid, function () use ( $call, $pid ) {
+				list( $st, $d ) = $call( 'GET', '/wp/v2/posts/' . $pid . '?context=edit' );
+				return array( $st, (array) ( $d['minn_acf'] ?? array() ) );
+			} );
+		};
+
+		// 09-3: a menu's term id stored in the Contributor's own draft, as
+		// ACF's own metabox accepts it.
+		$store( $cpost, 'minnrc_topic', (string) $menu );
+		list( $st, $v ) = $read( $cid, $cpost );
+		$topic = $v['minnrc_topic'] ?? null;
+		$check( 'ACF 09-3: a term id from another taxonomy does not resolve to its name', 200 === $st && ( ! is_array( $topic ) || false === strpos( (string) ( $topic['label'] ?? '' ), 'Minn rc menu' ) ), $st . ' ' . wp_json_encode( $topic ) );
+		$as( $cid, function () use ( $call, $cpost ) {
+			$call( 'POST', '/wp/v2/posts/' . $cpost, array( 'minn_acf' => array( 'minnrc_topic' => '', 'minnrc_note' => 'Edited' ) ) );
+		} );
+		$check( 'ACF 09-3: and it reads as withheld: a save sending the empty box keeps it', (string) $menu === (string) $meta( $cpost, 'minnrc_topic' ) && 'Edited' === $meta( $cpost, 'minnrc_note' ), wp_json_encode( array( $meta( $cpost, 'minnrc_topic' ), $meta( $cpost, 'minnrc_note' ) ) ) );
+		$store( $cpost, 'minnrc_topic', (string) $cat );
+		list( $st, $v ) = $read( $cid, $cpost );
+		$check( 'ACF 09-3: a term of the field\'s own taxonomy resolves (control)', is_array( $v['minnrc_topic'] ?? null ) && 'Minn rc cat ' . $tag === ( $v['minnrc_topic']['label'] ?? '' ), wp_json_encode( $v['minnrc_topic'] ?? null ) );
+		$as( $cid, function () use ( $call, $cpost, $menu ) {
+			$call( 'POST', '/wp/v2/posts/' . $cpost, array( 'minn_acf' => array( 'minnrc_topic' => array( 'value' => (string) $menu ) ) ) );
+		} );
+		$check( 'ACF 09-3: a foreign term id is not stored by hand (control)', (string) $cat === (string) $meta( $cpost, 'minnrc_topic' ), wp_json_encode( $meta( $cpost, 'minnrc_topic' ) ) );
+
+		// 09-4: the privacy request, by hand, into fields with no type filter.
+		list( $st, $d ) = $as( $eid, function () use ( $call, $epost, $reqid, $other ) {
+			return $call( 'POST', '/wp/v2/posts/' . $epost, array( 'minn_acf' => array( 'minnrc_related' => array( array( 'value' => (string) $reqid ), array( 'value' => (string) $other ) ), 'minnrc_obj' => array( 'value' => (string) $reqid ) ) ) );
+		} );
+		$rel = array_map( 'strval', (array) $meta( $epost, 'minnrc_related' ) );
+		$check( 'ACF 09-4: a privacy request is not stored in a relationship field by an Editor', ! in_array( (string) $reqid, $rel, true ), wp_json_encode( $rel ) );
+		$check( 'ACF 09-4: nor in a post object field', (string) $reqid !== (string) $meta( $epost, 'minnrc_obj' ), wp_json_encode( $meta( $epost, 'minnrc_obj' ) ) );
+		$check( 'ACF 09-4: the ordinary post beside it is stored (control)', in_array( (string) $other, $rel, true ), wp_json_encode( $rel ) );
+		// Stored by other means (ACF's own screen, an import): not resolved.
+		$store( $epost, 'minnrc_related', array( (string) $reqid, (string) $other ) );
+		$store( $epost, 'minnrc_obj', (string) $reqid );
+		foreach ( array( 'Editor' => $eid, 'administrator' => $admin ) as $who => $uid ) {
+			list( $st, $v ) = $read( $uid, $epost );
+			$all = wp_json_encode( array( $v['minnrc_related'] ?? null, $v['minnrc_obj'] ?? null ) );
+			$check( 'ACF 09-4: a stored privacy request does not resolve (its title is the requester\'s email) for the ' . $who, 200 === $st && false === strpos( $all, 'minnrc-' . $tag ), $all );
+		}
+		list( $st, $v ) = $read( $eid, $epost );
+		$labels = wp_list_pluck( (array) ( $v['minnrc_related'] ?? array() ), 'label' );
+		$check( 'ACF 09-4: the ordinary post still resolves (control)', in_array( 'Minn rc ACF target', $labels, true ), wp_json_encode( $labels ) );
+		$as( $eid, function () use ( $call, $epost, $other ) {
+			$call( 'POST', '/wp/v2/posts/' . $epost, array( 'minn_acf' => array( 'minnrc_related' => array( array( 'value' => (string) $other ) ), 'minnrc_obj' => '' ) ) );
+		} );
+		$rel = array_map( 'strval', (array) $meta( $epost, 'minnrc_related' ) );
+		$check( 'ACF 09-4: a save of what was served keeps the withheld request where it was', array( (string) $reqid, (string) $other ) === $rel && (string) $reqid === (string) $meta( $epost, 'minnrc_obj' ), wp_json_encode( array( $rel, $meta( $epost, 'minnrc_obj' ) ) ) );
 	} finally {
 		$clean();
 	}
