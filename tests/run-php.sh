@@ -119,7 +119,8 @@ MINN_SWAP_ADD=eps-301-redirects/eps-301-redirects.php,simple-301-redirects/wp-si
 MINN_SWAP_ADD=custom-css-js/custom-css-js.php run security-v046-registry-writes single --user=admin --require=tests/lib/plugin-swap.php
 run security-v046-rc-browser single --user=admin
 run security-v046-rc-core single --user=admin
-run security-v046-rc-egress single --user=admin
+# Custom CSS & JS, 301 Redirects and Simple 301 Redirects stay inactive on the lab; the swap loads them for this process only.
+MINN_SWAP_ADD=custom-css-js/custom-css-js.php,eps-301-redirects/eps-301-redirects.php,simple-301-redirects/wp-simple-301-redirects.php run security-v046-rc-egress single --user=admin --require=tests/lib/plugin-swap.php
 run security-v046-rc-fields single --user=admin
 # Safe Redirect Manager stays inactive on the lab; the swap loads it for this process only.
 MINN_SWAP_ADD=safe-redirect-manager/safe-redirect-manager.php run security-v046-rc-adapters single --user=admin --require=tests/lib/plugin-swap.php
