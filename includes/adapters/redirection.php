@@ -235,6 +235,16 @@ function minn_admin_redirection_has( $const ) {
 	return minn_admin_redirection_can();
 }
 
+/** Their log screen's capability: the database browser asks it of the logs table. */
+function minn_admin_redirection_can_logs() {
+	return minn_admin_redirection_has( 'CAP_LOG_MANAGE' );
+}
+
+/** Their 404 screen's capability: the database browser asks it of the 404 table. */
+function minn_admin_redirection_can_404() {
+	return minn_admin_redirection_has( 'CAP_404_MANAGE' );
+}
+
 /** The redirect list's capability. */
 function minn_admin_redirection_can_redirects() {
 	return minn_admin_redirection_has( 'CAP_REDIRECT_MANAGE' );

@@ -431,12 +431,24 @@ class Minn_Admin_DB {
 		'/(^|[^a-z0-9])aryo_activity_log/' => 'self::aryo_admits',
 		'/(^|[^a-z0-9])pimwick_gift_card/' => 'minn_admin_pwgc_can',
 		'/(^|[^a-z0-9])wpml_mails/'        => 'minn_admin_wpml_can',
-		// Gravity Forms' entries, their meta and notes, saved drafts, and the
-		// pre-2.3 tables a migration leaves behind.
-		'/(^|[^a-z0-9])(gf_entry|gf_draft_submissions|rg_lead|rg_incomplete_submissions)/' => 'self::gravity_forms_admits',
+		// Gravity Forms' entries, their meta and notes, saved drafts, the
+		// payment add-ons' transactions and callbacks for those entries, and
+		// the pre-2.3 tables a migration leaves behind.
+		'/(^|[^a-z0-9])(gf_entry|gf_draft_submissions|gf_addon_payment_(transaction|callback)|rg_lead|rg_incomplete_submissions)/' => 'self::gravity_forms_admits',
 		'/(^|[^a-z0-9])burst_/'            => 'cap:view_burst_statistics',
 		'/(^|[^a-z0-9])koko_analytics_/'   => 'cap:view_koko_analytics',
-		'/(^|[^a-z0-9])redirection_(logs|404)/' => 'minn_admin_redirection_can',
+		// WP Statistics' own tables by name (Burst's statistics_searches is
+		// not one of them).
+		'/(^|[^a-z0-9])statistics_(visitor|visit|exclusions|pages|historical|summary_totals|events|ar_outbox|campaigns|goals|useronline|search)([^a-z0-9]|$)/' => 'self::wp_statistics_admits',
+		'/(^|[^a-z0-9])independent_analytics_/' => 'self::independent_analytics_admits',
+		'/(^|[^a-z0-9])matomo_/'           => 'self::matomo_admits',
+		'/(^|[^a-z0-9])analytics_wp_/'     => 'self::analyticswp_admits',
+		'/(^|[^a-z0-9])rank_math_404_logs/' => 'cap:rank_math_404_monitor',
+		'/(^|[^a-z0-9])rank_math_analytics_/' => 'cap:rank_math_analytics',
+		// Redirection keeps its logs and its 404s each behind a capability
+		// of their own, beyond its plugin role.
+		'/(^|[^a-z0-9])redirection_logs/'  => 'minn_admin_redirection_can_logs',
+		'/(^|[^a-z0-9])redirection_404/'   => 'minn_admin_redirection_can_404',
 		'/(^|[^a-z0-9])itsec_/'            => 'minn_admin_solid_security_can',
 	);
 
@@ -548,6 +560,70 @@ class Minn_Admin_DB {
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * WP Statistics shows its reports to whoever holds the capability its
+	 * read_capability setting names (manage_options unless changed), asked
+	 * as Minn's own traffic card asks it, and read from its stored settings
+	 * when the plugin is not loaded.
+	 *
+	 * @return bool
+	 */
+	private static function wp_statistics_admits() {
+		if ( defined( 'WP_STATISTICS_VERSION' ) && function_exists( 'minn_admin_wps_ready' ) ) {
+			return true === minn_admin_wps_ready();
+		}
+		$stored = get_option( 'wp_statistics' );
+		$cap    = is_array( $stored ) && is_string( $stored['read_capability'] ?? null ) && '' !== $stored['read_capability'] ? $stored['read_capability'] : 'manage_options';
+		return current_user_can( $cap );
+	}
+
+	/**
+	 * Independent Analytics shows its reports to the administrator role (or
+	 * setup_network) and to a role it granted read-only or full access; its
+	 * authored-posts tier sees only its own posts' rows, so not these tables
+	 * whole. Asked as Minn's own traffic card asks it, and by the same rule
+	 * from the capabilities its grants left on roles when it is not loaded.
+	 *
+	 * @return bool
+	 */
+	private static function independent_analytics_admits() {
+		if ( class_exists( '\\IAWP\\Capability_Manager' ) && function_exists( 'minn_admin_iawp_ready' ) ) {
+			return true === minn_admin_iawp_ready();
+		}
+		return current_user_can( 'setup_network' ) || in_array( 'administrator', (array) wp_get_current_user()->roles, true )
+			|| current_user_can( 'iawp_read_only_access' ) || current_user_can( 'iawp_full_access' );
+	}
+
+	/**
+	 * Matomo shows its reports to whoever holds view_matomo, which its own
+	 * filter grants a site's administrators (its super users) and the roles
+	 * its access settings name. With the plugin gone that filter is too, so
+	 * its super-user rule is asked as it asks it: the administrator role, or
+	 * a super admin on a network.
+	 *
+	 * @return bool
+	 */
+	private static function matomo_admits() {
+		if ( current_user_can( 'view_matomo' ) ) {
+			return true;
+		}
+		return ! class_exists( '\\WpMatomo\\Capabilities' )
+			&& ( current_user_can( 'administrator' ) || ( is_multisite() && is_super_admin() ) );
+	}
+
+	/**
+	 * AnalyticsWP decides access in its own page from a role allowlist, and
+	 * Minn's own traffic card asks its resolver with none, which admits only
+	 * a super admin (on a single site, whoever may delete users), above the
+	 * manage_options floor. Asked here the same way without the resolver,
+	 * which keeps its first answer for the whole request.
+	 *
+	 * @return bool
+	 */
+	private static function analyticswp_admits() {
+		return is_super_admin() && current_user_can( 'manage_options' );
 	}
 
 	/**
