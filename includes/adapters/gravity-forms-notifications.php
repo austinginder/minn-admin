@@ -525,11 +525,13 @@ function minn_admin_gfn_store( $form, $n, $is_new ) {
  * brace and bracket encoding a field tag gets (so a value would be read
  * again as a tag, or run as a shortcode in a test send), so only the
  * columns Gravity Forms itself writes. {user:*} reads the person
- * previewing, so only its profile fields. {created_by:*} (the submitter's
- * account), {embed_post:*}, {custom_field:*} and {embed_url} (the page it
- * was sent from), {ip}, {user_agent} and {referer} (the sender's request),
- * {payment_action:*}, the save-and-continue tags and every add-on's tag
- * stay placeholders.
+ * previewing, so only its profile fields. Of the submitter's account,
+ * {created_by:*}, only what Gravity Forms' entry screen shows (its id and
+ * login); minn_admin_gfn_prepare() adds the profile fields core shows to
+ * someone who may list users. Every other {created_by:*}, {embed_post:*},
+ * {custom_field:*} and {embed_url} (the page it was sent from), {ip},
+ * {user_agent} and {referer} (the sender's request), {payment_action:*},
+ * the save-and-continue tags and every add-on's tag stay placeholders.
  *
  * @param array $form The form.
  * @return string[]
@@ -542,9 +544,10 @@ function minn_admin_gfn_preview_tags( $form ) {
 		'entry:id', 'entry:form_id', 'entry:post_id', 'entry:date_created', 'entry:date_updated', 'entry:is_starred', 'entry:is_read', 'entry:status',
 		'entry:currency', 'entry:payment_status', 'entry:payment_date', 'entry:payment_amount', 'entry:payment_method', 'entry:transaction_id', 'entry:transaction_type', 'entry:is_fulfilled',
 		'user:ID', 'user:id', 'user:display_name', 'user:user_email', 'user:user_login', 'user:first_name', 'user:last_name', 'user:nickname',
-		// The submitter's profile fields Gravity Forms' entry screen shows;
-		// any other key of their account stays a placeholder.
-		'created_by:ID', 'created_by:id', 'created_by:display_name', 'created_by:user_login', 'created_by:user_email', 'created_by:first_name', 'created_by:last_name', 'created_by:nickname', 'created_by:roles', 'created_by:user_url',
+		// What Gravity Forms' entry screen and entry list show of the
+		// submitter's account (entry_detail.php, entry_list.php): its login,
+		// linked by id. The profile fields are minn_admin_gfn_profile_keys().
+		'created_by:ID', 'created_by:id', 'created_by:user_login',
 	);
 	foreach ( (array) rgar( $form, 'fields' ) as $field ) {
 		if ( is_object( $field ) && '' !== (string) $field->id ) {
@@ -553,6 +556,27 @@ function minn_admin_gfn_preview_tags( $form ) {
 		}
 	}
 	return $tags;
+}
+
+/**
+ * The submitter's profile fields a preview or test send fills for the
+ * person previewing, beyond the login Gravity Forms' entry screen shows:
+ * their name, email, roles and URL, which core shows another account only
+ * to someone who may list users (and on a network, where a site lists only
+ * its members, only for a member of this site unless the caller is the
+ * network's owner). Anyone else gets them as placeholders.
+ *
+ * @param WP_User|false|null $user The account that submitted the entry, if known.
+ * @return string[]
+ */
+function minn_admin_gfn_profile_keys( $user = null ) {
+	if ( ! current_user_can( 'list_users' ) ) {
+		return array();
+	}
+	if ( is_multisite() && $user instanceof WP_User && ! Minn_Admin::network_owner() && ! is_user_member_of_blog( $user->ID, get_current_blog_id() ) ) {
+		return array();
+	}
+	return array( 'display_name', 'user_email', 'first_name', 'last_name', 'nickname', 'roles', 'user_url' );
 }
 
 /**
@@ -569,9 +593,13 @@ function minn_admin_gfn_preview_tags( $form ) {
  * @return string
  */
 function minn_admin_gfn_prepare( $text, $form, $entry ) {
-	$text = Minn_Admin_Preview::restrict( (string) $text, 'gf', minn_admin_gfn_preview_tags( $form ) );
-	$uid  = (int) rgar( (array) $entry, 'created_by' );
-	$user = $uid > 0 ? get_userdata( $uid ) : false;
+	$uid   = (int) rgar( (array) $entry, 'created_by' );
+	$user  = $uid > 0 ? get_userdata( $uid ) : false;
+	$allow = minn_admin_gfn_preview_tags( $form );
+	foreach ( minn_admin_gfn_profile_keys( $user ) as $key ) {
+		$allow[] = 'created_by:' . $key;
+	}
+	$text = Minn_Admin_Preview::restrict( (string) $text, 'gf', $allow );
 	return (string) preg_replace_callback( '/\{created_by:(ID|id|display_name|user_login|user_email|first_name|last_name|nickname|roles|user_url) ?\}/', function ( $m ) use ( $user ) {
 		if ( ! $user ) {
 			return '';
@@ -587,8 +615,9 @@ function minn_admin_gfn_prepare( $text, $form, $entry ) {
  * WP_User::get()), {custom_field:<key>} any meta of the page it was sent
  * from, protected keys included, and {embed_post:<field>} any field of that
  * page, private or draft. A preview made from a real entry shows only the
- * profile fields Gravity Forms' entry screen shows; every other such tag
- * stays a placeholder (the notification preview and test send go further:
+ * login Gravity Forms' entry screen shows, and the profile fields
+ * minn_admin_gfn_profile_keys() allows; every other such tag stays a
+ * placeholder (the notification preview and test send go further:
  * minn_admin_gfn_preview_tags()). The created_by match is Gravity
  * Forms' own (common.php): the colon is optional, so
  * {created_by_two_factor_totp_key} reads that key too, and a key runs up to
@@ -600,7 +629,7 @@ function minn_admin_gfn_prepare( $text, $form, $entry ) {
  */
 function minn_admin_gfn_neutral_tags( $text ) {
 	$text = (string) preg_replace_callback( '/\{created_by:?(.*?)(?:\s)?\}/ism', function ( $m ) {
-		$safe = array( 'ID', 'id', 'display_name', 'user_login', 'user_email', 'first_name', 'last_name', 'nickname', 'roles', 'user_url' );
+		$safe = array_merge( array( 'ID', 'id', 'user_login' ), minn_admin_gfn_profile_keys() );
 		/* translators: %s: a user property named in a merge tag. */
 		return in_array( $m[1], $safe, true ) ? $m[0] : sprintf( __( '[user meta: %s]', 'minn-admin' ), sanitize_key( $m[1] ) );
 	}, (string) $text );
@@ -626,6 +655,12 @@ function minn_admin_gfn_neutral_tags( $text ) {
  * administrator's, and writes its key. Only Gravity Forms' own callbacks
  * run on that filter here, so an add-on's tag stays as typed, and those
  * two tags become placeholders ahead of any callback, composed or not.
+ *
+ * Their send records its outcome as a note on the entry it was made from
+ * (GFFormsModel::add_notification_note()), which would tell the entry's
+ * readers that notification went out for it, written by someone Gravity
+ * Forms may only let read entries. A note with no text is not written, so
+ * every note is emptied while the render runs, after any listener's.
  *
  * @param array    $entry  The entry.
  * @param callable $render Called with the guarded entry.
@@ -660,9 +695,14 @@ function minn_admin_gfn_guarded( $entry, $render ) {
 	}, 9, 1 );
 	$wp_filter[ $hook ] = $only;
 	add_filter( 'get_user_metadata', $deny, PHP_INT_MAX, 4 );
+	$no_note = function () {
+		return array();
+	};
+	add_filter( 'gform_notification_note', $no_note, PHP_INT_MAX );
 	try {
 		return $render( $entry );
 	} finally {
+		remove_filter( 'gform_notification_note', $no_note, PHP_INT_MAX );
 		remove_filter( 'get_user_metadata', $deny, PHP_INT_MAX );
 		if ( $held ) {
 			$wp_filter[ $hook ] = $held;

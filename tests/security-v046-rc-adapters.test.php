@@ -198,6 +198,117 @@ add_filter( 'pre_http_request', $no_http, 1 );
 	}
 } )();
 
+/*
+ * 07-2 / 07-3 · Gravity Forms previews and test send. A test send ran their
+ * send on the real latest entry, which records a notification note on it;
+ * the previews and the test send filled the submitter's email, roles and
+ * name, which Gravity Forms' entry screen never shows (only the login).
+ */
+( function () use ( $check, $skip, $call, $once, $make_user, $admin, $tag, &$mail ) {
+	if ( ! class_exists( 'GFAPI' ) || ! function_exists( 'minn_admin_gfn_guarded' ) || ! function_exists( 'minn_admin_gfc_preview' ) ) {
+		$skip( '07-2/07-3 Gravity Forms: inactive' );
+		return;
+	}
+	$role  = 'minn_rc_gf_' . $tag;
+	$form  = 0;
+	$clean = $once( function () use ( &$form, $role, $admin ) {
+		wp_set_current_user( $admin );
+		if ( is_int( $form ) && $form > 0 ) {
+			GFAPI::delete_form( $form );
+		}
+		remove_role( $role );
+	} );
+	try {
+		add_role( $role, 'Minn RC GF form editor', array( 'read' => true, 'gravityforms_edit_forms' => true, 'gravityforms_view_entries' => true ) );
+		$ed   = $make_user( $role );
+		$smail = 'minn-rc-submitter-' . $tag . '@example.com';
+		$sub  = $make_user( 'subscriber', array( 'user_login' => 'minn-rc-submitter-' . $tag, 'user_email' => $smail, 'display_name' => 'RcSubmitter' . $tag, 'first_name' => 'RcFirst' . $tag, 'user_url' => 'https://rc-' . $tag . '.example.com' ) );
+		$note = array( 'rcn' => array( 'id' => 'rcn', 'name' => 'RC note', 'event' => 'form_submission', 'toType' => 'email', 'to' => '{admin_email}', 'subject' => 'S', 'message' => 'M', 'isActive' => true ) );
+		$conf = array( 'rcc' => array( 'id' => 'rcc', 'name' => 'RC', 'isDefault' => true, 'type' => 'message', 'message' => 'Thanks' ) );
+		$form = GFAPI::add_form( array( 'title' => 'Minn RC GF ' . $tag, 'fields' => array( array( 'id' => 1, 'type' => 'text', 'label' => 'Nick' ) ), 'notifications' => $note, 'confirmations' => $conf ) );
+		$form = is_int( $form ) && $form > 0 ? $form : 0;
+		$eid  = $form && $sub ? GFAPI::add_entry( array( 'form_id' => $form, 'created_by' => $sub, '1' => 'typed {created_by:user_email}' ) ) : 0;
+		$eid  = is_int( $eid ) ? $eid : 0;
+		if ( ! $ed || ! $sub || ! $form || ! $eid ) {
+			$check( '07-2/07-3 GF fixtures', false, 'could not create the accounts, the form or the entry' );
+			return;
+		}
+		$login  = get_userdata( $sub )->user_login;
+		$nroute = "/minn-admin/v1/gf/notifications/{$form}:rcn";
+		$croute = "/minn-admin/v1/gf/confirmations/{$form}:rcc";
+		$notes  = function () use ( $eid ) {
+			return count( (array) GFFormsModel::get_lead_notes( $eid ) );
+		};
+		$profile = function ( $text ) use ( $smail, $tag ) {
+			$leak = array();
+			foreach ( array( 'email' => $smail, 'name' => 'RcSubmitter' . $tag, 'first name' => 'RcFirst' . $tag, 'url' => 'rc-' . $tag . '.example.com' ) as $what => $needle ) {
+				if ( false !== strpos( (string) $text, $needle ) ) {
+					$leak[] = $what;
+				}
+			}
+			return $leak;
+		};
+		$tags = '{created_by:user_email} | {created_by:roles} | {created_by:display_name} | {created_by:first_name} | {created_by:user_url} | L={created_by:user_login} | I={created_by:ID} | {Nick:1}';
+
+		wp_set_current_user( $ed );
+		$check( '07-3 the form editor reads entries but may not list users', GFCommon::current_user_can_any( 'gravityforms_view_entries' ) && ! current_user_can( 'list_users' ) );
+
+		// 07-2: the test send leaves the entry's notes alone.
+		$was  = $notes();
+		$mail = array();
+		list( $st, $d ) = $call( 'POST', "{$nroute}/test", array( 'subject' => 'S', 'message' => 'M {Nick:1}', 'fromName' => '{created_by:user_email}' ) );
+		$check( '07-2 control: the form editor\'s test send goes out, to them alone', 200 === $st && 1 === count( $mail ) && false !== strpos( wp_json_encode( $mail[0]['to'] ?? '' ), get_userdata( $ed )->user_email ), $st . ' ' . count( $mail ) );
+		$check( '07-2 the test send writes no note on the real latest entry', $was === $notes(), $was . ' → ' . $notes() );
+		$check( '07-3 the test send puts none of the submitter\'s profile in the mail, sender included', ! $profile( wp_json_encode( $mail ) ), implode( ',', $profile( wp_json_encode( $mail ) ) ) );
+
+		// 07-3: previews show the login and id, nothing more of the account.
+		list( $st, $d ) = $call( 'POST', "{$nroute}/preview", array( 'subject' => 'S {created_by:user_email}', 'message' => $tags ) );
+		$out = wp_json_encode( $d );
+		$check( '07-3 the notification preview is made from the entry', 200 === $st && $eid === (int) ( $d['entry'] ?? 0 ), $st );
+		$check( '07-3 the notification preview fills no email, role, name or URL of the submitter', 200 === $st && ! $profile( $out ) && false === strpos( $out, 'subscriber' ), implode( ',', $profile( $out ) ) . ' ' . substr( $out, 0, 300 ) );
+		$check( '07-3 those tags show as placeholders', false !== strpos( $out, '[tag: created_by:user_email]' ) && false !== strpos( $out, '[tag: created_by:roles]' ), substr( $out, 0, 300 ) );
+		$check( '07-3 control: the login and id the entry screen shows still fill', false !== strpos( $out, 'L=' . $login ) && false !== strpos( $out, 'I=' . $sub ), substr( $out, 0, 300 ) );
+		foreach ( array(
+			'with a trailing space' => '{created_by:user_email }',
+			'in upper case'         => '{CREATED_BY:user_email}',
+			'with no colon'         => '{created_byuser_email}',
+			'in doubled braces'     => '{{created_by:user_email}}',
+			'inside another tag'    => '{created_by:{created_by:user_email}}',
+			'split across a line'   => "{created_by:user_email\n}",
+		) as $label => $variant ) {
+			list( $st, $d ) = $call( 'POST', "{$nroute}/preview", array( 'subject' => 'S', 'message' => 'M ' . $variant, 'disableAutoformat' => true ) );
+			$check( "07-3 the email does not fill {$label}", 200 === $st && ! $profile( wp_json_encode( $d ) ), $st . ' ' . substr( wp_json_encode( $d ), 0, 200 ) );
+		}
+		list( $st, $d ) = $call( 'POST', "{$croute}/preview", array( 'type' => 'message', 'message' => 'by {created_by:user_email} {created_by:display_name} L={created_by:user_login}' ) );
+		$out = wp_json_encode( $d );
+		$check( '07-3 the confirmation preview fills no email or name of the submitter', 200 === $st && ! $profile( $out ), implode( ',', $profile( $out ) ) . ' ' . substr( $out, 0, 200 ) );
+		$check( '07-3 control: the confirmation preview still fills the login', false !== strpos( $out, 'L=' . $login ), substr( $out, 0, 200 ) );
+		list( $st, $d ) = $call( 'POST', "{$croute}/preview", array( 'type' => 'redirect', 'url' => 'https://example.com/t', 'queryString' => 'e={created_by:user_email}&n={created_by:display_name}' ) );
+		$check( '07-3 the redirect preview address carries no email or name of the submitter', 200 === $st && ! $profile( urldecode( wp_json_encode( $d ) ) ), substr( wp_json_encode( $d ), 0, 200 ) );
+
+		// An administrator lists users, so the profile fields fill for them.
+		wp_set_current_user( $admin );
+		list( $st, $d ) = $call( 'POST', "{$nroute}/preview", array( 'subject' => 'S', 'message' => $tags ) );
+		$out = wp_json_encode( $d );
+		$check( '07-3 control: for an administrator the email and name still fill', 200 === $st && in_array( 'email', $profile( $out ), true ) && in_array( 'name', $profile( $out ), true ), substr( $out, 0, 300 ) );
+		$was  = $notes();
+		$mail = array();
+		list( $st ) = $call( 'POST', "{$nroute}/test", array( 'subject' => 'S', 'message' => 'M' ) );
+		$check( '07-2 an administrator\'s test send goes out and writes no note either', 200 === $st && 1 === count( $mail ) && $was === $notes(), $st . ' ' . count( $mail ) . ' ' . $was . ' → ' . $notes() );
+
+		// Their own send records its note: the mechanism the test now stays out of.
+		$was = $notes();
+		$n   = $note['rcn'];
+		$n['to'] = 'minn-rc-control@example.com';
+		GFCommon::send_notification( $n, GFAPI::get_form( $form ), GFAPI::get_entry( $eid ) );
+		$check( 'GF control: their own send still records its note on the entry', $notes() === $was + 1, $was . ' → ' . $notes() );
+	} catch ( \Throwable $e ) {
+		$check( 'section ran to the end', false, get_class( $e ) . ': ' . $e->getMessage() );
+	} finally {
+		$clean();
+	}
+} )();
+
 $drop_users();
 wp_set_current_user( $admin );
 remove_filter( 'pre_wp_mail', $mail_trap, 1 );
