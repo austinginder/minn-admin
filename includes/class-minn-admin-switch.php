@@ -44,11 +44,15 @@ class Minn_Admin_Switch {
 	/** How long a checked release waits, staged, for the switch. */
 	const STAGE_TTL = 3600;
 
+	/** The one-off cron event that removes a staging folder nobody came back for. */
+	const SWEEP_HOOK = 'minn_admin_switch_sweep';
+
 	public static function init() {
 		if ( Minn_Admin::is_engine() ) {
 			return;
 		}
 		add_action( 'rest_api_init', array( __CLASS__, 'routes' ) );
+		add_action( self::SWEEP_HOOK, array( __CLASS__, 'sweep' ) );
 		// The engine's own commands, loaded with --require=minn/cli.php,
 		// already answer `wp minn`.
 		if ( defined( 'WP_CLI' ) && WP_CLI && ! class_exists( 'Minn\Cli\Commands', false ) ) {
@@ -141,6 +145,14 @@ class Minn_Admin_Switch {
 			/* translators: %s: a folder path. */
 			return new WP_Error( 'minn_switch_stage', sprintf( __( 'Minn Admin could not create %s.', 'minn-admin' ), $dir ) );
 		}
+		// The web server can reach wp-content/upgrade. The staged engine is
+		// code, and a failed switch's report holds the installer's lines and
+		// paths: neither is for it to list or hand out (Apache honours the
+		// deny; nginx needs the matching location rule), and the folder
+		// goes once its check expires, whether or not anyone checks again.
+		file_put_contents( $dir . '/index.php', "<?php\n// Silence is golden.\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+		file_put_contents( $dir . '/.htaccess', "<IfModule mod_authz_core.c>\nRequire all denied\n</IfModule>\n<IfModule !mod_authz_core.c>\nOrder deny,allow\nDeny from all\n</IfModule>\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+		self::schedule_sweep();
 		$zip = $dir . '/minn.zip';
 		if ( is_file( $release['package'] ) ) {
 			$copied = copy( $release['package'], $zip );
@@ -279,12 +291,33 @@ class Minn_Admin_Switch {
 		rmdir( $dir );
 	}
 
-	/** Staging folders older than a check is kept for are removed. */
-	private static function sweep() {
+	/**
+	 * Staging folders older than a check is kept for are removed, unless
+	 * their check is still held (a switch running from one). The sweep
+	 * comes back while any folder is left.
+	 */
+	public static function sweep() {
+		$left = false;
 		foreach ( (array) glob( WP_CONTENT_DIR . '/upgrade/minn-switch-*', GLOB_ONLYDIR ) as $old ) {
-			if ( is_string( $old ) && filemtime( $old ) < time() - self::STAGE_TTL ) {
-				self::remove( $old );
+			if ( ! is_string( $old ) ) {
+				continue;
 			}
+			$token = substr( basename( $old ), strlen( 'minn-switch-' ) );
+			if ( filemtime( $old ) < time() - self::STAGE_TTL && ! ( preg_match( '/^[A-Za-z0-9]{32}$/', $token ) && false !== get_transient( 'minn_switch_' . $token ) ) ) {
+				self::remove( $old );
+			} else {
+				$left = true;
+			}
+		}
+		if ( $left ) {
+			self::schedule_sweep();
+		}
+	}
+
+	/** One sweep a little after a staged check expires, unless one is due already. */
+	private static function schedule_sweep() {
+		if ( ! wp_next_scheduled( self::SWEEP_HOOK ) ) {
+			wp_schedule_single_event( time() + self::STAGE_TTL + MINUTE_IN_SECONDS, self::SWEEP_HOOK );
 		}
 	}
 

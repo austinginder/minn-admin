@@ -798,6 +798,201 @@ $drop_users = $once( function () use ( &$made, $admin ) {
 } )();
 
 /*
+ * Run on Minn: the staging folder under wp-content/upgrade is closed to the
+ * web server, and a one-off sweep removes it once its check expires.
+ */
+( function () use ( $check, $skip, $once ) {
+	if ( is_multisite() || ! class_exists( 'Minn_Admin_Switch' ) || PHP_VERSION_ID < 80200 || ! class_exists( 'ZipArchive' ) || Minn_Admin::is_engine() ) {
+		$skip( 'Run on Minn: needs a single WordPress site on PHP 8.2+ with zip' );
+		return;
+	}
+	$hook  = 'minn_admin_switch_sweep';
+	$had   = wp_next_scheduled( $hook );
+	$seen  = null;
+	$block = function ( $pre, $args, $url ) use ( &$seen ) {
+		if ( false === strpos( (string) $url, 'minn-rccore-probe' ) ) {
+			return $pre;
+		}
+		$dir  = dirname( (string) ( $args['filename'] ?? '' ) );
+		$seen = array(
+			'dir'      => $dir,
+			'index'    => is_file( $dir . '/index.php' ),
+			'htaccess' => is_file( $dir . '/.htaccess' ) ? (string) file_get_contents( $dir . '/.htaccess' ) : '',
+		);
+		return new WP_Error( 'minn_rccore_offline', 'offline' );
+	};
+	add_filter( 'pre_http_request', $block, 10, 3 );
+	$dirs   = array();
+	$tokens = array();
+	$clean  = $once( function () use ( $block, &$dirs, &$tokens, $hook, $had ) {
+		remove_filter( 'pre_http_request', $block, 10 );
+		foreach ( $dirs as $d ) {
+			Minn_Admin_Switch::remove( $d );
+		}
+		foreach ( $tokens as $t ) {
+			delete_transient( 'minn_switch_' . $t );
+		}
+		if ( ! $had ) {
+			wp_clear_scheduled_hook( $hook );
+		}
+	} );
+	try {
+		$r = Minn_Admin_Switch::stage( array( 'version' => '', 'package' => 'https://updates.minn.run/v1/minn/download/minn-rccore-probe.zip', 'sha256' => str_repeat( 'a', 64 ), 'signature' => 'x', 'notes' => '' ) );
+		$check( 'Run on Minn: the probe stage stops at the (blocked) download', is_wp_error( $r ) && is_array( $seen ), is_wp_error( $r ) ? $r->get_error_code() : 'staged' );
+		$check( 'Run on Minn: the staging folder holds an index.php', is_array( $seen ) && $seen['index'], wp_json_encode( $seen ) );
+		$check( 'Run on Minn: and an .htaccess that denies the web server', is_array( $seen ) && false !== strpos( $seen['htaccess'], 'Require all denied' ) && false !== strpos( $seen['htaccess'], 'Deny from all' ), wp_json_encode( $seen ) );
+		$check( 'Run on Minn: and a sweep is scheduled for when the check expires', false !== wp_next_scheduled( $hook ) && has_action( $hook ), wp_json_encode( wp_next_scheduled( $hook ) ) );
+		$check( 'Run on Minn: the failed stage removed its folder (control)', is_array( $seen ) && ! is_dir( $seen['dir'] ) );
+
+		$base = WP_CONTENT_DIR . '/upgrade';
+		wp_mkdir_p( $base );
+		$mk = function ( $age, $held ) use ( $base, &$dirs, &$tokens ) {
+			$t   = wp_generate_password( 32, false );
+			$dir = "{$base}/minn-switch-{$t}";
+			wp_mkdir_p( "{$dir}/minn" );
+			file_put_contents( "{$dir}/result.json", '{"code":1,"lines":["minn-rccore"]}' );
+			touch( $dir, time() - $age );
+			$dirs[] = $dir;
+			if ( $held ) {
+				$tokens[] = $t;
+				set_transient( 'minn_switch_' . $t, array( 'dir' => $dir, 'state' => 'switching' ), 600 );
+			}
+			return $dir;
+		};
+		$old   = $mk( 2 * HOUR_IN_SECONDS, false );
+		$held  = $mk( 2 * HOUR_IN_SECONDS, true );
+		$fresh = $mk( 0, false );
+		wp_clear_scheduled_hook( $hook );
+		do_action( $hook );
+		clearstatcache();
+		$check( 'Run on Minn: the sweep removes a staged folder whose check expired, a failed result.json with it', ! is_dir( $old ) );
+		$check( 'Run on Minn: and keeps one whose check is still held (control)', is_dir( $held ) );
+		$check( 'Run on Minn: and a fresh one (control)', is_dir( $fresh ) );
+		$check( 'Run on Minn: and comes back while folders are left', false !== wp_next_scheduled( $hook ) );
+	} finally {
+		$clean();
+	}
+} )();
+
+/*
+ * Write fence: MySQL's PAD SPACE collations ignore trailing spaces in a
+ * meta_key, so 'wp_capabilities ' writes the real row; core trims option
+ * names but not meta keys or network option names. A probe route inside
+ * minn-admin/v1 stands in for an adapter whose gate is wrong.
+ */
+( function () use ( $check, $skip, $once, $mkuser, $admin, $wpdb ) {
+	$caller = $mkuser( 'editor', 'editor' );
+	$target = $mkuser( 'target', 'subscriber' );
+	if ( ! $caller || ! $target ) {
+		$skip( 'write fence: could not make the accounts' );
+		return;
+	}
+	$prefix = $wpdb->get_blog_prefix();
+	$cases  = array(
+		'caps_space'       => function () use ( $target, $prefix ) {
+			update_user_meta( $target, $prefix . 'capabilities ', array( 'administrator' => true ) );
+		},
+		'caps_case_spaces' => function () use ( $target, $prefix ) {
+			update_user_meta( $target, strtoupper( $prefix . 'capabilities' ) . '  ', array( 'administrator' => true ) );
+		},
+		'level_space'      => function () use ( $target, $prefix ) {
+			update_user_meta( $target, $prefix . 'user_level ', 10 );
+		},
+	);
+	if ( is_multisite() ) {
+		foreach ( array( 'admins_space' => 'site_admins ', 'admins_case_space' => 'SITE_ADMINS ' ) as $k => $spelling ) {
+			$cases[ $k ] = function () use ( $target, $spelling ) {
+				$list   = (array) get_site_option( 'site_admins', array() );
+				$list[] = get_userdata( $target )->user_login;
+				update_site_option( $spelling, $list );
+			};
+		}
+	}
+	register_rest_route(
+		'minn-admin/v1',
+		'/zz-rccore-fence',
+		array(
+			'methods'             => 'POST',
+			'permission_callback' => 'is_user_logged_in',
+			'callback'            => function ( WP_REST_Request $request ) use ( $cases ) {
+				$cases[ (string) $request['case'] ]();
+				return rest_ensure_response( array( 'ok' => true ) );
+			},
+		)
+	);
+	$net     = is_multisite() ? get_current_network_id() : 0;
+	$admins  = is_multisite() ? $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->sitemeta} WHERE site_id = %d AND meta_key = 'site_admins'", $net ) ) : null; // phpcs:ignore WordPress.DB
+	$reset   = function () use ( $target, $prefix, $wpdb, $admins, $net ) {
+		wp_set_current_user( 0 );
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->usermeta} WHERE user_id = %d AND meta_key = %s", $target, $prefix . 'user_level' ) ); // phpcs:ignore WordPress.DB
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->usermeta} WHERE user_id = %d AND BINARY meta_key <> %s AND meta_key = %s", $target, $prefix . 'capabilities', $prefix . 'capabilities' ) ); // phpcs:ignore WordPress.DB
+		update_user_meta( $target, $prefix . 'capabilities', array( 'subscriber' => true ) );
+		if ( null !== $admins ) {
+			$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->sitemeta} WHERE site_id = %d AND meta_key = 'site_admins' AND BINARY meta_key <> 'site_admins'", $net ) ); // phpcs:ignore WordPress.DB
+			$wpdb->update( $wpdb->sitemeta, array( 'meta_value' => $admins ), array( 'site_id' => $net, 'meta_key' => 'site_admins' ) ); // phpcs:ignore WordPress.DB
+			wp_cache_delete( $net . ':site_admins', 'site-options' );
+			wp_cache_delete( $net . ':notoptions', 'site-options' );
+		}
+		clean_user_cache( $target );
+		wp_cache_delete( $target, 'user_meta' );
+	};
+	$clean = $once( function () use ( $reset, $admin ) {
+		$reset();
+		wp_set_current_user( $admin );
+	} );
+	try {
+		$send  = function ( $who, $case ) use ( $reset ) {
+			wp_set_current_user( $who );
+			$r   = new WP_REST_Request( 'POST', '/minn-admin/v1/zz-rccore-fence' );
+			$r->set_param( 'case', $case );
+			$res = rest_do_request( $r );
+			wp_set_current_user( 0 );
+			return array( $res->get_status(), (array) $res->get_data() );
+		};
+		$state = function () use ( $target, $prefix, $wpdb, $net ) {
+			clean_user_cache( $target );
+			wp_cache_delete( $target, 'user_meta' );
+			$caps = Minn_Admin::decode_serialized( (string) $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->usermeta} WHERE user_id = %d AND BINARY meta_key = %s", $target, $prefix . 'capabilities' ) ), array() ); // phpcs:ignore WordPress.DB
+			$out  = array(
+				'admin' => ! empty( $caps['administrator'] ),
+				'level' => (string) $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->usermeta} WHERE user_id = %d AND meta_key = %s", $target, $prefix . 'user_level' ) ), // phpcs:ignore WordPress.DB
+			);
+			if ( is_multisite() ) {
+				$list               = Minn_Admin::decode_serialized( (string) $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->sitemeta} WHERE site_id = %d AND BINARY meta_key = 'site_admins'", $net ) ), array() ); // phpcs:ignore WordPress.DB
+				$out['super_admin'] = in_array( get_userdata( $target )->user_login, (array) $list, true );
+			}
+			return $out;
+		};
+		foreach ( array(
+			'caps_space'       => array( "a capability grant under 'capabilities '", 'admin' ),
+			'caps_case_spaces' => array( "one under 'CAPABILITIES  '", 'admin' ),
+			'level_space'      => array( "a user level under 'user_level '", 'level' ),
+		) as $case => $meta ) {
+			$reset();
+			list( $st, $d ) = $send( $caller, $case );
+			$now = $state();
+			$check( "write fence: {$meta[0]} by an Editor is refused (403)", 403 === $st && 'minn_write_fenced' === ( $d['code'] ?? '' ), $st . ' ' . wp_json_encode( $d ) );
+			$check( 'write fence: and the stored access record stays', 'admin' === $meta[1] ? false === $now['admin'] : in_array( $now['level'], array( '', '0' ), true ), wp_json_encode( $now ) );
+		}
+		if ( is_multisite() ) {
+			foreach ( array( 'admins_space' => "'site_admins '", 'admins_case_space' => "'SITE_ADMINS '" ) as $case => $spelling ) {
+				$reset();
+				list( $st, $d ) = $send( $caller, $case );
+				$now = $state();
+				$check( "write fence: naming a super admin under {$spelling} by a site's Editor is refused (403)", 403 === $st && 'minn_write_fenced' === ( $d['code'] ?? '' ), $st . ' ' . wp_json_encode( $d ) );
+				$check( 'write fence: and the network keeps its super admins', false === $now['super_admin'], wp_json_encode( $now ) );
+			}
+		}
+		$reset();
+		list( $st, $d ) = $send( $admin, 'caps_space' );
+		$now = $state();
+		$check( 'write fence: the same grant by the Administrator goes through (control)', 200 === $st && true === $now['admin'], $st . ' ' . wp_json_encode( array( $d, $now ) ) );
+	} finally {
+		$clean();
+	}
+} )();
+
+/*
  * A network-only plugin that is not active on the site: the site's Plugins
  * screen and core's plugins endpoint hide it from the site's
  * administrators, so its changelog is not theirs to read either.

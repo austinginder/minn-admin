@@ -321,6 +321,7 @@ class Minn_Admin_Fences {
 		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->sitemeta} WHERE site_id = %d AND meta_key = %s AND BINARY meta_key = %s", $network_id, $option, $option ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		wp_cache_delete( $network_id . ':' . $option, 'site-options' );
 		wp_cache_delete( $network_id . ':' . strtolower( $option ), 'site-options' );
+		wp_cache_delete( $network_id . ':' . self::site_name( $option ), 'site-options' );
 	}
 
 	/**
@@ -335,7 +336,7 @@ class Minn_Admin_Fences {
 			return;
 		}
 		self::$refused[] = $option;
-		$name = strtolower( $option );
+		$name = self::site_name( $option );
 		if ( isset( self::$network_was[ $name ] ) && (int) self::$network_was['network'] === (int) $network_id && false !== self::$network_was[ $name ] ) {
 			$value = self::$network_was[ $name ];
 			// Core cleared the cache under the spelling it was handed; the
@@ -349,10 +350,20 @@ class Minn_Admin_Fences {
 		}
 	}
 
-	/** A network setting's name in a case other than its own. */
+	/** A network setting's name in a case or spelling other than its own. */
 	private static function site_variant( $option ) {
 		$option = (string) $option;
-		return ! in_array( $option, self::SITE_OPTIONS, true ) && in_array( strtolower( $option ), self::SITE_OPTIONS, true );
+		return ! in_array( $option, self::SITE_OPTIONS, true ) && in_array( self::site_name( $option ), self::SITE_OPTIONS, true );
+	}
+
+	/**
+	 * The row a network setting name lands on. MySQL compares meta_key
+	 * without regard to case, and its PAD SPACE collations ignore trailing
+	 * spaces, so 'SITE_ADMINS ' writes site_admins; core trims option
+	 * names, but not network option names or meta keys.
+	 */
+	private static function site_name( $option ) {
+		return strtolower( rtrim( (string) $option, ' ' ) );
 	}
 
 	public static function meta_add( $check, $user_id, $key, $value ) {
@@ -421,12 +432,14 @@ class Minn_Admin_Fences {
 
 	/**
 	 * Which access record a user meta key is ('caps', 'level' or '') and
-	 * the key it is stored under. Matched without regard to case, as MySQL
-	 * matches meta_key: WP_CAPABILITIES writes wp_capabilities.
+	 * the key it is stored under. Matched as MySQL matches meta_key:
+	 * without regard to case, and with trailing spaces ignored (PAD SPACE
+	 * collations), so WP_CAPABILITIES and 'wp_capabilities ' both write
+	 * wp_capabilities.
 	 */
 	private static function access_key( $key ) {
 		global $wpdb;
-		if ( ! preg_match( '/^' . preg_quote( $wpdb->base_prefix, '/' ) . '(\d+_)?(capabilities|user_level)$/i', $key, $m ) ) {
+		if ( ! preg_match( '/^' . preg_quote( $wpdb->base_prefix, '/' ) . '(\d+_)?(capabilities|user_level)$/i', rtrim( (string) $key, ' ' ), $m ) ) {
 			return array( '', '' );
 		}
 		$kind = 'capabilities' === strtolower( $m[2] ) ? 'caps' : 'level';
