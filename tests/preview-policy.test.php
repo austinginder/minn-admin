@@ -282,10 +282,10 @@ if ( ! function_exists( 'wpforms' ) || ! function_exists( 'minn_admin_wpforms_ac
 			$ok   = 200 === $st;
 			$check( 'WPForms administrator: the preview is made from the entry', $ok && $eid === (int) ( $d['entry'] ?? 0 ), $st . ' entry ' . (int) ( $d['entry'] ?? 0 ) );
 			$check( 'WPForms administrator: (a) a field tag fills from the entry', $ok && false !== strpos( $out, 'PpNickValue' ), $cut( $out ) );
-			// The submitter's address is on the entry screen this person reads;
-			// the account's meta is not.
+			// The submitter's address is core's to show to someone who may
+			// list users, as this person may; the account's meta never.
 			$check( 'WPForms administrator: (b) {user_meta} of the submitter is a placeholder', $ok && $ph( $out, 'user_meta' ) && ! in_array( 'submitter meta', $leak, true ), implode( ',', $leak ) . ' ' . $cut( $out ) );
-			$check( 'WPForms administrator: (b) control: {user_email}, which the entry screen shows, resolves', $ok && in_array( 'submitter account', $leak, true ), implode( ',', $leak ) . ' ' . $cut( $out ) );
+			$check( 'WPForms administrator: (b) control: {user_email} resolves for someone who may list users', $ok && in_array( 'submitter account', $leak, true ), implode( ',', $leak ) . ' ' . $cut( $out ) );
 			$check( 'WPForms administrator: (c) an add-on\'s tag is a placeholder', $ok && $ph( $out, 'minn_pp_addon' ) && ! in_array( 'add-on', $leak, true ), implode( ',', $leak ) . ' ' . $cut( $out ) );
 			$check( 'WPForms administrator: (c) an add-on\'s tag carried in by a field value does not run', $ok && false !== strpos( $out, 'note ' ) && ! in_array( 'carried add-on', $leak, true ), implode( ',', $leak ) . ' ' . $cut( $out ) );
 			$check( 'WPForms administrator: (d) an unregistered tag is a placeholder', $ok && $ph( $out, 'minn_pp_nobody' ), $cut( $out ) );

@@ -59,14 +59,25 @@ function minn_admin_wpforms_tags( $data ) {
  * The smart tags a preview resolves from a real entry (Minn_Admin_Preview):
  * WPForms' own that read only the entry, the form, the site or the person
  * previewing. The user_* tags read the account that submitted the entry
- * (with none, the person previewing), page_*, author_*, url_referer and
- * query_var the page and the request it was sent from, and user_ip the
- * sender's address: they stay placeholders, with every add-on's tag.
+ * (with none, the person previewing): its id and display name, which
+ * WPForms' entry screen shows (class-entries-single.php), and its name
+ * parts and address only for someone core would show them to, who may
+ * list users (on a network, where a site lists only its members, for a
+ * member of the site unless the caller is the network's owner). Its meta,
+ * page_*, author_*, url_referer and query_var (the page and the request it
+ * was sent from), user_ip (the sender's address) and every add-on's tag
+ * stay placeholders.
+ *
+ * @param int $user_id The account the previewed entry was sent from (0: none or not known).
+ * @return string[]
  */
-function minn_admin_wpforms_preview_tags() {
-	// The submitter's name and address are on the entry screen the person
-	// previewing may already read, as Gravity Forms' are; their meta is not.
-	return array( 'user_id', 'user_display', 'user_full_name', 'user_first_name', 'user_last_name', 'user_email', 'field_id', 'field_html_id', 'field_value_id', 'all_fields', 'form_id', 'form_name', 'entry_id', 'entry_date', 'entry_type', 'entry_details_url', 'order_summary', 'admin_email', 'site_name', 'date', 'unique_value', 'url_login', 'url_logout', 'url_register', 'url_lost_password' );
+function minn_admin_wpforms_preview_tags( $user_id = 0 ) {
+	$tags    = array( 'user_id', 'user_display', 'field_id', 'field_html_id', 'field_value_id', 'all_fields', 'form_id', 'form_name', 'entry_id', 'entry_date', 'entry_type', 'entry_details_url', 'order_summary', 'admin_email', 'site_name', 'date', 'unique_value', 'url_login', 'url_logout', 'url_register', 'url_lost_password' );
+	$user_id = (int) $user_id;
+	if ( current_user_can( 'list_users' ) && ( ! is_multisite() || $user_id < 1 || Minn_Admin::network_owner() || is_user_member_of_blog( $user_id, get_current_blog_id() ) ) ) {
+		array_push( $tags, 'user_full_name', 'user_first_name', 'user_last_name', 'user_email' );
+	}
+	return $tags;
 }
 
 /** The page's read. */
@@ -246,17 +257,18 @@ add_action( 'rest_api_init', function () {
 			if ( ! current_user_can( 'unfiltered_html' ) ) {
 				$message = wp_strip_all_tags( $message );
 			}
+			// Editing a form doesn't include reading its entries; WPForms'
+			// own preview renders placeholder content for the same reason.
+			$newest = ! wpforms_current_user_can( 'view_entries_form_single', (int) $data['id'] ) ? array() : Minn_Admin_Kernel_SQL::select( 'wpforms_entries', array( 'entry_id', 'fields', 'user_id' ), array( 'form_id' => (int) $data['id'] ), array( 'entry_id' => 'DESC' ), 1 );
+			$entry  = $newest ? (object) $newest[0] : null;
 			// {user_meta key="…"} reads any meta of the account that submitted
 			// the entry the preview uses (a 2FA seed, a licence key), and an
 			// add-on's tag does whatever the add-on does. Only the tags
 			// minn_admin_wpforms_preview_tags() names resolve; any other is a
 			// placeholder before WPForms reads the text. A real send is unchanged.
-			$subject = Minn_Admin_Preview::restrict( $subject, 'wpforms', minn_admin_wpforms_preview_tags() );
-			$message = Minn_Admin_Preview::restrict( $message, 'wpforms', minn_admin_wpforms_preview_tags() );
-			// Editing a form doesn't include reading its entries; WPForms'
-			// own preview renders placeholder content for the same reason.
-			$newest = ! wpforms_current_user_can( 'view_entries_form_single', (int) $data['id'] ) ? array() : Minn_Admin_Kernel_SQL::select( 'wpforms_entries', array( 'entry_id', 'fields' ), array( 'form_id' => (int) $data['id'] ), array( 'entry_id' => 'DESC' ), 1 );
-			$entry  = $newest ? (object) $newest[0] : null;
+			$allow   = minn_admin_wpforms_preview_tags( $entry ? (int) $entry->user_id : 0 );
+			$subject = Minn_Admin_Preview::restrict( $subject, 'wpforms', $allow );
+			$message = Minn_Admin_Preview::restrict( $message, 'wpforms', $allow );
 			if ( ! $entry || ! class_exists( '\WPForms\Emails\Notifications' ) ) {
 				return rest_ensure_response( array( 'entry' => 0, 'subject' => $subject, 'html' => wpautop( $message ) ) );
 			}

@@ -754,6 +754,94 @@ add_filter( 'pre_http_request', $no_http, 1 );
 	}
 } )();
 
+/*
+ * 07-3 peer · WPForms preview. The list filled the entry's account email
+ * and name parts for anyone the preview admits (WPForms' manage_options
+ * gate), while WPForms' entry screen shows only the display name.
+ */
+( function () use ( $check, $skip, $call, $once, $make_user, $admin, $tag ) {
+	global $wpdb;
+	$table = $wpdb->prefix . 'wpforms_entries';
+	if ( ! function_exists( 'wpforms' ) || ! function_exists( 'minn_admin_wpforms_preview_tags' ) || ! class_exists( '\WPForms\Emails\Notifications' ) || $table !== $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) ) {
+		$skip( '07-3 WPForms preview: WPForms with entries inactive' );
+		return;
+	}
+	$role  = 'minn_rc_wpf_' . $tag;
+	$form  = 0;
+	$entry = 0;
+	$clean = $once( function () use ( &$form, &$entry, $role, $admin, $table ) {
+		global $wpdb;
+		wp_set_current_user( $admin );
+		if ( is_int( $entry ) && $entry > 0 && is_int( $form ) && $form > 1 ) {
+			$wpdb->delete( $table, array( 'entry_id' => $entry, 'form_id' => $form ) );
+		}
+		if ( is_int( $form ) && $form > 1 && 'wpforms' === get_post_type( $form ) ) {
+			wp_delete_post( $form, true );
+		}
+		remove_role( $role );
+	} );
+	try {
+		// WPForms admits manage_options to every form; this role cannot list users.
+		add_role( $role, 'Minn RC WPForms manager', array( 'read' => true, 'manage_options' => true ) );
+		$mgr   = $make_user( $role );
+		$smail = 'minn-rc-wpf-sub-' . $tag . '@example.com';
+		$sub   = $make_user( 'subscriber', array( 'user_login' => 'minn-rc-wpf-login-' . $tag, 'user_email' => $smail, 'display_name' => 'RcWpfShown' . $tag, 'first_name' => 'RcWpfFirst' . $tag, 'last_name' => 'RcWpfLast' . $tag ) );
+		wp_set_current_user( $admin );
+		$data = array(
+			'fields'   => array( 1 => array( 'id' => '1', 'type' => 'text', 'label' => 'Nick' ) ),
+			'settings' => array(
+				'form_title'          => 'Minn RC WPForms ' . $tag,
+				'notification_enable' => '1',
+				'notifications'       => array( 1 => array( 'notification_name' => 'Default', 'email' => '{admin_email}', 'subject' => 'S', 'message' => '{all_fields}' ) ),
+			),
+		);
+		$form = wp_insert_post( array( 'post_type' => 'wpforms', 'post_status' => 'publish', 'post_title' => 'Minn RC WPForms ' . $tag, 'post_author' => $admin, 'post_content' => wpforms_encode( $data ) ) );
+		$form = is_int( $form ) && $form > 1 ? $form : 0;
+		if ( ! $mgr || ! $sub || ! $form ) {
+			$check( '07-3 WPForms fixtures', false, 'could not create the accounts or the form' );
+			return;
+		}
+		$data['id'] = $form;
+		wp_update_post( array( 'ID' => $form, 'post_content' => wpforms_encode( $data ) ) );
+		$now = gmdate( 'Y-m-d H:i:s' );
+		$wpdb->insert( $table, array( 'form_id' => $form, 'post_id' => 0, 'user_id' => $sub, 'status' => '', 'type' => '', 'fields' => wp_json_encode( array( 1 => array( 'name' => 'Nick', 'value' => 'RcWpfNick', 'id' => 1, 'type' => 'text' ) ) ), 'meta' => '', 'date' => $now, 'date_modified' => $now, 'ip_address' => '', 'user_agent' => '', 'user_uuid' => '' ) );
+		$entry = (int) $wpdb->insert_id;
+		if ( $entry < 1 ) {
+			$check( '07-3 WPForms fixtures', false, 'could not insert the entry' );
+			return;
+		}
+		$leaks = function ( $out ) use ( $smail, $tag ) {
+			$found = array();
+			foreach ( array( 'email' => $smail, 'first name' => 'RcWpfFirst' . $tag, 'last name' => 'RcWpfLast' . $tag ) as $what => $needle ) {
+				if ( false !== strpos( (string) $out, $needle ) ) {
+					$found[] = $what;
+				}
+			}
+			return $found;
+		};
+		$route = "/minn-admin/v1/wpforms/forms/{$form}/emails/preview";
+		$body  = array( 'key' => '1', 'subject' => 'S {user_email}', 'message' => 'E={user_email} N={user_full_name} F={user_first_name} L={user_last_name} D={user_display} I={user_id} {field_id="1"}' );
+
+		wp_set_current_user( $mgr );
+		$check( '07-3 WPForms: the manager reaches the form and its entries but may not list users', wpforms_current_user_can( 'edit_form_single', $form ) && wpforms_current_user_can( 'view_entries_form_single', $form ) && ! current_user_can( 'list_users' ) );
+		list( $st, $d ) = $call( 'POST', $route, $body );
+		$out = wp_json_encode( $d );
+		$check( '07-3 WPForms: the preview is made from the entry', 200 === $st && $entry === (int) ( $d['entry'] ?? 0 ), $st . ' ' . substr( $out, 0, 200 ) );
+		$check( '07-3 WPForms: the preview fills no email or name parts of the submitter', 200 === $st && ! $leaks( $out ), implode( ',', $leaks( $out ) ) . ' ' . substr( $out, 0, 300 ) );
+		$check( '07-3 WPForms: those tags show as placeholders', false !== strpos( $out, '[tag: user_email]' ) && false !== strpos( $out, '[tag: user_full_name]' ), substr( $out, 0, 300 ) );
+		$check( '07-3 WPForms control: the display name and id the entry screen shows still fill', false !== strpos( $out, 'RcWpfShown' . $tag ) && false !== strpos( $out, 'I=' . $sub ) && false !== strpos( $out, 'RcWpfNick' ), substr( $out, 0, 300 ) );
+
+		wp_set_current_user( $admin );
+		list( $st, $d ) = $call( 'POST', $route, $body );
+		$out = wp_json_encode( $d );
+		$check( '07-3 WPForms control: for an administrator the email and name parts still fill', 200 === $st && array( 'email', 'first name', 'last name' ) === $leaks( $out ), implode( ',', $leaks( $out ) ) . ' ' . substr( $out, 0, 300 ) );
+	} catch ( \Throwable $e ) {
+		$check( 'section ran to the end', false, get_class( $e ) . ': ' . $e->getMessage() );
+	} finally {
+		$clean();
+	}
+} )();
+
 $drop_users();
 wp_set_current_user( $admin );
 remove_filter( 'pre_wp_mail', $mail_trap, 1 );
