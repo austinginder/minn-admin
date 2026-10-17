@@ -489,16 +489,20 @@ class Minn_Admin_Egress {
 			}
 			$was  = isset( $old[ $path ] ) ? $old[ $path ] : '';
 			$held = array();
+			$whom = array();
 			foreach ( '' === $was ? array() : self::credentials() as $c => $fp ) {
 				// The bytes the old value holds there: the credential, or a
 				// JSON string's escaped copy of it (a response masks both).
 				$at = self::found( $was, self::forms( (string) $c )[0] );
 				if ( null !== $at ) {
 					$held[ self::MASK . ':' . $fp . ']' ] = $at;
+					// Kept under the credential itself, not the bytes restored:
+					// keep()'s moved check looks it up in the decoded list.
+					$whom[ self::MASK . ':' . $fp . ']' ] = (string) $c;
 				}
 			}
 			$new = $held ? strtr( $v, $held ) : $v;
-			foreach ( $held as $mask => $c ) {
+			foreach ( $whom as $mask => $c ) {
 				if ( false !== strpos( $v, $mask ) ) {
 					$kept[ $c ] = true;
 				}

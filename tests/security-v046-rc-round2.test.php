@@ -18,6 +18,14 @@
  * 01-1  Fluent Forms masks password answers for every viewer, but its
  *       submission tables showed them in the database browser; Gravity
  *       Forms' entry view showed a password its own entry screen skips.
+ * R2-1  An option's JSON string holding a slash key, renamed around its mask,
+ *       saved the key under the new name (the moved check looked it up by
+ *       its escaped bytes), and the next response printed it.
+ * R2-2  Fluent Forms emails stored earlier notifications before refusing a
+ *       later one (or the confirmation) for a mask, and answered "Nothing
+ *       was saved".
+ * R2-5  /plugin-meta read the plugin file of an update entry whose plugin
+ *       is gone (a PHP warning on a network).
  * Info  N3 (the credential list named rows in requests that are not Minn's),
  *       N5 (a cross-definition attach written after the definition), N7
  *       (Pods answers '' and 0 read as a pass), N8 (Brizy Pro's network
@@ -182,6 +190,23 @@ try {
 	list( $st ) = $send( 'POST', '/minn-admin/v1/minn-r2-test/option', array( 'value' => array( 'config' => wp_json_encode( $conf ) ) ) );
 	$now        = json_decode( (string) ( get_option( $row3 )['config'] ?? '' ), true );
 	$check( 'N1 control: an edit beside the masked key keeps the key and saves the edit', 200 === $st && $skey === ( $now['api_key'] ?? '' ) && 'b' === ( $now['name'] ?? '' ), $st . ' ' . wp_json_encode( $now ) );
+	update_option( $row3, $row3_was );
+
+	// R2-1: the same JSON string with the masked key renamed to a name that
+	// is no credential's ("note") is a moved key, refused as an unescaped one is.
+	$conf = json_decode( (string) ( $served['config'] ?? '' ), true );
+	if ( is_array( $conf ) && isset( $conf['api_key'] ) ) {
+		$conf = array( 'note' => $conf['api_key'], 'name' => 'a' );
+	}
+	list( $st ) = $send( 'POST', '/minn-admin/v1/minn-r2-test/option', array( 'value' => array( 'config' => wp_json_encode( $conf ) ) ) );
+	$check( 'R2-1 a slash key stored JSON-escaped and renamed around its mask is refused and the option keeps its bytes', 200 !== $st && get_option( $row3 ) === $row3_was, $st . ' ' . wp_json_encode( get_option( $row3 ) ) );
+	list( , $d ) = $send( 'GET', '/minn-admin/v1/minn-r2-test/option' );
+	$check( 'R2-1 so the next read still carries no part of the key', ! $leak( wp_json_encode( $d ) ), wp_json_encode( $d ) );
+	update_option( $row3, $row3_was );
+	Minn_Admin_Egress::reset();
+	list( , $d ) = $send( 'GET', '/minn-admin/v1/minn-r2-test/option' );
+	list( $st ) = $send( 'POST', '/minn-admin/v1/minn-r2-test/option', array( 'value' => $d['value'] ?? array() ) );
+	$check( 'R2-1 control: the read sent back untouched still saves with the stored bytes', 200 === $st && get_option( $row3 ) === $row3_was, $st . ' ' . wp_json_encode( get_option( $row3 ) ) );
 	update_option( $row3, $row3_was );
 
 	// The database browser: a cell holding the key JSON-escaped is a copy.
@@ -599,6 +624,32 @@ try {
 			};
 			list( $st ) = $send( 'POST', "/minn-admin/v1/fluent-forms/forms/{$fid}/emails", array( 'notifications' => array( array( 'metaId' => $mid, 'message' => '<p>Ping ' . $t1 . ' more</p>' ) ) ) );
 			$check( '12-1 Fluent Forms emails: an edited message that keeps the mask is refused and writes nothing', 400 === $st && '<p>Ping ' . $key . '</p>' === $msg(), $st . ' ' . $msg() );
+			// R2-2: a refusal on a later notification, or on the confirmation,
+			// leaves an earlier notification in the same save unwritten.
+			$first = wp_json_encode( array( 'name' => 'First email', 'sendTo' => array( 'type' => 'email', 'email' => '{wp.admin_email}', 'field' => '', 'routing' => array() ), 'subject' => 'First', 'message' => '<p>Hello</p>', 'enabled' => true ) );
+			$wpdb->insert( "{$p}fluentform_form_meta", array( 'form_id' => $fid, 'meta_key' => 'notifications', 'value' => $first ) );
+			$aid  = (int) $wpdb->insert_id;
+			$subj = function () use ( $wpdb, $p, $aid ) {
+				$v = json_decode( (string) $wpdb->get_var( $wpdb->prepare( "SELECT value FROM {$p}fluentform_form_meta WHERE id = %d", $aid ) ), true ); // phpcs:ignore
+				return (string) ( $v['subject'] ?? '' );
+			};
+			$wpdb->insert( "{$p}fluentform_form_meta", array( 'form_id' => $fid, 'meta_key' => 'formSettings', 'value' => wp_json_encode( array( 'confirmation' => array( 'redirectTo' => 'samePage', 'messageToShow' => '<p>Thanks ' . $key . '</p>', 'samePageFormBehavior' => 'hide_form', 'customPage' => null, 'customUrl' => null ) ) ) ) );
+			$sid  = (int) $wpdb->insert_id;
+			$conf = function () use ( $wpdb, $p, $sid ) {
+				$v = json_decode( (string) $wpdb->get_var( $wpdb->prepare( "SELECT value FROM {$p}fluentform_form_meta WHERE id = %d", $sid ) ), true ); // phpcs:ignore
+				return (string) ( $v['confirmation']['messageToShow'] ?? '' );
+			};
+			if ( $aid > 0 && $sid > 0 ) {
+				list( $st ) = $send( 'POST', "/minn-admin/v1/fluent-forms/forms/{$fid}/emails", array( 'notifications' => array( array( 'metaId' => $aid, 'subject' => 'Changed ' . $tag ), array( 'metaId' => $mid, 'message' => '<p>Ping ' . $t1 . ' more</p>' ) ) ) );
+				$check( 'R2-2 Fluent Forms emails: a later notification refused for a mask leaves the earlier one in the same save unwritten', 400 === $st && 'First' === $subj() && '<p>Ping ' . $key . '</p>' === $msg(), $st . ' ' . $subj() );
+				$wpdb->update( "{$p}fluentform_form_meta", array( 'value' => $first ), array( 'id' => $aid ) );
+				list( $st ) = $send( 'POST', "/minn-admin/v1/fluent-forms/forms/{$fid}/emails", array( 'notifications' => array( array( 'metaId' => $aid, 'subject' => 'Changed ' . $tag ) ), 'confirmation' => array( 'messageToShow' => '<p>Thanks ' . $t1 . ' more</p>' ) ) );
+				$check( 'R2-2 Fluent Forms emails: a confirmation refused for a mask leaves the notifications in the same save unwritten', 400 === $st && 'First' === $subj() && '<p>Thanks ' . $key . '</p>' === $conf(), $st . ' ' . $subj() . ' ' . $conf() );
+				list( $st ) = $send( 'POST', "/minn-admin/v1/fluent-forms/forms/{$fid}/emails", array( 'notifications' => array( array( 'metaId' => $aid, 'subject' => 'Changed ' . $tag ), array( 'metaId' => $mid, 'subject' => 'Second ' . $tag ) ) ) );
+				$check( 'R2-2 Fluent control: two clean notification edits in one save are both written, the masked message kept', 200 === $st && 'Changed ' . $tag === $subj() && '<p>Ping ' . $key . '</p>' === $msg(), $st . ' ' . $subj() . ' ' . $msg() );
+			} else {
+				$check( 'R2-2 Fluent: the fixture rows were seeded', false, $wpdb->last_error );
+			}
 			list( $st ) = $send( 'POST', "/minn-admin/v1/fluent-forms/forms/{$fid}/emails", array( 'notifications' => array( array( 'metaId' => $mid, 'message' => '<p>Plain ' . $tag . '</p>' ) ) ) );
 			$check( '12-1 Fluent Forms emails control: a real edit is written', 200 === $st && false !== strpos( $msg(), 'Plain ' . $tag ), $st . ' ' . $msg() );
 		} finally {
@@ -817,6 +868,50 @@ try {
 
 	// N11: the dead preview helper is gone.
 	$check( 'N11 minn_admin_gfn_neutral_tags() (no callers) is gone', ! function_exists( 'minn_admin_gfn_neutral_tags' ) );
+
+	// R2-5: an update entry for a plugin no longer installed reads no file.
+	if ( is_multisite() && ! is_main_site() ) {
+		$gone  = 'minn-r2-gone-' . $tag . '/gone.php';
+		$stale = function ( $tr ) use ( $gone ) {
+			$tr = is_object( $tr ) ? $tr : (object) array();
+			$tr->no_update = (array) ( $tr->no_update ?? array() );
+			$tr->no_update[ $gone ] = (object) array( 'id' => 'w.org/plugins/' . dirname( $gone ), 'slug' => dirname( $gone ) );
+			return $tr;
+		};
+		add_filter( 'site_transient_update_plugins', $stale );
+		$uid = wp_insert_user( array( 'user_login' => 'minn_r2_stale_' . $tag, 'user_pass' => wp_generate_password( 24 ), 'user_email' => 'minn_r2_stale_' . $tag . '@example.com', 'role' => 'administrator' ) );
+		$uid = is_int( $uid ) ? $uid : 0;
+		$warned = array();
+		try {
+			if ( $uid > 1 ) {
+				wp_set_current_user( $uid );
+				set_error_handler( function ( $no, $str ) use ( &$warned, $gone ) {
+					if ( false !== strpos( (string) $str, dirname( $gone ) ) ) {
+						$warned[] = $str;
+						return true;
+					}
+					return false;
+				} );
+				try {
+					list( $st ) = $send( 'GET', '/minn-admin/v1/plugin-meta' );
+				} finally {
+					restore_error_handler();
+				}
+				$check( 'R2-5 /plugin-meta: a site administrator\'s read with an update entry for a removed plugin raises no warning', 200 === $st && ! $warned, $st . ' ' . implode( ' | ', $warned ) );
+			} else {
+				$check( 'R2-5 /plugin-meta: the site administrator was created', false );
+			}
+		} finally {
+			remove_filter( 'site_transient_update_plugins', $stale );
+			wp_set_current_user( $admin );
+			if ( $uid > 1 && 'minn_r2_stale_' . $tag === get_userdata( $uid )->user_login ) {
+				require_once ABSPATH . 'wp-admin/includes/ms.php';
+				wpmu_delete_user( $uid );
+			}
+		}
+	} else {
+		$skip( 'R2-5 /plugin-meta: run on a network subsite' );
+	}
 
 	// /plugin-meta on a network: a site's administrator is not told about a
 	// network-only plugin that is not active there.
