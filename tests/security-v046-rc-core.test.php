@@ -368,6 +368,357 @@ $drop_users = $once( function () use ( &$made, $admin ) {
 	}
 } )();
 
+/*
+ * 05-1 and 05-2: post type and taxonomy edits. The modal ticks the
+ * REGISTERED lists; a box moved there is applied to every definition that
+ * holds it, or refused naming where it comes from, never answered
+ * "updated" with nothing written. JetEngine keeps only the singular label
+ * someone typed.
+ */
+( function () use ( $check, $skip, $call, $wpdb, $tag ) {
+	if ( is_multisite() ) {
+		$skip( 'post types: single site only' );
+		return;
+	}
+	if ( ! defined( 'CPTUI_VERSION' ) || ! function_exists( 'cptui_register_single_post_type' ) || ! function_exists( 'cptui_register_single_taxonomy' ) ) {
+		$skip( 'post types: CPT UI inactive' );
+		return;
+	}
+	$row = function ( $kind, $slug ) use ( $call ) {
+		list( , $d ) = $call( 'GET', '/minn-admin/v1/' . ( 'type' === $kind ? 'post-types' : 'taxonomies' ) );
+		foreach ( (array) ( $d[ 'type' === $kind ? 'types' : 'taxonomies' ] ?? array() ) as $r ) {
+			if ( $slug === $r['slug'] ) {
+				return $r;
+			}
+		}
+		return null;
+	};
+	$opt = function ( $option, $slug ) {
+		return (array) ( ( (array) get_option( $option, array() ) )[ $slug ] ?? array() );
+	};
+	$snap = function () {
+		return wp_json_encode( array( get_option( 'cptui_post_types' ), get_option( 'cptui_taxonomies' ), get_option( Minn_Admin_CPT::OPTION ), get_option( Minn_Admin_CPT::OPTION_TAX ) ) );
+	};
+	$wpdb->query( 'START TRANSACTION' );
+	$locked = null;
+	try {
+		$cpt   = 'mrcb' . $tag;
+		$own   = 'mrco' . $tag;
+		$named = 'mrcn' . $tag;
+		$code  = 'mrcc' . $tag;
+		list( $s1 ) = $call( 'POST', '/minn-admin/v1/post-types', array( 'slug' => $cpt, 'singular' => 'Book', 'plural' => 'Books', 'description' => '', 'public' => 1, 'supports' => array( 'title', 'editor', 'author' ), 'backend' => 'cptui' ) );
+		$types = (array) get_option( 'cptui_post_types', array() );
+		if ( isset( $types[ $cpt ] ) && ! post_type_exists( $cpt ) ) {
+			cptui_register_single_post_type( $types[ $cpt ] );
+		}
+		list( $s2 ) = $call( 'POST', '/minn-admin/v1/taxonomies', array( 'slug' => $own, 'singular' => 'Genre', 'plural' => 'Genres', 'object_types' => array( $cpt ), 'backend' => 'cptui' ) );
+		list( $s3 ) = $call( 'POST', '/minn-admin/v1/taxonomies', array( 'slug' => $named, 'singular' => 'Shelf', 'plural' => 'Shelves', 'object_types' => array(), 'backend' => 'cptui' ) );
+		if ( 200 !== $s1 || 200 !== $s2 || 200 !== $s3 ) {
+			$skip( "post types: CPT UI would not take the fixtures ({$s1}/{$s2}/{$s3})" );
+			return;
+		}
+		// The type names $named in its own definition; $own attaches itself.
+		$types                         = (array) get_option( 'cptui_post_types', array() );
+		$types[ $cpt ]['taxonomies']   = array( $named );
+		update_option( 'cptui_post_types', $types );
+		$reload = function ( $runtime = true ) use ( $cpt, $own, $named, $code ) {
+			foreach ( array( $own, $named, $code ) as $t ) {
+				if ( taxonomy_exists( $t ) ) {
+					unregister_taxonomy( $t );
+				}
+			}
+			if ( post_type_exists( $cpt ) ) {
+				unregister_post_type( $cpt );
+			}
+			$taxes = (array) get_option( 'cptui_taxonomies', array() );
+			cptui_register_single_taxonomy( $taxes[ $own ] );
+			cptui_register_single_taxonomy( $taxes[ $named ] );
+			cptui_register_single_post_type( ( (array) get_option( 'cptui_post_types', array() ) )[ $cpt ] );
+			if ( $runtime ) {
+				// What a theme or plugin does in code.
+				register_taxonomy( $code, $cpt, array( 'public' => true, 'show_ui' => true, 'label' => 'Code tags' ) );
+				add_post_type_support( $cpt, 'excerpt' );
+				remove_post_type_support( $cpt, 'author' );
+			}
+		};
+		$save   = function ( $kind, $slug, $body ) use ( $call, $row ) {
+			$shown = $row( $kind, $slug );
+			return $call( 'POST', '/minn-admin/v1/' . ( 'type' === $kind ? 'post-types/' : 'taxonomies/' ) . $slug, array_merge( $body( $shown ), array( 'base' => $shown['stamp'] ?? '' ) ) );
+		};
+		$without = function ( $list, $v ) {
+			return array_values( array_diff( (array) $list, array( $v ) ) );
+		};
+
+		$reload();
+		$shown = $row( 'type', $cpt );
+		$check( 'post types: the fixture shows a taxonomy attached from its own side, one the type names, one from code, a runtime support and not a support removed at runtime', in_array( $own, (array) $shown['taxonomies'], true ) && in_array( $named, (array) $shown['taxonomies'], true ) && in_array( $code, (array) $shown['taxonomies'], true ) && in_array( 'excerpt', (array) $shown['supports'], true ) && ! in_array( 'author', (array) $shown['supports'], true ), wp_json_encode( $shown ) );
+
+		list( $st, $d ) = $save( 'type', $cpt, function ( $s ) use ( $without, $own ) {
+			return array( 'taxonomies' => $without( $s['taxonomies'], $own ) );
+		} );
+		$reload();
+		$check( 'post types: unticking a taxonomy that attaches itself (CPT UI "Attach to post type") detaches it in the taxonomy', 200 === $st && ! in_array( $cpt, (array) ( $opt( 'cptui_taxonomies', $own )['object_types'] ?? array() ), true ), $st . ' ' . wp_json_encode( array( $d, $opt( 'cptui_taxonomies', $own )['object_types'] ?? null ) ) );
+		$check( 'post types: and the type no longer shows it', ! in_array( $own, (array) $row( 'type', $cpt )['taxonomies'], true ) );
+
+		$before = $snap();
+		list( $st, $d ) = $save( 'type', $cpt, function ( $s ) use ( $without, $code ) {
+			return array( 'taxonomies' => $without( $s['taxonomies'], $code ) );
+		} );
+		$check( 'post types: unticking a taxonomy code attaches answers 409, naming where it comes from', 409 === $st && 'minn_attached_elsewhere' === ( $d['code'] ?? '' ), $st . ' ' . wp_json_encode( $d ) );
+		$check( 'post types: and writes nothing', $before === $snap() );
+
+		list( $st, $d ) = $save( 'type', $cpt, function ( $s ) use ( $without ) {
+			return array( 'supports' => $without( $s['supports'], 'excerpt' ) );
+		} );
+		$check( 'post types: unticking a support the theme adds at runtime answers 409', 409 === $st && 'minn_support_elsewhere' === ( $d['code'] ?? '' ), $st . ' ' . wp_json_encode( $d ) );
+		list( $st, $d ) = $save( 'type', $cpt, function ( $s ) {
+			return array( 'supports' => array_merge( (array) $s['supports'], array( 'author' ) ) );
+		} );
+		$check( 'post types: ticking a stored support the theme takes off at runtime answers 409', 409 === $st && 'minn_support_elsewhere' === ( $d['code'] ?? '' ), $st . ' ' . wp_json_encode( $d ) );
+		$check( 'post types: and neither wrote anything', $before === $snap() );
+
+		list( $st ) = $save( 'type', $cpt, function ( $s ) use ( $without, $named ) {
+			return array( 'taxonomies' => $without( $s['taxonomies'], $named ) );
+		} );
+		$reload();
+		$check( 'post types: unticking a taxonomy the type names is written in the type (control)', 200 === $st && ! in_array( $named, (array) ( $opt( 'cptui_post_types', $cpt )['taxonomies'] ?? array() ), true ) && ! in_array( $named, (array) $row( 'type', $cpt )['taxonomies'], true ), (string) $st );
+		list( $st ) = $save( 'type', $cpt, function ( $s ) {
+			return array( 'supports' => array_merge( (array) $s['supports'], array( 'thumbnail' ) ) );
+		} );
+		$sup = (array) ( $opt( 'cptui_post_types', $cpt )['supports'] ?? array() );
+		$check( 'post types: ticking a support is written, and the runtime one stays out (control)', 200 === $st && in_array( 'thumbnail', $sup, true ) && ! in_array( 'excerpt', $sup, true ), $st . ' ' . wp_json_encode( $sup ) );
+
+		// The taxonomy side: a type that names the taxonomy holds it there.
+		$types                       = (array) get_option( 'cptui_post_types', array() );
+		$types[ $cpt ]['taxonomies'] = array( $named );
+		update_option( 'cptui_post_types', $types );
+		$reload();
+		$check( 'taxonomies: the fixture shows the type that names the taxonomy', in_array( $cpt, (array) $row( 'tax', $named )['object_types'], true ) );
+		list( $st, $d ) = $save( 'tax', $named, function ( $s ) use ( $without, $cpt ) {
+			return array( 'object_types' => $without( $s['object_types'], $cpt ) );
+		} );
+		$reload();
+		$check( 'taxonomies: unticking a post type that names the taxonomy detaches it in the post type', 200 === $st && ! in_array( $named, (array) ( $opt( 'cptui_post_types', $cpt )['taxonomies'] ?? array() ), true ), $st . ' ' . wp_json_encode( array( $d, $opt( 'cptui_post_types', $cpt )['taxonomies'] ?? null ) ) );
+		$check( 'taxonomies: and the taxonomy no longer shows it', ! in_array( $cpt, (array) $row( 'tax', $named )['object_types'], true ) );
+		$taxes                           = (array) get_option( 'cptui_taxonomies', array() );
+		$taxes[ $own ]['object_types']   = array( $cpt );
+		update_option( 'cptui_taxonomies', $taxes );
+		$reload();
+		list( $st ) = $save( 'tax', $own, function ( $s ) use ( $without, $cpt ) {
+			return array( 'object_types' => $without( $s['object_types'], $cpt ) );
+		} );
+		$check( 'taxonomies: unticking a post type the taxonomy holds is written there (control)', 200 === $st && ! in_array( $cpt, (array) ( $opt( 'cptui_taxonomies', $own )['object_types'] ?? array() ), true ), (string) $st );
+		$reload();
+		list( $st, $d ) = $save( 'tax', $code, function ( $s ) use ( $without, $cpt ) {
+			return array( 'object_types' => $without( $s['object_types'], $cpt ) );
+		} );
+		$check( 'taxonomies: a taxonomy registered in code still cannot be edited (control)', 400 === $st, $st . ' ' . wp_json_encode( $d ) );
+
+		// Every box unticked: an empty list would register title and editor again.
+		$reload( false );
+		list( $st ) = $save( 'type', $cpt, function () {
+			return array( 'supports' => array() );
+		} );
+		$reload( false );
+		$check( 'post types: unticking every support keeps them off (CPT UI\'s "None")', 200 === $st && array() === array_values( (array) $row( 'type', $cpt )['supports'] ), $st . ' ' . wp_json_encode( array( $opt( 'cptui_post_types', $cpt )['supports'] ?? null, $row( 'type', $cpt )['supports'] ) ) );
+		list( $st ) = $save( 'type', $cpt, function () {
+			return array( 'supports' => array( 'title' ) );
+		} );
+		$reload( false );
+		$check( 'post types: and ticking one again takes effect (control)', 200 === $st && array( 'title' ) === array_values( (array) $row( 'type', $cpt )['supports'] ), $st . ' ' . wp_json_encode( $row( 'type', $cpt )['supports'] ) );
+
+		// A holder the caller may not edit: CPT UI kept to another capability.
+		$minn = 'mrcm' . $tag;
+		$own2 = 'mrcp' . $tag;
+		list( $s1 ) = $call( 'POST', '/minn-admin/v1/post-types', array( 'slug' => $minn, 'singular' => 'Dish', 'plural' => 'Dishes', 'description' => '', 'public' => 1, 'supports' => array( 'title' ), 'taxonomies' => array(), 'backend' => 'minn' ) );
+		list( $s2 ) = $call( 'POST', '/minn-admin/v1/taxonomies', array( 'slug' => $own2, 'singular' => 'Pot', 'plural' => 'Pots', 'object_types' => array( $minn ), 'backend' => 'cptui' ) );
+		if ( 200 !== $s1 || 200 !== $s2 ) {
+			$skip( "post types: the locked-holder fixture did not take ({$s1}/{$s2})" );
+		} else {
+			if ( taxonomy_exists( $own2 ) ) {
+				unregister_taxonomy( $own2 );
+			}
+			cptui_register_single_taxonomy( ( (array) get_option( 'cptui_taxonomies', array() ) )[ $own2 ] );
+			$locked = function () {
+				return 'minn_rccore_nobody';
+			};
+			add_filter( 'cptui_required_capabilities', $locked );
+			$before = $snap();
+			list( $st, $d ) = $save( 'type', $minn, function ( $s ) use ( $without, $own2 ) {
+				return array( 'taxonomies' => $without( $s['taxonomies'], $own2 ) );
+			} );
+			remove_filter( 'cptui_required_capabilities', $locked );
+			$check( 'post types: unticking a taxonomy held in CPT UI that this site keeps from the caller answers 409', 409 === $st && 'minn_attached_elsewhere' === ( $d['code'] ?? '' ), $st . ' ' . wp_json_encode( $d ) );
+			$check( 'post types: and writes nothing', $before === $snap() );
+		}
+
+		// Minn's own store: its types register before every taxonomy but
+		// core's, so a taxonomy ticked on a Minn type has to attach later.
+		$mt = 'mrcq' . $tag;
+		$mx = 'mrcr' . $tag;
+		list( $s1 ) = $call( 'POST', '/minn-admin/v1/post-types', array( 'slug' => $mt, 'singular' => 'Jar', 'plural' => 'Jars', 'description' => '', 'public' => 1, 'supports' => array( 'title' ), 'taxonomies' => array(), 'backend' => 'minn' ) );
+		list( $s2 ) = $call( 'POST', '/minn-admin/v1/taxonomies', array( 'slug' => $mx, 'singular' => 'Lid', 'plural' => 'Lids', 'object_types' => array( 'post' ), 'backend' => 'minn' ) );
+		if ( 200 !== $s1 || 200 !== $s2 ) {
+			$skip( "post types: Minn's store would not take the fixtures ({$s1}/{$s2})" );
+		} else {
+			// What the next page load does, in init's order.
+			$minn_reload = function () use ( $mt, $mx ) {
+				if ( taxonomy_exists( $mx ) ) {
+					unregister_taxonomy( $mx );
+				}
+				if ( post_type_exists( $mt ) ) {
+					unregister_post_type( $mt );
+				}
+				Minn_Admin_CPT::register_native_types();
+				Minn_Admin_CPT::register_native_taxonomies();
+				if ( method_exists( 'Minn_Admin_CPT', 'attach_native_taxonomies' ) ) {
+					Minn_Admin_CPT::attach_native_taxonomies();
+				}
+			};
+			$minn_reload();
+			list( $st ) = $save( 'type', $mt, function ( $s ) use ( $mx ) {
+				return array( 'taxonomies' => array_merge( (array) $s['taxonomies'], array( $mx ) ) );
+			} );
+			$minn_reload();
+			$check( 'post types: a Minn taxonomy ticked on a Minn type is still attached on the next load', 200 === $st && in_array( $mx, (array) $row( 'type', $mt )['taxonomies'], true ), $st . ' ' . wp_json_encode( $row( 'type', $mt )['taxonomies'] ?? null ) );
+			list( $st ) = $save( 'type', $mt, function ( $s ) use ( $without, $mx ) {
+				return array( 'taxonomies' => $without( $s['taxonomies'], $mx ) );
+			} );
+			$minn_reload();
+			$check( 'post types: and unticking it detaches it (control)', 200 === $st && ! in_array( $mx, (array) $row( 'type', $mt )['taxonomies'], true ), $st . ' ' . wp_json_encode( $row( 'type', $mt )['taxonomies'] ?? null ) );
+		}
+
+		// ACF registers an empty supports list as none at all.
+		if ( function_exists( 'acf_get_setting' ) && acf_get_setting( 'enable_post_types' ) && function_exists( 'acf_get_internal_post_type_posts' ) ) {
+			$acf  = 'mrca' . $tag;
+			$find = function () use ( $acf ) {
+				foreach ( (array) acf_get_internal_post_type_posts( 'acf-post-type' ) as $settings ) {
+					if ( ( $settings['post_type'] ?? '' ) === $acf ) {
+						return $settings;
+					}
+				}
+				return null;
+			};
+			list( $st ) = $call( 'POST', '/minn-admin/v1/post-types', array( 'slug' => $acf, 'singular' => 'Car', 'plural' => 'Cars', 'description' => '', 'public' => 1, 'supports' => array(), 'backend' => 'acf' ) );
+			if ( 200 !== $st || ! $find() ) {
+				$skip( "post types: ACF would not take a test post type ({$st})" );
+			} else {
+				if ( post_type_exists( $acf ) ) {
+					unregister_post_type( $acf );
+				}
+				register_post_type( $acf, array( 'labels' => array( 'name' => 'Cars', 'singular_name' => 'Car' ), 'public' => true, 'show_ui' => true, 'supports' => false ) );
+				list( $st ) = $save( 'type', $acf, function () {
+					return array( 'supports' => array( 'title' ) );
+				} );
+				$acf_sup = (array) ( $find()['supports'] ?? array() );
+				$check( 'post types: ticking a support on an ACF type with none is written', 200 === $st && array( 'title' ) === array_values( $acf_sup ), $st . ' ' . wp_json_encode( $acf_sup ) );
+			}
+		} else {
+			$skip( 'post types: ACF post types off' );
+		}
+
+		// JetEngine keeps a type's taxonomies on the taxonomy, and a singular
+		// label only when one was typed.
+		if ( function_exists( 'jet_engine' ) && is_object( jet_engine()->cpt ) && is_object( jet_engine()->cpt->data ) && is_object( jet_engine()->taxonomies ) && is_object( jet_engine()->taxonomies->data ) ) {
+			$jtype = 'mrcj' . $tag;
+			$jtax  = 'mrck' . $tag;
+			$ttab  = $wpdb->prefix . 'jet_post_types';
+			$xtab  = $wpdb->prefix . 'jet_taxonomies';
+			$forget = function () {
+				if ( is_object( jet_engine()->db ) && property_exists( jet_engine()->db, 'query_cache' ) ) {
+					jet_engine()->db->query_cache = array();
+				}
+				jet_engine()->cpt->data->reset_raw_cache();
+				jet_engine()->taxonomies->data->reset_raw_cache();
+			};
+			$jrow   = function ( $table, $slug ) use ( $wpdb, $forget ) {
+				$forget();
+				$r = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE slug = %s", $slug ), ARRAY_A ); // phpcs:ignore WordPress.DB
+				if ( ! $r ) {
+					return null;
+				}
+				foreach ( array( 'labels', 'args', 'object_type' ) as $col ) {
+					if ( isset( $r[ $col ] ) ) {
+						$r[ $col ] = Minn_Admin::decode_serialized( (string) $r[ $col ], array() );
+					}
+				}
+				return $r;
+			};
+			list( $s1 ) = $call( 'POST', '/minn-admin/v1/post-types', array( 'slug' => $jtype, 'singular' => 'Fish', 'plural' => 'Fishes', 'description' => '', 'public' => 1, 'supports' => array( 'title' ), 'backend' => 'jet' ) );
+			list( $s2 ) = $call( 'POST', '/minn-admin/v1/taxonomies', array( 'slug' => $jtax, 'singular' => 'Reef', 'plural' => 'Reefs', 'object_types' => array( 'post' ), 'backend' => 'jet' ) );
+			$tr = $jrow( $ttab, $jtype );
+			$xr = $jrow( $xtab, $jtax );
+			if ( 200 !== $s1 || 200 !== $s2 || ! $tr || ! $xr ) {
+				$skip( "post types: JetEngine would not take the fixtures ({$s1}/{$s2})" );
+			} else {
+				$jreg = function ( $types, $singular_type = 'Fish', $singular_tax = 'Reef' ) use ( $jtype, $jtax ) {
+					if ( taxonomy_exists( $jtax ) ) {
+						unregister_taxonomy( $jtax );
+					}
+					if ( post_type_exists( $jtype ) ) {
+						unregister_post_type( $jtype );
+					}
+					register_post_type( $jtype, array( 'labels' => array( 'name' => 'Fishes', 'singular_name' => $singular_type ), 'public' => true, 'show_ui' => true, 'supports' => array( 'title' ) ) );
+					register_taxonomy( $jtax, $types, array( 'labels' => array( 'name' => 'Reefs', 'singular_name' => $singular_tax ), 'public' => true, 'show_ui' => true ) );
+				};
+				$jreg( array( 'post' ) );
+				list( $st, $d ) = $save( 'type', $jtype, function ( $s ) use ( $jtax ) {
+					return array( 'taxonomies' => array_merge( (array) $s['taxonomies'], array( $jtax ) ) );
+				} );
+				$xr = $jrow( $xtab, $jtax );
+				$check( 'post types: ticking a taxonomy on a JetEngine type attaches it in the taxonomy, where JetEngine keeps it', 200 === $st && in_array( $jtype, (array) $xr['object_type'], true ) && in_array( 'post', (array) $xr['object_type'], true ), $st . ' ' . wp_json_encode( array( $d, $xr['object_type'] ?? null ) ) );
+				$jreg( array( 'post', $jtype ) );
+				list( $st ) = $save( 'type', $jtype, function ( $s ) use ( $without, $jtax ) {
+					return array( 'taxonomies' => $without( $s['taxonomies'], $jtax ) );
+				} );
+				$xr = $jrow( $xtab, $jtax );
+				$check( 'post types: and unticking it detaches it there, keeping the rest', 200 === $st && ! in_array( $jtype, (array) $xr['object_type'], true ) && in_array( 'post', (array) $xr['object_type'], true ), $st . ' ' . wp_json_encode( $xr['object_type'] ?? null ) );
+
+				// 05-2: no singular label stored; the registered one is a translation.
+				$labels = (array) $tr['labels'];
+				unset( $labels['singular_name'] );
+				$wpdb->update( $ttab, array( 'labels' => maybe_serialize( $labels ) ), array( 'id' => (int) $tr['id'] ) ); // phpcs:ignore WordPress.DB
+				$xlabels = (array) $jrow( $xtab, $jtax )['labels'];
+				unset( $xlabels['singular_name'] );
+				$wpdb->update( $xtab, array( 'labels' => maybe_serialize( $xlabels ) ), array( 'id' => (int) $xr['id'] ) ); // phpcs:ignore WordPress.DB
+				$jreg( array( 'post' ), 'Fisch (übersetzt)', 'Riff (übersetzt)' );
+				list( $st ) = $save( 'type', $jtype, function () {
+					return array( 'has_archive' => 1 );
+				} );
+				$tr = $jrow( $ttab, $jtype );
+				$check( 'JetEngine: an unrelated edit leaves a singular label JetEngine does not hold unheld', 200 === $st && ! isset( $tr['labels']['singular_name'] ) && ! empty( $tr['args']['has_archive'] ), $st . ' ' . wp_json_encode( $tr['labels'] ?? null ) );
+				list( $st ) = $save( 'tax', $jtax, function () {
+					return array( 'hierarchical' => 1 );
+				} );
+				$xr = $jrow( $xtab, $jtax );
+				$check( 'JetEngine: the same for a taxonomy', 200 === $st && ! isset( $xr['labels']['singular_name'] ), $st . ' ' . wp_json_encode( $xr['labels'] ?? null ) );
+				list( $st ) = $save( 'type', $jtype, function () {
+					return array( 'singular' => 'Trout' );
+				} );
+				$tr = $jrow( $ttab, $jtype );
+				$check( 'JetEngine: a singular label typed in the modal is written (control)', 200 === $st && 'Trout' === ( $tr['labels']['singular_name'] ?? null ), $st . ' ' . wp_json_encode( $tr['labels'] ?? null ) );
+				$jreg( array( 'post' ), 'Trout' );
+				list( $st ) = $save( 'type', $jtype, function () {
+					return array( 'has_archive' => 0 );
+				} );
+				$tr = $jrow( $ttab, $jtype );
+				$check( 'JetEngine: and a stored one rides along untouched (control)', 200 === $st && 'Trout' === ( $tr['labels']['singular_name'] ?? null ), $st . ' ' . wp_json_encode( $tr['labels'] ?? null ) );
+			}
+		} else {
+			$skip( 'post types: JetEngine inactive' );
+		}
+	} finally {
+		if ( $locked ) {
+			remove_filter( 'cptui_required_capabilities', $locked );
+		}
+		$wpdb->query( 'ROLLBACK' );
+		wp_cache_delete( 'alloptions', 'options' );
+		foreach ( array( 'cptui_post_types', 'cptui_taxonomies', Minn_Admin_CPT::OPTION, Minn_Admin_CPT::OPTION_TAX, 'rewrite_rules' ) as $o ) {
+			wp_cache_delete( $o, 'options' );
+		}
+	}
+} )();
+
 $drop_users();
 printf( "\nsecurity-v046-rc-core: %d/%d passed\n", count( array_filter( $results ) ), count( $results ) );
 exit( count( array_filter( $results ) ) === count( $results ) ? 0 : 1 );

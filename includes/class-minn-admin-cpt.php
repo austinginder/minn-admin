@@ -37,6 +37,7 @@ class Minn_Admin_CPT {
 	public static function init() {
 		add_action( 'init', array( __CLASS__, 'register_native_types' ), 5 );
 		add_action( 'init', array( __CLASS__, 'register_native_taxonomies' ), 6 );
+		add_action( 'init', array( __CLASS__, 'attach_native_taxonomies' ), 99 );
 		add_action( 'rest_api_init', array( __CLASS__, 'register_routes' ) );
 	}
 
@@ -76,9 +77,33 @@ class Minn_Admin_CPT {
 			'show_in_rest' => ! empty( $def['show_in_rest'] ),
 			'show_ui'      => true,
 			'menu_icon'    => 'dashicons-admin-post',
-			'supports'     => array_values( array_intersect( (array) ( $def['supports'] ?? array( 'title', 'editor' ) ), self::SUPPORTS ) ),
+			// 'none' (written when every support is unticked) registers none,
+			// as CPT UI reads the same marker: an empty list gets core's
+			// default title and editor.
+			'supports'     => in_array( 'none', (array) ( $def['supports'] ?? array() ), true ) ? false : array_values( array_intersect( (array) ( $def['supports'] ?? array( 'title', 'editor' ) ), self::SUPPORTS ) ),
 			'taxonomies'   => array_values( array_filter( (array) ( $def['taxonomies'] ?? array() ), 'taxonomy_exists' ) ),
 		);
+	}
+
+	/**
+	 * A Minn post type's own taxonomies, attached once every taxonomy is
+	 * registered. Core attaches a type's taxonomies only if they exist as
+	 * the type registers, and Minn's types register at init 5, before
+	 * Minn's own taxonomies (6) and the managers' (CPT UI's at 9), so a
+	 * taxonomy ticked on a Minn type was stored and never attached again.
+	 */
+	public static function attach_native_taxonomies() {
+		foreach ( (array) get_option( self::OPTION, array() ) as $slug => $def ) {
+			$slug = sanitize_key( $slug );
+			if ( ! $slug || ! is_array( $def ) || ! post_type_exists( $slug ) ) {
+				continue;
+			}
+			foreach ( (array) ( $def['taxonomies'] ?? array() ) as $tax ) {
+				if ( is_string( $tax ) && taxonomy_exists( $tax ) ) {
+					register_taxonomy_for_object_type( $tax, $slug );
+				}
+			}
+		}
 	}
 
 	/**
@@ -876,15 +901,32 @@ class Minn_Admin_CPT {
 		// stays as stored.
 		$stored = self::stored_type_lists( $source, $slug );
 		// An empty stored list registers with core's default title and
-		// editor, which is what the modal showed for it.
-		$base = $stored['supports'] ? $stored['supports'] : array( 'title', 'editor' );
-		$next = self::list_edit( $base, array_values( array_intersect( $now['supports'], self::SUPPORTS ) ), $request->has_param( 'supports' ) ? $def['supports'] : null );
+		// editor, which is what the modal showed for it; ACF and JetEngine
+		// register an empty list as no supports at all.
+		$base      = $stored['supports'] || in_array( $source, array( 'acf', 'jet' ), true ) ? $stored['supports'] : array( 'title', 'editor' );
+		$shown_sup = array_values( array_intersect( $now['supports'], self::SUPPORTS ) );
+		$sent_sup  = $request->has_param( 'supports' ) ? $def['supports'] : null;
+		// A box ticked or unticked has to change what the store registers,
+		// or the save changes nothing it showed: a support the theme or a
+		// plugin adds at runtime is not in the store to take out, and one
+		// they take off is already in it. The 'none' marker registers none.
+		$registers = in_array( 'none', $base, true ) ? array() : $base;
+		$refused   = null === $sent_sup ? null : self::supports_refusal( $slug, $registers, $shown_sup, $sent_sup );
+		if ( $refused ) {
+			return $refused;
+		}
+		$next = self::list_edit( $base, $shown_sup, $sent_sup );
 		// CPT UI's 'none' marker turns every support off when present, so it is
 		// dropped once the modal ticks something: what it ticks has to take
 		// effect. With nothing ticked it stays, since an empty list gets core's
 		// default title and editor.
 		if ( array_intersect( $next, self::SUPPORTS ) ) {
 			$next = array_values( array_diff( $next, array( 'none' ) ) );
+		} elseif ( ! $next && null !== $sent_sup && in_array( $source, array( 'cptui', 'minn' ), true ) ) {
+			// Every box unticked: written as an empty list, CPT UI and Minn
+			// register core's default title and editor again. The marker
+			// registers none (CPT UI's own "None" box; Minn reads it too).
+			$next = array( 'none' );
 		}
 		$def['supports'] = $stored['supports'];
 		if ( ! self::same_list( $next, $base ) ) {
@@ -895,34 +937,276 @@ class Minn_Admin_CPT {
 			$tax = get_taxonomy( $name );
 			return $tax && self::offered_taxonomy( $tax );
 		} ) );
-		$next = self::list_edit( $stored['taxonomies'], $shown_tax, $request->has_param( 'taxonomies' ) ? $def['taxonomies'] : null );
+		$sent_tax = $request->has_param( 'taxonomies' ) ? $def['taxonomies'] : null;
+		// A taxonomy can attach itself to the type from its own definition
+		// (CPT UI's "Attach to post type"), and JetEngine keeps a type's
+		// taxonomies there only. A box moved here is applied to every
+		// definition that holds the attachment, under the same gates as
+		// editing that definition, and refused when one of them may not be
+		// edited here or none holds it.
+		$cross = array();
+		if ( null !== $sent_tax ) {
+			$cross = self::attachment_moves( 'type', $slug, $source, $shown_tax, $sent_tax );
+			if ( is_wp_error( $cross ) ) {
+				return $cross;
+			}
+		}
 		$def['taxonomies'] = $stored['taxonomies'];
-		if ( ! self::same_list( $next, $stored['taxonomies'] ) ) {
-			$def['taxonomies'] = $next;
-			$only[]            = 'taxonomies';
+		if ( 'jet' !== $source ) {
+			$next = self::list_edit( $stored['taxonomies'], $shown_tax, $sent_tax );
+			if ( ! self::same_list( $next, $stored['taxonomies'] ) ) {
+				$def['taxonomies'] = $next;
+				$only[]            = 'taxonomies';
+			}
 		}
 		if ( ! $def['singular'] || ! $def['plural'] ) {
 			return new WP_Error( 'missing_labels', __( 'Singular and plural labels are required.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
-		if ( ! $only ) {
+		if ( ! $only && ! $cross ) {
 			return rest_ensure_response( array( 'updated' => $slug ) );
 		}
 
-		if ( 'acf' === $source ) {
-			$existing = self::acf_types()[ $slug ] ?? null;
-			$result   = self::acf_write( $slug, $def, $existing, $only );
-		} elseif ( 'cptui' === $source ) {
-			$result = self::cptui_write( $slug, $def, $only );
-		} elseif ( 'jet' === $source ) {
-			$result = self::jet_write( $slug, $def, self::jet_types()[ $slug ] ?? null, $only );
-		} else {
-			$result = self::minn_write( $slug, $def, $only );
+		if ( $only ) {
+			if ( 'acf' === $source ) {
+				$existing = self::acf_types()[ $slug ] ?? null;
+				$result   = self::acf_write( $slug, $def, $existing, $only );
+			} elseif ( 'cptui' === $source ) {
+				$result = self::cptui_write( $slug, $def, $only );
+			} elseif ( 'jet' === $source ) {
+				$result = self::jet_write( $slug, $def, self::jet_types()[ $slug ] ?? null, $only );
+			} else {
+				$result = self::minn_write( $slug, $def, $only );
+			}
+			if ( is_wp_error( $result ) ) {
+				return $result;
+			}
 		}
-		if ( is_wp_error( $result ) ) {
-			return $result;
+		foreach ( $cross as $tax => $attach ) {
+			$result = self::attach_in_tax( $tax, $slug, $attach );
+			if ( is_wp_error( $result ) ) {
+				return $result;
+			}
 		}
 		flush_rewrite_rules();
 		return rest_ensure_response( array( 'updated' => $slug ) );
+	}
+
+	/**
+	 * The 409 for a support box whose move the type's own store cannot
+	 * make, or null when every move it holds can be made.
+	 *
+	 * @param string   $slug  Post type.
+	 * @param string[] $base  The supports the store registers.
+	 * @param string[] $shown What the modal ticked.
+	 * @param string[] $sent  What the save ticked.
+	 * @return WP_Error|null
+	 */
+	private static function supports_refusal( $slug, array $base, array $shown, array $sent ) {
+		foreach ( array_diff( $shown, $sent ) as $support ) {
+			if ( ! in_array( $support, $base, true ) ) {
+				return new WP_Error(
+					'minn_support_elsewhere',
+					/* translators: 1: a post type feature, such as excerpt, 2: a post type's name. */
+					sprintf( __( '%1$s is turned on for %2$s outside the settings Minn Admin edits (by the theme, a plugin or a custom supports field), so it cannot be turned off here.', 'minn-admin' ), $support, self::type_name( $slug ) ),
+					array( 'status' => 409 )
+				);
+			}
+		}
+		foreach ( array_diff( $sent, $shown ) as $support ) {
+			if ( in_array( $support, $base, true ) ) {
+				return new WP_Error(
+					'minn_support_elsewhere',
+					/* translators: 1: a post type feature, such as excerpt, 2: a post type's name. */
+					sprintf( __( '%1$s is already on in the settings of %2$s, but the theme or a plugin turns it off, so it cannot be turned on here.', 'minn-admin' ), $support, self::type_name( $slug ) ),
+					array( 'status' => 409 )
+				);
+			}
+		}
+		return null;
+	}
+
+	/** A post type's name for an answer: its registered plural label. */
+	private static function type_name( $slug ) {
+		$pto = get_post_type_object( $slug );
+		return $pto ? Minn_Admin::plain_text( $pto->labels->name ) : $slug;
+	}
+
+	/** A taxonomy's name for an answer: its registered plural label. */
+	private static function tax_name( $slug ) {
+		$tax = get_taxonomy( $slug );
+		return $tax ? Minn_Admin::plain_text( $tax->labels->name ) : $slug;
+	}
+
+	/**
+	 * Which definitions hold an attachment between a taxonomy and a post
+	 * type: the taxonomy's own store (its post types) and the post type's
+	 * own store (its taxonomies; JetEngine's model has none), each as the
+	 * source that holds it, or ''.
+	 *
+	 * @param string $tax  Taxonomy.
+	 * @param string $type Post type.
+	 * @return array{tax: string, type: string}
+	 */
+	private static function attachment_holders( $tax, $type ) {
+		$tax_source  = self::tax_source_of( $tax );
+		$type_source = self::source_of( $type );
+		return array(
+			'tax'  => in_array( $tax_source, array( 'minn', 'acf', 'cptui', 'jet' ), true ) && in_array( $type, self::stored_tax_object_types( $tax_source, $tax ), true ) ? $tax_source : '',
+			'type' => in_array( $type_source, array( 'minn', 'acf', 'cptui' ), true ) && in_array( $tax, self::stored_type_lists( $type_source, $type )['taxonomies'], true ) ? $type_source : '',
+		);
+	}
+
+	/**
+	 * The attachment boxes a save moved, checked against where each
+	 * attachment is held, and what the OTHER definition's store has to
+	 * change for the move to take effect: other slug => attach (true) or
+	 * detach (false). The edited definition's own store moves through
+	 * list_edit() as before. A move no store can make, or one held by a
+	 * definition the caller may not edit, is a 409.
+	 *
+	 * @param string   $kind   'type' (a post type's taxonomies) or 'taxonomy' (a taxonomy's post types).
+	 * @param string   $slug   The edited definition.
+	 * @param string   $source Its source.
+	 * @param string[] $shown  What the modal ticked.
+	 * @param string[] $sent   What the save ticked.
+	 * @return array|WP_Error
+	 */
+	private static function attachment_moves( $kind, $slug, $source, array $shown, array $sent ) {
+		$cross    = array();
+		$editable = self::editable_sources();
+		$pair     = static function ( $other ) use ( $kind, $slug ) {
+			return 'type' === $kind ? array( $other, $slug ) : array( $slug, $other );
+		};
+		foreach ( array_diff( $shown, $sent ) as $other ) {
+			list( $tax, $type ) = $pair( $other );
+			$held               = self::attachment_holders( $tax, $type );
+			if ( '' === $held['tax'] && '' === $held['type'] ) {
+				return new WP_Error(
+					'minn_attached_elsewhere',
+					/* translators: 1: a taxonomy's name, 2: a post type's name. */
+					sprintf( __( '%1$s is attached to %2$s by the theme or a plugin, not in either one’s settings, so it cannot be detached here.', 'minn-admin' ), self::tax_name( $tax ), self::type_name( $type ) ),
+					array( 'status' => 409 )
+				);
+			}
+			foreach ( $held as $holder ) {
+				if ( '' !== $holder && ! in_array( $holder, $editable, true ) ) {
+					return self::attachment_locked( $tax, $type, $holder );
+				}
+			}
+			$theirs = 'type' === $kind ? $held['tax'] : $held['type'];
+			if ( '' !== $theirs ) {
+				$cross[ $other ] = false;
+			}
+		}
+		foreach ( array_diff( $sent, $shown ) as $other ) {
+			list( $tax, $type ) = $pair( $other );
+			$held               = self::attachment_holders( $tax, $type );
+			if ( '' !== $held['tax'] || '' !== $held['type'] ) {
+				return new WP_Error(
+					'minn_attached_elsewhere',
+					/* translators: 1: a taxonomy's name, 2: a post type's name. */
+					sprintf( __( '%1$s is already attached to %2$s in their settings, but the theme or a plugin detaches it, so it cannot be attached here.', 'minn-admin' ), self::tax_name( $tax ), self::type_name( $type ) ),
+					array( 'status' => 409 )
+				);
+			}
+			if ( 'type' === $kind && 'jet' === $source ) {
+				// JetEngine keeps a post type's taxonomies on the taxonomy.
+				$tax_source = self::tax_source_of( $tax );
+				if ( ! in_array( $tax_source, array( 'minn', 'acf', 'cptui', 'jet' ), true ) || ! in_array( $tax_source, $editable, true ) ) {
+					return new WP_Error(
+						'minn_attached_elsewhere',
+						/* translators: 1: a taxonomy's name, 2: a post type's name. */
+						sprintf( __( 'JetEngine keeps a post type’s taxonomies in each taxonomy’s settings, and %1$s is not one you can edit here, so it cannot be attached to %2$s.', 'minn-admin' ), self::tax_name( $tax ), self::type_name( $type ) ),
+						array( 'status' => 409 )
+					);
+				}
+				$cross[ $other ] = true;
+			}
+		}
+		return $cross;
+	}
+
+	/** The 409 for an attachment held by a definition this caller may not edit here. */
+	private static function attachment_locked( $tax, $type, $holder ) {
+		$names = array(
+			'cptui' => 'Custom Post Type UI',
+			'acf'   => 'ACF',
+			'jet'   => 'JetEngine',
+		);
+		return new WP_Error(
+			'minn_attached_elsewhere',
+			/* translators: 1: a taxonomy's name, 2: a post type's name, 3: a plugin's name, such as Custom Post Type UI. */
+			sprintf( __( '%1$s is attached to %2$s in %3$s, which this site keeps to people with that plugin’s own access.', 'minn-admin' ), self::tax_name( $tax ), self::type_name( $type ), $names[ $holder ] ?? $holder ),
+			array( 'status' => 409 )
+		);
+	}
+
+	/**
+	 * Attach a post type to a taxonomy, or detach it, in the taxonomy's own
+	 * store, writing that one setting through the taxonomy's own writer.
+	 *
+	 * @param string $tax    Taxonomy.
+	 * @param string $type   Post type.
+	 * @param bool   $attach Attach (true) or detach (false).
+	 * @return true|WP_Error
+	 */
+	private static function attach_in_tax( $tax, $type, $attach ) {
+		$source = self::tax_source_of( $tax );
+		$stored = self::stored_tax_object_types( $source, $tax );
+		$next   = $attach ? array_values( array_unique( array_merge( $stored, array( $type ) ) ) ) : array_values( array_diff( $stored, array( $type ) ) );
+		if ( self::same_list( $next, $stored ) ) {
+			return true;
+		}
+		$text = self::stored_tax_text( $source, $tax );
+		$def  = self::tax_def( get_taxonomy( $tax ) );
+		$def  = array_merge(
+			$def,
+			array(
+				'plural'       => null !== $text['plural'] && '' !== $text['plural'] ? $text['plural'] : sanitize_text_field( $def['plural'] ),
+				'singular'     => null !== $text['singular'] && '' !== $text['singular'] ? $text['singular'] : sanitize_text_field( $def['singular'] ),
+				'object_types' => $next,
+			)
+		);
+		$only = array( 'object_types' );
+		if ( 'acf' === $source ) {
+			return self::acf_tax_write( $tax, $def, self::acf_taxonomies()[ $tax ] ?? null, $only );
+		}
+		if ( 'cptui' === $source ) {
+			return self::cptui_tax_write( $tax, $def, $only );
+		}
+		if ( 'jet' === $source ) {
+			return self::jet_tax_write( $tax, $def, self::jet_taxonomies()[ $tax ] ?? null, $only );
+		}
+		return self::minn_tax_write( $tax, $def, $only );
+	}
+
+	/**
+	 * Attach a taxonomy to a post type, or detach it, in the post type's
+	 * own store (its taxonomies), writing that one setting through the
+	 * post type's own writer.
+	 *
+	 * @param string $type   Post type.
+	 * @param string $tax    Taxonomy.
+	 * @param bool   $attach Attach (true) or detach (false).
+	 * @return true|WP_Error
+	 */
+	private static function attach_in_type( $type, $tax, $attach ) {
+		$source = self::source_of( $type );
+		$stored = self::stored_type_lists( $source, $type )['taxonomies'];
+		$next   = $attach ? array_values( array_unique( array_merge( $stored, array( $tax ) ) ) ) : array_values( array_diff( $stored, array( $tax ) ) );
+		if ( self::same_list( $next, $stored ) ) {
+			return true;
+		}
+		$def               = self::type_def( get_post_type_object( $type ) );
+		$def['taxonomies'] = $next;
+		$only              = array( 'taxonomies' );
+		if ( 'acf' === $source ) {
+			return self::acf_write( $type, $def, self::acf_types()[ $type ] ?? null, $only );
+		}
+		if ( 'cptui' === $source ) {
+			return self::cptui_write( $type, $def, $only );
+		}
+		return self::minn_write( $type, $def, $only );
 	}
 
 	public static function delete_type( WP_REST_Request $request ) {
@@ -1119,7 +1403,18 @@ class Minn_Admin_CPT {
 			$pto = get_post_type_object( $type );
 			return $pto && self::offered_type( $pto );
 		} ) );
-		$next                = self::list_edit( $stored, $shown, $request->has_param( 'object_types' ) ? $def['object_types'] : null );
+		$sent  = $request->has_param( 'object_types' ) ? $def['object_types'] : null;
+		// A post type that names the taxonomy in its own definition is held
+		// there: a box moved here is applied to every definition that holds
+		// it, or refused (see update_type()).
+		$cross = array();
+		if ( null !== $sent ) {
+			$cross = self::attachment_moves( 'taxonomy', $slug, $source, $shown, $sent );
+			if ( is_wp_error( $cross ) ) {
+				return $cross;
+			}
+		}
+		$next                = self::list_edit( $stored, $shown, $sent );
 		$def['object_types'] = $stored;
 		if ( ! self::same_list( $next, $stored ) ) {
 			$def['object_types'] = $next;
@@ -1128,22 +1423,30 @@ class Minn_Admin_CPT {
 		if ( ! $def['singular'] || ! $def['plural'] ) {
 			return new WP_Error( 'missing_labels', __( 'Singular and plural labels are required.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
-		if ( ! $only ) {
+		if ( ! $only && ! $cross ) {
 			return rest_ensure_response( array( 'updated' => $slug ) );
 		}
 
-		if ( 'acf' === $source ) {
-			$existing = self::acf_taxonomies()[ $slug ] ?? null;
-			$result   = self::acf_tax_write( $slug, $def, $existing, $only );
-		} elseif ( 'cptui' === $source ) {
-			$result = self::cptui_tax_write( $slug, $def, $only );
-		} elseif ( 'jet' === $source ) {
-			$result = self::jet_tax_write( $slug, $def, self::jet_taxonomies()[ $slug ] ?? null, $only );
-		} else {
-			$result = self::minn_tax_write( $slug, $def, $only );
+		if ( $only ) {
+			if ( 'acf' === $source ) {
+				$existing = self::acf_taxonomies()[ $slug ] ?? null;
+				$result   = self::acf_tax_write( $slug, $def, $existing, $only );
+			} elseif ( 'cptui' === $source ) {
+				$result = self::cptui_tax_write( $slug, $def, $only );
+			} elseif ( 'jet' === $source ) {
+				$result = self::jet_tax_write( $slug, $def, self::jet_taxonomies()[ $slug ] ?? null, $only );
+			} else {
+				$result = self::minn_tax_write( $slug, $def, $only );
+			}
+			if ( is_wp_error( $result ) ) {
+				return $result;
+			}
 		}
-		if ( is_wp_error( $result ) ) {
-			return $result;
+		foreach ( $cross as $type => $attach ) {
+			$result = self::attach_in_type( $type, $slug, $attach );
+			if ( is_wp_error( $result ) ) {
+				return $result;
+			}
 		}
 		flush_rewrite_rules();
 		return rest_ensure_response( array( 'updated' => $slug ) );
@@ -1427,6 +1730,13 @@ class Minn_Admin_CPT {
 				'admin_filters' => (array) ( $edit['admin_filters'] ?? array() ),
 			)
 		);
+		// JetEngine keeps a singular label only when one was typed (its
+		// editor never fills one in, and core derives it from the plural):
+		// one this save did not edit and the row does not hold stays out,
+		// never the registered, perhaps translated, label.
+		if ( $existing && null !== $only && ! in_array( 'singular', $only, true ) && '' === (string) ( $edit['labels']['singular_name'] ?? '' ) ) {
+			unset( $request['singular_name'] );
+		}
 		// Screen and menu are not on the dialog: set for a new type only, so
 		// an edit keeps the owner's stored choice (advanced_settings above).
 		if ( ! $existing ) {
@@ -1500,6 +1810,10 @@ class Minn_Admin_CPT {
 				'meta_fields' => (array) ( $edit['meta_fields'] ?? array() ),
 			)
 		);
+		// A singular label JetEngine does not hold stays out (see jet_write()).
+		if ( $existing && null !== $only && ! in_array( 'singular', $only, true ) && '' === (string) ( $edit['labels']['singular_name'] ?? '' ) ) {
+			unset( $request['singular_name'] );
+		}
 		if ( ! $existing ) {
 			$request += array( 'rewrite' => 'true', 'query_var' => 'true', 'show_admin_column' => 'true', 'show_ui' => 'true' );
 		}
