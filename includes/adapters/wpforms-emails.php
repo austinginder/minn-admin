@@ -163,6 +163,7 @@ add_action( 'rest_api_init', function () {
 				return $data;
 			}
 			$body = (array) $request->get_json_params();
+			$was  = (array) ( $data['settings'] ?? array() );
 			$s    = &$data['settings'];
 			$text = function ( $a, $k ) {
 				return isset( $a[ $k ] ) && is_scalar( $a[ $k ] ) ? (string) $a[ $k ] : '';
@@ -229,6 +230,12 @@ add_action( 'rest_api_init', function () {
 				}
 			}
 			unset( $s );
+			// The form is a post, which has no restore: a value edited with a
+			// credential copy still masked in it would be stored where it was.
+			$masked = Minn_Admin_Egress::refuse_masks( array( 'notifications' => $data['settings']['notifications'] ?? array(), 'confirmations' => $data['settings']['confirmations'] ?? array() ), array( 'notifications' => $was['notifications'] ?? array(), 'confirmations' => $was['confirmations'] ?? array() ) );
+			if ( $masked ) {
+				return $masked;
+			}
 			// Not a builder save (see the file comment). Their update unslashes
 			// its input unless their form-data slashing is on.
 			$payload = function_exists( 'wpforms_is_form_data_slashing_enabled' ) && wpforms_is_form_data_slashing_enabled() ? $data : wp_slash( $data );

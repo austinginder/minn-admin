@@ -296,6 +296,12 @@ add_action( 'rest_api_init', function () {
 						$n[ $k ] = $text( $k );
 					}
 				}
+				// Form meta has no restore: a value edited with a credential
+				// copy still masked in it would be stored where it was.
+				$masked = Minn_Admin_Egress::refuse_masks( $n, $stored[ $id ] );
+				if ( $masked ) {
+					return $masked;
+				}
 				try {
 					$service->store( array(
 						'form_id'  => (int) $form->id,
@@ -352,6 +358,10 @@ add_action( 'rest_api_init', function () {
 				}
 				if ( ( $sent( 'redirectTo' ) || $sent( 'customPage' ) ) && 'customPage' === $c['redirectTo'] && ! empty( $c['customPage'] ) && ( ! get_post( (int) $c['customPage'] ) || ! current_user_can( 'read_post', (int) $c['customPage'] ) ) ) {
 					return new WP_Error( 'minn_ffe_invalid', __( 'Choose a published page.', 'minn-admin' ), array( 'status' => 400, 'field' => 'confirmation.customPage' ) );
+				}
+				$masked = Minn_Admin_Egress::refuse_masks( $c, (array) ( $settings['confirmation'] ?? array() ) );
+				if ( $masked ) {
+					return $masked;
 				}
 				$settings['confirmation'] = $c;
 				try {

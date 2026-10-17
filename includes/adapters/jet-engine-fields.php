@@ -700,7 +700,8 @@ function minn_admin_jet_compare_key( $f, $v ) {
  * a gallery reads only its live ids, so the rest would be dropped. Compared
  * in the read's own shape, all of those count as untouched and are skipped,
  * which is what makes an empty read of a stored picture a refusal rather
- * than a clear.
+ * than a clear. A value sent back as a response served it (a credential
+ * copy masked) counts as untouched too.
  *
  * @param array $f         Mapped field.
  * @param mixed $submitted Submitted panel value.
@@ -708,6 +709,11 @@ function minn_admin_jet_compare_key( $f, $v ) {
  * @return bool
  */
 function minn_admin_jet_same_value( $f, $submitted, $current ) {
+	// The read as a minn-admin/v1 response served it: a credential copy in
+	// it masked, which no compare key matches.
+	if ( Minn_Admin_Egress::served_as( $submitted, $current ) ) {
+		return true;
+	}
 	$a = minn_admin_jet_compare_key( $f, $submitted );
 	$b = minn_admin_jet_compare_key( $f, $current );
 	if ( null === $a || null === $b ) {

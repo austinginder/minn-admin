@@ -43,10 +43,11 @@ function minn_admin_srm_cap() {
  * srm_create_redirect upserts by source path, which would fork a new post if
  * the user renames the source — so edit-by-id writes meta directly, same as
  * SRM's own save_post handler. The dialog sends every field, an untouched
- * one as the list serves it: that one, or one the request leaves out
- * (null), keeps its stored bytes and is not written. Only a changed field
- * goes through SRM's own sanitizer, and a changed status SRM does not know
- * is refused, never turned into 301.
+ * one as the list serves it (a credential copy masked): that one, or one
+ * the request leaves out (null), keeps its stored bytes and is not written.
+ * Only a changed field goes through SRM's own sanitizer, a changed status
+ * SRM does not know is refused, never turned into 301, and a changed value
+ * still carrying a mask is refused rather than stored.
  *
  * @param int             $id          redirect_rule post ID.
  * @param string|null     $from        Source path, or null to keep it.
@@ -59,9 +60,23 @@ function minn_admin_srm_update_redirect( $id, $from, $to, $status_code = null ) 
 	if ( ! $stored ) {
 		return new WP_Error( 'not_found', __( 'Redirect not found.', 'minn-admin' ), array( 'status' => 404 ) );
 	}
+	// As served counts as stored: a credential copy in a target is masked.
 	$changed = function ( $sent, $key ) use ( $stored ) {
-		return null !== $sent && (string) $sent !== (string) $stored[ $key ];
+		return null !== $sent && ! Minn_Admin::unchanged( $sent, $stored[ $key ] );
 	};
+	// Post meta has no restore: a mask left in an edited value would be
+	// stored where the credential was. Asked of the values as sent, before
+	// any cleaning.
+	$edited = array();
+	foreach ( array( 'from' => $from, 'to' => $to ) as $key => $sent ) {
+		if ( $changed( $sent, $key ) ) {
+			$edited[ $key ] = (string) $sent;
+		}
+	}
+	$masked = Minn_Admin_Egress::refuse_masks( $edited, $stored );
+	if ( $masked ) {
+		return $masked;
+	}
 	$write = array();
 	if ( $changed( $from, 'from' ) ) {
 		$allow_regex = (bool) get_post_meta( $stored['id'], '_redirect_rule_from_regex', true );
@@ -221,6 +236,10 @@ minn_admin_resource( 'srm/redirects', function () {
 					if ( '' !== (string) $from && Minn_Admin_Kernel_SQL::count( array( 'core' => 'postmeta' ), array( 'meta_key' => '_redirect_rule_from', 'meta_value' => $from ) ) ) {
 						return new WP_Error( 'srm_exists', __( 'A redirect from that address already exists. Edit it instead.', 'minn-admin' ), array( 'status' => 400 ) );
 					}
+				}
+				$masked = Minn_Admin_Egress::refuse_masks( array( 'from' => (string) $request['from'], 'to' => (string) $request['to'] ), array() );
+				if ( $masked ) {
+					return $masked;
 				}
 				$id = srm_create_redirect( (string) $request['from'], (string) $request['to'], (int) ( $request['status_code'] ?: 301 ) );
 				return is_wp_error( $id ) ? new WP_Error( 'create_failed', $id->get_error_message(), array( 'status' => 400 ) ) : (int) $id;

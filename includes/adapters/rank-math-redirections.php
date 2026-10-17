@@ -348,11 +348,21 @@ function minn_admin_rm_edit_redirect( $id, WP_REST_Request $request ) {
 	}
 	$needs_target = ! in_array( $code, array( '410', '451' ), true );
 	$url_to       = $request->has_param( 'url_to' ) ? (string) $request->get_param( 'url_to' ) : (string) $row['url_to'];
-	// A target sent back as stored keeps its bytes (their model would make a
-	// relative '/new' absolute).
-	$same_target  = (string) $row['url_to'] === $url_to;
+	// A target sent back as stored, or as served (a credential copy masked),
+	// keeps its stored bytes (their model would make a relative '/new'
+	// absolute).
+	$same_target = Minn_Admin::unchanged( $url_to, (string) $row['url_to'] );
+	if ( $same_target ) {
+		$url_to = (string) $row['url_to'];
+	}
 	if ( $needs_target && '' === trim( $url_to ) ) {
 		return new WP_Error( 'minn_rm_target', __( 'Add the address to redirect to.', 'minn-admin' ), array( 'status' => 400 ) );
+	}
+	// Their table has no restore: an edited target still carrying a mask
+	// would be stored where the credential was.
+	$masked = $same_target ? null : Minn_Admin_Egress::refuse_masks( array( 'url_to' => $url_to ), array( 'url_to' => (string) $row['url_to'] ) );
+	if ( $masked ) {
+		return $masked;
 	}
 	// Their model normalizes the destination (relative → home URL) and runs
 	// the loop check; its re-sanitized sources are used for nothing else.
@@ -437,6 +447,10 @@ minn_admin_resource( 'rankmath/redirects', function () use ( $minn_rm_item ) {
 				$source = trim( (string) $request->get_param( 'source' ) );
 				if ( '' === $source ) {
 					return new WP_Error( 'minn_rm_source', __( 'Add the source address to redirect.', 'minn-admin' ), array( 'status' => 400 ) );
+				}
+				$masked = Minn_Admin_Egress::refuse_masks( array( 'source' => $source, 'url_to' => (string) $request->get_param( 'url_to' ) ), array() );
+				if ( $masked ) {
+					return $masked;
 				}
 				return minn_admin_rm_save_redirect( array(
 					'sources'     => array( array( 'pattern' => $source, 'comparison' => 'exact' ) ),

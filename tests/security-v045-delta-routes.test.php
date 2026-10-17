@@ -96,7 +96,7 @@ wp_set_current_user( $admin );
 // Gravity Forms' own created_by match makes the colon optional, so
 // {created_by_two_factor_totp_key} read the submitter's meta in both
 // previews, and the test send left from, fromName and replyTo as typed.
-if ( ! class_exists( 'GFAPI' ) || ! function_exists( 'minn_admin_gfn_neutral_tags' ) ) {
+if ( ! class_exists( 'GFAPI' ) || ! function_exists( 'minn_admin_gfn_guarded' ) ) {
 	$skip( 'OS-6/OS-7 Gravity Forms inactive' );
 } else {
 	foreach ( GFAPI::get_forms( null ) as $gf_old ) {

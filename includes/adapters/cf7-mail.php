@@ -236,7 +236,7 @@ function minn_admin_cf7_mail_in( $input, $current ) {
  *
  * @param mixed $input   The page's keys for this property.
  * @param mixed $current The stored property.
- * @return array|null
+ * @return array|WP_Error|null The property, a refusal, or null.
  */
 function minn_admin_cf7_mail_merge( $input, $current ) {
 	if ( ! is_array( $input ) ) {
@@ -246,13 +246,23 @@ function minn_admin_cf7_mail_merge( $input, $current ) {
 	$stored  = minn_admin_cf7_mail_out( $current );
 	$merged  = minn_admin_cf7_mail_in( $input, $current );
 	$changed = array();
+	$edited  = array();
 	foreach ( minn_admin_cf7_mail_keys() as $k ) {
-		if ( $merged[ $k ] !== $stored[ $k ] ) {
-			$changed[] = $k;
+		// A key sent back as the page loaded it, a credential copy masked
+		// (every response masks one), is unchanged too.
+		if ( $merged[ $k ] !== $stored[ $k ] && ( ! is_string( $merged[ $k ] ) || ! Minn_Admin_Egress::served_as( $merged[ $k ], $stored[ $k ] ) ) ) {
+			$changed[]    = $k;
+			$edited[ $k ] = $merged[ $k ];
 		}
 	}
 	if ( ! $changed ) {
 		return null;
+	}
+	// The form keeps its mail in post meta, which has no restore: an edited
+	// body still carrying a mask would be stored where the credential was.
+	$masked = Minn_Admin_Egress::refuse_masks( $edited, $stored );
+	if ( $masked ) {
+		return $masked;
 	}
 	$clean = wpcf7_sanitize_mail( $merged );
 	$out   = $current + $clean;
@@ -300,11 +310,17 @@ add_action( 'rest_api_init', function () {
 			// a property the request does not carry is left as stored, and
 			// within one only what changed is cleaned (minn_admin_cf7_mail_merge()).
 			$mail = minn_admin_cf7_mail_merge( $body['mail'] ?? null, $form->prop( 'mail' ) );
+			if ( is_wp_error( $mail ) ) {
+				return $mail;
+			}
 			if ( null !== $mail ) {
 				$mail['active'] = true;
 				$props['mail']  = $mail;
 			}
 			$mail_2 = minn_admin_cf7_mail_merge( $body['mail_2'] ?? null, $form->prop( 'mail_2' ) );
+			if ( is_wp_error( $mail_2 ) ) {
+				return $mail_2;
+			}
 			if ( null !== $mail_2 ) {
 				$props['mail_2'] = $mail_2;
 			}
@@ -317,7 +333,12 @@ add_action( 'rest_api_init', function () {
 					}
 					// The page shows the default for a message never stored.
 					$sent = (string) $body['messages'][ $key ];
-					if ( $sent !== (string) ( $stored[ $key ] ?? $m['default'] ) ) {
+					$was  = (string) ( $stored[ $key ] ?? $m['default'] );
+					if ( $sent !== $was && ! Minn_Admin_Egress::served_as( $sent, $was ) ) {
+						$masked = Minn_Admin_Egress::refuse_masks( array( $key => $sent ), array( $key => $was ) );
+						if ( $masked ) {
+							return $masked;
+						}
 						$messages[ $key ] = trim( $sent ); // wpcf7_sanitize_messages()
 					}
 				}

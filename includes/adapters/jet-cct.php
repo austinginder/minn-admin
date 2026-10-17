@@ -209,7 +209,8 @@ function minn_admin_jet_cct_item( $factory, $row ) {
  * @param array      $values  The request's JSON body.
  * @param array|null $row     The stored row on an edit: the form posts every
  *                            field it shows, and one whose value the read
- *                            already shows is skipped (minn_admin_jet_same_value).
+ *                            already shows, or showed with a credential copy
+ *                            masked, is skipped (minn_admin_jet_same_value).
  * @return array
  */
 function minn_admin_jet_cct_itemarr( $factory, $values, $row = null ) {
@@ -405,6 +406,10 @@ add_action( 'rest_api_init', function () {
 			if ( ! $itemarr ) {
 				return new WP_Error( 'empty', __( 'Fill in at least one field.', 'minn-admin' ), array( 'status' => 400 ) );
 			}
+			$masked = Minn_Admin_Egress::refuse_masks( $itemarr, array() );
+			if ( $masked ) {
+				return $masked;
+			}
 			$itemarr['cct_status'] = 'publish';
 			try {
 				$id = $factory->get_item_handler()->update_item( $itemarr ); // no _ID = insert
@@ -454,6 +459,16 @@ add_action( 'rest_api_init', function () {
 			$itemarr = minn_admin_jet_cct_itemarr( $factory, $request->get_json_params(), $row );
 			if ( ! $itemarr ) {
 				return rest_ensure_response( minn_admin_jet_cct_item( $factory, minn_admin_jet_cct_row( $slug, $id ) ) );
+			}
+			// Their table has no restore: an edited value still carrying a
+			// mask would be stored where the credential was.
+			$was = array();
+			foreach ( array_keys( $itemarr ) as $name ) {
+				$was[ $name ] = isset( $row[ $name ] ) ? minn_admin_jet_cct_decode( $row[ $name ] ) : '';
+			}
+			$masked = Minn_Admin_Egress::refuse_masks( $itemarr, $was );
+			if ( $masked ) {
+				return $masked;
 			}
 			$sent           = $itemarr;
 			$itemarr['_ID'] = $id;

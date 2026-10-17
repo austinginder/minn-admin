@@ -690,13 +690,30 @@ add_action( 'rest_api_init', function () {
 				}
 				$field = $found['field'];
 				// The dialog sends every field, an untouched one as the row
-				// serves it; that one stays as stored. Parsed back from its
-				// text, a choice label holding " : " lost its tail.
-				$served = minn_admin_acf_schema_field_item( $field, $found['group'] + array( 'minn_source' => 'db' ) );
-				if ( null !== $request['label'] && (string) $request['label'] !== $served['label'] ) {
+				// serves it (a credential copy masked); that one stays as
+				// stored. Parsed back from its text, a choice label holding
+				// " : " lost its tail.
+				$served  = minn_admin_acf_schema_field_item( $field, $found['group'] + array( 'minn_source' => 'db' ) );
+				$changed = function ( $key ) use ( $request, $served ) {
+					return null !== $request[ $key ] && ! Minn_Admin::unchanged( is_scalar( $request[ $key ] ) ? (string) $request[ $key ] : $request[ $key ], $served[ $key ] );
+				};
+				// A field group lives in posts, which have no restore: an
+				// edited text still carrying a mask would be stored where the
+				// credential was.
+				$edited = array();
+				foreach ( array( 'label', 'default_value', 'choices' ) as $key ) {
+					if ( $changed( $key ) ) {
+						$edited[ $key ] = $request[ $key ];
+					}
+				}
+				$masked = Minn_Admin_Egress::refuse_masks( $edited, $served );
+				if ( $masked ) {
+					return $masked;
+				}
+				if ( $changed( 'label' ) ) {
 					$field['label'] = trim( (string) $request['label'] ) ?: $field['label'];
 				}
-				if ( null !== $request['default_value'] && (string) $request['default_value'] !== $served['default_value'] ) {
+				if ( $changed( 'default_value' ) ) {
 					$field['default_value'] = (string) $request['default_value'];
 				}
 				if ( null !== $request['required'] && (string) $request['required'] !== $served['required'] ) {
@@ -704,7 +721,7 @@ add_action( 'rest_api_init', function () {
 				}
 				// Choices only mean something on choice fields; an edit form
 				// shared across types must not bolt them onto a text field.
-				if ( null !== $request['choices'] && (string) $request['choices'] !== $served['choices'] && in_array( $field['type'], array( 'select', 'radio' ), true ) ) {
+				if ( $changed( 'choices' ) && in_array( $field['type'], array( 'select', 'radio' ), true ) ) {
 					$choices = minn_admin_acf_schema_parse_choices( (string) $request['choices'] );
 					if ( ! $choices ) {
 						return new WP_Error( 'invalid', __( 'Select and radio fields need at least one choice.', 'minn-admin' ), array( 'status' => 400 ) );
@@ -1046,13 +1063,54 @@ function minn_admin_acf_builder_plan_row( $row, $stored, &$names, $order, $sub =
 	// New choice fields must arrive with choices; an existing row may omit
 	// the key entirely, or send it back as served (both keep what's stored,
 	// see minn_admin_acf_builder_overlay()).
-	$as_served = $cur && array_key_exists( 'choices', $row ) && is_scalar( $row['choices'] ) && (string) $row['choices'] === minn_admin_acf_schema_choices_text( $cur['choices'] ?? null );
+	$as_served = $cur && array_key_exists( 'choices', $row ) && is_scalar( $row['choices'] ) && Minn_Admin::unchanged( (string) $row['choices'], minn_admin_acf_schema_choices_text( $cur['choices'] ?? null ) );
 	if ( in_array( $type, array( 'select', 'radio' ), true ) && ( ! $key || array_key_exists( 'choices', $row ) ) && ! $as_served ) {
 		if ( ! minn_admin_acf_schema_parse_choices( (string) ( $row['choices'] ?? '' ) ) ) {
 			return new WP_Error( 'invalid', __( 'Select and radio fields need at least one choice.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 	}
 	return array( 'row' => $row, 'key' => $key, 'cur' => $cur, 'type' => $type, 'name' => $name, 'order' => $order );
+}
+
+/**
+ * Whether a builder row sends a setting back as the payload served it: as
+ * stored, or with a credential copy masked (a response masks every copy).
+ *
+ * @param string $setting The setting.
+ * @param mixed  $v       The value sent.
+ * @param array  $served  minn_admin_acf_builder_field() of the stored field.
+ * @return bool
+ */
+function minn_admin_acf_builder_same( $setting, $v, $served ) {
+	if ( ! array_key_exists( $setting, $served ) ) {
+		return false;
+	}
+	if ( 'required' === $setting ) {
+		return ( ! empty( $v ) && 'false' !== $v ) === (bool) $served['required'];
+	}
+	return ( null === $v || is_scalar( $v ) ) && Minn_Admin::unchanged( (string) $v, (string) $served[ $setting ] );
+}
+
+/**
+ * A builder row's settings that would store a mask: a field lives in posts,
+ * which have no restore, so a setting edited with a credential copy still
+ * masked in it would be stored where the credential was. Asked of every row
+ * before anything is written.
+ *
+ * @param array $plan     The row's plan (minn_admin_acf_builder_plan_row()).
+ * @param array $settings Setting keys the field's type declares.
+ * @return WP_Error|null
+ */
+function minn_admin_acf_builder_masked( $plan, $settings ) {
+	$row    = (array) $plan['row'];
+	$served = $plan['cur'] ? minn_admin_acf_builder_field( $plan['cur'] ) : array();
+	$edited = array();
+	foreach ( $settings as $setting ) {
+		if ( array_key_exists( $setting, $row ) && ! minn_admin_acf_builder_same( $setting, $row[ $setting ], $served ) ) {
+			$edited[ $setting ] = $row[ $setting ];
+		}
+	}
+	return Minn_Admin_Egress::refuse_masks( $edited, $served );
 }
 
 /**
@@ -1075,13 +1133,8 @@ function minn_admin_acf_builder_overlay( $field, $row, $settings ) {
 			continue;
 		}
 		$v = $row[ $setting ];
-		if ( $served && array_key_exists( $setting, $served ) ) {
-			$same = 'required' === $setting
-				? ( ! empty( $v ) && 'false' !== $v ) === (bool) $served['required']
-				: ( null === $v || is_scalar( $v ) ) && (string) $v === (string) $served[ $setting ];
-			if ( $same ) {
-				continue;
-			}
+		if ( $served && minn_admin_acf_builder_same( $setting, $v, $served ) ) {
+			continue;
 		}
 		if ( 'required' === $setting ) {
 			$field['required'] = ! empty( $v ) && 'false' !== $v ? 1 : 0;
@@ -1133,6 +1186,10 @@ function minn_admin_acf_builder_save( $group, $body ) {
 		if ( is_wp_error( $plan ) ) {
 			return $plan;
 		}
+		$masked = minn_admin_acf_builder_masked( $plan, isset( $types[ $plan['type'] ] ) ? $types[ $plan['type'] ] : array( 'label' ) );
+		if ( $masked ) {
+			return $masked;
+		}
 		// Repeaters carry their own one-level list; validate it now so a
 		// bad sub refuses before anything is written. A row without the
 		// sub_fields key keeps its stored children untouched.
@@ -1150,6 +1207,10 @@ function minn_admin_acf_builder_save( $group, $body ) {
 				$sp = minn_admin_acf_builder_plan_row( $srow, $cur_subs, $sub_names, $j, true );
 				if ( is_wp_error( $sp ) ) {
 					return $sp;
+				}
+				$masked = minn_admin_acf_builder_masked( $sp, isset( $types[ $sp['type'] ] ) && 'repeater' !== $sp['type'] ? $types[ $sp['type'] ] : array( 'label' ) );
+				if ( $masked ) {
+					return $masked;
 				}
 				$sub_plans[] = $sp;
 			}

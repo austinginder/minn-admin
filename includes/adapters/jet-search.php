@@ -137,6 +137,10 @@ minn_admin_resource( 'jet-search/suggestions', function () {
 				if ( '' === $name ) {
 					return new WP_Error( 'missing_name', __( 'A suggestion needs some text.', 'minn-admin' ), array( 'status' => 400 ) );
 				}
+				$masked = Minn_Admin_Egress::refuse_masks( array( 'name' => $name ), array() );
+				if ( $masked ) {
+					return $masked;
+				}
 				if ( minn_admin_jet_search_taken( $name ) ) {
 					/* translators: %s: the suggestion text. */
 					return new WP_Error( 'exists', sprintf( __( 'The suggestion "%s" already exists.', 'minn-admin' ), $name ), array( 'status' => 409 ) );
@@ -164,7 +168,14 @@ minn_admin_resource( 'jet-search/suggestions', function () {
 					// cleaning it would rewrite '50%DEAL' or 'Shoes <50' on an
 					// edit of the weight.
 					$sent = $request->get_param( 'name' );
-					if ( null !== $sent && (string) $sent !== (string) $row['name'] ) {
+					// As served counts as stored: a credential copy masked. Their
+					// table has no restore, so an edited name still carrying a
+					// mask is refused.
+					if ( null !== $sent && ! Minn_Admin::unchanged( is_scalar( $sent ) ? (string) $sent : $sent, (string) $row['name'] ) ) {
+						$masked = Minn_Admin_Egress::refuse_masks( array( 'name' => $sent ), array( 'name' => (string) $row['name'] ) );
+						if ( $masked ) {
+							return $masked;
+						}
 						$name = sanitize_text_field( (string) $sent );
 						if ( '' === $name ) {
 							return new WP_Error( 'missing_name', __( 'A suggestion needs some text.', 'minn-admin' ), array( 'status' => 400 ) );

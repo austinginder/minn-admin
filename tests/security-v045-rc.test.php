@@ -172,7 +172,7 @@ if ( is_multisite() ) {
 // sending page's meta and {embed_post:<field>} any field of that page. The
 // notification preview and test left only the first as a placeholder, and
 // missed a key with a space; the confirmation preview resolved all three.
-if ( ! class_exists( 'GFAPI' ) || ! function_exists( 'minn_admin_gfn_neutral_tags' ) && ! function_exists( 'minn_admin_gfn_neutral_created_by' ) ) {
+if ( ! class_exists( 'GFAPI' ) || ! function_exists( 'minn_admin_gfn_guarded' ) && ! function_exists( 'minn_admin_gfn_neutral_created_by' ) ) {
 	$skip( '04-01/04-02 Gravity Forms inactive' );
 } else {
 	$gf_form = null;

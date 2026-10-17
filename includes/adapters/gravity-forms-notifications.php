@@ -220,7 +220,8 @@ function minn_admin_gfn_routing_out( $routing ) {
  * @param mixed  $read What the page's read serves for the stored list.
  */
 function minn_admin_gfn_as_read( $body, $key, $read ) {
-	return array_key_exists( $key, $body ) && wp_json_encode( $body[ $key ] ) === wp_json_encode( $read );
+	// Or as the response served it, a credential copy masked.
+	return array_key_exists( $key, $body ) && ( wp_json_encode( $body[ $key ] ) === wp_json_encode( $read ) || Minn_Admin_Egress::served_as( $body[ $key ], $read ) );
 }
 
 /** The page's whole read: the notification, its form, and every list it picks from. */
@@ -331,7 +332,8 @@ function minn_admin_gfn_build( $form, $stored, $body, $is_new ) {
 	// '50AL Store'). Gravity Forms' own screen never cleans one either; it
 	// refuses the save.
 	$kept = function ( $key, $stored_key = null ) use ( $val, $stored, $is_new ) {
-		return ! $is_new && $val( $key ) === (string) rgar( $stored, null === $stored_key ? $key : $stored_key );
+		$was = (string) rgar( $stored, null === $stored_key ? $key : $stored_key );
+		return ! $is_new && ( $val( $key ) === $was || Minn_Admin_Egress::served_as( $val( $key ), $was ) );
 	};
 	$name = $kept( 'name' ) ? (string) rgar( $stored, 'name' ) : trim( sanitize_text_field( $val( 'name' ) ) );
 	if ( '' === trim( $name ) ) {
@@ -425,7 +427,13 @@ function minn_admin_gfn_build( $form, $stored, $body, $is_new ) {
 
 	// Subject: their text field refuses what sanitizing would change; an
 	// unchanged subject is kept exactly as stored.
-	$subject = $val( 'subject' );
+	// Sent back as the page read it (a credential copy masked) is unchanged
+	// too: the stored text stays.
+	$as_stored = function ( $key ) use ( $val, $stored ) {
+		$was = (string) rgar( $stored, $key );
+		return Minn_Admin_Egress::served_as( $val( $key ), $was ) ? $was : $val( $key );
+	};
+	$subject = $as_stored( 'subject' );
 	if ( $subject !== (string) rgar( $stored, 'subject' ) && sanitize_text_field( $subject ) !== $subject ) {
 		return minn_admin_gfn_invalid( 'subject', __( 'The subject has characters Gravity Forms does not allow.', 'minn-admin' ) );
 	}
@@ -434,7 +442,7 @@ function minn_admin_gfn_build( $form, $stored, $body, $is_new ) {
 	}
 	// Message: email-body HTML, filtered the way Gravity Forms filters it;
 	// an unchanged message is kept exactly as stored.
-	$message = $val( 'message' );
+	$message = $as_stored( 'message' );
 	if ( '' === trim( $message ) ) {
 		return minn_admin_gfn_invalid( 'message', __( 'Write the message.', 'minn-admin' ) );
 	}
@@ -606,36 +614,6 @@ function minn_admin_gfn_prepare( $text, $form, $entry ) {
 		}
 		$v = 'roles' === $m[1] ? implode( ', ', (array) $user->roles ) : ( 'id' === $m[1] ? $user->ID : $user->get( $m[1] ) );
 		return str_replace( array( '{', '}' ), array( '&#123;', '&#125;' ), (string) $v );
-	}, $text );
-}
-
-/**
- * Merge tags that read past the entry: {created_by:<key>} reads any meta of
- * the account that submitted it (Gravity Forms answers it through
- * WP_User::get()), {custom_field:<key>} any meta of the page it was sent
- * from, protected keys included, and {embed_post:<field>} any field of that
- * page, private or draft. A preview made from a real entry shows only the
- * login Gravity Forms' entry screen shows, and the profile fields
- * minn_admin_gfn_profile_keys() allows; every other such tag stays a
- * placeholder (the notification preview and test send go further:
- * minn_admin_gfn_preview_tags()). The created_by match is Gravity
- * Forms' own (common.php): the colon is optional, so
- * {created_by_two_factor_totp_key} reads that key too, and a key runs up to
- * the closing brace across lines, less one trailing space. Real sends are
- * unchanged.
- *
- * @param string $text Subject, message or address with merge tags.
- * @return string
- */
-function minn_admin_gfn_neutral_tags( $text ) {
-	$text = (string) preg_replace_callback( '/\{created_by:?(.*?)(?:\s)?\}/ism', function ( $m ) {
-		$safe = array_merge( array( 'ID', 'id', 'user_login' ), minn_admin_gfn_profile_keys() );
-		/* translators: %s: a user property named in a merge tag. */
-		return in_array( $m[1], $safe, true ) ? $m[0] : sprintf( __( '[user meta: %s]', 'minn-admin' ), sanitize_key( $m[1] ) );
-	}, (string) $text );
-	return (string) preg_replace_callback( '/\{(?:custom_field|embed_post):([^}]*)\}/i', function ( $m ) {
-		/* translators: %s: a field of the page a form was sent from, named in a merge tag. */
-		return sprintf( __( '[page field: %s]', 'minn-admin' ), sanitize_key( $m[1] ) );
 	}, $text );
 }
 
@@ -819,6 +797,12 @@ add_action( 'rest_api_init', function () {
 			$n = minn_admin_gfn_build( $form, $stored, $body, $is_new );
 			if ( is_wp_error( $n ) ) {
 				return $n;
+			}
+			// Form meta has no restore: a value edited with a credential copy
+			// still masked in it would be stored where the credential was.
+			$masked = Minn_Admin_Egress::refuse_masks( $n, $is_new ? array() : (array) $stored );
+			if ( $masked ) {
+				return $masked;
 			}
 			$nid = minn_admin_gfn_store( $form, $n, $is_new );
 			// The Active switch through their own toggle (its hooks fire).

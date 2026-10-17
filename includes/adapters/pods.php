@@ -497,8 +497,9 @@ function minn_admin_pods_refusal( $pod_obj, $name, $value, $post_id ) {
 	} catch ( Throwable $e ) {
 		return minn_admin_pods_reason( $e->getMessage() );
 	}
-	// Read as save_pod_item() reads it.
-	if ( true === $ok || ( ! is_bool( $ok ) && empty( $ok ) ) ) {
+	// Read as save_pod_item() reads it: anything but true is cast to a list,
+	// and only an empty list passes ('' and 0 are refusals there).
+	if ( true === $ok || ( ! is_bool( $ok ) && array() === (array) $ok ) ) {
 		return null;
 	}
 	return false === $ok ? '' : minn_admin_pods_reason( implode( ' ', array_map( 'strval', (array) $ok ) ) );
@@ -596,7 +597,8 @@ function minn_admin_pods_write_values( $post_id, $values ) {
 			} elseif ( 'number' === $panel_type && is_numeric( $value ) && is_numeric( $was ) ) {
 				$same = (float) $value === (float) $was;
 			} else {
-				$same = (string) $value === (string) $was;
+				// Or as served, a credential copy masked.
+				$same = (string) $value === (string) $was || Minn_Admin_Egress::served_as( (string) $value, (string) $was );
 			}
 			if ( $same ) {
 				continue;

@@ -491,7 +491,8 @@ class Minn_Admin_CPT {
 		$shown = function ( $v ) {
 			return trim( preg_replace( '/\r\n?/', "\n", (string) $v ) );
 		};
-		return $shown( $request[ $key ] ) === $shown( $now[ $key ] ?? '' );
+		// Or as a minn-admin/v1 response served it, a credential copy masked.
+		return $shown( $request[ $key ] ) === $shown( $now[ $key ] ?? '' ) || Minn_Admin_Egress::served_as( $shown( $request[ $key ] ), $shown( $now[ $key ] ?? '' ) );
 	}
 
 	/**
@@ -966,6 +967,15 @@ class Minn_Admin_CPT {
 			return rest_ensure_response( array( 'updated' => $slug ) );
 		}
 
+		// The other definitions' attachments first: they only attach or
+		// detach, so a writer refusing one answers before the labels or
+		// switches of this definition are written.
+		foreach ( $cross as $tax => $attach ) {
+			$result = self::attach_in_tax( $tax, $slug, $attach );
+			if ( is_wp_error( $result ) ) {
+				return $result;
+			}
+		}
 		if ( $only ) {
 			if ( 'acf' === $source ) {
 				$existing = self::acf_types()[ $slug ] ?? null;
@@ -977,12 +987,6 @@ class Minn_Admin_CPT {
 			} else {
 				$result = self::minn_write( $slug, $def, $only );
 			}
-			if ( is_wp_error( $result ) ) {
-				return $result;
-			}
-		}
-		foreach ( $cross as $tax => $attach ) {
-			$result = self::attach_in_tax( $tax, $slug, $attach );
 			if ( is_wp_error( $result ) ) {
 				return $result;
 			}
@@ -1427,6 +1431,15 @@ class Minn_Admin_CPT {
 			return rest_ensure_response( array( 'updated' => $slug ) );
 		}
 
+		// The other definitions' attachments first: they only attach or
+		// detach, so a writer refusing one answers before the labels or
+		// switches of this definition are written.
+		foreach ( $cross as $type => $attach ) {
+			$result = self::attach_in_type( $type, $slug, $attach );
+			if ( is_wp_error( $result ) ) {
+				return $result;
+			}
+		}
 		if ( $only ) {
 			if ( 'acf' === $source ) {
 				$existing = self::acf_taxonomies()[ $slug ] ?? null;
@@ -1438,12 +1451,6 @@ class Minn_Admin_CPT {
 			} else {
 				$result = self::minn_tax_write( $slug, $def, $only );
 			}
-			if ( is_wp_error( $result ) ) {
-				return $result;
-			}
-		}
-		foreach ( $cross as $type => $attach ) {
-			$result = self::attach_in_type( $type, $slug, $attach );
 			if ( is_wp_error( $result ) ) {
 				return $result;
 			}

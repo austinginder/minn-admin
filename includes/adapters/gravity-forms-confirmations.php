@@ -176,7 +176,8 @@ function minn_admin_gfc_build( $form, $stored, $body, $is_new ) {
 	// read serves a type it does not know as Text and a page that no longer
 	// exists as none, so those are compared with what it served.
 	$kept = function ( $key ) use ( $val, $stored, $is_new ) {
-		return ! $is_new && $val( $key ) === (string) rgar( $stored, $key );
+		$was = (string) rgar( $stored, $key );
+		return ! $is_new && ( $val( $key ) === $was || Minn_Admin_Egress::served_as( $val( $key ), $was ) );
 	};
 	$name = $default || $kept( 'name' ) ? (string) rgar( $stored, 'name' ) : trim( sanitize_text_field( $val( 'name' ) ) );
 	if ( '' === trim( $name ) ) {
@@ -197,7 +198,9 @@ function minn_admin_gfc_build( $form, $stored, $body, $is_new ) {
 		$type = 'message';
 	}
 
-	$message     = $val( 'message' );
+	// A message sent back as the page read it (a credential copy masked)
+	// is the stored one.
+	$message     = Minn_Admin_Egress::served_as( $val( 'message' ), (string) rgar( $stored, 'message' ) ) ? (string) rgar( $stored, 'message' ) : $val( 'message' );
 	$stored_page = absint( rgar( $stored, 'pageId' ) );
 	$page_kept   = ! $is_new && $val( 'pageId' ) === ( $stored_page && get_post( $stored_page ) ? (string) $stored_page : '' );
 	$page_id     = $page_kept ? $stored_page : absint( $val( 'pageId' ) );
@@ -425,6 +428,12 @@ add_action( 'rest_api_init', function () {
 			$c = minn_admin_gfc_build( $form, $stored, $body, $is_new );
 			if ( is_wp_error( $c ) ) {
 				return $c;
+			}
+			// Form meta has no restore: a value edited with a credential copy
+			// still masked in it would be stored where the credential was.
+			$masked = Minn_Admin_Egress::refuse_masks( $c, $is_new ? array() : (array) $stored );
+			if ( $masked ) {
+				return $masked;
 			}
 			$cid = minn_admin_gfc_store( $form, $c, $is_new );
 			if ( array_key_exists( 'isActive', $body ) && empty( $c['isDefault'] ) ) {

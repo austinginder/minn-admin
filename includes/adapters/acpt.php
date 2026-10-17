@@ -440,7 +440,10 @@ function minn_admin_acpt_same( $served, $sent ) {
 		}
 		return true === $v ? '1' : (string) $v;
 	};
-	return $norm( json_decode( wp_json_encode( $served ), true ) ) === $norm( json_decode( wp_json_encode( $sent ), true ) );
+	$a = $norm( json_decode( wp_json_encode( $served ), true ) );
+	$b = $norm( json_decode( wp_json_encode( $sent ), true ) );
+	// Or as a minn-admin/v1 response served it, a credential copy masked.
+	return $a === $b || Minn_Admin_Egress::served_as( $b, $a );
 }
 
 /**
@@ -1935,8 +1938,22 @@ function minn_admin_acpt_builder_plan_field( $row, $stored, &$names, $depth ) {
 				return false;
 			}
 			$sent = null === $row[ $setting ] ? '' : $row[ $setting ];
-			return ! ( is_scalar( $sent ) && (string) $sent === (string) ( $served[ $setting ] ?? '' ) );
+			// As served counts as stored: a credential copy in it is masked.
+			return ! ( is_scalar( $sent ) && Minn_Admin::unchanged( (string) $sent, (string) ( $served[ $setting ] ?? '' ) ) );
 		};
+		// ACPT keeps fields in its own tables, which have no restore: a
+		// setting edited with a credential copy still masked in it would be
+		// stored where the credential was. Refused before anything is saved.
+		$edited = array();
+		foreach ( $edit ? array( 'label', 'instructions', 'default_value', 'choices' ) : array( 'label' ) as $setting ) {
+			if ( $changed( $setting ) ) {
+				$edited[ $setting ] = $row[ $setting ];
+			}
+		}
+		$masked = Minn_Admin_Egress::refuse_masks( $edited, $served );
+		if ( $masked ) {
+			return $masked;
+		}
 		if ( $changed( 'label' ) ) {
 			$base['label'] = sanitize_text_field( (string) ( $row['label'] ?? '' ) );
 		}
@@ -1999,6 +2016,10 @@ function minn_admin_acpt_builder_plan_field( $row, $stored, &$names, $depth ) {
 		), array( 'status' => 400 ) );
 	}
 	$names[] = $name;
+	$masked  = Minn_Admin_Egress::refuse_masks( array_intersect_key( $row, array_flip( array( 'label', 'instructions', 'default_value', 'choices' ) ) ), array() );
+	if ( $masked ) {
+		return $masked;
+	}
 	$new     = array(
 		'name'        => $name,
 		'label'       => sanitize_text_field( (string) ( $row['label'] ?? '' ) ),
@@ -2182,7 +2203,11 @@ function minn_admin_acpt_builder_save( $group, $body ) {
 			// A box label sent back as served keeps its stored value (see
 			// minn_admin_acpt_builder_plan_field()).
 			$sent = array_key_exists( 'label', $row ) && is_scalar( $row['label'] ) ? (string) $row['label'] : null;
-			if ( null !== $sent && $sent !== (string) ( $base['label'] ?? '' ) ) {
+			if ( null !== $sent && ! Minn_Admin::unchanged( $sent, (string) ( $base['label'] ?? '' ) ) ) {
+				$masked = Minn_Admin_Egress::refuse_masks( array( 'label' => $sent ), array( 'label' => (string) ( $base['label'] ?? '' ) ) );
+				if ( $masked ) {
+					return $masked;
+				}
 				$base['label'] = sanitize_text_field( $sent );
 			}
 			$fields = minn_admin_acpt_builder_plan_list( $row['sub_fields'] ?? array(), minn_admin_acpt_builder_box_fields( $base ), 0 );
@@ -2219,6 +2244,10 @@ function minn_admin_acpt_builder_save( $group, $body ) {
 			), array( 'status' => 400 ) );
 		}
 		$box_names[] = $name;
+		$masked      = Minn_Admin_Egress::refuse_masks( array( 'label' => (string) ( $row['label'] ?? '' ) ), array() );
+		if ( $masked ) {
+			return $masked;
+		}
 		$fields      = minn_admin_acpt_builder_plan_list( $row['sub_fields'] ?? array(), array(), 0 );
 		if ( is_wp_error( $fields ) ) {
 			return $fields;
@@ -2238,9 +2267,13 @@ function minn_admin_acpt_builder_save( $group, $body ) {
 	// unlabelled group stays unlabelled rather than taking its name as one.
 	$served_title = (string) ( '' !== (string) ( $g['label'] ?? '' ) ? $g['label'] : $g['name'] );
 	$sent_title   = isset( $body['title'] ) && is_scalar( $body['title'] ) ? (string) $body['title'] : ( array_key_exists( 'title', $body ) ? '' : null );
-	if ( null === $sent_title || $sent_title === $served_title ) {
+	if ( null === $sent_title || Minn_Admin::unchanged( $sent_title, $served_title ) ) {
 		$label = $g['label'] ?? null;
 	} else {
+		$masked = Minn_Admin_Egress::refuse_masks( array( 'title' => $sent_title ), array( 'title' => $served_title ) );
+		if ( $masked ) {
+			return $masked;
+		}
 		$title = sanitize_text_field( $sent_title );
 		$label = '' !== $title ? $title : null;
 	}
