@@ -224,6 +224,44 @@ function minn_admin_cf7_mail_in( $input, $current ) {
 	return $out;
 }
 
+/**
+ * The mail property a save writes, or null when the page changed nothing in
+ * it. Only a key the page sent with a value other than the stored one goes
+ * through their sanitizer; every other key keeps its stored value byte for
+ * byte. wpcf7_sanitize_mail() runs kses over the body for anyone without
+ * unfiltered_html, so cleaning a stored body nobody edited again stripped an
+ * HTML message's <style> and <head> (leaving its CSS as text) and a
+ * "<[your-email]>" line. Their REST update and wpcf7_save_contact_form()
+ * likewise touch only the properties sent.
+ *
+ * @param mixed $input   The page's keys for this property.
+ * @param mixed $current The stored property.
+ * @return array|null
+ */
+function minn_admin_cf7_mail_merge( $input, $current ) {
+	if ( ! is_array( $input ) ) {
+		return null;
+	}
+	$current = is_array( $current ) ? $current : array();
+	$stored  = minn_admin_cf7_mail_out( $current );
+	$merged  = minn_admin_cf7_mail_in( $input, $current );
+	$changed = array();
+	foreach ( minn_admin_cf7_mail_keys() as $k ) {
+		if ( $merged[ $k ] !== $stored[ $k ] ) {
+			$changed[] = $k;
+		}
+	}
+	if ( ! $changed ) {
+		return null;
+	}
+	$clean = wpcf7_sanitize_mail( $merged );
+	$out   = $current + $clean;
+	foreach ( $changed as $k ) {
+		$out[ $k ] = $clean[ $k ];
+	}
+	return $out;
+}
+
 add_action( 'rest_api_init', function () {
 	if ( ! defined( 'WPCF7_VERSION' ) || ! function_exists( 'wpcf7_save_contact_form' ) || ! function_exists( 'wpcf7_messages' ) ) {
 		return;
@@ -252,27 +290,45 @@ add_action( 'rest_api_init', function () {
 			if ( is_wp_error( $form ) ) {
 				return $form;
 			}
-			$body     = (array) $request->get_json_params();
-			$messages = (array) $form->prop( 'messages' );
-			foreach ( wpcf7_messages() as $key => $m ) {
-				if ( isset( $body['messages'][ $key ] ) && is_scalar( $body['messages'][ $key ] ) ) {
-					$messages[ $key ] = (string) $body['messages'][ $key ];
-				} elseif ( ! isset( $messages[ $key ] ) ) {
-					$messages[ $key ] = (string) $m['default'];
-				}
-			}
+			$body  = (array) $request->get_json_params();
+			$props = array();
 			// What wpcf7_save_contact_form() does for these three, minus its
 			// wpcf7_save_contact_form action: the panels listening there
 			// (Brevo, AnalyticsWP) rebuild their settings from the editor's
 			// $_POST, which a JSON save doesn't have, so firing it switched
-			// them off. Their save() still fires wpcf7_after_save.
-			$mail           = wpcf7_sanitize_mail( minn_admin_cf7_mail_in( $body['mail'] ?? array(), $form->prop( 'mail' ) ) );
-			$mail['active'] = true;
-			$form->set_properties( array(
-				'mail'     => $mail,
-				'mail_2'   => wpcf7_sanitize_mail( minn_admin_cf7_mail_in( $body['mail_2'] ?? array(), $form->prop( 'mail_2' ) ) ),
-				'messages' => wpcf7_sanitize_messages( $messages ),
-			) );
+			// them off. Their save() still fires wpcf7_after_save. As there,
+			// a property the request does not carry is left as stored, and
+			// within one only what changed is cleaned (minn_admin_cf7_mail_merge()).
+			$mail = minn_admin_cf7_mail_merge( $body['mail'] ?? null, $form->prop( 'mail' ) );
+			if ( null !== $mail ) {
+				$mail['active'] = true;
+				$props['mail']  = $mail;
+			}
+			$mail_2 = minn_admin_cf7_mail_merge( $body['mail_2'] ?? null, $form->prop( 'mail_2' ) );
+			if ( null !== $mail_2 ) {
+				$props['mail_2'] = $mail_2;
+			}
+			if ( isset( $body['messages'] ) && is_array( $body['messages'] ) ) {
+				$stored   = (array) $form->prop( 'messages' );
+				$messages = $stored;
+				foreach ( wpcf7_messages() as $key => $m ) {
+					if ( ! isset( $body['messages'][ $key ] ) || ! is_scalar( $body['messages'][ $key ] ) ) {
+						continue;
+					}
+					// The page shows the default for a message never stored.
+					$sent = (string) $body['messages'][ $key ];
+					if ( $sent !== (string) ( $stored[ $key ] ?? $m['default'] ) ) {
+						$messages[ $key ] = trim( $sent ); // wpcf7_sanitize_messages()
+					}
+				}
+				if ( $messages !== $stored ) {
+					$props['messages'] = $messages;
+				}
+			}
+			if ( ! $props ) {
+				return rest_ensure_response( minn_admin_cf7_mail_payload( $form ) );
+			}
+			$form->set_properties( $props );
 			if ( ! $form->save() ) {
 				return new WP_Error( 'minn_cf7_failed', __( 'Contact Form 7 did not save the form.', 'minn-admin' ), array( 'status' => 500 ) );
 			}
