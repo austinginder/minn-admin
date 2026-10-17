@@ -256,12 +256,46 @@ function minn_admin_acpt_groups_for( $post_id, $post_type ) {
 	return $groups;
 }
 
+/**
+ * Does ACPT show this box here, to this user?
+ *
+ * ACPT's own screens put a box on the page only when its back-end visibility
+ * conditions pass (a USER condition names accounts; others a post id, status
+ * or term, or the option page), and a hidden box's fields never reach that
+ * user. ACPT's save writes whatever is posted, so the walks below skip such a
+ * box: its fields are neither served nor accepted. Without ACPT's checker a
+ * box that carries conditions is skipped.
+ *
+ * @param object      $box        ACPT MetaBoxModel.
+ * @param string|null $element_id The post id as ACPT's screen has it (null on
+ *                                a new post), or the option page slug.
+ * @param string      $context    ACPT MetaTypes value.
+ * @return bool
+ */
+function minn_admin_acpt_box_shown( $box, $element_id, $context ) {
+	if ( ! method_exists( $box, 'hasVisibilityConditions' ) || ! $box->hasVisibilityConditions() ) {
+		return true;
+	}
+	if ( ! class_exists( '\\ACPT\\Utils\\Checker\\BoxVisibilityChecker' ) || ! class_exists( '\\ACPT\\Constants\\Visibility' ) ) {
+		return false;
+	}
+	try {
+		return true === \ACPT\Utils\Checker\BoxVisibilityChecker::check( \ACPT\Constants\Visibility::IS_BACKEND, $box, $element_id, $context );
+	} catch ( \Throwable $e ) {
+		return false;
+	}
+}
+
 /** Panel schema payload and an optional field-id lookup for value I/O. */
 function minn_admin_acpt_fields_payload( $post_id, $post_type, $with_lookup = false ) {
 	$groups = array();
 	$lookup = array();
 	foreach ( minn_admin_acpt_groups_for( $post_id, $post_type ) as $group ) {
 		foreach ( $group->getBoxes() as $box ) {
+			// ACPT's edit screen has the id as its query string gives it.
+			if ( ! minn_admin_acpt_box_shown( $box, $post_id ? (string) (int) $post_id : null, \ACPT\Constants\MetaTypes::CUSTOM_POST_TYPE ) ) {
+				continue;
+			}
 			$mapped = array();
 			$locked = 0;
 			foreach ( $box->getFields() as $field ) {
@@ -1151,6 +1185,9 @@ function minn_admin_acpt_option_tabs( $slug ) {
 	$tabs = array();
 	foreach ( minn_admin_acpt_option_groups_for( $slug ) as $group ) {
 		foreach ( $group->getBoxes() as $box ) {
+			if ( ! minn_admin_acpt_box_shown( $box, (string) $slug, \ACPT\Constants\MetaTypes::OPTION_PAGE ) ) {
+				continue;
+			}
 			$mapped = array();
 			$lookup = array();
 			$locked = 0;

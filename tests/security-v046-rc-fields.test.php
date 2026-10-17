@@ -9,6 +9,8 @@
  *    draft. Pods' own object exits the same way outside REST, and a refusal
  *    that threw instead fell through to a raw meta write. Run over real REST
  *    (an application password), where the post is stored before the exit.
+ *  - 09-2 ACPT: box visibility conditions (a USER condition, a post status)
+ *    were ignored by the post panel and the option-page walk.
  *  - The held-refusal store every panel shares (ACPT, Pods).
  *
  * Sections SKIP when their plugin is inactive. Everything a section makes
@@ -353,6 +355,177 @@ $tag   = (string) wp_rand( 1000, 9999 );
 			return $call( 'GET', '/wp/v2/posts/' . $id . '?context=edit' );
 		} );
 		$check( 'Pods: the panel still reads the stored values (control)', 200 === $st && 'admin@example.com' === ( $d['minn_pods'][ $email ] ?? null ) && 'kept' === ( $d['minn_pods'][ $req ] ?? null ), $st . ' ' . wp_json_encode( $d['minn_pods'] ?? null ) );
+	} finally {
+		$clean();
+	}
+} )();
+
+/*
+ * 09-2 ACPT. One group on posts with three boxes: an open one, one kept to
+ * the administrator by a USER condition, and one shown only on published
+ * posts. And a group on an option page with a box kept the same way, beside
+ * a field with its own permissions (a control: the field mapper refuses it).
+ */
+( function () use ( $check, $skip, $call, $as, $once, $user, $drop_user, $tag, $admin ) {
+	if ( ! function_exists( 'minn_admin_acpt_active' ) || ! minn_admin_acpt_active() || ! class_exists( '\ACPT\Core\CQRS\Command\SaveMetaGroupCommand' ) ) {
+		$skip( 'ACPT: inactive' );
+		return;
+	}
+	$login  = 'minnrc_acpt_e' . $tag;
+	$uid    = 0;
+	$gid    = '';
+	$ogid   = '';
+	$post   = 0;
+	$perm   = '';
+	$page   = 'minnrc-acpt-' . $tag;
+	$clean  = $once( function () use ( &$uid, &$gid, &$ogid, &$post, &$perm, $login, $drop_user, $tag ) {
+		global $wpdb;
+		if ( $post > 0 && 'Minn rc ACPT' === get_the_title( $post ) ) {
+			wp_delete_post( $post, true );
+		}
+		// What the option-page check wrote: options under the run's own box names.
+		foreach ( (array) $wpdb->get_col( $wpdb->prepare( "SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE %s", '%' . $wpdb->esc_like( 'minnrco_' ) . '%' . $wpdb->esc_like( $tag ) . '%' ) ) as $opt ) { // phpcs:ignore
+			delete_option( $opt );
+		}
+		if ( '' !== $perm && class_exists( '\ACPT\Core\Repository\PermissionRepository' ) ) {
+			try {
+				\ACPT\Core\Repository\PermissionRepository::deleteByEntityId( $perm );
+			} catch ( \Throwable $e ) {
+				echo "WARN  could not delete the ACPT test permission\n";
+			}
+		}
+		foreach ( array( $gid, $ogid ) as $g ) {
+			if ( '' !== $g ) {
+				try {
+					( new \ACPT\Core\CQRS\Command\DeleteMetaGroupCommand( $g ) )->execute();
+				} catch ( \Throwable $e ) {
+					echo 'WARN  could not delete the ACPT test group ' . $g . "\n";
+				}
+			}
+		}
+		$drop_user( $uid, $login );
+	} );
+	try {
+		$cond = function ( $type, $value ) {
+			return array( 'type' => array( 'type' => $type, 'value' => $type ), 'operator' => '=', 'value' => (string) $value, 'logic' => null, 'backEnd' => 1, 'frontEnd' => 1 );
+		};
+		$gid = (string) ( new \ACPT\Core\CQRS\Command\SaveMetaGroupCommand( array(
+			'name'    => 'minnrc' . $tag,
+			'label'   => 'RC',
+			'belongs' => array( array( 'belongsTo' => \ACPT\Constants\MetaTypes::CUSTOM_POST_TYPE, 'operator' => '=', 'find' => 'post', 'logic' => '' ) ),
+			'boxes'   => array(
+				array( 'name' => 'minnrc_open' . $tag, 'label' => 'Open', 'fields' => array( array( 'name' => 'note', 'label' => 'Note', 'type' => 'Text', 'isRequired' => false ) ) ),
+				array( 'name' => 'minnrc_mine' . $tag, 'label' => 'Mine', 'visibilityConditions' => array( $cond( 'USER', $admin ) ), 'fields' => array( array( 'name' => 'secret', 'label' => 'Secret', 'type' => 'Text', 'isRequired' => false ) ) ),
+				array( 'name' => 'minnrc_live' . $tag, 'label' => 'Live', 'visibilityConditions' => array( $cond( 'POST_STATUS', 'publish' ) ), 'fields' => array( array( 'name' => 'live', 'label' => 'Live note', 'type' => 'Text', 'isRequired' => false ) ) ),
+			),
+		) ) )->execute();
+		$uid  = $user( $login, 'editor' );
+		$post = (int) wp_insert_post( array( 'post_title' => 'Minn rc ACPT', 'post_status' => 'draft', 'post_type' => 'post', 'post_author' => $uid ) );
+		$ids  = array();
+		$boxes = array();
+		$g     = \ACPT\Core\Repository\MetaRepository::get( array( 'id' => $gid ) );
+		foreach ( $g ? $g[0]->getBoxes() : array() as $b ) {
+			$boxes[ $b->getLabel() ] = $b->getName();
+			foreach ( $b->getFields() as $f ) {
+				$ids[ $f->getName() ] = (string) $f->getId();
+			}
+		}
+		$conds = 0;
+		foreach ( $g ? $g[0]->getBoxes() : array() as $b ) {
+			$conds += count( $b->getVisibilityConditions() );
+		}
+		$check( 'ACPT: the test group, its two box conditions, an Editor and a draft exist', 3 === count( $ids ) && 2 === $conds && $uid && $post > 0, wp_json_encode( array( $ids, $conds, $uid, $post ) ) );
+		if ( 3 !== count( $ids ) || ! $uid || ! $post ) {
+			return;
+		}
+		save_acpt_meta_field_value( array( 'post_id' => $post, 'box_name' => $boxes['Mine'], 'field_name' => 'secret', 'value' => 'For the admin only' ) );
+		$raw = function ( $box, $name ) use ( $post ) {
+			return get_acpt_field( array( 'post_id' => $post, 'box_name' => $box, 'field_name' => $name, 'format' => 'only_value', 'return' => 'raw' ) );
+		};
+		$labels = function ( $d ) {
+			return implode( ' | ', wp_list_pluck( (array) ( is_array( $d ) ? ( $d['groups'] ?? array() ) : array() ), 'group' ) );
+		};
+
+		list( $st, $d ) = $as( $uid, function () use ( $call, $post ) {
+			return $call( 'GET', '/minn-admin/v1/acpt/fields?post_id=' . $post );
+		} );
+		$check( 'ACPT: a box kept to another account is not listed for the Editor', 200 === $st && false === strpos( $labels( $d ), 'Mine' ), $st . ' ' . $labels( $d ) );
+		$check( 'ACPT: nor a box ACPT shows only on published posts, on a draft', 200 === $st && false === strpos( $labels( $d ), 'Live' ), $labels( $d ) );
+		$check( 'ACPT: the open box is listed (control)', false !== strpos( $labels( $d ), 'Open' ), $labels( $d ) );
+		list( $st, $d ) = $as( $uid, function () use ( $call, $post ) {
+			return $call( 'GET', '/wp/v2/posts/' . $post . '?context=edit' );
+		} );
+		$vals = (array) ( $d['minn_acpt'] ?? array() );
+		$check( 'ACPT: the hidden box\'s value is not served to the Editor', 200 === $st && ! array_key_exists( $ids['secret'], $vals ), wp_json_encode( $vals ) );
+		list( $st, $d ) = $as( $uid, function () use ( $call, $post, $ids ) {
+			return $call( 'POST', '/wp/v2/posts/' . $post, array( 'minn_acpt' => array( $ids['secret'] => 'Overwritten', $ids['live'] => 'Live text', $ids['note'] => 'Open text' ) ) );
+		} );
+		$check( 'ACPT: nor accepted from the Editor', 'For the admin only' === $raw( $boxes['Mine'], 'secret' ), wp_json_encode( $raw( $boxes['Mine'], 'secret' ) ) );
+		$check( 'ACPT: nor the published-only box on a draft', in_array( $raw( $boxes['Live'], 'live' ), array( null, '' ), true ), wp_json_encode( $raw( $boxes['Live'], 'live' ) ) );
+		$check( 'ACPT: the open field in the same save is written (control)', 200 === $st && 'Open text' === $raw( $boxes['Open'], 'note' ), $st . ' ' . wp_json_encode( $raw( $boxes['Open'], 'note' ) ) );
+
+		// Controls: the account the condition names sees and writes its box.
+		list( $st, $d ) = $call( 'GET', '/minn-admin/v1/acpt/fields?post_id=' . $post );
+		$check( 'ACPT: the administrator the condition names gets the box (control)', 200 === $st && false !== strpos( $labels( $d ), 'Mine' ), $labels( $d ) );
+		list( $st, $d ) = $call( 'POST', '/wp/v2/posts/' . $post, array( 'minn_acpt' => array( $ids['secret'] => 'Admin edit' ) ) );
+		$check( 'ACPT: and writes it (control)', 200 === $st && 'Admin edit' === $raw( $boxes['Mine'], 'secret' ), $st . ' ' . wp_json_encode( $raw( $boxes['Mine'], 'secret' ) ) );
+
+		// The option-page walk (listing a page needs an ACPT licence, so the
+		// walk and its writer are driven directly).
+		$ogid = (string) ( new \ACPT\Core\CQRS\Command\SaveMetaGroupCommand( array(
+			'name'    => 'minnrco' . $tag,
+			'label'   => 'RC options',
+			'belongs' => array( array( 'belongsTo' => \ACPT\Constants\MetaTypes::OPTION_PAGE, 'operator' => '=', 'find' => $page, 'logic' => '' ) ),
+			'boxes'   => array(
+				array( 'name' => 'minnrco_open' . $tag, 'label' => 'General', 'fields' => array(
+					array( 'name' => 'site_note', 'label' => 'Site note', 'type' => 'Text', 'isRequired' => false ),
+					array( 'name' => 'gated', 'label' => 'Gated', 'type' => 'Text', 'isRequired' => false ),
+				) ),
+				array( 'name' => 'minnrco_keys' . $tag, 'label' => 'Integrations', 'visibilityConditions' => array( $cond( 'USER', $admin ) ), 'fields' => array( array( 'name' => 'api_key', 'label' => 'API key', 'type' => 'Text', 'isRequired' => false ) ) ),
+			),
+		) ) )->execute();
+		$og = \ACPT\Core\Repository\MetaRepository::get( array( 'id' => $ogid ) );
+		$oids = array();
+		foreach ( $og ? $og[0]->getBoxes() : array() as $b ) {
+			foreach ( $b->getFields() as $f ) {
+				$oids[ $f->getName() ] = (string) $f->getId();
+			}
+		}
+		// ACPT's own field permissions: a row for the administrator role makes
+		// the field ask for read_/edit_<box>_<field>, which an Editor lacks.
+		if ( isset( $oids['gated'] ) && class_exists( '\ACPT\Core\CQRS\Command\SavePermissionCommand' ) ) {
+			$perm = $oids['gated'];
+			( new \ACPT\Core\CQRS\Command\SavePermissionCommand( array(
+				'entityId' => $perm,
+				'items'    => array( array( 'id' => wp_generate_uuid4(), 'userRole' => 'administrator', 'permissions' => array( 'read' => true, 'edit' => true ) ) ),
+			) ) )->execute();
+		}
+		$tab_fields = function () use ( $page ) {
+			$out = array();
+			foreach ( minn_admin_acpt_option_tabs( $page ) as $t ) {
+				foreach ( $t['fields'] as $f ) {
+					$out[] = (string) $f['name'];
+				}
+			}
+			return $out;
+		};
+		$check( 'ACPT options: the option-page group exists', 3 === count( $oids ), wp_json_encode( $oids ) );
+		if ( 3 === count( $oids ) ) {
+			$ed = $as( $uid, $tab_fields );
+			$ad = $tab_fields();
+			$check( 'ACPT options: a box kept to another account gives the Editor no tab and no field', ! in_array( $oids['api_key'], $ed, true ), wp_json_encode( $ed ) );
+			$check( 'ACPT options: a field whose own permissions the Editor fails is not offered (control)', '' !== $perm && ! in_array( $oids['gated'], $ed, true ), wp_json_encode( $ed ) );
+			$check( 'ACPT options: the open field is offered to the Editor (control)', in_array( $oids['site_note'], $ed, true ), wp_json_encode( $ed ) );
+			$check( 'ACPT options: the administrator the condition names gets the kept box (control)', in_array( $oids['api_key'], $ad, true ), wp_json_encode( $ad ) );
+			$before = get_acpt_field( array( 'option_page' => $page, 'box_name' => 'minnrco_keys' . $tag, 'field_name' => 'api_key', 'format' => 'only_value', 'return' => 'raw' ) );
+			$as( $uid, function () use ( $page, $oids ) {
+				minn_admin_acpt_option_save( $page, array( $oids['api_key'] => 'sk_from_editor', $oids['site_note'] => 'Editor note' ) );
+			} );
+			$after = get_acpt_field( array( 'option_page' => $page, 'box_name' => 'minnrco_keys' . $tag, 'field_name' => 'api_key', 'format' => 'only_value', 'return' => 'raw' ) );
+			$note  = get_acpt_field( array( 'option_page' => $page, 'box_name' => 'minnrco_open' . $tag, 'field_name' => 'site_note', 'format' => 'only_value', 'return' => 'raw' ) );
+			$check( 'ACPT options: the kept box is not written from the Editor', $before === $after && 'sk_from_editor' !== $after, wp_json_encode( $after ) );
+			$check( 'ACPT options: the open field in the same save is written (control)', 'Editor note' === $note, wp_json_encode( $note ) );
+		}
 	} finally {
 		$clean();
 	}
