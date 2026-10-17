@@ -664,42 +664,14 @@ class Minn_Admin_DB {
 	 * types the viewer's capabilities cover, and the actors whose role theirs
 	 * outranks. The table is shown only to a viewer whose scope is all of it,
 	 * the scope Aryo gives the accounts it lets see everything (super admins,
-	 * view_all_aryo_activity_log), asked the same way.
+	 * view_all_aryo_activity_log), asked the same way: the adapter's own
+	 * answer, which the kernel asks of its resource too.
 	 *
 	 * @return bool
 	 */
 	private static function aryo_admits() {
-		if ( ! function_exists( 'minn_admin_aryo_can_view' ) || ! function_exists( 'minn_admin_aryo_scope' ) || ! minn_admin_aryo_can_view() ) {
-			return false;
-		}
-		$mine = minn_admin_aryo_scope();
-		if ( ! is_array( $mine ) ) {
-			return false;
-		}
-		// The everything scope: the same question with their see-everything
-		// capability held for this one call, and nothing else changed.
-		$uid = get_current_user_id();
-		$all = function ( $allcaps, $caps, $args ) use ( $uid ) {
-			if ( 'view_all_aryo_activity_log' === ( $args[0] ?? '' ) && $uid === (int) ( $args[1] ?? 0 ) ) {
-				$allcaps['view_all_aryo_activity_log'] = true;
-			}
-			return $allcaps;
-		};
-		add_filter( 'user_has_cap', $all, PHP_INT_MAX, 3 );
-		try {
-			$max = minn_admin_aryo_scope();
-		} finally {
-			remove_filter( 'user_has_cap', $all, PHP_INT_MAX );
-		}
-		if ( ! is_array( $max ) ) {
-			return false;
-		}
-		foreach ( array( 'object_type', 'user_caps' ) as $k ) {
-			if ( isset( $mine[ $k ] ) && ( ! isset( $max[ $k ] ) || array_diff( (array) $max[ $k ], (array) $mine[ $k ] ) ) ) {
-				return false;
-			}
-		}
-		return true;
+		return function_exists( 'minn_admin_aryo_can_view' ) && function_exists( 'minn_admin_aryo_sees_all' )
+			&& minn_admin_aryo_can_view() && true === minn_admin_aryo_sees_all();
 	}
 
 	private static function quote_ident( $name ) {

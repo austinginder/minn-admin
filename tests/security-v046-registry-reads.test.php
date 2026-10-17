@@ -497,15 +497,19 @@ if ( ! $admin || ! current_user_can( 'manage_options' ) || ( is_multisite() && !
 		$listed = $names();
 		$check( '#7 round two control: an administrator Amelia shows every appointment still browses them and their customers', in_array( $wpdb->prefix . 'amelia_appointments', $listed, true ) && in_array( $wpdb->prefix . 'amelia_users', $listed, true ) );
 		// Every source that declares its where the viewer's own: an
-		// administrator it narrows nothing for is shown the table.
+		// administrator it narrows nothing for, or one its 'viewer' answer
+		// says it shows everything (a scope that is never empty, as Aryo's
+		// list of types), is shown the table.
 		$narrowed = array();
 		foreach ( Minn_Admin_Kernel::resources() as $id => $res ) {
 			if ( empty( $res['source']['viewer'] ) || ! is_string( $res['source']['table'] ?? null ) ) {
 				continue;
 			}
-			$w = $res['source']['where'];
-			$w = is_callable( $w ) ? call_user_func( $w ) : $w;
-			if ( array() !== $w ) {
+			$w   = $res['source']['where'];
+			$w   = is_callable( $w ) ? call_user_func( $w ) : $w;
+			$v   = $res['source']['viewer'];
+			$all = true !== $v && is_callable( $v ) && true === call_user_func( $v );
+			if ( array() !== $w && ! $all ) {
 				$narrowed[] = $id;
 			}
 		}

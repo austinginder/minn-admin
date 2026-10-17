@@ -114,6 +114,46 @@ function minn_admin_aryo_scope() {
 }
 
 /**
+ * Whether Aryo's scoping shows this viewer all it shows anyone: their scope
+ * covers the one Aryo gives the accounts it lets see everything (super
+ * admins, view_all_aryo_activity_log), asked the same way, with that
+ * capability held for the one call and nothing else changed. Aryo's scope
+ * is never empty, even for those accounts (a list of types and of actor
+ * roles), so a reader of the whole table (the database browser) asks this
+ * of the viewer instead.
+ *
+ * @return bool
+ */
+function minn_admin_aryo_sees_all() {
+	$mine = minn_admin_aryo_scope();
+	if ( ! is_array( $mine ) ) {
+		return false;
+	}
+	$uid = get_current_user_id();
+	$all = function ( $allcaps, $caps, $args ) use ( $uid ) {
+		if ( 'view_all_aryo_activity_log' === ( $args[0] ?? '' ) && $uid === (int) ( $args[1] ?? 0 ) ) {
+			$allcaps['view_all_aryo_activity_log'] = true;
+		}
+		return $allcaps;
+	};
+	add_filter( 'user_has_cap', $all, PHP_INT_MAX, 3 );
+	try {
+		$max = minn_admin_aryo_scope();
+	} finally {
+		remove_filter( 'user_has_cap', $all, PHP_INT_MAX );
+	}
+	if ( ! is_array( $max ) ) {
+		return false;
+	}
+	foreach ( array( 'object_type', 'user_caps' ) as $k ) {
+		if ( isset( $mine[ $k ] ) && ( ! isset( $max[ $k ] ) || array_diff( (array) $max[ $k ], (array) $mine[ $k ] ) ) ) {
+			return false;
+		}
+	}
+	return true;
+}
+
+/**
  * Aryo's role clause read back as values: "AND (`object_type` = '…' OR …)
  * AND (`user_caps` = '…' OR …)", each value as esc_sql() wrote it. Anything
  * else, false included, is null: Aryo shows this viewer nothing.
@@ -284,6 +324,9 @@ minn_admin_resource( 'aryo/events', function () {
 			},
 			// Only the rows Aryo would show this viewer, on every read.
 			'where'   => 'minn_admin_aryo_scope',
+			// That scope is the viewer's own, and never empty: a reader of
+			// the whole table admits only someone it shows all Aryo shows.
+			'viewer'  => 'minn_admin_aryo_sees_all',
 		),
 		'list'   => array(
 			'facets' => array(

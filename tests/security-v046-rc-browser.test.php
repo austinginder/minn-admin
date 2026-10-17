@@ -441,6 +441,21 @@ try {
 		$become( $editor );
 		$wpf = array( 'wpforms_entries', 'wpforms_tasks_meta', 'wpforms_protected_files' );
 		$wms = array( 'wpmailsmtp_debug_events', 'wpmailsmtp_emails_queue' );
+		// Formidable's and Everest Forms' answers live in their meta tables,
+		// which each resource searches (list.search.meta), so the kernel
+		// already gives them the entries' answer: kept as a guard.
+		$frm = $exists( 'frm_items' ) && function_exists( 'minn_admin_formidable_can' );
+		$evf = $exists( 'evf_entries' ) && function_exists( 'minn_admin_everest_can' );
+		if ( ! $frm ) {
+			$skip( '08-1 Formidable has no table here' );
+		} else {
+			$check( "08-1 Formidable: a role its entries refuse is refused every answer (frm_item_metas) with them", ! minn_admin_formidable_can() && $tr( $p . 'frm_items' ) && $tr( $p . 'frm_item_metas' ) && $tr( $p . 'frm_item_metas_old' ) );
+		}
+		if ( ! $evf ) {
+			$skip( '08-1 Everest Forms has no table here' );
+		} else {
+			$check( "08-1 Everest Forms: a role its entries refuse is refused every answer (evf_entrymeta) with them", ! minn_admin_everest_can() && $tr( $p . 'evf_entries' ) && $tr( $p . 'evf_entrymeta' ) );
+		}
 		$ans = array();
 		foreach ( array_merge( $wpf, $wms ) as $n ) {
 			$ans[ $n ] = $tr( $p . $n );
@@ -453,7 +468,26 @@ try {
 			$ans[ $n ] = $tr( $p . $n );
 		}
 		$check( '08-1 control: an administrator both admit is refused none of them', ! in_array( true, $ans, true ), wp_json_encode( $ans ) );
+		if ( $frm ) {
+			$check( '08-1 Formidable control: an administrator it admits is refused neither its entries nor their answers', ! $tr( $p . 'frm_items' ) && ! $tr( $p . 'frm_item_metas' ) );
+		}
+		if ( $evf ) {
+			$check( '08-1 Everest Forms control: an administrator it admits is refused neither its entries nor their answers', ! $tr( $p . 'evf_entries' ) && ! $tr( $p . 'evf_entrymeta' ) );
+		}
 		$become( $uid );
+		// Formidable answers to frm_view_entries or the administrator role,
+		// so the System role here (manage_options without either) is one it
+		// refuses: the browser leaves out its answers with its entries.
+		$fm = $exists( 'frm_item_metas' );
+		if ( $frm && $fm && ! minn_admin_formidable_can() ) {
+			$check( "08-1 Formidable: a System role Formidable refuses browses none of its answers", $hidden( $exists( 'frm_items' ) ) && $hidden( $fm ) );
+			$u = new WP_User( $uid );
+			$u->add_cap( 'frm_view_entries' );
+			$become( $uid );
+			$check( '08-1 Formidable control: grant frm_view_entries and the same role browses its entries and answers', $shown( $exists( 'frm_items' ) ) && $shown( $fm ) );
+			$u->remove_cap( 'frm_view_entries' );
+			$become( $uid );
+		}
 	}
 
 	// --- 08-2 Mail plugins' connection rows are credential rows -----------
@@ -563,8 +597,6 @@ try {
 	$ar = $exists( 'aryo_activity_log' );
 	if ( ! $ar || ! function_exists( 'minn_admin_aryo_scope' ) ) {
 		$skip( '13-3 Activity Log (Aryo) has no table here' );
-	} elseif ( ! function_exists( 'minn_admin_aryo_sees_all' ) ) {
-		$skip( "13-3 Activity Log (Aryo): the adapter's viewer answer (minn_admin_aryo_sees_all) is not installed" );
 	} else {
 		// An editor given manage_options: Aryo keys the actors it shows on
 		// the first role, so this viewer sees editors' and authors' actions
