@@ -2439,6 +2439,12 @@ function minn_admin_acpt_builder_export( $group ) {
 	} catch ( \Throwable $e ) {
 		return new WP_Error( 'minn_acpt_export', wp_strip_all_tags( $e->getMessage() ), array( 'status' => 400 ) );
 	}
+	// A credential in the group would leave masked: a file that imports
+	// broken is refused, never handed out.
+	$refused = Minn_Admin_Egress::refuse_export( (string) $content );
+	if ( $refused ) {
+		return $refused;
+	}
 	return array(
 		'filename' => 'acpt-export-' . sanitize_key( $group->getName() ) . '.json',
 		'content'  => (string) $content,

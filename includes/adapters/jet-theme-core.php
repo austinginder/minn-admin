@@ -286,15 +286,20 @@ add_action( 'rest_api_init', function () {
 				return new WP_Error( 'not_found', __( 'Template not found', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			// The dialog sends the title as the row has it when it is left
-			// alone: that writes nothing, so cleaning never rewrites a title
-			// Jet's own screen stored (a '50%DEAL' footer, an untitled draft).
+			// alone (as served: a credential copy masked): that writes
+			// nothing, so cleaning never rewrites a title Jet's own screen
+			// stored (a '50%DEAL' footer, an untitled draft).
 			$sent = $request->get_param( 'title' );
-			if ( null === $sent || (string) $sent === (string) $p->post_title ) {
+			if ( null === $sent || Minn_Admin::unchanged( $sent, $p->post_title ) ) {
 				return rest_ensure_response( minn_admin_jet_tc_item( $p ) );
 			}
 			$title = sanitize_text_field( (string) $sent );
 			if ( '' === $title ) {
 				return new WP_Error( 'missing_title', __( 'A template needs a title.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
+			$masked = Minn_Admin_Egress::refuse_masks( array( 'post_title' => $title ), array( 'post_title' => $p->post_title ) );
+			if ( $masked ) {
+				return $masked;
 			}
 			$r = wp_update_post( wp_slash( array( 'ID' => $p->ID, 'post_title' => $title ) ), true );
 			if ( is_wp_error( $r ) ) {

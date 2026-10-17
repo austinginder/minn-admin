@@ -1160,8 +1160,13 @@ function minn_admin_acf_builder_save( $group, $body ) {
 	}
 
 	// ---- Group settings. ----
-	// A title sent back as stored keeps its stored bytes (edge spaces too).
-	if ( ! isset( $body['title'] ) || (string) $body['title'] !== (string) $group['title'] ) {
+	// A title sent back as stored keeps its stored bytes (edge spaces too),
+	// and so does one sent back as served (a credential copy masked).
+	if ( ! isset( $body['title'] ) || ! Minn_Admin::unchanged( $body['title'], $group['title'] ) ) {
+		$masked = Minn_Admin_Egress::refuse_masks( array( 'title' => $title ), array( 'title' => $group['title'] ) );
+		if ( $masked ) {
+			return $masked;
+		}
 		$group['title'] = $title;
 	}
 	if ( array_key_exists( 'active', $body ) ) {
@@ -1397,6 +1402,12 @@ add_action( 'rest_api_init', function () {
 			$group['fields'] = acf_get_fields( $group );
 			$export          = acf_prepare_field_group_for_export( $group );
 			$json            = function_exists( 'acf_json_encode' ) ? acf_json_encode( array( $export ) ) : wp_json_encode( array( $export ), JSON_PRETTY_PRINT );
+			// A credential in the group would leave masked: a file that
+			// imports broken is refused, never handed out.
+			$refused = Minn_Admin_Egress::refuse_export( $json );
+			if ( $refused ) {
+				return $refused;
+			}
 			return rest_ensure_response( array(
 				'filename' => 'acf-export-' . sanitize_title( $export['title'] ) . '-' . gmdate( 'Y-m-d' ) . '.json',
 				'content'  => $json,

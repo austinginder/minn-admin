@@ -79,8 +79,9 @@ function minn_admin_eps301_item( $row ) {
  */
 function minn_admin_eps301_payload( WP_REST_Request $request, $row = null ) {
 	$served = is_array( $row ) ? minn_admin_eps301_item( $row ) : null;
+	// As served counts as stored: a credential copy in a target is masked.
 	$keep   = function ( $key ) use ( $request, $served ) {
-		return null !== $served && ( null === $request[ $key ] || (string) $request[ $key ] === (string) $served[ $key ] );
+		return null !== $served && ( null === $request[ $key ] || Minn_Admin::unchanged( $request[ $key ], $served[ $key ] ) );
 	};
 	// sanitize_text_field( urldecode( … ) ) on both sides, matching their own
 	// writer, the same rule the Simple 301 Redirects adapter already follows.
@@ -95,6 +96,12 @@ function minn_admin_eps301_payload( WP_REST_Request $request, $row = null ) {
 	}
 	if ( ! $keep( 'status' ) && ! in_array( $status, array( '301', '302', '307', 'inactive' ), true ) ) {
 		$status = '301';
+	}
+	// Their table has no restore: a mask left in an edited value would be
+	// stored where the credential was.
+	$masked = Minn_Admin_Egress::refuse_masks( array( 'url_from' => $from, 'url_to' => $to ), is_array( $row ) ? array( 'url_from' => $row['url_from'], 'url_to' => $row['url_to'] ) : array() );
+	if ( $masked ) {
+		return $masked;
 	}
 	// Exactly their _save_redirects normalization: strip this site's root
 	// from the source, then the leading slash (see the header note). A

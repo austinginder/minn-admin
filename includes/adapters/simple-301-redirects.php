@@ -80,8 +80,11 @@ function minn_admin_s301_can() {
  * @return array|WP_Error array( from, to )
  */
 function minn_admin_s301_rule( WP_REST_Request $request, $from_was = null, $to_was = null ) {
+	// As served counts as stored: a credential copy in a target is masked.
+	// The rules are one option, so a mask in an edited target goes back to
+	// its key through the egress fence's option restore.
 	$keep = function ( $key, $was ) use ( $request ) {
-		return null !== $was && ( null === $request[ $key ] || (string) $request[ $key ] === (string) $was );
+		return null !== $was && ( null === $request[ $key ] || Minn_Admin::unchanged( $request[ $key ], $was ) );
 	};
 	$from = $keep( 'from', $from_was ) ? (string) $from_was : sanitize_text_field( trim( (string) $request['from'] ) );
 	$to   = $keep( 'to', $to_was ) ? (string) $to_was : sanitize_text_field( trim( (string) $request['to'] ) );

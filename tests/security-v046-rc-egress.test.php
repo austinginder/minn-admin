@@ -19,9 +19,13 @@
  * them. Sections SKIP when their plugin is inactive (HFCM runs on
  * builders.localhost and minndemo.localhost, Custom CSS & JS on minndemo;
  * without a Novamira Pro licence the memory section stands in for its post
- * type). Everything it makes is removed however the run ends.
+ * type; Bricks runs on builders.localhost; the redirect plugins and Custom
+ * CSS & JS load for the one process through tests/lib/plugin-swap.php).
+ * Everything it makes is removed however the run ends.
  *
- * Run: wp eval-file <absolute path>/tests/security-v046-rc-egress.test.php --user=admin --path=<site>
+ * Run: MINN_SWAP_ADD=custom-css-js/custom-css-js.php,eps-301-redirects/eps-301-redirects.php,simple-301-redirects/wp-simple-301-redirects.php \
+ *      wp eval-file <absolute path>/tests/security-v046-rc-egress.test.php --user=admin --path=<site> \
+ *      --require=<absolute path>/tests/lib/plugin-swap.php
  *
  * @package minn-admin
  */
@@ -491,6 +495,302 @@ try {
 	} )();
 
 	/*
+	 * Peers of 12-1: other writes fed by a masked read, and other exports.
+	 */
+
+	// Additional CSS (core's custom_css post for the active theme).
+	( function () use ( $check, $skip, $send, $once, $has, $key, $t1, $tag ) {
+		if ( ! function_exists( 'wp_get_custom_css_post' ) || ! current_user_can( 'edit_css' ) ) {
+			$skip( '12-1 Additional CSS: the caller may not edit it here' );
+			return;
+		}
+		$post  = wp_get_custom_css_post();
+		$had   = $post ? (int) $post->ID : 0;
+		$was   = $post ? (string) $post->post_content : '';
+		$revs  = $had ? array_map( 'intval', wp_list_pluck( wp_get_post_revisions( $had ), 'ID' ) ) : array();
+		$clean = $once( function () use ( $had, $was, $revs ) {
+			$now = wp_get_custom_css_post();
+			if ( $had ) {
+				if ( $now && $was !== (string) $now->post_content ) {
+					wp_update_custom_css_post( $was );
+				}
+				foreach ( wp_get_post_revisions( $had ) as $rev ) {
+					if ( ! in_array( (int) $rev->ID, $revs, true ) ) {
+						wp_delete_post_revision( $rev->ID );
+					}
+				}
+			} elseif ( $now && 'custom_css' === $now->post_type ) {
+				wp_delete_post( $now->ID, true );
+				remove_theme_mod( 'custom_css_post_id' );
+			}
+		} );
+		try {
+			$seeded = $was . "\n/* minn rc egress {$tag} */\n.minn-rc-egress { background: url(https://example.com/i.png?k={$key}); }\n";
+			wp_update_custom_css_post( $seeded );
+			$stored = function () {
+				$p = wp_get_custom_css_post();
+				return $p ? (string) $p->post_content : '';
+			};
+			list( , $item ) = $send( 'GET', '/minn-admin/v1/custom-css' );
+			$check( '12-1 Additional CSS: the read shows the copy masked', $has( $item['css'] ?? '', $t1 ), substr( (string) ( $item['css'] ?? '' ), -160 ) );
+			list( $st ) = $send( 'POST', '/minn-admin/v1/custom-css', array( 'css' => $item['css'] ?? '', 'base' => $item['stamp'] ?? '' ) );
+			$check( '12-1 Additional CSS: saving it back untouched leaves the stylesheet holding the real key', 200 === $st && $seeded === $stored(), $st . ' ' . substr( $stored(), -160 ) );
+			list( $st, $d ) = $send( 'POST', '/minn-admin/v1/custom-css', array( 'css' => ( $item['css'] ?? '' ) . ".minn-rc-edited { color: red; }\n", 'base' => $item['stamp'] ?? '' ) );
+			$check( '12-1 Additional CSS: an edit that keeps the mask is refused and writes nothing', 400 === $st && 'minn_egress_mask' === ( $d['code'] ?? '' ) && $seeded === $stored(), $st . ' ' . wp_json_encode( $d['code'] ?? null ) );
+			list( , $item ) = $send( 'GET', '/minn-admin/v1/custom-css' );
+			list( $st ) = $send( 'POST', '/minn-admin/v1/custom-css', array( 'css' => str_replace( $t1, $key, (string) ( $item['css'] ?? '' ) ) . ".minn-rc-edited { color: red; }\n", 'base' => $item['stamp'] ?? '' ) );
+			$check( '12-1 Additional CSS control: an edit with the real value typed back is written', 200 === $st && $has( $stored(), $key ) && $has( $stored(), 'minn-rc-edited' ), (string) $st );
+		} finally {
+			$clean();
+		}
+	} )();
+
+	// Bricks templates: the rename dialog and the export.
+	( function () use ( $check, $skip, $send, $once, $has, $key, $t1, $tag ) {
+		if ( ! defined( 'BRICKS_DB_TEMPLATE_SLUG' ) || ! function_exists( 'minn_admin_bricks_template_item' ) ) {
+			$skip( '12-1 Bricks: inactive (it runs on builders.localhost)' );
+			return;
+		}
+		$ids   = array();
+		$clean = $once( function () use ( &$ids ) {
+			foreach ( $ids as $id ) {
+				if ( is_int( $id ) && $id > 1 && BRICKS_DB_TEMPLATE_SLUG === get_post_type( $id ) ) {
+					wp_delete_post( $id, true );
+				}
+			}
+		} );
+		try {
+			$make = function ( $title, $text ) use ( $send, &$ids ) {
+				list( $st, $d ) = $send( 'POST', '/minn-admin/v1/bricks/templates', array( 'title' => $title, 'type' => 'section' ) );
+				$id             = (int) ( $d['id'] ?? 0 );
+				if ( $id > 1 ) {
+					$ids[] = $id;
+					update_post_meta( $id, BRICKS_DB_PAGE_CONTENT, array( array( 'id' => 'mrcegr', 'name' => 'heading', 'parent' => 0, 'children' => array(), 'settings' => array( 'text' => $text ) ) ) );
+				}
+				return array( $id, $st, $d );
+			};
+			list( $with, $st, $d ) = $make( 'Minn rc egress ' . $key, 'Key ' . $key );
+			list( $plain )         = $make( 'Minn rc egress plain ' . $tag, 'Hello there' );
+			if ( $with < 2 || $plain < 2 ) {
+				$check( '12-1 Bricks: the test templates were created', false, $st . ' ' . wp_json_encode( $d ) );
+				return;
+			}
+			$check( '12-1 Bricks: the create answer shows the title masked', $has( $d['title'] ?? '', $t1 ), wp_json_encode( $d['title'] ?? null ) );
+			list( $st ) = $send( 'PUT', "/minn-admin/v1/bricks/templates/{$with}", array( 'title' => $d['title'] ?? '', 'type' => $d['type'] ?? '' ) );
+			clean_post_cache( $with );
+			$check( '12-1 Bricks: saving the dialog untouched leaves the title holding the real key', 200 === $st && $has( get_post_field( 'post_title', $with ), $key ) && ! $has( get_post_field( 'post_title', $with ), '[redacted' ), $st . ' ' . get_post_field( 'post_title', $with ) );
+			list( $st, $e ) = $send( 'GET', "/minn-admin/v1/bricks/templates/{$with}/export" );
+			$check( '12-1 Bricks export: a template holding a credential is refused, never handed out masked', 409 === $st && 'minn_egress_export' === ( $e['code'] ?? '' ) && ! $has( wp_json_encode( $e ), '[redacted' ), $st . ' ' . substr( wp_json_encode( $e ), 0, 200 ) );
+			list( $st, $e ) = $send( 'GET', "/minn-admin/v1/bricks/templates/{$plain}/export" );
+			$check( '12-1 Bricks export control: a template without one exports', 200 === $st && $has( $e['content'] ?? '', 'Hello there' ), $st . ' ' . substr( wp_json_encode( $e ), 0, 200 ) );
+		} finally {
+			$clean();
+		}
+	} )();
+
+	// ACF field group builder (the title) and export.
+	( function () use ( $check, $skip, $send, $once, $has, $key, $t1, $tag ) {
+		if ( ! function_exists( 'minn_admin_acf_schema_group' ) || ! function_exists( 'acf_update_field_group' ) ) {
+			$skip( '12-1 ACF field groups: ACF inactive' );
+			return;
+		}
+		$gids  = array();
+		$clean = $once( function () use ( &$gids ) {
+			foreach ( $gids as $gid ) {
+				if ( is_int( $gid ) && $gid > 1 && 'acf-field-group' === get_post_type( $gid ) ) {
+					acf_delete_field_group( $gid );
+				}
+			}
+		} );
+		try {
+			$make = function ( $gkey, $title ) use ( &$gids, $tag ) {
+				$g   = acf_update_field_group( array( 'key' => $gkey, 'title' => $title, 'active' => false, 'location' => array( array( array( 'param' => 'post_type', 'operator' => '==', 'value' => 'post' ) ) ) ) );
+				$gid = is_array( $g ) ? (int) ( $g['ID'] ?? 0 ) : 0;
+				if ( $gid > 1 ) {
+					$gids[] = $gid;
+					acf_update_field( array( 'key' => 'field_' . substr( md5( $gkey ), 0, 12 ), 'label' => 'Note', 'name' => 'minnrcegress_note_' . $tag, 'type' => 'text', 'parent' => $gid ) );
+				}
+				return $gid;
+			};
+			$gkey = 'group_minnrcegress' . $tag;
+			$pkey = 'group_minnrcegressp' . $tag;
+			$gid  = $make( $gkey, 'Minn rc egress ' . $key );
+			$pid  = $make( $pkey, 'Minn rc egress plain ' . $tag );
+			if ( $gid < 2 || $pid < 2 ) {
+				$check( '12-1 ACF field groups: the test groups were created', false );
+				return;
+			}
+			list( , $payload ) = $send( 'GET', "/minn-admin/v1/acf/schema/groups/{$gkey}/full" );
+			$check( '12-1 ACF builder: the read shows the title masked', $has( $payload['group']['title'] ?? '', $t1 ), wp_json_encode( $payload['group']['title'] ?? null ) );
+			$rows = array();
+			foreach ( (array) ( $payload['fields'] ?? array() ) as $f ) {
+				$row = array( 'key' => $f['key'] );
+				foreach ( array( 'label', 'instructions', 'required', 'default_value', 'placeholder', 'choices', 'min', 'max', 'step', 'rows', 'ui_on_text', 'ui_off_text', 'button_label' ) as $s ) {
+					$row[ $s ] = $f[ $s ] ?? null;
+				}
+				$rows[] = $row;
+			}
+			$body       = array( 'stamp' => $payload['stamp'] ?? '', 'title' => $payload['group']['title'] ?? '', 'location' => $payload['group']['location'] ?? array(), 'fields' => $rows, 'active' => false );
+			list( $st ) = $send( 'POST', "/minn-admin/v1/acf/schema/groups/{$gkey}/full", $body );
+			clean_post_cache( $gid );
+			$check( '12-1 ACF builder: a save with the title untouched leaves it holding the real key', 200 === $st && $has( get_post_field( 'post_title', $gid ), $key ) && ! $has( get_post_field( 'post_title', $gid ), '[redacted' ), $st . ' ' . get_post_field( 'post_title', $gid ) );
+			list( $st, $e ) = $send( 'GET', "/minn-admin/v1/acf/schema/groups/{$gkey}/export" );
+			$check( '12-1 ACF export: a group holding a credential is refused, never handed out masked', 409 === $st && 'minn_egress_export' === ( $e['code'] ?? '' ), $st . ' ' . substr( wp_json_encode( $e ), 0, 200 ) );
+			list( $st, $e ) = $send( 'GET', "/minn-admin/v1/acf/schema/groups/{$pkey}/export" );
+			$check( '12-1 ACF export control: a group without one exports', 200 === $st && $has( $e['content'] ?? '', $pkey ), $st . ' ' . substr( wp_json_encode( $e ), 0, 200 ) );
+		} finally {
+			$clean();
+		}
+	} )();
+
+	// ACPT export.
+	( function () use ( $check, $skip, $send, $once, $has, $key, $tag ) {
+		if ( ! function_exists( 'minn_admin_acpt_active' ) || ! minn_admin_acpt_active() || ! class_exists( '\ACPT\Core\CQRS\Command\SaveMetaGroupCommand' ) ) {
+			$skip( '12-1 ACPT export: ACPT inactive' );
+			return;
+		}
+		$gids  = array();
+		$clean = $once( function () use ( &$gids ) {
+			foreach ( $gids as $gid ) {
+				try {
+					( new \ACPT\Core\CQRS\Command\DeleteMetaGroupCommand( $gid ) )->execute();
+				} catch ( \Throwable $e ) {
+					echo 'WARN  could not delete the ACPT test group ' . $gid . "\n";
+				}
+			}
+		} );
+		try {
+			$make  = function ( $suffix, $label ) use ( &$gids, $tag ) {
+				$gid = (string) ( new \ACPT\Core\CQRS\Command\SaveMetaGroupCommand( array(
+					'name'    => 'minnrcegress' . $suffix . $tag,
+					'label'   => $label,
+					'belongs' => array( array( 'belongsTo' => \ACPT\Constants\MetaTypes::CUSTOM_POST_TYPE, 'operator' => '=', 'find' => 'post', 'logic' => '' ) ),
+					'boxes'   => array( array( 'name' => 'minnrcegress_box' . $suffix . $tag, 'label' => 'Box', 'fields' => array( array( 'name' => 'note', 'label' => 'Note', 'type' => 'Text', 'isRequired' => false ) ) ) ),
+				) ) )->execute();
+				if ( '' !== $gid ) {
+					$gids[] = $gid;
+				}
+				return $gid;
+			};
+			$with  = $make( 'k', 'Egress ' . $key );
+			$plain = $make( 'p', 'Egress plain' );
+			if ( '' === $with || '' === $plain ) {
+				$check( '12-1 ACPT export: the test groups were created', false );
+				return;
+			}
+			list( $st, $e ) = $send( 'GET', "/minn-admin/v1/acpt/schema/groups/{$with}/export" );
+			$check( '12-1 ACPT export: a group holding a credential is refused, never handed out masked', 409 === $st && 'minn_egress_export' === ( $e['code'] ?? '' ), $st . ' ' . substr( wp_json_encode( $e ), 0, 200 ) );
+			list( $st, $e ) = $send( 'GET', "/minn-admin/v1/acpt/schema/groups/{$plain}/export" );
+			$check( '12-1 ACPT export control: a group without one exports', 200 === $st && $has( $e['content'] ?? '', 'minnrcegressp' . $tag ), $st . ' ' . substr( wp_json_encode( $e ), 0, 200 ) );
+		} finally {
+			$clean();
+		}
+	} )();
+
+	// JetThemeCore template rename.
+	( function () use ( $check, $skip, $send, $once, $key, $t1, $tag ) {
+		if ( ! function_exists( 'minn_admin_jet_tc_item' ) || ! post_type_exists( 'jet-theme-core' ) ) {
+			$skip( '12-1 JetThemeCore: inactive' );
+			return;
+		}
+		$id    = 0;
+		$clean = $once( function () use ( &$id ) {
+			if ( is_int( $id ) && $id > 1 && 'jet-theme-core' === get_post_type( $id ) ) {
+				wp_delete_post( $id, true );
+			}
+		} );
+		try {
+			$id = wp_insert_post( array( 'post_type' => 'jet-theme-core', 'post_status' => 'publish', 'post_title' => 'Minn rc egress ' . $key ), true );
+			$id = is_wp_error( $id ) ? 0 : (int) $id;
+			if ( $id < 2 ) {
+				$check( '12-1 JetThemeCore: the test template was created', false );
+				return;
+			}
+			$served     = 'Minn rc egress ' . $t1;
+			list( $st ) = $send( 'PUT', "/minn-admin/v1/jet-theme-core/templates/{$id}", array( 'title' => $served ) );
+			clean_post_cache( $id );
+			$check( '12-1 JetThemeCore: saving the title back as served leaves it holding the real key', 200 === $st && 'Minn rc egress ' . $key === get_post_field( 'post_title', $id ), $st . ' ' . get_post_field( 'post_title', $id ) );
+			list( $st ) = $send( 'PUT', "/minn-admin/v1/jet-theme-core/templates/{$id}", array( 'title' => $served . ' v2' ) );
+			clean_post_cache( $id );
+			$check( '12-1 JetThemeCore: an edit that keeps the mask is refused and writes nothing', 400 === $st && 'Minn rc egress ' . $key === get_post_field( 'post_title', $id ), $st . ' ' . get_post_field( 'post_title', $id ) );
+			list( $st ) = $send( 'PUT', "/minn-admin/v1/jet-theme-core/templates/{$id}", array( 'title' => 'Minn rc egress renamed ' . $tag ) );
+			clean_post_cache( $id );
+			$check( '12-1 JetThemeCore control: a real rename is written', 200 === $st && 'Minn rc egress renamed ' . $tag === get_post_field( 'post_title', $id ) );
+		} finally {
+			$clean();
+		}
+	} )();
+
+	// 301 Redirects (EPS): their own table, no restore.
+	( function () use ( $check, $skip, $send, $key, $t1, $tag ) {
+		global $wpdb;
+		if ( ! function_exists( 'minn_admin_eps301_active' ) || ! minn_admin_eps301_active() || ! Minn_Admin_Kernel_SQL::exists( 'redirects' ) ) {
+			$skip( '12-1 301 Redirects: inactive (load it with MINN_SWAP_ADD=eps-301-redirects/eps-301-redirects.php)' );
+			return;
+		}
+		$table = $wpdb->prefix . 'redirects';
+		$from  = 'minn-rc-egress-' . $tag;
+		$to    = 'https://example.com/dl?key=' . $key;
+		$wpdb->query( 'START TRANSACTION' );
+		try {
+			$wpdb->insert( $table, array( 'url_from' => $from, 'url_to' => $to, 'status' => '301', 'type' => 'url', 'count' => 0 ) );
+			$id = (int) $wpdb->insert_id;
+			if ( $id <= 0 ) {
+				$check( '12-1 301 Redirects: a rule is seeded', false, $wpdb->last_error );
+				return;
+			}
+			$row          = function () use ( $wpdb, $table, $id ) {
+				return $wpdb->get_row( $wpdb->prepare( "SELECT url_from, url_to, status FROM {$table} WHERE id = %d", $id ), ARRAY_A ); // phpcs:ignore
+			};
+			$served       = minn_admin_eps301_item( $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $id ) ) ); // phpcs:ignore
+			$served['to'] = str_replace( $key, $t1, $served['to'] );
+			$route        = '/' . str_replace( '{id}', (string) $id, Minn_Admin_Kernel::action_path( 'eps301/redirects', 'edit' ) );
+			list( $st )   = $send( 'PUT', $route, array( 'from' => $served['from'], 'to' => $served['to'], 'status' => '302' ) );
+			$now          = $row();
+			$check( '12-1 301 Redirects: a status-only edit keeps the target holding the real key', 200 === $st && $to === $now['url_to'] && '302' === $now['status'], $st . ' ' . wp_json_encode( $now ) );
+			list( $st )   = $send( 'PUT', $route, array( 'from' => $served['from'], 'to' => $served['to'] . '&x=1', 'status' => '302' ) );
+			$now          = $row();
+			$check( '12-1 301 Redirects: an edit that keeps the mask is refused and writes nothing', 400 === $st && $to === $now['url_to'], $st . ' ' . wp_json_encode( $now ) );
+		} finally {
+			$wpdb->query( 'ROLLBACK' );
+			wp_cache_flush();
+		}
+	} )();
+
+	// Simple 301 Redirects: one option, so an edited target gets its key back.
+	( function () use ( $check, $skip, $send, $once, $key, $t1, $tag ) {
+		if ( ! function_exists( 'minn_admin_s301_active' ) || ! minn_admin_s301_active() ) {
+			$skip( '12-1 Simple 301 Redirects: inactive (load it with MINN_SWAP_ADD=simple-301-redirects/wp-simple-301-redirects.php)' );
+			return;
+		}
+		$sentinel = new stdClass();
+		$was      = get_option( '301_redirects', $sentinel );
+		$restore  = $once( function () use ( $was, $sentinel ) {
+			if ( $was === $sentinel ) {
+				delete_option( '301_redirects' );
+			} else {
+				update_option( '301_redirects', $was );
+			}
+		} );
+		try {
+			$from          = '/minn-rc-egress-' . $tag;
+			$to            = 'https://example.com/caf%C3%A9?key=' . $key;
+			$rows          = is_array( $was ) ? $was : array();
+			$rows[ $from ] = $to;
+			update_option( '301_redirects', $rows );
+			$id         = minn_admin_s301_encode_id( $from );
+			list( $st ) = $send( 'PUT', "/minn-admin/v1/s301/redirects/{$id}", array( 'from' => $from, 'to' => str_replace( $key, $t1, $to ) ) );
+			$now        = (array) get_option( '301_redirects', array() );
+			$check( '12-1 Simple 301: saving a rule untouched keeps its target byte for byte (the percent octets too)', 200 === $st && $to === ( $now[ $from ] ?? null ), $st . ' ' . wp_json_encode( $now[ $from ] ?? null ) );
+			list( $st ) = $send( 'PUT', "/minn-admin/v1/s301/redirects/{$id}", array( 'from' => $from, 'to' => 'https://example.com/new?key=' . $t1 ) );
+			$now        = (array) get_option( '301_redirects', array() );
+			$check( '12-1 Simple 301 control: an edited target beside the mask gets the key back (the option restore)', 200 === $st && 'https://example.com/new?key=' . $key === ( $now[ $from ] ?? null ), $st . ' ' . wp_json_encode( $now[ $from ] ?? null ) );
+		} finally {
+			$restore();
+		}
+	} )();
+
+	/*
 	 * 04-3: the credential list is read again after a credential row changes.
 	 */
 	$held = function () {
@@ -510,12 +810,8 @@ try {
 	add_option( $row4, $key3 . 'Late7', '', 'no' );
 	$check( '04-3: a credential row added drops the list held for this request', ! $held() );
 	$check( '04-3: and the object cache\'s copy', false === wp_cache_get( 'egress_credentials', 'minn_admin' ) );
-	if ( method_exists( 'Minn_Admin_DB', 'forget_credentials' ) ) {
-		list( , $d ) = $send( 'GET', '/minn-admin/v1/minn-rc-egress-test/read' );
-		$check( '04-3: a key saved earlier in the request is masked in the next response', ! $has( $d['late'] ?? '', $key3 . 'Late7' ), wp_json_encode( $d ) );
-	} else {
-		$skip( '04-3: same-request masking of a new key waits on Minn_Admin_DB::forget_credentials()' );
-	}
+	list( , $d ) = $send( 'GET', '/minn-admin/v1/minn-rc-egress-test/read' );
+	$check( '04-3: a key saved earlier in the request is masked in the next response', ! $has( $d['late'] ?? '', $key3 . 'Late7' ), wp_json_encode( $d ) );
 } finally {
 	$seed_clean();
 }

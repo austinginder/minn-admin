@@ -126,9 +126,11 @@ try {
 	$check( 'a redacted value sent back never overwrites the stored key', is_array( $now ) && $key === ( $now['key'] ?? '' ), wp_json_encode( $now ) );
 	$check( 'while the rest of the save lands', is_array( $now ) && 'basic' === ( $now['type'] ?? '' ) );
 
-	// An edit beside the token in the same string is kept.
-	update_option( $option, array( 'url' => 'https://example.com/?key=' . $key . '&mode=a' ) );
-	$send( 'POST', '/minn-admin/v1/minn-egress-test/save', array( 'option' => $option, 'value' => array( 'url' => 'https://example.com/?key=' . $t1 . '&mode=b' ) ) );
+	// An edit beside the token in the same string is kept. The row keeps
+	// the key under its own name too: the list is read again once the row
+	// changes, and a URL alone is not a credential.
+	update_option( $option, array( 'key' => $key, 'url' => 'https://example.com/?key=' . $key . '&mode=a' ) );
+	$send( 'POST', '/minn-admin/v1/minn-egress-test/save', array( 'option' => $option, 'value' => array( 'key' => $t1, 'url' => 'https://example.com/?key=' . $t1 . '&mode=b' ) ) );
 	$check( 'an edit beside a redacted value in one string is kept', 'https://example.com/?key=' . $key . '&mode=b' === ( get_option( $option )['url'] ?? '' ), wp_json_encode( get_option( $option ) ) );
 
 	// Two keys in a list, saved back after the first was removed: the one

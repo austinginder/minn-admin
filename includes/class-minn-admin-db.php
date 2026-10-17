@@ -1463,6 +1463,17 @@ class Minn_Admin_DB {
 		return (array) self::$credentials;
 	}
 
+	/**
+	 * Read the credentials again when next asked: the egress fence calls
+	 * this after a credential row changes, so a key saved earlier in the
+	 * request is masked in its response.
+	 */
+	public static function forget_credentials() {
+		self::$credentials    = null;
+		self::$needles        = null;
+		self::$needles_capped = false;
+	}
+
 	/** The option names the browser treats as credential rows, for guards outside it. */
 	public static function credential_option_names() {
 		return self::secret_option_names();

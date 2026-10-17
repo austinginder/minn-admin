@@ -1018,9 +1018,10 @@ add_action( 'rest_api_init', function () {
 			if ( ! $post || BRICKS_DB_TEMPLATE_SLUG !== $post->post_type ) {
 				return new WP_Error( 'not_found', __( 'Template not found.', 'minn-admin' ), array( 'status' => 404 ) );
 			}
-			// An untouched title comes back as stored and writes nothing; only
-			// a new one is escaped the way Bricks stores titles.
-			$title    = (string) $request['title'] === (string) $post->post_title ? '' : trim( (string) $request['title'] );
+			// An untouched title comes back as stored (or as served, a
+			// credential copy masked) and writes nothing; only a new one is
+			// escaped the way Bricks stores titles.
+			$title    = Minn_Admin::unchanged( $request['title'], $post->post_title ) ? '' : trim( (string) $request['title'] );
 			$type     = sanitize_key( (string) $request['type'] );
 			$previous = (string) get_post_meta( $post->ID, BRICKS_DB_TEMPLATE_TYPE, true );
 			// The form sends the stored type back on every save, and a type
@@ -1031,6 +1032,10 @@ add_action( 'rest_api_init', function () {
 			$retype = '' !== $type && $type !== $previous;
 			if ( $retype && ! isset( minn_admin_bricks_template_types()[ $type ] ) ) {
 				return new WP_Error( 'invalid', __( 'Unknown template type.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
+			$masked = Minn_Admin_Egress::refuse_masks( array( 'post_title' => $title ), array( 'post_title' => $post->post_title ) );
+			if ( $masked ) {
+				return $masked;
 			}
 			if ( '' !== $title && $title !== $post->post_title ) {
 				$result = wp_update_post( wp_slash( array( 'ID' => $post->ID, 'post_title' => esc_html( $title ) ) ), true );
@@ -1161,6 +1166,12 @@ add_action( 'rest_api_init', function () {
 			$export = \Bricks\Templates::export_template( $post->ID );
 			if ( ! is_array( $export ) || empty( $export['content'] ) ) {
 				return new WP_Error( 'failed', __( 'Bricks could not export this template.', 'minn-admin' ), array( 'status' => 500 ) );
+			}
+			// A credential in the template would leave masked: a file that
+			// imports broken is refused, never handed out.
+			$refused = Minn_Admin_Egress::refuse_export( (string) $export['content'] );
+			if ( $refused ) {
+				return $refused;
 			}
 			return rest_ensure_response( array(
 				'filename' => (string) $export['name'],

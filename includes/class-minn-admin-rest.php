@@ -3705,9 +3705,14 @@ class Minn_Admin_REST {
 			return new WP_Error( 'minn_stale', __( 'The custom CSS was changed somewhere else after you opened it. Copy your edit, reload, and apply it again.', 'minn-admin' ), array( 'status' => 409 ) );
 		}
 		// The stylesheet as stored goes back unwritten: no revision, and no
-		// pass through the update_custom_css_data filter.
-		if ( $css === $stored ) {
+		// pass through the update_custom_css_data filter. As served counts as
+		// stored: a credential copy in it (a URL carrying a key) is masked.
+		if ( Minn_Admin::unchanged( $css, $stored ) ) {
 			return rest_ensure_response( self::custom_css_state() );
+		}
+		$masked = Minn_Admin_Egress::refuse_masks( array( 'css' => $css ), array( 'css' => $stored ) );
+		if ( $masked ) {
+			return $masked;
 		}
 
 		// The Customizer refuses obviously broken CSS rather than blanking the
