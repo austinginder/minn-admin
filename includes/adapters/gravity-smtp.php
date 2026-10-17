@@ -634,6 +634,10 @@ minn_admin_resource( 'gravity-smtp/events', function () {
 			'resend' => function () {
 				return current_user_can( minn_admin_gsmtp_cap( 'EDIT_EMAIL_LOG_DETAILS' ) ) && minn_admin_gsmtp_can_preview();
 			},
+			// The raw tables hold every message body, which the detail
+			// shows only to the preview cap: the database browser shows
+			// them only to someone who holds it too.
+			'table'  => 'minn_admin_gsmtp_can_preview',
 		),
 		'labels'  => array( 'not_found' => __( 'Event not found', 'minn-admin' ) ),
 		'source'  => array(

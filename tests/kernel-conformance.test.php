@@ -34,7 +34,9 @@
  *    then the database's own clock (a column NOW() wrote) in a day range,
  *    chart days, grouped totals, a window and a last event's age.
  * 2. Every real declaration: each action has a declared gate and a
- *    post-condition, each descriptor action that points at a kernel route
+ *    post-condition, a resource over a table whose item or a read sits
+ *    behind a gate stricter than its view gate says what a reader of the
+ *    whole table must pass, each descriptor action that points at a kernel route
  *    names a declared action with its method and a state the action accepts,
  *    and each collection descriptor's route, paging, search and keys agree
  *    with the resource they read; and the kernel refused none of them.
@@ -2222,8 +2224,9 @@ $wpdb->query( $wpdb->prepare( 'SET time_zone = %s', '' === $dc_zone ? 'SYSTEM' :
 
 // --- 1j. A whole table, for screens that show tables raw -------------------
 // The database browser leaves out a table a resource's own rule keeps the
-// viewer from (Minn_Admin_Kernel::table_refused()): its gate, a scope short
-// of everything, a tab gate with no scope, a fixed condition it cannot read.
+// viewer from (Minn_Admin_Kernel::table_refused()): its gate, the gates its
+// item and reads answer to, its 'table' gate, a scope short of everything, a
+// tab gate with no scope, a fixed condition it cannot read.
 // None of these tables exist; the answer comes from the declarations alone.
 if ( ! method_exists( 'Minn_Admin_Kernel', 'table_refused' ) ) {
 	$check( 'a whole table: Minn_Admin_Kernel::table_refused() exists', false );
@@ -2375,6 +2378,106 @@ if ( ! method_exists( 'Minn_Admin_Kernel', 'table_refused' ) ) {
 	) );
 	Minn_Admin_Kernel::resources();
 	$check( "a whole table: 'tables' that is not a list of names, or beside no source table, is a declaration the kernel refuses", $tr_more_refused( 'tr-more-bad' ) && $tr_more_refused( 'tr-more-nosrc' ) && ! $tr_more_refused( 'tr-more:' ) && ! $tr_more_refused( 'tr-more-viewer' ) );
+
+	// A whole table holds every column: the ones the item and each further
+	// read show behind their own gates (a message body, a booking's meta),
+	// and the ones the rows mask past any gate (a gift card code), which the
+	// resource's 'table' gate answers for. Its other tables, joins and
+	// copies follow.
+	$tr_one  = function ( $row ) {
+		return array( 'id' => (int) $row['id'] );
+	};
+	$tr_item = false;
+	$tr_read = false;
+	$tr_tbl  = false;
+	Minn_Admin_Kernel::resource( 'minn-conformance/tr-item', $tr_def( 'minn_conf_tr_item', '__return_true', array(
+		'gates' => array( 'detail' => function () use ( &$tr_item ) {
+			return $tr_item;
+		} ),
+		'item'  => array( 'gate' => 'detail', 'view' => $tr_one, 'fields' => array( 'id' => 'int' ) ),
+	) ) );
+	Minn_Admin_Kernel::resource( 'minn-conformance/tr-read', $tr_def( 'minn_conf_tr_read', '__return_true', array(
+		'gates' => array( 'preview' => function () use ( &$tr_read ) {
+			return $tr_read;
+		} ),
+		'item'  => array( 'view' => $tr_one, 'fields' => array( 'id' => 'int' ) ),
+		'reads' => array( 'body' => array( 'gate' => 'preview', 'view' => $tr_one, 'fields' => array( 'id' => 'int' ) ) ),
+	) ) );
+	Minn_Admin_Kernel::resource( 'minn-conformance/tr-whole', $tr_def( 'minn_conf_tr_whole', '__return_true', array(
+		'gates'  => array( 'table' => function () use ( &$tr_tbl ) {
+			return $tr_tbl;
+		} ),
+		'source' => array(
+			'tables' => array( 'minn_conf_tr_whole_meta' ),
+			'joins'  => array( 'w' => array( 'table' => 'minn_conf_tr_wjoin', 'on' => array( 'id' => 'e.owner' ) ) ),
+		),
+	) ) );
+	Minn_Admin_Kernel::resource( 'minn-conformance/tr-whole-throws', $tr_def( 'minn_conf_tr_wthrow', '__return_true', array( 'gates' => array( 'table' => function () {
+		throw new RuntimeException( 'vendor class renamed' );
+	} ) ) ) );
+	Minn_Admin_Kernel::resource( 'minn-conformance/tr-whole-odd', $tr_def( 'minn_conf_tr_wodd', '__return_true', array( 'gates' => array( 'table' => function () {
+		return 1;
+	} ) ) ) );
+	Minn_Admin_Kernel::resource( 'minn-conformance/tr-item-none', $tr_def( 'minn_conf_tr_inone', '__return_true', array(
+		'item' => array( 'gate' => 'nobody-declared', 'view' => $tr_one, 'fields' => array( 'id' => 'int' ) ),
+	) ) );
+	$tr_shut_all = array(
+		$tr( $p . 'minn_conf_tr_item' ),
+		$tr( $p . 'minn_conf_tr_read' ),
+		$tr( $p . 'minn_conf_tr_whole' ),
+		$tr( $p . 'minn_conf_tr_whole_meta' ),
+		$tr( $p . 'minn_conf_tr_wjoin' ),
+		$tr( $p . 'minn_conf_tr_whole_bak' ),
+	);
+	$check( "a whole table: an item gate, a further read's gate or the 'table' gate that says no refuses it though the view gate says yes, with its other tables, joins and copies", ! in_array( false, $tr_shut_all, true ), wp_json_encode( $tr_shut_all ) );
+	list( $tr_list_st ) = $call( 'GET', '/minn-admin/v1/minn-conformance/tr-whole' );
+	$check( "a whole table: the 'table' gate answers for whole tables only, never the resource's own list", 200 === $tr_list_st, (string) $tr_list_st );
+	$tr_item     = true;
+	$tr_read     = true;
+	$tr_tbl      = true;
+	$tr_open_all = array(
+		$tr( $p . 'minn_conf_tr_item' ),
+		$tr( $p . 'minn_conf_tr_read' ),
+		$tr( $p . 'minn_conf_tr_whole' ),
+		$tr( $p . 'minn_conf_tr_whole_meta' ),
+		$tr( $p . 'minn_conf_tr_wjoin' ),
+	);
+	$check( 'a whole table: shown once every gate a read of it answers to says yes', ! in_array( true, $tr_open_all, true ), wp_json_encode( $tr_open_all ) );
+	$check( "a whole table: a 'table' gate that throws or answers anything but true refuses, and so does an item gate nobody declared", $tr( $p . 'minn_conf_tr_wthrow' ) && $tr( $p . 'minn_conf_tr_wodd' ) && $tr( $p . 'minn_conf_tr_inone' ) );
+
+	// A viewer's own scope that is never empty (a log's list of types) is
+	// admitted by the adapter's own answer that it shows this viewer all the
+	// plugin shows anyone ('viewer' as a callable), and only by a strict true.
+	$tr_vsees = false;
+	$tr_vwhere = array( 'owner' => array( 1, 2 ) );
+	Minn_Admin_Kernel::resource( 'minn-conformance/tr-vcall', $tr_def( 'minn_conf_tr_vcall', '__return_true', array(
+		'source' => array(
+			'tables' => array( 'minn_conf_tr_vcall_meta' ),
+			'where'  => function () use ( &$tr_vwhere ) {
+				return $tr_vwhere;
+			},
+			'viewer' => function () use ( &$tr_vsees ) {
+				return $tr_vsees;
+			},
+		),
+	) ) );
+	Minn_Admin_Kernel::resource( 'minn-conformance/tr-vthrow', $tr_def( 'minn_conf_tr_vthrow', '__return_true', array(
+		'source' => array( 'where' => array( 'owner' => 1 ), 'viewer' => function () {
+			throw new RuntimeException( 'vendor class renamed' );
+		} ),
+	) ) );
+	Minn_Admin_Kernel::resource( 'minn-conformance/tr-vodd', $tr_def( 'minn_conf_tr_vodd', '__return_true', array(
+		'source' => array( 'where' => array( 'owner' => 1 ), 'viewer' => function () {
+			return 'yes';
+		} ),
+	) ) );
+	$tr_v_no   = array( $tr( $p . 'minn_conf_tr_vcall' ), $tr( $p . 'minn_conf_tr_vcall_meta' ) );
+	$tr_vsees  = true;
+	$tr_v_yes  = array( $tr( $p . 'minn_conf_tr_vcall' ), $tr( $p . 'minn_conf_tr_vcall_meta' ) );
+	$tr_vwhere = 'not conditions';
+	$tr_v_bad  = $tr( $p . 'minn_conf_tr_vcall' );
+	$check( "a whole table: a viewer scope the adapter says shows this viewer everything is shown, one it does not is refused, and an unreadable scope stays refused", ! in_array( false, $tr_v_no, true ) && ! in_array( true, $tr_v_yes, true ) && $tr_v_bad, wp_json_encode( array( $tr_v_no, $tr_v_yes, $tr_v_bad ) ) );
+	$check( "a whole table: a 'viewer' answer that throws or is anything but true refuses", $tr( $p . 'minn_conf_tr_vthrow' ) && $tr( $p . 'minn_conf_tr_vodd' ) );
 }
 
 // --- 2. Every real declaration ----------------------------------------------
@@ -2392,6 +2495,24 @@ foreach ( $real as $id => $res ) {
 	}
 	foreach ( (array) ( $res['reads'] ?? array() ) as $slug => $read ) {
 		$check( "{$id} read {$slug}: declares the fields it sends", ! empty( $read['fields'] ) );
+	}
+	// The database browser shows a resource's tables raw, every column the
+	// item and its reads keep behind a stricter gate included: a resource
+	// whose item or a read answers to a gate other than its view gate says
+	// what a reader of its whole table must pass ('table'), the columns its
+	// rows mask past that gate as well.
+	if ( isset( $res['source']['table'] ) ) {
+		$item  = is_array( $res['item'] ?? null ) ? $res['item'] : array();
+		$names = array( (string) ( $item['gate'] ?? 'view' ) );
+		foreach ( (array) ( $res['reads'] ?? array() ) as $read ) {
+			$names[] = (string) ( ( is_array( $read ) ? ( $read['gate'] ?? null ) : null ) ?? ( $item['gate'] ?? 'view' ) );
+		}
+		$stricter = array_values( array_filter( array_unique( $names ), function ( $n ) use ( $res ) {
+			return 'view' !== $n && ( $res['gates'][ $n ] ?? null ) !== ( $res['gates']['view'] ?? null );
+		} ) );
+		if ( $stricter ) {
+			$check( "{$id}: an item or read behind '" . implode( "', '", $stricter ) . "' declares what a reader of its whole table must pass (gates.table)", is_callable( $res['gates']['table'] ?? null ) );
+		}
 	}
 }
 $kernel_actions = array();

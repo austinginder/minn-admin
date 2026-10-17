@@ -29,7 +29,11 @@
  *   minn_admin_resource( 'everest/entries', array(
  *     'active'    => callable(): bool        // routes register only when true
  *     'gates'     => array( 'view' => callable(): bool, 'delete' => … ),
- *                                            // called with no arguments; 'view' is required
+ *                                            // called with no arguments; 'view' is required;
+ *                                            // 'table', when declared, is what a reader of the
+ *                                            // whole table (table_refused()) must pass beyond the
+ *                                            // gates its item and reads answer to: a column the
+ *                                            // rows mask past any gate (a code, a message)
  *     'item_gate' => callable( int $id, string $gate, array $row ): bool   // the row-level check
  *     'labels'    => array( 'not_found' => …, 'forbidden' => … ),
  *     'source'    => array( 'table' => 'evf_entries', 'key' => 'entry_id', 'columns' => [ … ], 'detail' => [ … ],
@@ -42,7 +46,10 @@
  *                 //           'customer_email' ) names a joined column in the row
  *                 //           'where'   => conditions | callable(): conditions,
  *                 //           'viewer'  => true,    // the where is the viewer's own row scope
- *                 //                                    (a provider's own bookings), not only a slice
+ *                 //                                    (a provider's own bookings), not only a slice;
+ *                 //                                    or callable(): bool, whether this viewer's scope
+ *                 //                                    is all the plugin shows anyone, for a scope
+ *                 //                                    that is never empty (a log's list of types)
  *                 //           'tables'  => array( 'wpforms_entry_fields', … ) )   // the vendor's other
  *                 //                                    tables holding this data (entry fields, payments),
  *                 //                                    each a name or a table spec, on the source's prefix
@@ -51,8 +58,9 @@
  *                 // is held to it in PHP. A callable that answers anything but an array
  *                 // matches nothing. A missing table is an empty list and a 404. A reader of
  *                 // whole tables (table_refused()) admits a 'viewer' source only to someone
- *                 // its where answers array() for, and gives each of its 'tables' the
- *                 // source's own answer. No read routes ever touch 'tables'.
+ *                 // its where answers array() for (or its 'viewer' callable says yes to),
+ *                 // and gives each of its 'tables' the source's own answer. No read routes
+ *                 // ever touch 'tables'.
  *                 // or array( 'rows' => callable(): array[] )   // a vendor's list in memory (an option, an
  *                 //    API's queue), in the order to show it: the kernel applies the facets, search
  *                 //    (any declared column contains the term), range and page to it in PHP
@@ -374,10 +382,12 @@ class Minn_Admin_Kernel {
 	 *
 	 * A table a resource reads as its source, or names among the vendor's
 	 * other tables holding the same data ('tables'), is refused when any
-	 * resource reading it so does not show the viewer all of it: its view gate says no,
-	 * its scope admits less than every row, it has a tab gate and no scope to
-	 * say which tabs pass, its fixed condition cannot be read, or that
-	 * condition is the viewer's own scope ('viewer') and narrows anything. A
+	 * resource reading it so does not show the viewer all of it: its view
+	 * gate, the gate its item or any further read answers to, or its 'table'
+	 * gate says no (table_gates()), its scope admits less than every row, it
+	 * has a tab gate and no scope to say which tabs pass, its fixed condition
+	 * cannot be read, or that condition is the viewer's own scope ('viewer')
+	 * and narrows anything the adapter does not say it shows them anyway. A
 	 * table a resource only joins or searches (its meta table) is refused
 	 * unless some resource reading it shows the viewer all of its own table,
 	 * since that one shows them these rows. A fixed condition that is not the
@@ -444,10 +454,13 @@ class Minn_Admin_Kernel {
 		return $found;
 	}
 
-	/** Whether a resource shows the current user every row of its source table. */
+	/** Whether a resource shows the current user every row of its source table, every column of it included. */
 	private static function admits_table( array $res ) {
-		if ( ! self::yes( $res['gates']['view'] ?? null ) ) {
-			return false;
+		$gates = (array) ( $res['gates'] ?? array() );
+		foreach ( self::table_gates( $res ) as $name ) {
+			if ( ! self::yes( $gates[ $name ] ?? null ) ) {
+				return false;
+			}
 		}
 		$l = (array) ( $res['list'] ?? array() );
 		if ( null !== self::scope( $res ) || ( ! empty( $l['tab']['gate'] ) && empty( $l['scope'] ) ) ) {
@@ -455,7 +468,37 @@ class Minn_Admin_Kernel {
 		}
 		$src   = (array) ( $res['source'] ?? array() );
 		$fixed = self::fixed( $src );
-		return null !== $fixed && ( empty( $src['viewer'] ) || array() === $fixed );
+		if ( null === $fixed ) {
+			return false;
+		}
+		$viewer = $src['viewer'] ?? null;
+		// A viewer's own scope admits someone it narrows nothing for, or
+		// someone the adapter's own answer says it shows all the plugin shows
+		// anyone (a scope that is never empty, as a log's own list of types).
+		return empty( $viewer ) || array() === $fixed || ( true !== $viewer && self::yes( $viewer ) );
+	}
+
+	/**
+	 * The gates a reader of a resource's whole table must pass: its view
+	 * gate, the gate its item and each further read answer to (a whole table
+	 * holds every column those show, a message body behind a preview
+	 * capability, a booking's meta behind its own context), and its own
+	 * 'table' gate when it declares one, for what its rows mask past any
+	 * gate (a gift card code only some roles see whole).
+	 *
+	 * @param array $res Resource declaration.
+	 * @return string[]
+	 */
+	private static function table_gates( array $res ) {
+		$item  = is_array( $res['item'] ?? null ) ? $res['item'] : array();
+		$names = array( 'view', (string) ( $item['gate'] ?? 'view' ) );
+		foreach ( (array) ( $res['reads'] ?? array() ) as $read ) {
+			$names[] = (string) ( ( is_array( $read ) ? ( $read['gate'] ?? null ) : null ) ?? ( $item['gate'] ?? 'view' ) );
+		}
+		if ( array_key_exists( 'table', (array) ( $res['gates'] ?? array() ) ) ) {
+			$names[] = 'table';
+		}
+		return array_values( array_unique( $names ) );
 	}
 
 	/**

@@ -217,6 +217,23 @@ function minn_admin_wcgc_message( $message ) {
 }
 
 /**
+ * Whether the viewer may read every card whole, its full code and its
+ * message: the raw tables hold both, so this is what the database browser
+ * asks beyond the list's gate. Their screens show a message only to a site
+ * administrator, and an administrator sees codes unmasked unless their
+ * filter masks them; with the plugin gone the administrator role answers,
+ * as their own test does.
+ *
+ * @return bool
+ */
+function minn_admin_wcgc_sees_whole() {
+	$is_admin = function_exists( 'wc_gc_is_site_admin' )
+		? (bool) wc_gc_is_site_admin()
+		: in_array( 'administrator', (array) wp_get_current_user()->roles, true );
+	return $is_admin && ! ( function_exists( 'wc_gc_mask_codes' ) && wc_gc_mask_codes( 'admin' ) );
+}
+
+/**
  * Send the gift card email through their force-send hook.
  *
  * @param WC_GC_Gift_Card_Data $card Card.
@@ -284,7 +301,10 @@ minn_admin_resource( 'wcgc/gift-cards', function () {
 	}
 	return array(
 		'active'  => 'minn_admin_wcgc_active',
-		'gates'   => array( 'view' => 'minn_admin_wcgc_can', 'manage' => 'minn_admin_wcgc_can' ),
+		// The rows mask codes and messages below an administrator; the raw
+		// tables cannot, so the database browser shows them only to
+		// someone who sees both whole.
+		'gates'   => array( 'view' => 'minn_admin_wcgc_can', 'manage' => 'minn_admin_wcgc_can', 'table' => 'minn_admin_wcgc_sees_whole' ),
 		'labels'  => array( 'not_found' => __( 'Gift card not found.', 'minn-admin' ) ),
 		'source'  => array(
 			'table'   => 'woocommerce_gc_cards',

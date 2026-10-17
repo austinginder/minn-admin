@@ -324,11 +324,17 @@ minn_admin_resource( 'jet-appointments/appointments', function () use ( $minn_je
 			'detail' => 'minn_admin_jet_apb_can_detail',
 			'status' => 'minn_admin_jet_apb_can_update',
 			'delete' => 'minn_admin_jet_apb_can_delete',
+			// The meta table holds the phone, comments and form fields their
+			// meta endpoint keeps to its own context: the database browser
+			// shows these tables only to someone who passes it as well.
+			'table'  => 'minn_admin_jet_apb_can_meta',
 		),
 		'labels'  => array( 'not_found' => __( 'Appointment not found', 'minn-admin' ) ),
 		'source'  => array(
 			'table'   => 'jet_appointments',
 			'key'     => 'ID',
+			// Each appointment's phone, comments and form fields.
+			'tables'  => array( 'jet_appointments_meta' ),
 			'joins'   => array(
 				's'  => array( 'core' => 'posts', 'on' => array( 'ID' => 'e.service' ) ),
 				'pr' => array( 'core' => 'posts', 'on' => array( 'ID' => 'e.provider' ) ),
