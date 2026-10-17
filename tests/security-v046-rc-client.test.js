@@ -19,16 +19,20 @@
  *        on the block comment and a multi-line shortcode's line breaks. A
  *        field typed into and put back keeps them too; a real edit still
  *        saves.
+ *   02-I1 The wp-config switch's "late" lock (a define after the line that
+ *        loads WordPress) no longer reads "defined elsewhere".
  *
- * Every check on a save fails on the RC app.js (452ef6cb). Posts are seeded
- * through REST as the role that writes them: a Contributor this suite
- * creates, and the lab's Author and Editor.
+ * Every 16-1 and 16-2 check on a save, and the label check, fails on the RC
+ * app.js (452ef6cb). Posts are seeded through REST as the role that writes
+ * them: a Contributor this suite creates, and the lab's Author and Editor.
  * onExit() removes the posts and the Contributor however the run ends.
  *
  * Run: cd tests && MINN_TEST_PASS=… node security-v046-rc-client.test.js
  */
 const { execFileSync } = require( 'child_process' );
 const crypto = require( 'crypto' );
+const fs = require( 'fs' );
+const path = require( 'path' );
 const { launch, login, loginAs, createPost, openEditor, freshParagraph, reporter, onExit, BASE, WP } = require( './helpers' );
 
 const wp = ( args ) => {
@@ -62,6 +66,32 @@ const ignorable = ( text ) => /Failed to load resource/.test( text )
 
 ( async () => {
 	const t = reporter( 'security-v046-rc-client' );
+
+	/* ===== 02-I1: the lock label, statically (no browser) ===== */
+	// Every lock kind the server emits gets a label of its own; only
+	// 'elsewhere' (defined outside wp-config.php) says so.
+	const app = fs.readFileSync( path.join( __dirname, '..', 'assets', 'js', 'app.js' ), 'utf8' );
+	const restSrc = fs.readFileSync( path.join( __dirname, '..', 'includes', 'class-minn-admin-rest.php' ), 'utf8' );
+	const fnAt = app.indexOf( 'function configLockLabel(' );
+	const fnSrc = fnAt < 0 ? '' : app.slice( fnAt, app.indexOf( '\n\t}\n', fnAt ) + 3 );
+	// eslint-disable-next-line no-new-func
+	const configLockLabel = fnSrc ? new Function( '__', fnSrc + '\nreturn configLockLabel;' )( ( s ) => s ) : () => '';
+	// The kinds: what config_define_scan() answers, and what config_switch()
+	// sets as the lock (every kind but absent and bool, plus 'elsewhere').
+	const phpFn = ( name ) => {
+		const at = restSrc.indexOf( `function ${ name }(` );
+		const end = at < 0 ? -1 : restSrc.indexOf( '\n\t}\n', at );
+		return at < 0 ? '' : restSrc.slice( at, end < 0 ? undefined : end );
+	};
+	const kinds = new Set();
+	( phpFn( 'config_define_scan' ).match( /'kind'\s*=>\s*'[a-z_]+'/g ) || [] ).forEach( ( m ) => kinds.add( m.replace( /^.*'([a-z_]+)'$/, '$1' ) ) );
+	phpFn( 'config_switch' ).split( '\n' ).filter( ( l ) => /\$lock\s*=/.test( l ) ).forEach( ( l ) => ( l.match( /'[a-z_]+'/g ) || [] ).forEach( ( q ) => kinds.add( q.slice( 1, -1 ) ) ) );
+	[ 'absent', 'bool' ].forEach( ( k ) => kinds.delete( k ) );
+	t.check( '02-I1 the server\'s lock kinds were read', kinds.has( 'elsewhere' ) && kinds.has( 'late' ) && kinds.size >= 5, [ ...kinds ].join( ', ' ) );
+	const mislabelled = [ ...kinds ].filter( ( k ) => 'elsewhere' !== k && 'defined elsewhere' === configLockLabel( { lock: k } ) );
+	t.check( '02-I1 no lock but "elsewhere" reads "defined elsewhere"', 0 === mislabelled.length, mislabelled.join( ', ' ) );
+	t.check( '02-I1 the late lock says the define comes after WordPress loads', /after .*loads WordPress/i.test( configLockLabel( { lock: 'late' } ) ), configLockLabel( { lock: 'late' } ) );
+	t.check( '02-I1 a define outside wp-config.php still reads "defined elsewhere"', 'defined elsewhere' === configLockLabel( { lock: 'elsewhere' } ) );
 
 	// Restores, armed before anything changes. A Contributor left by a run
 	// that was killed is removed first.
@@ -358,6 +388,34 @@ const ignorable = ( text ) => /Failed to load resource/.test( text )
 		await saveNow( editor.page, p5 );
 		const after5 = blocksOf( ( await stored( p5 ) ).content );
 		t.check( '16-2 the Editor\'s save keeps a Contributor\'s untouched Details and Buttons blocks', !! planted5.details && after5.details === planted5.details && !! planted5.buttons && after5.buttons === planted5.buttons, JSON.stringify( after5 ).slice( 0, 400 ) );
+
+		/* ===== 02-I1 in the app ===== */
+		// The System page drawn from a config read that carries each lock kind.
+		const sysRe = /minn-admin\/v1\/system(?![/a-z])/;
+		await page.route( sysRe, async ( route ) => {
+			if ( 'GET' !== route.request().method() ) return route.continue().catch( () => {} );
+			try {
+				const res = await route.fetch();
+				const j = await res.json();
+				j.config = { ...( j.config || {} ), editable: true, constants: [ ...kinds ].map( ( k ) => ( { name: 'MINN_RC_' + k.toUpperCase(), label: 'Probe ' + k, desc: '', value: false, in_config: 'elsewhere' !== k, locked: true, lock: k } ) ) };
+				await route.fulfill( { response: res, json: j } );
+			} catch ( e ) {
+				await route.continue().catch( () => {} );
+			}
+		} );
+		await page.goto( `${ BASE }/minn-admin/system`, { waitUntil: 'domcontentloaded' } );
+		const labels = await page.waitForFunction( () => {
+			const rows = [ ...document.querySelectorAll( '.minn-sys-toggle' ) ];
+			if ( ! rows.length ) return null;
+			const out = {};
+			rows.forEach( ( r ) => {
+				const name = ( r.querySelector( '.minn-sys-const' ) || {} ).textContent || '';
+				out[ name ] = ( r.querySelector( '.minn-sys-locked' ) || {} ).textContent || '';
+			} );
+			return out;
+		}, null, { timeout: 45000, polling: 300 } ).then( ( h ) => h.jsonValue() ).catch( () => null );
+		await page.unroute( sysRe );
+		t.check( '02-I1 the System page labels the late lock as a define after WordPress loads', !! labels && /after .*loads WordPress/i.test( labels.MINN_RC_LATE || '' ) && 'defined elsewhere' === labels.MINN_RC_ELSEWHERE, JSON.stringify( labels ) );
 	} catch ( e ) {
 		t.check( 'suite ran to the end', false, e && e.stack ? e.stack.split( '\n' ).slice( 0, 3 ).join( ' | ' ) : String( e ) );
 	} finally {

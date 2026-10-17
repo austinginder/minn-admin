@@ -27374,11 +27374,13 @@
 	// on it, so the row says which one rather than just disabling a button.
 	// Why a wp-config switch is shown locked: the constant is defined outside
 	// wp-config.php, or wp-config.php sets it to something other than true or
-	// false (a log path), inside a condition, or more than once. A switch
+	// false (a log path), inside a condition, more than once, or after the
+	// line that loads WordPress (where it never takes effect). A switch
 	// would rewrite those, so they stay as the file has them.
 	function configLockLabel( c ) {
 		if ( c.lock === 'custom' || c.lock === 'branch' ) return __( 'set in wp-config.php' );
 		if ( c.lock === 'multiple' ) return __( 'set more than once in wp-config.php' );
+		if ( c.lock === 'late' ) return __( 'set after wp-config.php loads WordPress' );
 		return __( 'defined elsewhere' );
 	}
 
