@@ -117,6 +117,12 @@ run security-v046-prerc-forms single --user=admin
 # 301 Redirects, Simple 301 Redirects and PowerPress stay inactive on the lab; the swap loads them, and the suite passed to --require switches Rank Math's redirections module on, for this process only.
 MINN_SWAP_ADD=eps-301-redirects/eps-301-redirects.php,simple-301-redirects/wp-simple-301-redirects.php,powerpress/powerpress.php run security-v046-prerc-misc single --user=admin --require=tests/lib/plugin-swap.php --require=tests/security-v046-prerc-misc.test.php
 MINN_SWAP_ADD=custom-css-js/custom-css-js.php run security-v046-registry-writes single --user=admin --require=tests/lib/plugin-swap.php
+run security-v046-rc-browser single --user=admin
+run security-v046-rc-core single --user=admin
+run security-v046-rc-egress single --user=admin
+run security-v046-rc-fields single --user=admin
+# Safe Redirect Manager stays inactive on the lab; the swap loads it for this process only.
+MINN_SWAP_ADD=safe-redirect-manager/safe-redirect-manager.php run security-v046-rc-adapters single --user=admin --require=tests/lib/plugin-swap.php
 run sweep-v044 single --user=admin
 run write-fences single --user=admin
 
@@ -139,6 +145,8 @@ run security-v045-delta-routes subsite --user=admin
 run security-v045-delta-surfaces subsite --user=admin
 run security-v046-registry-rest subsite --user=admin
 run security-v046-registry-reads subsite --user=admin
+run security-v046-rc-core subsite --user=admin
+run security-v046-rc-adapters subsite --user=admin
 run security-v045-delta-surfaces net2
 run multi-network-system net2
 run security-v046-registry-rest net2
