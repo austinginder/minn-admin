@@ -41,6 +41,39 @@ function minn_admin_pods_active() {
 }
 
 /**
+ * Run Pods code with its refusals thrown, never printed.
+ *
+ * Inside any REST request Pods answers a refusal by printing its own JSON
+ * error and exiting (pods_error() takes its 'json' mode whenever
+ * REST_REQUEST is set), and its Pods object exits on one by default
+ * anywhere. Reached from a post save, that ended the request after
+ * WordPress had stored the post: a new post's id never reached the editor,
+ * so each retry and autosave made another draft, and the REST fields after
+ * this one were never written. Every Pods call Minn makes goes through
+ * here, so a refusal throws to the caller instead, and Pods' fallback
+ * handler for an uncaught one is left out of it.
+ *
+ * @param callable $fn What to run.
+ * @return mixed What it returns.
+ */
+function minn_admin_pods_quiet( callable $fn ) {
+	$mode     = function () {
+		return 'exception';
+	};
+	$fallback = function () {
+		return false;
+	};
+	add_filter( 'pods_error_mode', $mode, PHP_INT_MAX );
+	add_filter( 'pods_error_exception_fallback_enabled', $fallback, PHP_INT_MAX );
+	try {
+		return $fn();
+	} finally {
+		remove_filter( 'pods_error_mode', $mode, PHP_INT_MAX );
+		remove_filter( 'pods_error_exception_fallback_enabled', $fallback, PHP_INT_MAX );
+	}
+}
+
+/**
  * Resolve REST base (or post type slug) to a post type name.
  *
  * @param string $rest_base From the editor.
@@ -138,17 +171,16 @@ function minn_admin_pods_may_see( $field ) {
 		return false;
 	}
 	try {
-		if ( ! pods_permission( $field ) ) {
-			return false;
-		}
-		$group = ( is_object( $field ) && method_exists( $field, 'get_group_object' ) ) ? $field->get_group_object() : null;
-		if ( $group && ! pods_permission( $group ) ) {
-			return false;
-		}
+		return minn_admin_pods_quiet( function () use ( $field ) {
+			if ( ! pods_permission( $field ) ) {
+				return false;
+			}
+			$group = ( is_object( $field ) && method_exists( $field, 'get_group_object' ) ) ? $field->get_group_object() : null;
+			return ! $group || pods_permission( $group );
+		} );
 	} catch ( Throwable $e ) {
 		return false;
 	}
-	return true;
 }
 
 function minn_admin_pods_map_field( $field ) {
@@ -237,13 +269,15 @@ function minn_admin_pods_for_type( $post_type ) {
 		return array();
 	}
 	try {
-		$pods = pods_api()->load_pods(
-			array(
-				'type'   => 'post_type',
-				'object' => $post_type,
-				'fields' => true,
-			)
-		);
+		$pods = minn_admin_pods_quiet( function () use ( $post_type ) {
+			return pods_api()->load_pods(
+				array(
+					'type'   => 'post_type',
+					'object' => $post_type,
+					'fields' => true,
+				)
+			);
+		} );
 	} catch ( Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
 		return array();
 	}
@@ -349,7 +383,9 @@ function minn_admin_pods_read_values( $post_id ) {
 	// Fall back to raw post meta if the pod object won't load.
 	$pod_obj = null;
 	try {
-		$pod_obj = pods( $post->post_type, $post_id );
+		$pod_obj = minn_admin_pods_quiet( function () use ( $post ) {
+			return pods( $post->post_type, $post->ID );
+		} );
 		if ( ! $pod_obj || ( method_exists( $pod_obj, 'valid' ) && ! $pod_obj->valid() ) ) {
 			$pod_obj = null;
 		}
@@ -359,9 +395,13 @@ function minn_admin_pods_read_values( $post_id ) {
 
 	foreach ( $simple as $name => $panel_type ) {
 		$val = null;
-		if ( $pod_obj && method_exists( $pod_obj, 'field' ) ) {
-			$val = $pod_obj->field( $name );
-		} else {
+		try {
+			$val = ( $pod_obj && method_exists( $pod_obj, 'field' ) )
+				? minn_admin_pods_quiet( function () use ( $pod_obj, $name ) {
+					return $pod_obj->field( $name );
+				} )
+				: get_post_meta( $post_id, $name, true );
+		} catch ( Throwable $e ) {
 			$val = get_post_meta( $post_id, $name, true );
 		}
 		if ( 'true_false' === $panel_type ) {
@@ -395,36 +435,145 @@ function minn_admin_pods_number_in( $pod_name, $name, $value ) {
 		return $value;
 	}
 	try {
-		$field = pods_api()->load_field( array( 'pod' => $pod_name, 'name' => $name ) );
-		$type  = $field ? (string) pods_v( 'type', $field ) : '';
-		if ( ! in_array( $type, array( 'number', 'currency' ), true ) || 'slider' === pods_v( $type . '_format_type', $field ) ) {
-			return $value;
-		}
-		$loader = PodsForm::field_loader( $type );
-		if ( ! $loader || ! method_exists( $loader, 'get_number_format_args' ) ) {
-			return $value;
-		}
-		$args = $loader->get_number_format_args( $field );
-		$dot  = isset( $args['dot'] ) ? (string) $args['dot'] : '.';
-		return '.' === $dot || '' === $dot ? $value : str_replace( '.', $dot, $value );
+		return minn_admin_pods_quiet( function () use ( $pod_name, $name, $value ) {
+			$field = pods_api()->load_field( array( 'pod' => $pod_name, 'name' => $name ) );
+			$type  = $field ? (string) pods_v( 'type', $field ) : '';
+			if ( ! in_array( $type, array( 'number', 'currency' ), true ) || 'slider' === pods_v( $type . '_format_type', $field ) ) {
+				return $value;
+			}
+			$loader = PodsForm::field_loader( $type );
+			if ( ! $loader || ! method_exists( $loader, 'get_number_format_args' ) ) {
+				return $value;
+			}
+			$args = $loader->get_number_format_args( $field );
+			$dot  = isset( $args['dot'] ) ? (string) $args['dot'] : '.';
+			return '.' === $dot || '' === $dot ? $value : str_replace( '.', $dot, $value );
+		} );
 	} catch ( Throwable $e ) {
 		return $value;
 	}
 }
 
 /**
+ * Pods' refusal message as plain text: it arrives as markup (a list when
+ * there are several), and the editor shows it as text.
+ *
+ * @param string $message Pods' message.
+ * @return string
+ */
+function minn_admin_pods_reason( $message ) {
+	return trim( html_entity_decode( wp_strip_all_tags( str_replace( '</li>', ' </li>', (string) $message ) ), ENT_QUOTES, 'UTF-8' ) );
+}
+
+/**
+ * Pods' own verdict on one value before it is saved: null when Pods takes
+ * it, otherwise its reason ('' when it gave none).
+ *
+ * PodsAPI::save_pod_item() runs this same check on every field it is handed
+ * before it writes any, and one refusal refuses the whole save. Asked field
+ * by field first, the values Pods takes are saved and the one it refuses is
+ * named. A Pods build without the check (or a pod it cannot describe) skips
+ * this; the save itself still refuses, and that refusal is reported.
+ *
+ * @param object $pod_obj Pods object for the post.
+ * @param string $name    Field name.
+ * @param mixed  $value   The value as Pods' saver would be handed it.
+ * @param int    $post_id Post ID.
+ * @return string|null
+ */
+function minn_admin_pods_refusal( $pod_obj, $name, $value, $post_id ) {
+	$pod = isset( $pod_obj->pod_data ) ? $pod_obj->pod_data : null;
+	$api = pods_api();
+	if ( ! is_object( $pod ) || ! method_exists( $pod, 'get_fields' ) || ! method_exists( $pod, 'get_object_fields' ) || ! method_exists( $api, 'handle_field_validation' ) ) {
+		return null;
+	}
+	try {
+		$copy = $value;
+		$ok   = $api->handle_field_validation( $copy, $name, $pod->get_object_fields(), $pod->get_fields(), $pod, (object) array(
+			'id'   => (int) $post_id,
+			'pod'  => $pod['name'],
+			'from' => 'save',
+		) );
+	} catch ( Throwable $e ) {
+		return minn_admin_pods_reason( $e->getMessage() );
+	}
+	// Read as save_pod_item() reads it.
+	if ( true === $ok || ( ! is_bool( $ok ) && empty( $ok ) ) ) {
+		return null;
+	}
+	return false === $ok ? '' : minn_admin_pods_reason( implode( ' ', array_map( 'strval', (array) $ok ) ) );
+}
+
+/**
+ * The fields a save could not write, as one error, or null when there are
+ * none. One field keeps its own message; several are named together, and a
+ * save that wrote other fields says so. The error data lists each field
+ * (key, label, message) for the post answer that reports them.
+ *
+ * @param object|null $pod_obj Pods object, for the labels.
+ * @param array       $refused Field name => Pods' reason ('' for none).
+ * @param int         $done    Fields the same save wrote.
+ * @return WP_Error|null
+ */
+function minn_admin_pods_write_errors( $pod_obj, $refused, $done ) {
+	if ( ! $refused ) {
+		return null;
+	}
+	$fields = array();
+	$names  = array();
+	foreach ( $refused as $name => $reason ) {
+		$label = '';
+		try {
+			$def   = ( $pod_obj && isset( $pod_obj->pod_data ) && is_object( $pod_obj->pod_data ) && method_exists( $pod_obj->pod_data, 'get_field' ) ) ? $pod_obj->pod_data->get_field( $name ) : null;
+			$label = $def ? (string) minn_admin_pods_field_arg( $def, 'label', '' ) : '';
+		} catch ( Throwable $e ) {
+			$label = '';
+		}
+		$label = '' !== $label ? $label : (string) $name;
+		if ( '' !== (string) $reason ) {
+			/* translators: 1: field label, 2: the reason Pods gave. */
+			$message = sprintf( __( '“%1$s” was not saved: %2$s', 'minn-admin' ), $label, $reason );
+		} else {
+			/* translators: %s: field label. */
+			$message = sprintf( __( '“%s” was not saved: Pods did not accept that value.', 'minn-admin' ), $label );
+		}
+		$fields[] = array(
+			'key'     => (string) $name,
+			'label'   => $label,
+			'message' => $message,
+		);
+		$names[]  = '“' . $label . '”';
+	}
+	if ( 1 === count( $fields ) ) {
+		$message = $fields[0]['message'];
+	} else {
+		/* translators: %s: comma-separated list of field labels, each in quotes. */
+		$message = sprintf( __( 'These fields were not saved: %s.', 'minn-admin' ), implode( ', ', $names ) );
+	}
+	if ( $done > 0 ) {
+		$message .= ' ' . __( 'Your other changes were saved.', 'minn-admin' );
+	}
+	return new WP_Error( 'minn_pods_refused', $message, array( 'status' => 400, 'fields' => $fields ) );
+}
+
+/**
  * Write simple field values through Pods' own saver.
+ *
+ * A value Pods refuses is never written another way: it is named in the
+ * answer and the stored value stays.
  *
  * @param int   $post_id Post ID.
  * @param array $values  Field name => value.
+ * @return WP_Error|null Every field that was not written, named in one
+ *                       error; the others are written either way.
  */
 function minn_admin_pods_write_values( $post_id, $values ) {
 	if ( ! is_array( $values ) || ! minn_admin_pods_active() ) {
-		return;
+		return null;
 	}
 	$post = get_post( $post_id );
 	if ( ! $post ) {
-		return;
+		return null;
 	}
 	$allowed = minn_admin_pods_simple_map_for_post( $post_id );
 	// The panel sends every field back when any one of them changes. A value
@@ -471,33 +620,61 @@ function minn_admin_pods_write_values( $post_id, $values ) {
 		$data[ $key ] = $value;
 	}
 	if ( ! $data ) {
-		return;
+		return null;
 	}
+	// pods()->save accepts a field map for an existing item, and parses
+	// numbers in each field's own format.
+	$in = $data;
+	foreach ( $in as $key => $value ) {
+		if ( 'number' === $allowed[ $key ] && is_scalar( $value ) && '' !== (string) $value ) {
+			$in[ $key ] = minn_admin_pods_number_in( $post->post_type, $key, (string) $value );
+		}
+	}
+	$refused = array();
+	$pod_obj = null;
 	try {
-		$pod_obj = pods( $post->post_type, $post_id );
-		if ( $pod_obj && method_exists( $pod_obj, 'save' ) ) {
-			// pods()->save accepts field map for an existing item, and parses
-			// numbers in each field's own format.
-			$in = $data;
-			foreach ( $in as $key => $value ) {
-				if ( 'number' === $allowed[ $key ] && is_scalar( $value ) && '' !== (string) $value ) {
-					$in[ $key ] = minn_admin_pods_number_in( $post->post_type, $key, (string) $value );
+		$pod_obj = minn_admin_pods_quiet( function () use ( $post ) {
+			return pods( $post->post_type, $post->ID );
+		} );
+	} catch ( Throwable $e ) {
+		$pod_obj = null;
+	}
+	if ( ! $pod_obj || ! method_exists( $pod_obj, 'save' ) || ( method_exists( $pod_obj, 'valid' ) && ! $pod_obj->valid() ) ) {
+		// No saver to hand them to: nothing is written behind Pods' back.
+		return minn_admin_pods_write_errors( null, array_fill_keys( array_keys( $in ), '' ), 0 );
+	}
+	foreach ( $in as $key => $value ) {
+		$reason = minn_admin_pods_quiet( function () use ( $pod_obj, $key, $value, $post_id ) {
+			return minn_admin_pods_refusal( $pod_obj, $key, $value, $post_id );
+		} );
+		if ( null !== $reason ) {
+			$refused[ $key ] = $reason;
+			unset( $in[ $key ] );
+		}
+	}
+	if ( $in ) {
+		try {
+			minn_admin_pods_quiet( function () use ( $pod_obj, $in ) {
+				return $pod_obj->save( $in );
+			} );
+		} catch ( Throwable $e ) {
+			// A refusal the check above did not foresee (a hook on Pods' own
+			// save). Pods checks every field before it writes any, but such a
+			// hook can also throw after, so the store says which were
+			// written. None is written another way.
+			$reason = minn_admin_pods_reason( $e->getMessage() );
+			$now    = minn_admin_pods_read_values( $post_id );
+			foreach ( array_keys( $in ) as $key ) {
+				$a = $now[ $key ] ?? null;
+				$b = $held[ $key ] ?? null;
+				if ( is_bool( $a ) || is_bool( $b ) ? (bool) $a === (bool) $b : (string) $a === (string) $b ) {
+					$refused[ $key ] = $reason;
+					unset( $in[ $key ] );
 				}
 			}
-			$pod_obj->save( $in );
-			return;
-		}
-	} catch ( Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
-		// Fall through to raw meta.
-	}
-	// Fallback: write post meta directly (extended post-type storage).
-	foreach ( $data as $key => $value ) {
-		if ( '' === $value || null === $value ) {
-			delete_post_meta( $post_id, $key );
-		} else {
-			update_post_meta( $post_id, $key, wp_slash( $value ) ); // update_post_meta() unslashes
 		}
 	}
+	return minn_admin_pods_write_errors( $pod_obj, $refused, count( $in ) );
 }
 
 add_filter( 'minn_admin_editor_panels', function ( $panels ) {
@@ -570,7 +747,7 @@ add_action( 'rest_api_init', function () {
 					}
 					return (object) minn_admin_pods_read_values( $id );
 				},
-				'update_callback' => function ( $value, $post ) {
+				'update_callback' => function ( $value, $post, $field_name = '', $request = null ) {
 					if ( ! $post instanceof WP_Post ) {
 						return;
 					}
@@ -583,7 +760,19 @@ add_action( 'rest_api_init', function () {
 					if ( ! is_array( $value ) ) {
 						return;
 					}
-					minn_admin_pods_write_values( $post->ID, $value );
+					$error = minn_admin_pods_write_values( $post->ID, $value );
+					if ( ! is_wp_error( $error ) ) {
+						return;
+					}
+					// Never an error from here: the post is already saved, a
+					// new one included. The refusal rides on the post's own
+					// answer instead, beside any other panel's
+					// (minn_admin_panel_report_held(), adapters/acpt.php).
+					if ( $request instanceof WP_REST_Request && function_exists( 'minn_admin_panel_held' ) ) {
+						minn_admin_panel_held( $request, $error, 'minn_pods' );
+						return;
+					}
+					return $error;
 				},
 				'schema'          => array(
 					'description' => __( 'Pods simple field values for Minn Admin.', 'minn-admin' ),

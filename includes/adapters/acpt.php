@@ -811,9 +811,9 @@ add_action( 'rest_api_init', function () {
 				// editor (each retry and autosave then made another draft),
 				// and it would stop the controller from writing the REST
 				// fields registered after this one. The refusal rides on the
-				// post's own answer instead (minn_admin_acpt_report_held()).
+				// post's own answer instead (minn_admin_panel_report_held()).
 				if ( $request instanceof WP_REST_Request ) {
-					minn_admin_acpt_held_error( $request, $error );
+					minn_admin_panel_held( $request, $error, 'minn_acpt' );
 					return;
 				}
 				return $error;
@@ -828,22 +828,32 @@ add_action( 'rest_api_init', function () {
 } );
 
 /**
- * The panel's refusals for one REST request: add one with $error, take them
- * all (and forget them) without. Held by the request object itself, so a
- * leftover can never be read by another request.
+ * The refusals editor panels hold for one REST request: add one with $error
+ * and the panel's write key, take them all (and forget them) without.
+ *
+ * A panel's REST field is written after the post is stored, so it never
+ * answers an error (minn_admin_panel_report_held() says why). ACPT's panel
+ * holds what ACPT refused here, and so does every other panel whose plugin
+ * can refuse a value (Pods); this panel was the first to need it. Held by
+ * the request object itself, so a leftover can never be read by another
+ * request.
  *
  * @param WP_REST_Request $request The request the save runs in.
  * @param WP_Error|null   $error   A refusal to add.
- * @return WP_Error[]
+ * @param string          $panel   The panel's write key (its REST field).
+ * @return array[] Each { panel, error }.
  */
-function minn_admin_acpt_held_error( $request, $error = null ) {
+function minn_admin_panel_held( $request, $error = null, $panel = '' ) {
 	static $held = null;
 	if ( null === $held ) {
 		$held = new SplObjectStorage();
 	}
 	if ( null !== $error ) {
 		$list             = $held->contains( $request ) ? $held[ $request ] : array();
-		$list[]           = $error;
+		$list[]           = array(
+			'panel' => (string) $panel,
+			'error' => $error,
+		);
 		$held[ $request ] = $list;
 		return $list;
 	}
@@ -856,7 +866,18 @@ function minn_admin_acpt_held_error( $request, $error = null ) {
 }
 
 /**
- * Put the panel's refusals on the post's own answer once the save has run.
+ * ACPT's panel refusals for one REST request (minn_admin_panel_held()).
+ *
+ * @param WP_REST_Request $request The request the save runs in.
+ * @param WP_Error|null   $error   A refusal to add.
+ * @return array[]
+ */
+function minn_admin_acpt_held_error( $request, $error = null ) {
+	return minn_admin_panel_held( $request, $error, 'minn_acpt' );
+}
+
+/**
+ * Put the panels' refusals on the post's own answer once the save has run.
  *
  * A successful answer keeps its status (the post was saved) and carries
  * `minn_field_errors` (each refused field: the panel's write key, the field
@@ -868,18 +889,21 @@ function minn_admin_acpt_held_error( $request, $error = null ) {
  * @param WP_REST_Request $request  The request.
  * @return mixed
  */
-function minn_admin_acpt_report_held( $response, $request ) {
-	$held = $request instanceof WP_REST_Request ? minn_admin_acpt_held_error( $request ) : array();
+function minn_admin_panel_report_held( $response, $request ) {
+	$held = $request instanceof WP_REST_Request ? minn_admin_panel_held( $request ) : array();
 	if ( ! $held ) {
 		return $response;
 	}
 	$fields   = array();
 	$messages = array();
-	foreach ( $held as $e ) {
+	$errors   = array();
+	foreach ( $held as $h ) {
+		$e          = $h['error'];
+		$errors[]   = $e;
 		$messages[] = $e->get_error_message();
 		$data       = $e->get_error_data();
 		foreach ( (array) ( is_array( $data ) && isset( $data['fields'] ) ? $data['fields'] : array() ) as $f ) {
-			$fields[] = array( 'field' => 'minn_acpt' ) + (array) $f;
+			$fields[] = array( 'field' => $h['panel'] ) + (array) $f;
 		}
 	}
 	if ( is_wp_error( $response ) ) {
@@ -891,7 +915,7 @@ function minn_admin_acpt_report_held( $response, $request ) {
 				}
 			}
 		}
-		foreach ( $held as $e ) {
+		foreach ( $errors as $e ) {
 			$out->add( $e->get_error_code(), $e->get_error_message(), $e->get_error_data() );
 		}
 		return $out;
@@ -908,13 +932,13 @@ function minn_admin_acpt_report_held( $response, $request ) {
 }
 
 add_filter( 'rest_request_after_callbacks', function ( $response, $handler, $request ) {
-	return minn_admin_acpt_report_held( $response, $request );
+	return minn_admin_panel_report_held( $response, $request );
 }, 10, 3 );
 // A controller run outside the server's own dispatch never reaches the filter
 // above; whatever it held goes with its request.
 add_filter( 'rest_post_dispatch', function ( $result, $server, $request ) {
 	if ( $request instanceof WP_REST_Request ) {
-		minn_admin_acpt_held_error( $request );
+		minn_admin_panel_held( $request );
 	}
 	return $result;
 }, 10, 3 );
