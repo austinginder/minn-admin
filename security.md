@@ -78,15 +78,18 @@ A few properties worth knowing before auditing (details in
   removal that carries power, and a powerful account's login, password,
   email or password-reset key each need the caller's own capability, the
   one WordPress asks on its own screens. Names are matched without regard
-  to case, as MySQL matches them. A refusal answers 403
+  to case or trailing spaces, as MySQL matches them. A refusal answers 403
   `minn_write_fenced` and logs one line,
   `minn_write_fenced user= route= refused=`. The main network's super
   admin (`Minn_Admin::install_owner()`) is not fenced. Writes made with raw
-  SQL are outside the fence, as they are outside every WordPress hook. Minn
-  makes one itself: under WP Freighter, switching Minn on or off for a
-  tenant edits that tenant's `active_plugins` row directly, for a caller
-  with `manage_options` (Freighter's owner role), and touches only Minn's
-  own entry. A refused account change is put back after core has acted on
+  SQL are outside the fence, as they are outside every WordPress hook.
+  Minn's own raw writes touch no fenced option: under WP Freighter,
+  switching Minn on or off for a tenant edits that tenant's
+  `active_plugins` row directly, for a caller with `manage_options`
+  (Freighter's owner role), and touches only Minn's own entry; a refused
+  licence paste puts back the licence rows the vendor's call changed, and
+  a licence change clears the licence check caches some vendors keep in
+  options. A refused account change is put back after core has acted on
   it, so a listener on `wp_set_password` has already run and the "your
   password or email changed" notice may still go out; no Minn route below
   `edit_user` reaches that write, so the fence there is a backstop. A role
@@ -110,10 +113,23 @@ A few properties worth knowing before auditing (details in
   owner on purpose (the WP Migrate connection key, the Disembark command,
   a one-time login link) names that exact value, which passes in that
   response only. A save that sends a redacted value back gets the real one
-  restored, but only into the option that already holds it, so a screen that
-  showed it cannot overwrite it and a pasted token never turns into the key
-  elsewhere. A copy in another case, in hex, cut short or split across two
-  values is not caught, as it is not in the browser either.
+  restored, but only into the place in the option that held it (the same
+  keys down to it) and only where the browser still counts it as a
+  credential, so a screen that showed it cannot overwrite it; a token
+  anywhere else refuses the save (400) and the stored value stays. Every
+  other store (snippet code, posts, table rows, files) has no restore: its
+  routes treat a field sent back exactly as the read served it as
+  unchanged, and refuse a write that would store a token. An export file
+  that would carry a credential is refused rather than handed out with the
+  token in it. The transients list hides a value whose whole stored form
+  the browser would redact or withhold, before cutting it short. A copy in
+  another case, in hex, cut short or split across two values is not
+  caught, as it is not in the browser either. Keys shorter than 16
+  characters (Akismet's 12-character key, short CleanTalk keys, WP
+  Rocket's 8-character key) are hidden by their row's name only: the
+  database browser redacts those rows and the licence readers report them
+  as present or absent, but the fence does not search for their values,
+  since a needle that short would match ordinary text.
 - The database browser is read-only and redacts credentials three ways: by
   column name (a column named like a password, secret or token, in any
   table, which also cannot be sorted or filtered), by known vendor row
@@ -137,9 +153,16 @@ A few properties worth knowing before auditing (details in
   that plugin is: each log and store read through the kernel (its view
   gate and row scope), and WP Activity Log's, Simple History's, Stream's,
   Activity Log's, PW Gift Cards' and WP Mail Logging's tables, copies
-  included, also while the plugin is inactive, and Gravity Forms' entries,
-  Burst's and Koko's statistics, Redirection's logs and Solid Security's
-  tables, which follow their plugins' own rules. A table holding a list its
+  included, also while the plugin is inactive, and Gravity Forms' entries
+  and payment add-on records, Burst's, Koko's, WP Statistics',
+  Independent Analytics', Matomo's and AnalyticsWP's statistics, Rank
+  Math's 404 and analytics tables, Redirection's logs and 404s (each at
+  its own capability) and Solid Security's tables, which follow their
+  plugins' own rules. A table is shown only to someone the resource shows
+  every column of it, so a plugin's store whose rows mask a column for
+  some roles (a gift card code, a mail body, booking meta) is left out for
+  them, with its copies and other tables, and a health check names no
+  table the viewer may not open. A table holding a list its
   plugin keeps to the viewer's own rows (Amelia providers, LatePoint agents,
   JetBooking vendors) is shown only to someone that list shows everything,
   and so are the tables the list reads. A plugin's other tables holding the
@@ -155,6 +178,13 @@ A few properties worth knowing before auditing (details in
   table when High-Performance Order Storage is off, customer addresses in
   user meta) stays readable to whoever may use the browser, and so do
   wpDiscuz's own `wc_` tables.
+- A field panel serves and accepts only what the plugin's own screen shows
+  that user (location rules, box visibility, field permissions, a
+  relational field's own post types and taxonomy). A value the plugin
+  refuses is reported on the post's own answer with its status kept,
+  never by ending the request. A preview made from a real entry fills the
+  submitter's account fields only as far as the vendor's own entry screen
+  shows them, and their profile only for someone who may list users.
 - On a network, Minn's network routes read network capabilities on the
   main site, as core's Network Admin does, so a network capability granted
   through one subsite's role counts for nothing. On an install with several
@@ -172,6 +202,6 @@ A few properties worth knowing before auditing (details in
   reaches a user whose dashboard redirects or fails before the capture
   runs, and lapses a week after the last capture that came back. System ›
   Integrations leaves out the surfaces it hides.
-- A browser test suite (430 suites at the time of writing, beside 29 PHP
+- A browser test suite (443 suites at the time of writing, beside 62 PHP
   suites) includes an enforced zero-external-requests invariant for the
   app chrome.
