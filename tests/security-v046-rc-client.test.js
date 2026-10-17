@@ -19,6 +19,9 @@
  *        on the block comment and a multi-line shortcode's line breaks. A
  *        field typed into and put back keeps them too; a real edit still
  *        saves.
+ *   N2   (round 2) An inspector Apply on a Buttons block reaches the save:
+ *        the rows are redrawn from the applied block, so the save's rebuild
+ *        from the rows no longer undoes it. Fails on e26149ce's app.js.
  *   02-I1 The wp-config switch's "late" lock (a define after the line that
  *        loads WordPress) no longer reads "defined elsewhere".
  *
@@ -388,6 +391,66 @@ const ignorable = ( text ) => /Failed to load resource/.test( text )
 		await saveNow( editor.page, p5 );
 		const after5 = blocksOf( ( await stored( p5 ) ).content );
 		t.check( '16-2 the Editor\'s save keeps a Contributor\'s untouched Details and Buttons blocks', !! planted5.details && after5.details === planted5.details && !! planted5.buttons && after5.buttons === planted5.buttons, JSON.stringify( after5 ).slice( 0, 400 ) );
+
+		/* ===== N2: an inspector Apply on a Buttons block survives the save ===== */
+		// The save rebuilds a Buttons block from its rows, so rows still
+		// showing the block as it was before the Apply put it back, while the
+		// editor said "Block updated". Real input throughout.
+		const BTN_BLOCK = '<!-- wp:buttons -->\n<div class="wp-block-buttons"><!-- wp:button {"backgroundColor":"vivid-red"} -->\n<div class="wp-block-button"><a class="wp-block-button__link has-vivid-red-background-color has-background wp-element-button" href="https://example.com/a">Go there</a></div>\n<!-- /wp:button --></div>\n<!-- /wp:buttons -->';
+		const BTN_POST = '<!-- wp:paragraph -->\n<p>Intro.</p>\n<!-- /wp:paragraph -->\n\n' + BTN_BLOCK;
+		const applyColour = async ( p, colour ) => {
+			await p.evaluate( () => {
+				const isl = [ ...document.querySelectorAll( '#minn-editor-body .minn-buttons-island' ) ].find( ( el ) => 'false' === el.getAttribute( 'contenteditable' ) );
+				const chip = isl && isl.querySelector( ':scope > .minn-island-chip' );
+				if ( chip ) chip.click();
+			} );
+			const apply = await p.waitForSelector( '#minn-insp-apply', { timeout: 45000 } ).catch( () => null );
+			if ( ! apply ) return false;
+			await p.click( '.minn-inspector input[data-insp="0:backgroundColor"]' );
+			await p.keyboard.press( 'Meta+a' );
+			await p.keyboard.type( colour );
+			const applied = renderDone( p );
+			await p.click( '#minn-insp-apply' );
+			await applied;
+			await p.waitForTimeout( 500 );
+			return true;
+		};
+		const rowAttrs = ( p ) => p.evaluate( () => {
+			const isl = [ ...document.querySelectorAll( '#minn-editor-body .minn-buttons-island' ) ].find( ( el ) => 'false' === el.getAttribute( 'contenteditable' ) );
+			const row = isl && isl.querySelector( '.minn-btn-row' );
+			return row ? row.dataset.btnAttrs || '' : '';
+		} );
+		// Apply on an island nothing committed yet.
+		const p6 = await make( page, { title: 'RC N2 apply fresh', content: BTN_POST } );
+		await open( page, p6 );
+		const ok6 = await applyColour( page, 'vivid-cyan-blue' );
+		t.check( 'N2 the Buttons inspector opens and applies', ok6 );
+		t.check( 'N2 after Apply the row carries the applied attrs', /vivid-cyan-blue/.test( await rowAttrs( page ) ), await rowAttrs( page ) );
+		await typeElsewhere( page, 'After apply.' );
+		await saveNow( page, p6 );
+		let b6 = blocksOf( ( await stored( p6 ) ).content ).buttons || '';
+		t.check( 'N2 a save after Apply keeps the applied colour (an untouched island)', /"backgroundColor":"vivid-cyan-blue"/.test( b6 ) && b6.indexOf( '"backgroundColor":"vivid-red"' ) === -1, b6 );
+		t.check( 'N2 control: the button keeps its label and link', />Go there<\/a>/.test( b6 ) && b6.indexOf( 'href="https://example.com/a"' ) !== -1, b6 );
+		// A row edit after the Apply keeps it too.
+		await page.click( '#minn-editor-body .minn-buttons-island .minn-btn-label' );
+		await page.keyboard.press( 'End' );
+		await page.keyboard.type( ' now' );
+		await saveNow( page, p6 );
+		b6 = blocksOf( ( await stored( p6 ) ).content ).buttons || '';
+		t.check( 'N2 a label edit after Apply saves with the applied colour kept', />Go there now<\/a>/.test( b6 ) && /"backgroundColor":"vivid-cyan-blue"/.test( b6 ), b6 );
+		// Apply on an island that committed first (a label typed into).
+		const p7 = await make( page, { title: 'RC N2 apply committed', content: BTN_POST } );
+		await open( page, p7 );
+		await page.click( '#minn-editor-body .minn-buttons-island .minn-btn-label' );
+		await page.keyboard.press( 'End' );
+		await page.keyboard.type( '!' );
+		// Saved first, so no autosave of the edit is still in flight when
+		// the save after the Apply is read back.
+		await saveNow( page, p7 );
+		const ok7 = await applyColour( page, 'luminous-vivid-amber' );
+		await saveNow( page, p7 );
+		const b7 = blocksOf( ( await stored( p7 ) ).content ).buttons || '';
+		t.check( 'N2 Apply after a row edit saves both the edit and the applied colour', ok7 && />Go there!<\/a>/.test( b7 ) && /"backgroundColor":"luminous-vivid-amber"/.test( b7 ), b7 );
 
 		/* ===== 02-I1 in the app ===== */
 		// The System page drawn from a config read that carries each lock kind.

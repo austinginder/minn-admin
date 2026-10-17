@@ -33501,7 +33501,7 @@
 		const idx = parseInt( el.dataset.island, 10 );
 		const raw = islands && Number.isFinite( idx ) ? islands[ idx ] : null;
 		const rawStr = raw != null ? String( raw ).trim() : '';
-		const preview = el.querySelector( '.minn-island-preview' );
+		const preview = islandPreview( el );
 		if ( preview ) {
 			const clone = preview.cloneNode( true );
 			$$( 'script, style, .minn-island-chip, .minn-imgtool-badge, .minn-pattern-cover', clone ).forEach( ( n ) => n.remove() );
@@ -44745,6 +44745,17 @@
 			const bodyEl = islandEl.querySelector( '.minn-details-body' );
 			if ( sum ) sum.value = parts.summary;
 			if ( bodyEl ) rtNeutralizeInto( bodyEl, detailsBodyInner( parts ) );
+			islandEl._minnFilled = newRaw;
+		}
+		// A buttons island's rows are redrawn from newRaw, with each button's
+		// attrs parked on its row again: the next serialize rebuilds the block
+		// from the rows, so rows still showing the old block undid the Apply.
+		if ( isRealIsland( islandEl ) && islandEl.classList.contains( 'minn-buttons-island' ) ) {
+			const parsed = parseButtonsRaw( newRaw );
+			const box = islandEl.querySelector( ':scope > .minn-buttons-rows' );
+			if ( box ) box.innerHTML = parsed.buttons.map( ( b, i ) => buttonsRowHtml( i, b ) ).join( '' );
+			stampButtonsRowAttrs( islandEl, parsed );
+			islandEl.dataset.btnStamped = '1';
 			islandEl._minnFilled = newRaw;
 		}
 		const previewEl = islandPreview( islandEl );

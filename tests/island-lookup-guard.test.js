@@ -103,7 +103,6 @@ const REVIEWED = {
 	"const slotIdx = new Set( $$( '.minn-slot-island', body ).filter( isRealIsland ).map( ( el ) => parseInt( el.dataset.island, 10 ) ) );": 'guarded on the line',
 	"if ( a.closest( '#minn-editor-body, .minn-island-preview, .minn-email-frame' ) ) return;": 'exclusion: leaves links in content and previews alone',
 	"if ( carrier && ! carrier.closest( '.minn-island-preview' ) && body.contains( carrier ) ) {": 'exclusion',
-	"const preview = el.querySelector( '.minn-island-preview' );": 'islandClipboardParts: el is a real island; the text/html copy for other apps only (a paste back into Minn reads text/x-minn-blocks, the stored raw)',
 	"const prev = n.querySelector( '.minn-island-preview' );": 'paste: a clipboard island pastes as what its preview shows, never as an island',
 
 	// Geometry, hover and preventDefault only.
