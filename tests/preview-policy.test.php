@@ -466,7 +466,13 @@ if ( ! class_exists( 'GFAPI' ) || ! function_exists( 'minn_admin_gfn_guarded' ) 
 				$check( "GF {$who}: the preview is made from the entry", 200 === $st && $eid === (int) ( $d['entry'] ?? 0 ), $st . ' entry ' . (int) ( $d['entry'] ?? 0 ) );
 				$check( "GF {$who}: (a) a field tag fills from the entry", 200 === $st && false !== strpos( $out, 'PpNickValue' ), $cut( $out ) );
 				$check( "GF {$who}: (b) {created_by:<meta>} of the submitter is a placeholder", 200 === $st && $ph( $out, 'created_by:minn_pp_secret' ) && ! in_array( 'submitter meta', $leak, true ), implode( ',', $leak ) . ' ' . $cut( $out ) );
-				$check( "GF {$who}: (b) control: {created_by:user_email}, which the entry screen shows, resolves", 200 === $st && in_array( 'submitter account', $leak, true ), implode( ',', $leak ) . ' ' . $cut( $out ) );
+				// The entry screen shows the submitter's login only; their email
+				// is core's to show to someone who may list users.
+				if ( $uid === $ed ) {
+					$check( "GF {$who}: (b) {created_by:user_email} is a placeholder", 200 === $st && $ph( $out, 'created_by:user_email' ) && ! in_array( 'submitter account', $leak, true ), implode( ',', $leak ) . ' ' . $cut( $out ) );
+				} else {
+					$check( "GF {$who}: (b) control: {created_by:user_email} resolves for someone who may list users", 200 === $st && in_array( 'submitter account', $leak, true ), implode( ',', $leak ) . ' ' . $cut( $out ) );
+				}
 				$check( "GF {$who}: (c) an add-on's tag is a placeholder", 200 === $st && $ph( $out, 'minn_pp_addon' ) && ! in_array( 'add-on', $leak, true ), implode( ',', $leak ) . ' ' . $cut( $out ) );
 				$check( "GF {$who}: (d) an unregistered tag is a placeholder", 200 === $st && $ph( $out, 'minn_pp_nobody' ), $cut( $out ) );
 

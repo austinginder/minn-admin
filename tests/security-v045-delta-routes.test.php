@@ -158,9 +158,13 @@ if ( ! class_exists( 'GFAPI' ) || ! function_exists( 'minn_admin_gfn_neutral_tag
 			list( $gf_st, $gf_d ) = $call( 'POST', "{$gf_nroute}/preview", array( 'subject' => "S {created_by:_minn_d45_secret\n}", 'message' => "M {created_by_minn_d45_secret\n}", 'disableAutoformat' => true ) );
 			$gf_out = wp_json_encode( $gf_d );
 			$check( 'OS-6 the notification preview resolves no submitter meta split across lines', 200 === $gf_st && ! $gf_leaks( $gf_out ), $gf_st . ' ' . substr( $gf_out, 0, 200 ) );
-			list( $gf_st, $gf_d ) = $call( 'POST', "{$gf_nroute}/preview", array( 'subject' => 'S', 'message' => 'by {created_by:display_name} / {created_by:display_name } / {created_by:first_name} / {created_by:roles}' ) );
+			// Gravity Forms' entry screen shows the submitter's login, nothing
+			// more of the account; this form editor may not list users, so
+			// that is all that fills (security-v046-rc-adapters covers the rest).
+			$gf_login = get_userdata( $gf_sub )->user_login;
+			list( $gf_st, $gf_d ) = $call( 'POST', "{$gf_nroute}/preview", array( 'subject' => 'S', 'message' => 'by {created_by:user_login} / {created_by:user_login } / {created_by:display_name}' ) );
 			$gf_out = wp_json_encode( $gf_d );
-			$check( 'OS-6 control: a profile field the entry screen shows still resolves, with or without a trailing space', 200 === $gf_st && 2 === substr_count( $gf_out, 'D45 Submitter' ) && false !== strpos( $gf_out, 'D45First' ) && false !== strpos( $gf_out, 'subscriber' ), substr( $gf_out, 0, 200 ) );
+			$check( 'OS-6 control: the login the entry screen shows still resolves, with or without a trailing space', 200 === $gf_st && 2 === substr_count( $gf_out, $gf_login ) && false === strpos( $gf_out, 'D45 Submitter' ), substr( $gf_out, 0, 200 ) );
 
 			$gf_croute = "/minn-admin/v1/gf/confirmations/{$gf_a}:d45c";
 			foreach ( $gf_variants as $gf_label => $gf_tag ) {
@@ -171,8 +175,8 @@ if ( ! class_exists( 'GFAPI' ) || ! function_exists( 'minn_admin_gfn_neutral_tag
 			list( $gf_st, $gf_d ) = $call( 'POST', "{$gf_croute}/preview", array( 'type' => 'redirect', 'url' => 'https://example.com/{created_by_minn_d45_secret}', 'queryString' => 'a={created_by_minn_d45_secret}&b={CREATED_BY:_minn_d45_secret}&c={form_title}&d={{user:description}' ) );
 			$gf_out = wp_json_encode( $gf_d );
 			$check( 'OS-6 the redirect preview address carries no submitter meta or page field', 200 === $gf_st && ! $gf_leaks( $gf_out ), $gf_st . ' ' . substr( $gf_out, 0, 220 ) );
-			list( $gf_st, $gf_d ) = $call( 'POST', "{$gf_croute}/preview", array( 'type' => 'message', 'message' => 'by {created_by:display_name}' ) );
-			$check( 'OS-6 control: the confirmation preview still resolves a profile field', 200 === $gf_st && false !== strpos( wp_json_encode( $gf_d ), 'D45 Submitter' ), substr( wp_json_encode( $gf_d ), 0, 200 ) );
+			list( $gf_st, $gf_d ) = $call( 'POST', "{$gf_croute}/preview", array( 'type' => 'message', 'message' => 'by {created_by:user_login}' ) );
+			$check( 'OS-6 control: the confirmation preview still resolves the login', 200 === $gf_st && false !== strpos( wp_json_encode( $gf_d ), $gf_login ), substr( wp_json_encode( $gf_d ), 0, 200 ) );
 
 			// The test send goes through wp_mail; it is caught before anything
 			// leaves the site.
@@ -196,9 +200,9 @@ if ( ! class_exists( 'GFAPI' ) || ! function_exists( 'minn_admin_gfn_neutral_tag
 					$check( "OS-7 the test send puts no submitter meta or page field in {$gf_label}", ! $gf_leaks( $gf_out ) && ( 200 !== $gf_st || 1 === count( $gf_mail ) ), $gf_st . ' ' . count( $gf_mail ) . ' ' . substr( $gf_out, 0, 240 ) );
 				}
 				$gf_mail = array();
-				list( $gf_st, $gf_d ) = $call( 'POST', "{$gf_nroute}/test", array( 'fromName' => '{created_by:display_name}', 'subject' => 'S', 'message' => 'M' ) );
+				list( $gf_st, $gf_d ) = $call( 'POST', "{$gf_nroute}/test", array( 'fromName' => '{created_by:user_login}', 'subject' => 'S', 'message' => 'M' ) );
 				$gf_out = wp_json_encode( $gf_mail );
-				$check( 'OS-7 control: the test still goes to the caller alone, its sender a profile field', 200 === $gf_st && 1 === count( $gf_mail ) && false !== strpos( wp_json_encode( $gf_mail[0]['to'] ?? '' ), $gf_me ) && false !== strpos( $gf_out, 'D45 Submitter' ), $gf_st . ' ' . substr( $gf_out, 0, 240 ) );
+				$check( 'OS-7 control: the test still goes to the caller alone, its sender the submitter\'s login', 200 === $gf_st && 1 === count( $gf_mail ) && false !== strpos( wp_json_encode( $gf_mail[0]['to'] ?? '' ), $gf_me ) && false !== strpos( $gf_out, $gf_login ), $gf_st . ' ' . substr( $gf_out, 0, 240 ) );
 			} finally {
 				remove_filter( 'pre_wp_mail', $gf_trap, 1 );
 			}
