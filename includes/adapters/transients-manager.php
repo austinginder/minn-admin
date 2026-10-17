@@ -269,6 +269,27 @@ function minn_admin_tm_list( WP_REST_Request $request ) {
 }
 
 /**
+ * Whether the database browser prints this options row's value redacted or
+ * withheld: by its name, by a copy of a credential anywhere in the whole
+ * stored value, or because the browser's list of credentials stopped at its
+ * cap. Asked before anything cuts the value short. Without the browser's
+ * class nothing is shown.
+ *
+ * @param object $row options row (option_name, option_value), the value whole.
+ * @return bool
+ */
+function minn_admin_tm_withheld( $row ) {
+	global $wpdb;
+	if ( ! method_exists( 'Minn_Admin_DB', 'withholds_cell' ) ) {
+		return true;
+	}
+	return Minn_Admin_DB::withholds_cell( $wpdb->options, 'option_value', array(
+		'option_name'  => (string) $row->option_name,
+		'option_value' => (string) $row->option_value,
+	) );
+}
+
+/**
  * @param object $row     options row.
  * @param int    $timeout Epoch or 0.
  * @param int    $now     Current time.
@@ -286,10 +307,11 @@ function minn_admin_tm_row( $row, $timeout, $now ) {
 	if ( in_array( $type, array( 'array', 'object', 'serialized' ), true ) ) {
 		$preview = '(' . $type . ', ' . size_format( strlen( (string) $row->option_value ), 1 ) . ')';
 	}
-	// A row the database browser redacts (a password hash, a token) is
-	// hidden here too: the egress fence only recognises values shaped like
-	// a key.
-	if ( method_exists( 'Minn_Admin_DB', 'is_credential_option' ) && Minn_Admin_DB::is_credential_option( $row->option_name ) ) {
+	// A row the database browser prints redacted or withheld (a password
+	// hash, a token, a copy of one) is hidden here too, decided on the whole
+	// stored value: the egress fence only recognises a key whole, and the
+	// preview above may cut a copy of one in two.
+	if ( minn_admin_tm_withheld( $row ) ) {
 		$preview = __( '(hidden)', 'minn-admin' );
 	}
 
@@ -337,7 +359,7 @@ function minn_admin_tm_detail( $id ) {
 		/* translators: 1: value type (array, object or serialized), 2: formatted byte count. */
 		$show = sprintf( __( '(serialized %1$s, %2$s bytes — open Transients Manager to inspect)', 'minn-admin' ), $item['type'], number_format_i18n( strlen( $raw ) ) );
 	}
-	if ( method_exists( 'Minn_Admin_DB', 'is_credential_option' ) && Minn_Admin_DB::is_credential_option( $row->option_name ) ) {
+	if ( minn_admin_tm_withheld( $row ) ) {
 		$show = __( '(hidden)', 'minn-admin' );
 	}
 

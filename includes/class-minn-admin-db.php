@@ -1308,6 +1308,27 @@ class Minn_Admin_DB {
 	}
 
 	/**
+	 * Whether the browser prints a cell redacted or withheld (shown_cell()):
+	 * redacts_cell(), or a value long enough to hold a copy of a credential
+	 * while the copies list stopped at its cap. Another screen that prints
+	 * the same row, such as the transients list, asks this of the whole
+	 * stored value before it cuts the value short: a cut copy is one neither
+	 * this class nor the egress fence can recognise afterwards.
+	 *
+	 * @param string   $table Table name as resolved (prefix included).
+	 * @param string   $col   Column name.
+	 * @param string[] $row   The row keyed by column name, the value whole.
+	 * @return bool
+	 */
+	public static function withholds_cell( $table, $col, $row ) {
+		$v = isset( $row[ $col ] ) ? (string) $row[ $col ] : '';
+		if ( '' === $v ) {
+			return false;
+		}
+		return self::redacts_cell( $table, $col, $row ) || ( strlen( $v ) >= 16 && ! self::is_activity_log( $table ) && self::needles_capped() );
+	}
+
+	/**
 	 * Tables whose own screen shows the values it logged, credentials
 	 * included (WP Activity Log's metadata, Simple History's contexts). A copy
 	 * there stays as visible here as it is there.
