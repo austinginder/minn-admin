@@ -358,9 +358,13 @@ minn_admin_resource( 'fluent-forms/entries', function () {
 			'key'     => 'id',
 			'columns' => array( 'id', 'form_id', 'response', 'status', 'created_at' ),
 			'detail'  => array(),
-			// Every answer field by field, each entry's meta, and the log of
-			// what happened to it.
-			'tables'  => array( 'fluentform_entry_details', 'fluentform_submission_meta', 'fluentform_logs' ),
+			// Every answer field by field, each entry's meta, the log of what
+			// happened to it, and what Fluent's own entry delete removes with
+			// it: its payment orders, transactions and subscriptions, and the
+			// queued notification and integration feeds rendered from its
+			// answers. Pro's saved drafts are answers too, and the form view
+			// log carries each visitor's IP per form.
+			'tables'  => array( 'fluentform_entry_details', 'fluentform_submission_meta', 'fluentform_logs', 'fluentform_order_items', 'fluentform_transactions', 'fluentform_subscriptions', 'ff_scheduled_actions', 'fluentform_draft_submissions', 'fluentform_form_analytics' ),
 		),
 		'list'      => array(
 			// Their status column: unread/read/spam/trashed (favorites is a

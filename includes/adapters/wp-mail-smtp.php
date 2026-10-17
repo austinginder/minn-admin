@@ -111,6 +111,9 @@ minn_admin_resource( 'wp-mail-smtp/events', function () {
 			'table'   => 'wpmailsmtp_debug_events',
 			'key'     => 'id',
 			'columns' => array( 'id', 'content', 'initiator', 'event_type', 'created_at' ),
+			// The queue holds each queued email whole, body included, while
+			// its queue is on: its own capability, as every screen of theirs.
+			'tables'  => array( 'wpmailsmtp_emails_queue' ),
 		),
 		'list'   => array(
 			'facets' => array(

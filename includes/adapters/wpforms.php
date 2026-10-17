@@ -349,9 +349,11 @@ minn_admin_resource( 'wpforms/entries', function () use ( $minn_admin_wpforms_in
 			'key'     => 'entry_id',
 			'columns' => array( 'entry_id', 'form_id', 'status', 'viewed', 'starred', 'fields', 'date' ),
 			'detail'  => array(),
-			// Every answer field by field, the entries' notes and log, and the
-			// payments they took.
-			'tables'  => array( 'wpforms_entry_fields', 'wpforms_entry_meta', 'wpforms_payments', 'wpforms_payment_meta' ),
+			// Every answer field by field, the entries' notes and log, the
+			// payments they took, the protected uploads each entry's delete
+			// removes with it, and the queued notification emails (rendered
+			// answers) an async send holds in its task meta.
+			'tables'  => array( 'wpforms_entry_fields', 'wpforms_entry_meta', 'wpforms_payments', 'wpforms_payment_meta', 'wpforms_protected_files', 'wpforms_tasks_meta' ),
 		),
 		'list'      => array(
 			// Inbox behaviour: spam and trash stay in their buckets, and the
