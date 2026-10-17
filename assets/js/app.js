@@ -33076,6 +33076,28 @@
 	function islandByIdx( root, idx ) {
 		return root ? $$( `.minn-block-island[data-island="${ idx }"]`, root ).find( isRealIsland ) || null : null;
 	}
+	// An island's own preview: the direct child Minn rendered. Never look a
+	// preview up by class or data-preview: content can wear both, placed
+	// ahead of the block they name, and a render written there lands in the
+	// post's text (as the reviewer sees it), which the next save stores.
+	function islandPreview( island ) {
+		return isRealIsland( island ) ? island.querySelector( ':scope > .minn-island-preview' ) : null;
+	}
+	// A preview Minn rendered: an island's own, or the Styles specimen (page
+	// chrome, never content). The passes that sweep every preview (theme
+	// stamps, the reveal and slider passes' inline styles, classes, data-*,
+	// the missing-image class) write only into these, or a look-alike in the
+	// text would carry those writes into the save.
+	function isMinnPreview( el ) {
+		return !! el && 1 === el.nodeType && el.classList.contains( 'minn-island-preview' )
+			&& ( isRealIsland( el.parentElement ) || ( el.hasAttribute( 'data-lookspec' ) && ! el.closest( '[contenteditable]' ) ) );
+	}
+	// The nearest preview Minn rendered around el, skipping look-alikes.
+	function minnPreviewOf( el ) {
+		let n = el && el.closest ? el.closest( '.minn-island-preview' ) : null;
+		while ( n && ! isMinnPreview( n ) ) n = n.parentElement ? n.parentElement.closest( '.minn-island-preview' ) : null;
+		return n;
+	}
 
 	// Direct-DOM edits inside a container slot never fire `input`, so the
 	// slot's dirty stamp (which gates flushSlotIsland) must be set by hand.
@@ -33281,7 +33303,7 @@
 		el.setAttribute( 'data-root-theme', mode );
 	}
 	function stampAllPreviewShells() {
-		$$( '.minn-island-preview' ).forEach( stampPreviewShell );
+		$$( '.minn-island-preview' ).filter( isMinnPreview ).forEach( stampPreviewShell );
 	}
 
 	function islandHtml( idx, name, raw, ed ) {
@@ -34060,7 +34082,7 @@
 		if ( ! island ) return;
 		const badge = island.querySelector( ':scope > .minn-imgtool-badge' );
 		if ( ! badge ) return;
-		const preview = island.querySelector( ':scope > .minn-island-preview' );
+		const preview = islandPreview( island );
 		const img = preview ? preview.querySelector( 'img' ) : null;
 		const clear = () => {
 			badge.style.removeProperty( 'top' );
@@ -34112,7 +34134,7 @@
 			if ( island.classList.contains( 'minn-slot-island' ) ) return;
 			const short = String( island.dataset.block || '' ).replace( /^core\//, '' );
 			if ( ISLAND_RUN_SKIP_BLOCKS.includes( short ) ) return;
-			const preview = island.querySelector( '.minn-island-preview' );
+			const preview = islandPreview( island );
 			if ( ! preview ) return;
 			armAcfImages( island, preview, String( ed.islands[ idx ] ) );
 			island._minnRuns = null;
@@ -34550,7 +34572,7 @@
 			.then( ( r ) => {
 				injectPreviewStyles( r && r.styles );
 				const rendered = r && r.rendered && r.rendered[ 0 ];
-				const prev = islandEl && islandEl.querySelector( '.minn-island-preview' );
+				const prev = islandPreview( islandEl );
 				if ( prev && rendered && rendered.trim() ) setPreviewHtml( prev, rendered );
 				updateEditorStats();
 			} )
@@ -34971,7 +34993,7 @@
 	 * stylesheet lands. Put the hidden slides back and let the sweep decide
 	 * again from what is now on screen. */
 	function resetPreviewPolish() {
-		$$( '.minn-island-preview' ).forEach( ( el ) => {
+		$$( '.minn-island-preview' ).filter( isMinnPreview ).forEach( ( el ) => {
 			( el._minnCollapsedSlides || [] ).forEach( ( n ) => { n.style.display = ''; } );
 			delete el._minnCollapsedSlides;
 			delete el.dataset.sliderCollapsed;
@@ -35037,7 +35059,7 @@
 		previewRevealRaf = requestAnimationFrame( () => {
 			previewRevealRaf = 0;
 			let unfinished = false;
-			$$( '.minn-island-preview' ).forEach( ( el ) => {
+			$$( '.minn-island-preview' ).filter( isMinnPreview ).forEach( ( el ) => {
 				revealJsGatedPreview( el );
 				collapseSliderPreview( el );
 				clampTallImagePreview( el );
@@ -35102,11 +35124,13 @@
 	}
 
 	// `error` never bubbles, so this rides the capture phase for the whole
-	// document and filters down to chrome images.
+	// document and filters down to chrome images. Content can wear these
+	// classes: an image counts as chrome only inside a preview Minn rendered,
+	// or inside a tile or row that is not in editable text.
 	document.addEventListener( 'error', ( e ) => {
 		const img = e.target;
 		if ( ! img || img.tagName !== 'IMG' || ! img.closest ) return;
-		if ( ! img.closest( '.minn-island-preview, .minn-imgedit-tile, .minn-insp-img-row' ) ) return;
+		if ( ! minnPreviewOf( img ) && ! ( img.closest( '.minn-imgedit-tile, .minn-insp-img-row' ) && ! img.closest( '[contenteditable]' ) ) ) return;
 		img.classList.add( 'minn-img-missing' );
 	}, true );
 
@@ -40046,7 +40070,7 @@
 			const cbadge0 = e.target.closest && e.target.closest( '[data-ctedbadge]' );
 			const cbadge = cbadge0 && isRealIsland( cbadge0.parentElement ) ? cbadge0 : null;
 			const cprev0 = cbadge
-				? cbadge.parentElement.querySelector( ':scope > .minn-island-preview' )
+				? islandPreview( cbadge.parentElement )
 				: ( ! cbadge0 && e.target.closest && e.target.closest( '.minn-block-island[data-cted] > .minn-island-preview' ) );
 			const cprev = cprev0 && isRealIsland( cprev0.parentElement ) ? cprev0 : null;
 			if ( cprev ) {
@@ -40079,7 +40103,7 @@
 			const badge0 = e.target.closest && e.target.closest( '.minn-imgtool-badge' );
 			const badge = badge0 && isRealIsland( badge0.parentElement ) ? badge0 : null;
 			const prev0 = badge
-				? badge.parentElement.querySelector( ':scope > .minn-island-preview' )
+				? islandPreview( badge.parentElement )
 				: ( ! badge0 && e.target.closest && e.target.closest( '.minn-block-island[data-imgtool] > .minn-island-preview' ) );
 			const prev = prev0 && isRealIsland( prev0.parentElement ) ? prev0 : null;
 			if ( ! prev ) return;
@@ -44172,7 +44196,7 @@
 		// input event) — ancestor slot islands must re-splice on save or
 		// their stale stored raw would emit the OLD child bytes.
 		stampSlotDirtyFor( islandEl && islandEl.parentElement );
-		const prev = islandEl && islandEl.querySelector( '.minn-island-preview' );
+		const prev = islandPreview( islandEl );
 		if ( prev ) {
 			const inner = stripBlockComments( template ).trim();
 			if ( inner ) setPreviewHtml( prev, inner );
@@ -44678,7 +44702,7 @@
 			if ( sum ) sum.value = parts.summary;
 			if ( bodyEl ) rtNeutralizeInto( bodyEl, parts.bodyHtml && parts.bodyHtml.trim() ? parts.bodyHtml : '<p><br></p>' );
 		}
-		const previewEl = document.querySelector( `.minn-island-preview[data-preview="${ insp.idx }"]` );
+		const previewEl = islandPreview( islandEl );
 		// The armed text runs describe the old markup and the preview is
 		// about to be replaced: drop them, then arm the new render, or the
 		// block's text stays read-only until something else re-renders.
@@ -44728,7 +44752,7 @@
 					const island = islandByIdx( body, i );
 					// Shortcode/details host live fields — never clobber them.
 					if ( isLiveFieldIsland( island ) ) return;
-					const el = body.querySelector( `.minn-island-preview[data-preview="${ i }"]` );
+					const el = islandPreview( island );
 					if ( el && html && html.trim() ) setPreviewHtml( el, html );
 				} );
 				// Rendered previews are the arming surface for in-place island
@@ -47889,7 +47913,7 @@
 				.then( ( r ) => {
 					injectPreviewStyles( r && r.styles );
 					const html = r && r.rendered && r.rendered[ 0 ];
-					const prev = islandEl && islandEl.querySelector( '.minn-island-preview' );
+					const prev = islandPreview( islandEl );
 					if ( prev && html && html.trim() ) setPreviewHtml( prev, html );
 					updateEditorStats();
 				} )

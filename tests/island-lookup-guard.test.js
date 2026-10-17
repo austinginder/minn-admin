@@ -14,6 +14,13 @@
  * excludes islands (a look-alike then makes Minn do less), a real-island test
  * follows it, or the marker only ever describes its own element.
  *
+ * An island's preview is the same: content can wear .minn-island-preview
+ * and data-preview="K" ahead of block K, so a render written into a preview
+ * found that way lands in the post's text, and the save stores it. A preview
+ * is reached through islandPreview() (the direct child of a real island),
+ * isMinnPreview() or minnPreviewOf(), and the passes that sweep every preview
+ * keep only those.
+ *
  * A new bare lookup fails until it uses the helpers or is listed here with
  * its reason; a listed line that no longer exists fails too, so the list
  * stays true.
@@ -25,6 +32,8 @@ const src = fs.readFileSync( path.join( __dirname, '..', 'assets', 'js', 'app.js
 // Every Minn island class (minn-block-island, minn-details-island, …; not
 // minn-island-preview and the other chrome inside an island).
 const ISL = "minn-(?:[a-z]+-)*island(?![a-z-])";
+// An island's preview, by class or by the index it carries.
+const PREVIEW = "minn-island-preview(?![a-z-])";
 const LOOKUP = new RegExp( [
 	"(closest|querySelector(All)?|matches|\\$\\$?)\\(\\s*['`\"][^'`\"]*\\." + ISL,
 	"classList\\.contains\\(\\s*'" + ISL + "'\\s*\\)",
@@ -32,9 +41,14 @@ const LOOKUP = new RegExp( [
 	"\\[data-minn-[a-z-]+",
 	"dataset\\.minn[A-Z][A-Za-z]*",
 	"(get|has)Attribute\\(\\s*'data-minn-",
+	"(closest|querySelector(All)?|matches|\\$\\$?)\\(\\s*['`\"][^'`\"]*\\." + PREVIEW,
+	"classList\\.(contains|add|remove|toggle)\\(\\s*'" + PREVIEW + "'",
+	"\\[data-preview[\\]=]",
+	"dataset\\.preview(?![A-Za-z])",
+	"(get|has|set|remove)Attribute\\(\\s*'data-preview'",
 ].join( '|' ) );
 // A lookup that tests what it found on the same line is the helpers'.
-const GUARDED = /isRealIsland|islandOf\(|islandByIdx\(|isUploadPlaceholder|uploadPlaceholder\(|isPasteBracket/;
+const GUARDED = /isRealIsland|islandOf\(|islandByIdx\(|isUploadPlaceholder|uploadPlaceholder\(|isPasteBracket|isMinnPreview|islandPreview\(|minnPreviewOf\(/;
 const HELPER_ITSELF = /^(function |let n = |while \( n |return !! el && 1 === el\.nodeType && el\.classList)/;
 
 // Trimmed source line => why it is safe.
@@ -45,6 +59,12 @@ const REVIEWED = {
 	"return host ? $$( 'figure[data-minn-upload]', host ).find( ( f ) => f.getAttribute( 'data-minn-upload' ) === key ) || null : null;": 'uploadPlaceholder(): this page\'s key, under the editor body',
 	"if ( ! island || ! island.classList.contains( 'minn-block-island' ) || 'false' !== island.getAttribute( 'contenteditable' ) ) return null;": 'previewIsland(): the same test',
 	"return el.closest( '.minn-block-island' ) === island ? island : null;": 'previewIsland(): compares to a real island',
+	"&& ! ( el.parentElement && el.parentElement.closest( '.minn-island-preview' ) );": 'isRealIsland(): exclusion',
+	"return !! el && 1 === el.nodeType && el.classList.contains( 'minn-island-preview' )": 'isMinnPreview() itself: an island\'s own child or the Styles specimen, checked on the next line',
+	"let n = el && el.closest ? el.closest( '.minn-island-preview' ) : null;": 'minnPreviewOf(): tested with isMinnPreview() before use',
+	"while ( n && ! isMinnPreview( n ) ) n = n.parentElement ? n.parentElement.closest( '.minn-island-preview' ) : null;": 'minnPreviewOf() itself',
+	"const preview = el && el.closest( '.minn-island-preview' );": 'previewIsland(): its parent must be a real island',
+	"if ( island.parentElement && island.parentElement.closest( '.minn-island-preview' ) ) return null;": 'previewIsland(): exclusion',
 
 	// Compared with, or asked of, an island already known to be real.
 	"const isl = slot.closest( '.minn-block-island' );": 'stampSlotDirtyFor: a dirty stamp on a look-alike is ignored, flushSlotIsland takes real islands only',
@@ -81,6 +101,10 @@ const REVIEWED = {
 	"|| last.classList.contains( 'minn-block-island' )": 'trailing paragraph check, no write',
 	"} else if ( n.classList && n.classList.contains( 'minn-block-island' ) ) {": 'paste: a clipboard island pastes as its visible preview, never as an island',
 	"const slotIdx = new Set( $$( '.minn-slot-island', body ).filter( isRealIsland ).map( ( el ) => parseInt( el.dataset.island, 10 ) ) );": 'guarded on the line',
+	"if ( a.closest( '#minn-editor-body, .minn-island-preview, .minn-email-frame' ) ) return;": 'exclusion: leaves links in content and previews alone',
+	"if ( carrier && ! carrier.closest( '.minn-island-preview' ) && body.contains( carrier ) ) {": 'exclusion',
+	"const preview = el.querySelector( '.minn-island-preview' );": 'islandClipboardParts: el is a real island; the text/html copy for other apps only (a paste back into Minn reads text/x-minn-blocks, the stored raw)',
+	"const prev = n.querySelector( '.minn-island-preview' );": 'paste: a clipboard island pastes as what its preview shows, never as an island',
 
 	// Geometry, hover and preventDefault only.
 	"if ( ! body.querySelector( '.minn-block-island .minn-block-island > .minn-island-chip' ) ) return;": 'chip layout early-out; the layout itself takes real islands',
@@ -92,6 +116,8 @@ const REVIEWED = {
 	": ( ! badge0 && e.target.closest && e.target.closest( '.minn-block-island[data-imgtool] > .minn-island-preview' ) );": 'doorway: isRealIsland( parent ) checked next',
 	"const preview = e.target.closest && e.target.closest( '.minn-block-island > .minn-island-preview' );": 'context menu: isRealIsland( parent ) checked next',
 	"const isl0 = e.target.closest && e.target.closest( '.minn-block-island[data-imgtool]' );": 'hover outline: isRealIsland checked next',
+	"const tb = e.target.closest( '.minn-island-preview [data-acf-inline-fields]' );": 'ACF toolbar doorway: openAcfToolbarPop() takes its island through previewIsland()',
+	"if ( e.target.closest( '.minn-island-run' ) && e.target.closest( '.minn-island-preview a[href]' ) ) e.preventDefault();": 'preventDefault only',
 
 	// Markers that describe only their own element.
 	"const offered = ( state.cache.pluginUpdates || {} )[ file + '.php' ] || btn.dataset.minnOffered || '';": 'plugin card button Minn rendered, not editor content',
@@ -164,6 +190,16 @@ check( 'the serializer flush commits real Details and Buttons islands only',
 	/'\.minn-details-island', root \)\.filter\( isRealIsland \)/.test( body ) && /'\.minn-buttons-island', root \)\.filter\( isRealIsland \)/.test( body ) );
 check( 'upload placeholders carry the page token', /const key = UPLOAD_KEY \+/.test( body ) && ! /'u' \+ \( \+\+uploadSeq \)/.test( body ) );
 check( 'paste never rebuilds an island from clipboard HTML', ! /islandHtml\( idx, n\.dataset\.block/.test( body ) );
+// A server render reaches the island it was asked for, never a look-alike
+// carrying its class or index ahead of it in the post.
+[ 'renderIslandPreviews', 'applyInspector', 'replaceIsland', 'insertIsland' ].forEach( ( fn ) => {
+	const b = fnBody( fn );
+	check( `${ fn } writes a render only into the island's own preview`, /islandPreview\(/.test( b ) && ! /data-preview|querySelector\(\s*['`"][^'`"]*minn-island-preview/.test( b ) );
+} );
+check( 'islandPreview() asks for a real island\'s direct child', /function islandPreview\( island \) \{\s*return isRealIsland\( island \) \? island\.querySelector\( ':scope > \.minn-island-preview' \) : null;/.test( body ) );
+// The passes that sweep every preview write inline styles, classes and data-*
+// into what they touch; a look-alike in the text would carry them into the save.
+check( 'every sweep over previews keeps only the ones Minn rendered', ! /\$\$\( '\.minn-island-preview' \)\.(?!filter\( isMinnPreview \))/.test( body ) );
 
 const failed = results.filter( ( r ) => ! r ).length;
 console.log( `\nisland-lookup-guard: ${ results.length - failed }/${ results.length } passed` );
