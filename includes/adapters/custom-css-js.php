@@ -817,6 +817,11 @@ minn_admin_resource( 'ccj/snippets', function () {
 				if ( ! empty( $body['active'] ) && ! minn_admin_ccj_obj_can( 'publish' ) ) {
 					return minn_admin_ccj_obj_error();
 				}
+				// A new snippet holds nothing a mask could stand for.
+				$masked = Minn_Admin_Egress::refuse_masks( array( 'post_title' => $name, 'post_content' => $code ), array() );
+				if ( $masked ) {
+					return $masked;
+				}
 				// Slashed: wp_insert_post unslashes its input, and a CSS or JS
 				// body loses every backslash otherwise ("\f101" icon codes,
 				// regex escapes) before rebuild_tree writes it to the file.
@@ -878,22 +883,26 @@ minn_admin_resource( 'ccj/snippets', function () {
 					// included, so judge what actually changed against the stored
 					// snippet before writing anything.
 					// Line endings normalised: CCJ's own editor stores CRLF and Minn's
-					// form sends LF back, which read as a change on every save.
-					$eol            = function ( $v ) {
-						return str_replace( "\r\n", "\n", (string) $v );
-					};
-					$code_changed   = array_key_exists( 'code', $body ) && $eol( $body['code'] ) !== $eol( $post->post_content );
+					// form sends LF back, which read as a change on every save. Code
+					// that holds a credential is served with it masked, and comes
+					// back that way untouched.
+					$code_changed   = array_key_exists( 'code', $body ) && ! Minn_Admin::unchanged( $body['code'], $post->post_content );
 					$active_changed = array_key_exists( 'active', $body ) && ! empty( $body['active'] ) !== minn_admin_ccj_is_active( $id );
 					$update = array( 'ID' => $id );
 					// An untouched name comes back as stored: only a new one is
 					// cleaned and written, so '50%DEAL' survives a code edit.
-					if ( isset( $body['name'] ) && (string) $body['name'] !== (string) $post->post_title ) {
+					if ( isset( $body['name'] ) && ! Minn_Admin::unchanged( $body['name'], $post->post_title ) ) {
 						$update['post_title'] = sanitize_text_field( $body['name'] );
 					}
 					// Only a code change touches the body: an unchanged one would go
 					// back through kses for a designer and lose what CCJ stored.
 					if ( $code_changed ) {
 						$update['post_content'] = (string) $body['code'];
+					}
+					// Before the first write below (the _active flag).
+					$masked = Minn_Admin_Egress::refuse_masks( $update, array( 'post_title' => $post->post_title, 'post_content' => $post->post_content ) );
+					if ( $masked ) {
+						return $masked;
 					}
 					if ( array_key_exists( 'active', $body ) ) {
 						if ( ! empty( $body['active'] ) && ! minn_admin_ccj_can_write_code( $opts ) ) {

@@ -721,6 +721,11 @@ minn_admin_resource( 'wpcode/snippets', function () {
 				if ( is_wp_error( $guard_code ) ) {
 					return $guard_code;
 				}
+				// A new snippet holds nothing a mask could stand for.
+				$masked = Minn_Admin_Egress::refuse_masks( array( 'name' => $request['name'], 'code' => $request['code'], 'tags' => $request['tags'], 'desc' => $request['desc'] ), array() );
+				if ( $masked ) {
+					return $masked;
+				}
 				// load_from_array (via the array constructor) can set private
 				// fields like priority/note that are not assignable from outside.
 				// Title and code go in SLASHED: WPCode_Snippet::save() hands them
@@ -885,8 +890,10 @@ minn_admin_resource( 'wpcode/snippets', function () {
 					$patch = array( 'auto_insert' => $want_auto );
 					// A field the dialog sends back as stored is left as stored:
 					// cleaning an untouched value rewrites it ("50%DEAL" loses
-					// "%DE"). Only a changed one is cleaned and written.
-					if ( null !== $request['name'] && (string) $request['name'] !== (string) $snippet->get_title() ) {
+					// "%DE"). Only a changed one is cleaned and written. "As
+					// stored" includes as served: a read shows a credential the
+					// code holds as its egress mask.
+					if ( null !== $request['name'] && ! Minn_Admin::unchanged( $request['name'], $snippet->get_title() ) ) {
 						$patch['title'] = sanitize_text_field( (string) $request['name'] );
 					}
 					// The dialog always sends the code, an untouched one as
@@ -895,8 +902,10 @@ minn_admin_resource( 'wpcode/snippets', function () {
 					// changes: kses on a text snippet's stored code (for a caller
 					// without unfiltered_html) took out an embed someone allowed
 					// to store it had written, on an edit of the priority.
+					// A retype with the code sent back untouched re-filters the
+					// STORED code, never the copy sent (which carries the mask).
 					$retyped = null !== $new_type && $new_type !== (string) $snippet->get_code_type();
-					if ( null !== $request['code'] && ( $retyped || ! Minn_Admin::unchanged( $request['code'], (string) $snippet->get_code() ) ) ) {
+					if ( null !== $request['code'] && ! Minn_Admin::unchanged( $request['code'], (string) $snippet->get_code() ) ) {
 						$patch['code'] = minn_admin_wpcode_clean_code( $eff_type, (string) $request['code'] );
 					} elseif ( $retyped && minn_admin_wpcode_type_is_markup( $eff_type ) ) {
 						// Retyping is a write even when no code is sent. Creating a
@@ -917,11 +926,23 @@ minn_admin_resource( 'wpcode/snippets', function () {
 					if ( null !== $request['tags'] && array_map( 'strval', array_values( (array) $request['tags'] ) ) !== array_map( 'strval', array_values( (array) $snippet->get_tags() ) ) ) {
 						$patch['tags'] = array_map( 'sanitize_text_field', (array) $request['tags'] );
 					}
-					if ( null !== $request['desc'] && (string) $request['desc'] !== (string) $snippet->get_note() ) {
+					if ( null !== $request['desc'] && ! Minn_Admin::unchanged( $request['desc'], $snippet->get_note() ) ) {
 						$patch['note'] = sanitize_textarea_field( (string) $request['desc'] );
 					}
 					if ( null !== $request['active'] && current_user_can( 'wpcode_activate_snippets' ) ) {
 						$patch['active'] = (bool) $request['active'];
+					}
+					$masked = Minn_Admin_Egress::refuse_masks(
+						$patch,
+						array(
+							'title' => $snippet->get_title(),
+							'code'  => $snippet->get_code(),
+							'tags'  => $snippet->get_tags(),
+							'note'  => $snippet->get_note(),
+						)
+					);
+					if ( $masked ) {
+						return $masked;
 					}
 					$snippet->load_from_array( $patch );
 					// Slash what save() hands wp_update_post(): the code and title

@@ -584,12 +584,16 @@ add_action( 'rest_api_init', function () {
 			// The dialog sends the title as the row has it when it is left
 			// alone: that writes nothing (an untitled template stays untitled).
 			$sent = $request->get_param( 'title' );
-			if ( null === $sent || (string) $sent === (string) $post->post_title ) {
+			if ( null === $sent || Minn_Admin::unchanged( $sent, $post->post_title ) ) {
 				return rest_ensure_response( minn_admin_elementor_template_item( $post ) );
 			}
 			$title = trim( (string) $sent );
 			if ( '' === $title ) {
 				return new WP_Error( 'invalid', __( 'A template needs a title.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
+			$masked = Minn_Admin_Egress::refuse_masks( array( 'post_title' => $title ), array( 'post_title' => $post->post_title ) );
+			if ( $masked ) {
+				return $masked;
 			}
 			$updated = wp_update_post( wp_slash( array(
 				'ID'         => $post->ID,
@@ -652,9 +656,16 @@ add_action( 'rest_api_init', function () {
 				'title'         => $document->get_main_post()->post_title,
 				'type'          => \Elementor\TemplateLibrary\Source_Local::get_template_type( $post->ID ),
 			);
+			$file = (string) wp_json_encode( $export );
+			// A template holding a credential would leave with it masked, a
+			// file that imports broken: refused, never handed out that way.
+			$refused = Minn_Admin_Egress::refuse_export( $file );
+			if ( $refused ) {
+				return $refused;
+			}
 			return rest_ensure_response( array(
 				'filename' => 'elementor-' . $post->ID . '-' . gmdate( 'Y-m-d' ) . '.json',
-				'content'  => wp_json_encode( $export ),
+				'content'  => $file,
 				'mime'     => 'application/json',
 			) );
 		},

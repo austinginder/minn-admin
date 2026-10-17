@@ -145,9 +145,11 @@ try {
 	$v = get_option( 'searchwp_license' );
 	$check( 'an option that held an object gets its key back', $key === ( is_array( $v ) ? ( $v['key'] ?? '' ) : '' ), wp_json_encode( $v ) );
 
-	// The token pasted into a row that never held that key stays text.
+	// The token pasted into a row that never held that key: nothing to
+	// restore, and storing the placeholder would lose what was there.
+	$tagline = (string) get_option( 'blogdescription' );
 	$send( 'POST', '/minn-admin/v1/minn-egress-test/save', array( 'option' => 'blogdescription', 'value' => 'tagline ' . $t1 ) );
-	$check( 'a redacted token pasted elsewhere never turns into the key', false === strpos( (string) get_option( 'blogdescription' ), $key ) && false !== strpos( (string) get_option( 'blogdescription' ), $t1 ) );
+	$check( 'a redacted token pasted elsewhere never turns into the key, and is refused rather than stored', false === strpos( (string) get_option( 'blogdescription' ), $key ) && $tagline === (string) get_option( 'blogdescription' ), (string) get_option( 'blogdescription' ) );
 
 	// Outside a Minn request a plugin may store whatever it likes.
 	update_option( $option, array( 'key' => $t1 ) );

@@ -1173,6 +1173,11 @@ class Minn_Admin {
 	 * layer that could change it: a vendor's own form stored it, and nobody
 	 * edited it. tests/roundtrip-panels.test.php holds every panel to this.
 	 *
+	 * A read shows each known credential as its egress mask, so a text or
+	 * structured value that holds one comes back masked: it is unchanged when
+	 * it equals the whole stored value masked (Minn_Admin_Egress::served_as()).
+	 * Pass the STORED value, as the read built it before the fence.
+	 *
 	 * @param mixed  $sent   Value the client sent.
 	 * @param mixed  $served Value the read served for the same field.
 	 * @param string $kind   'bool' (on/off), 'number' (numeric), 'list' (a set)
@@ -1197,12 +1202,14 @@ class Minn_Admin {
 			return true;
 		}
 		if ( ! is_scalar( $sent ) || ! is_scalar( $served ) ) {
-			return wp_json_encode( $sent ) === wp_json_encode( $served );
+			return wp_json_encode( $sent ) === wp_json_encode( $served ) || Minn_Admin_Egress::served_as( $sent, $served );
 		}
 		if ( 'number' === $kind && is_numeric( $sent ) && is_numeric( $served ) ) {
 			return (float) $sent === (float) $served;
 		}
-		return str_replace( "\r\n", "\n", (string) $sent ) === str_replace( "\r\n", "\n", (string) $served );
+		$sent   = str_replace( "\r\n", "\n", (string) $sent );
+		$served = str_replace( "\r\n", "\n", (string) $served );
+		return $sent === $served || Minn_Admin_Egress::served_as( $sent, $served );
 	}
 
 	/**

@@ -26,9 +26,21 @@
  *
  * The write side: while a minn-admin/v1 request runs, a save of an option
  * that carries "[redacted:<fingerprint>]" gets back the credential with that
- * fingerprint, but only one the option already holds, so a screen that showed
- * a redacted value and saves it back cannot overwrite it, and a token pasted
- * into another option stays the text it is.
+ * fingerprint, but only at the place in the option that held it (the same
+ * keys down to it), so a screen that showed a redacted value and saves it
+ * back cannot overwrite it. A mask anywhere else, or one whose credential the
+ * restore would leave where the browser no longer counts it as one (a key
+ * moved under a name such as "title", text typed beside it), is a refused
+ * save: the option keeps its stored value and the request answers 400. A
+ * credential is recognised by the names along its path, so a moved copy
+ * would stop being redacted.
+ *
+ * Every other store (snippet code, a post, a table row, a file) has no hook
+ * to restore in, so its routes compare what was sent with the stored value
+ * served the way a read serves it (served_as(), which Minn_Admin::unchanged()
+ * asks), leave an untouched field as stored, and refuse a write that would
+ * store a mask (refuse_masks()). An export file is refused rather than
+ * handed out with a mask in it (refuse_export()).
  *
  * @package minn-admin
  */
@@ -39,6 +51,9 @@ class Minn_Admin_Egress {
 
 	const MASK = '[redacted';
 
+	/** A mask as the fence writes it: six hex characters of the credential's hash. */
+	const TOKEN = '/\[redacted:[0-9a-f]{6}\]/';
+
 	/** Credential => fingerprint, null until first needed. */
 	private static $credentials = null;
 
@@ -48,12 +63,23 @@ class Minn_Admin_Egress {
 	/** How many minn-admin/v1 requests are running (a route may dispatch another). */
 	private static $depth = 0;
 
+	/** Rows the running request was refused a save of (a mask they could not take back). */
+	private static $refused = array();
+
+	/** Whether an option name is a credential row, per site and name, for this request. */
+	private static $named = array();
+
 	public static function init() {
 		add_filter( 'rest_request_before_callbacks', array( __CLASS__, 'enter' ), 0, 3 );
 		add_filter( 'rest_request_after_callbacks', array( __CLASS__, 'leave' ), PHP_INT_MAX, 3 );
 		add_filter( 'rest_pre_echo_response', array( __CLASS__, 'scrub' ), PHP_INT_MAX, 3 );
 		add_filter( 'rest_post_dispatch', array( __CLASS__, 'scrub_headers' ), PHP_INT_MAX, 3 );
 		add_filter( 'pre_update_option', array( __CLASS__, 'keep_option' ), PHP_INT_MAX, 3 );
+		// A credential row that changes makes the list stale, and with a
+		// persistent object cache the list outlives the request.
+		foreach ( array( 'added_option', 'updated_option', 'deleted_option', 'add_site_option', 'update_site_option', 'delete_site_option' ) as $hook ) {
+			add_action( $hook, array( __CLASS__, 'changed' ), PHP_INT_MAX, 1 );
+		}
 		// Network rows: core has no filter for every site option, only one per name.
 		add_action( 'init', function () {
 			if ( is_multisite() && method_exists( 'Minn_Admin_DB', 'credential_option_names' ) ) {
@@ -71,16 +97,37 @@ class Minn_Admin_Egress {
 
 	public static function enter( $response, $handler, $request ) {
 		if ( self::ours( $request ) ) {
+			if ( 0 === self::$depth ) {
+				self::$refused = array();
+			}
 			++self::$depth;
 		}
 		return $response;
 	}
 
 	public static function leave( $response, $handler, $request ) {
-		if ( self::ours( $request ) && self::$depth > 0 ) {
-			--self::$depth;
+		if ( ! self::ours( $request ) || self::$depth < 1 ) {
+			return $response;
 		}
-		return $response;
+		--self::$depth;
+		if ( self::$depth > 0 || ! self::$refused ) {
+			return $response;
+		}
+		$names         = array_values( array_unique( self::$refused ) );
+		self::$refused = array();
+		error_log( sprintf( 'minn_egress_refused user=%d route="%s %s" refused=%s', get_current_user_id(), $request->get_method(), $request->get_route(), implode( ',', $names ) ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		// The write fence's own refusal, when it refused too, says it first.
+		if ( is_wp_error( $response ) ) {
+			return $response;
+		}
+		return new WP_Error(
+			'minn_egress_mask_refused',
+			__( 'Part of this change was not saved: it moves or changes a hidden key, shown as [redacted:…]. Type the real value instead.', 'minn-admin' ),
+			array(
+				'status'  => 400,
+				'refused' => $names,
+			)
+		);
 	}
 
 	/**
@@ -97,11 +144,59 @@ class Minn_Admin_Egress {
 		}
 	}
 
-	/** Forget what was read and named, after a save changed a credential row (and between tests). */
+	/** Forget what was read and named (between tests). */
 	public static function reset() {
+		self::forget();
+		self::$intended = array();
+		self::$named    = array();
+	}
+
+	/** Read the credentials again when next needed. */
+	private static function forget() {
 		self::$credentials = null;
-		self::$intended    = array();
 		wp_cache_delete( 'egress_credentials', 'minn_admin' );
+		if ( method_exists( 'Minn_Admin_DB', 'forget_credentials' ) ) {
+			Minn_Admin_DB::forget_credentials();
+		}
+	}
+
+	/**
+	 * An option or network option was added, changed or deleted: when it is
+	 * a credential row, the list is read again next time. Nothing is asked
+	 * unless a list is held (this request's, or the object cache's). Before
+	 * init the row is not named, since naming the gateway rows starts
+	 * WooCommerce's gateways, and starting them that early would freeze the
+	 * list before gateway plugins add theirs: the list is just dropped.
+	 *
+	 * @param string $option Option name.
+	 */
+	public static function changed( $option ) {
+		if ( null === self::$credentials && ( ! wp_using_ext_object_cache() || false === wp_cache_get( 'egress_credentials', 'minn_admin' ) ) ) {
+			return;
+		}
+		if ( ! did_action( 'init' ) ) {
+			self::forget();
+			return;
+		}
+		static $naming = false;
+		$at = get_current_blog_id() . ':' . $option;
+		if ( ! isset( self::$named[ $at ] ) ) {
+			// Naming the rows can start a gateway that saves an option of its
+			// own; that save drops the list rather than name rows again.
+			if ( $naming ) {
+				self::forget();
+				return;
+			}
+			$naming = true;
+			try {
+				self::$named[ $at ] = method_exists( 'Minn_Admin_DB', 'is_credential_option' ) && Minn_Admin_DB::is_credential_option( (string) $option );
+			} finally {
+				$naming = false;
+			}
+		}
+		if ( self::$named[ $at ] ) {
+			self::forget();
+		}
 	}
 
 	/**
@@ -171,16 +266,18 @@ class Minn_Admin_Egress {
 	 * JSON text with every credential copy replaced, and how many there were.
 	 * Intended values are set aside first and put back after.
 	 *
-	 * @param string $json JSON text.
+	 * @param string $json   JSON text.
+	 * @param bool   $answer A response (true): only when it looks keyed, and
+	 *                       intended values pass. False masks every copy.
 	 * @return array [ json, count ]
 	 */
-	private static function mask_json( $json ) {
-		if ( ! self::looks_keyed( $json ) || ! self::credentials() ) {
+	private static function mask_json( $json, $answer = true ) {
+		if ( ( $answer && ! self::looks_keyed( $json ) ) || ! self::credentials() ) {
 			return array( $json, 0 );
 		}
 		$held = array();
 		$i    = 0;
-		foreach ( array_keys( self::$intended ) as $ok ) {
+		foreach ( $answer ? array_keys( self::$intended ) : array() as $ok ) {
 			$enc = substr( (string) wp_json_encode( (string) $ok ), 1, -1 );
 			if ( '' !== $enc && false !== strpos( $json, $enc ) ) {
 				$mark          = 'minnintendedvalue' . ( $i++ ) . 'x';
@@ -262,63 +359,188 @@ class Minn_Admin_Egress {
 	}
 
 	private static function keep( $value, $old_value, $what ) {
-		if ( self::$depth < 1 || ! self::carries_mask( $value ) ) {
+		if ( self::$depth < 1 || ! self::tokens( $value ) ) {
 			return $value;
 		}
-		// The credentials this row already holds, by fingerprint: only those
-		// can come back, and only into this row.
-		$held = array();
-		$old  = (string) wp_json_encode( $old_value );
-		foreach ( self::credentials() as $c => $fp ) {
-			if ( false !== strpos( $old, substr( (string) wp_json_encode( (string) $c ), 1, -1 ) ) ) {
-				$held[ self::MASK . ':' . $fp . ']' ] = (string) $c;
+		$old = array();
+		self::paths( $old_value, '', $old );
+		$kept    = array();
+		$allowed = 0;
+		$out     = self::restore( $value, $old, $kept, $allowed );
+		$moved   = self::tokens( $out ) > $allowed;
+		// A credential restored where the browser no longer counts it as one
+		// (text typed beside it, a JSON string rearranged around it) drops out
+		// of the list, and the next response prints it.
+		if ( ! $moved && $kept && method_exists( 'Minn_Admin_DB', 'credential_strings' ) ) {
+			$before = Minn_Admin_DB::credential_strings( (string) maybe_serialize( $old_value ) );
+			$after  = Minn_Admin_DB::credential_strings( (string) maybe_serialize( $out ) );
+			foreach ( array_keys( $kept ) as $c ) {
+				if ( isset( $before[ $c ] ) && ! isset( $after[ $c ] ) ) {
+					$moved = true;
+				}
 			}
 		}
-		$kept = 0;
-		$out  = self::restore( $value, $held, $kept );
+		if ( $moved ) {
+			self::$refused[] = $what;
+			return $old_value;
+		}
 		if ( $kept ) {
-			error_log( 'minn_egress_kept ' . $what . ' count=' . $kept ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			error_log( 'minn_egress_kept ' . $what . ' count=' . count( $kept ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 		}
 		return $out;
 	}
 
-	private static function carries_mask( $v, $depth = 0 ) {
+	/** How many masks a value holds anywhere: strings, keys, deep or non-public properties alike. */
+	private static function tokens( $v ) {
 		if ( is_string( $v ) ) {
-			return false !== strpos( $v, self::MASK . ':' );
+			return (int) preg_match_all( self::TOKEN, $v );
 		}
-		if ( $depth < 32 && ( is_array( $v ) || is_object( $v ) ) ) {
-			foreach ( (array) $v as $x ) {
-				if ( self::carries_mask( $x, $depth + 1 ) ) {
-					return true;
-				}
-			}
+		if ( ! is_array( $v ) && ! is_object( $v ) ) {
+			return 0;
 		}
-		return false;
+		try {
+			$text = serialize( $v ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- core serializes the same value to store it.
+		} catch ( \Throwable $e ) {
+			$text = (string) wp_json_encode( $v );
+		}
+		return (int) preg_match_all( self::TOKEN, $text );
 	}
 
-	/** Each held mask in a saved value back to its credential, wherever it sits. */
-	private static function restore( $v, array $held, &$kept, $depth = 0 ) {
-		if ( is_string( $v ) ) {
-			if ( $held && false !== strpos( $v, self::MASK . ':' ) ) {
-				$new   = strtr( $v, $held );
-				$kept += ( $new !== $v ) ? 1 : 0;
-				return $new;
+	/**
+	 * A path's next step. A list position is "#": a credential is recognised
+	 * by the names along its path and a position names nothing, so a mask may
+	 * follow its item when a list is reordered or shortened, never move to
+	 * another name. A name carries its length, so no key can spell a path.
+	 */
+	private static function step( $path, $k ) {
+		return $path . ( ( is_int( $k ) || ctype_digit( (string) $k ) ) ? '/#' : '/' . strlen( (string) $k ) . ':' . $k );
+	}
+
+	/** Every place in a value, path => the strings there (list items joined by NUL, which no credential or mask holds). */
+	private static function paths( $v, $path, array &$out, $depth = 0 ) {
+		$out[ $path ] = ( isset( $out[ $path ] ) ? $out[ $path ] . "\0" : '' ) . ( is_string( $v ) ? $v : '' );
+		if ( $depth < 32 && ( is_array( $v ) || ( is_object( $v ) && ! $v instanceof Closure ) ) ) {
+			foreach ( is_array( $v ) ? $v : get_object_vars( $v ) as $k => $x ) {
+				self::paths( $x, self::step( $path, $k ), $out, $depth + 1 );
 			}
-			return $v;
+		}
+	}
+
+	/**
+	 * Each mask in a saved value back to its credential, only where the old
+	 * value held that credential at the same path. $allowed counts the masks
+	 * left that the old value already held as text in the same place (a mask
+	 * stored as text earlier saves back as it is); every other mask left
+	 * refuses the save.
+	 */
+	private static function restore( $v, array $old, array &$kept, &$allowed, $path = '', $depth = 0 ) {
+		if ( is_string( $v ) ) {
+			if ( ! preg_match( self::TOKEN, $v ) ) {
+				return $v;
+			}
+			$was  = isset( $old[ $path ] ) ? $old[ $path ] : '';
+			$held = array();
+			foreach ( '' === $was ? array() : self::credentials() as $c => $fp ) {
+				if ( false !== strpos( $was, (string) $c ) ) {
+					$held[ self::MASK . ':' . $fp . ']' ] = (string) $c;
+				}
+			}
+			$new = $held ? strtr( $v, $held ) : $v;
+			foreach ( $held as $mask => $c ) {
+				if ( false !== strpos( $v, $mask ) ) {
+					$kept[ $c ] = true;
+				}
+			}
+			if ( preg_match_all( self::TOKEN, $new, $left ) ) {
+				foreach ( $left[0] as $mask ) {
+					$allowed += ( '' !== $was && false !== strpos( $was, $mask ) ) ? 1 : 0;
+				}
+			}
+			return $new;
 		}
 		if ( $depth >= 32 ) {
 			return $v;
 		}
+		$walk = function ( $k, $x ) use ( $old, &$kept, &$allowed, $path, $depth ) {
+			$at = self::step( $path, $k );
+			// A mask in a key stays text: only one the old value had there.
+			if ( is_string( $k ) && array_key_exists( $at, $old ) ) {
+				$allowed += (int) preg_match_all( self::TOKEN, $k );
+			}
+			return self::restore( $x, $old, $kept, $allowed, $at, $depth + 1 );
+		};
 		if ( is_array( $v ) ) {
 			foreach ( $v as $k => $x ) {
-				$v[ $k ] = self::restore( $x, $held, $kept, $depth + 1 );
+				$v[ $k ] = $walk( $k, $x );
 			}
 		} elseif ( is_object( $v ) && ! $v instanceof Closure ) {
 			$v = clone $v;
 			foreach ( get_object_vars( $v ) as $k => $x ) {
-				$v->$k = self::restore( $x, $held, $kept, $depth + 1 );
+				$v->$k = $walk( $k, $x );
 			}
 		}
 		return $v;
+	}
+
+	/**
+	 * Whether a value sent back is the stored one as a minn-admin/v1 read
+	 * served it. Every response shows each known credential as its mask, so a
+	 * field a dialog sends back untouched arrives masked; it equals the whole
+	 * stored value masked, never a part of it, and nothing is restored.
+	 *
+	 * @param mixed $sent   The value sent.
+	 * @param mixed $stored The stored value it would replace.
+	 * @return bool
+	 */
+	public static function served_as( $sent, $stored ) {
+		$json = wp_json_encode( $sent );
+		if ( ! is_string( $json ) || ! preg_match( self::TOKEN, $json ) ) {
+			return false;
+		}
+		$was = wp_json_encode( $stored );
+		return is_string( $was ) && self::mask_json( $was, false )[0] === $json;
+	}
+
+	/**
+	 * A write outside the options API that would store a mask. Each value
+	 * about to be written is held against the stored value it replaces: a
+	 * mask that stored value already holds as text may stay, any other is a
+	 * value a read showed masked and someone saved, and writing it would put
+	 * "[redacted:…]" where the credential was. Nothing is written then.
+	 *
+	 * @param array $writes Values about to be written, by field.
+	 * @param array $stored The stored values they replace, by the same field.
+	 * @return WP_Error|null
+	 */
+	public static function refuse_masks( array $writes, array $stored ) {
+		foreach ( $writes as $field => $v ) {
+			if ( ! preg_match_all( self::TOKEN, (string) ( is_string( $v ) ? $v : wp_json_encode( $v ) ), $m ) ) {
+				continue;
+			}
+			$was = isset( $stored[ $field ] ) ? $stored[ $field ] : '';
+			$was = (string) ( is_string( $was ) ? $was : wp_json_encode( $was ) );
+			foreach ( $m[0] as $mask ) {
+				if ( false === strpos( $was, $mask ) ) {
+					error_log( 'minn_egress_refused field=' . $field ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+					return new WP_Error( 'minn_egress_mask', __( 'Nothing was saved: this change holds a hidden key, shown as [redacted:…], and saving it would put that placeholder where the key was. Type the real value in its place, or leave that part as it was.', 'minn-admin' ), array( 'status' => 400 ) );
+				}
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * A file built for download (an export) that holds a credential. The
+	 * response would carry it masked, which no importer can use, so the file
+	 * is refused rather than handed out silently broken.
+	 *
+	 * @param mixed $content The file's content as the response would carry it.
+	 * @return WP_Error|null
+	 */
+	public static function refuse_export( $content ) {
+		if ( ! self::mask_json( (string) wp_json_encode( $content ), false )[1] ) {
+			return null;
+		}
+		return new WP_Error( 'minn_egress_export', __( 'This holds a saved key (an API or licence key), and Minn never hands one out, so the export file was not made: it would not import correctly without the key.', 'minn-admin' ), array( 'status' => 409 ) );
 	}
 }

@@ -377,6 +377,11 @@ minn_admin_endpoint( 'fluent-snippets', array(
 			'load_as_file' => 'no',
 			'condition'    => array( 'status' => 'no' ),
 		);
+		// A new snippet holds nothing a mask could stand for.
+		$masked = Minn_Admin_Egress::refuse_masks( array( 'meta' => $meta, 'code' => $request['code'] ), array() );
+		if ( $masked ) {
+			return $masked;
+		}
 		$result = \FluentSnippets\App\Helpers\Helper::createSnippet(
 			array(
 				'meta' => $meta,
@@ -415,11 +420,12 @@ minn_admin_endpoint( 'fluent-snippets/(?P<file>[^/]+)', array(
 		}
 		list( , $meta, $code ) = $now;
 		// A field the dialog sends back as stored is left as stored: cleaning
-		// an untouched value rewrites it ("50%DEAL" loses "%DE").
-		if ( null !== $request['name'] && (string) $request['name'] !== (string) ( $meta['name'] ?? '' ) ) {
+		// an untouched value rewrites it ("50%DEAL" loses "%DE"). As served
+		// counts as stored: a read shows a credential as its egress mask.
+		if ( null !== $request['name'] && ! Minn_Admin::unchanged( $request['name'], (string) ( $meta['name'] ?? '' ) ) ) {
 			$meta['name'] = sanitize_text_field( (string) $request['name'] );
 		}
-		if ( null !== $request['desc'] && (string) $request['desc'] !== (string) ( $meta['description'] ?? '' ) ) {
+		if ( null !== $request['desc'] && ! Minn_Admin::unchanged( $request['desc'], (string) ( $meta['description'] ?? '' ) ) ) {
 			$meta['description'] = sanitize_textarea_field( (string) $request['desc'] );
 		}
 		// Code sent back as the item served it stays as their file holds it
@@ -455,6 +461,10 @@ minn_admin_endpoint( 'fluent-snippets/(?P<file>[^/]+)', array(
 		}
 		if ( '' === (string) ( $meta['run_at'] ?? '' ) ) {
 			return new WP_Error( 'minn_fluent_no_run_at', __( 'This snippet has no Run at setting. Pick one to save it.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		$masked = Minn_Admin_Egress::refuse_masks( array_merge( $meta, array( 'code' => $code ) ), array_merge( $now[1], array( 'code' => $now[2] ) ) );
+		if ( $masked ) {
+			return $masked;
 		}
 		return minn_admin_fluent_save( $file, $meta, $code );
 	},

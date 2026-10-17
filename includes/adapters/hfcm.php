@@ -203,7 +203,7 @@ function minn_admin_hfcm_edit( array $item, WP_REST_Request $request ) {
 	$data = array( 'last_revision_date' => current_time( 'mysql' ), 'last_modified_by' => minn_admin_hfcm_who() );
 	// A name the dialog sends back as stored is left as stored: cleaning an
 	// untouched value rewrites it ("50%DEAL" loses "%DE").
-	if ( isset( $body['name'] ) && (string) $body['name'] !== (string) $item['name'] ) {
+	if ( isset( $body['name'] ) && ! Minn_Admin::unchanged( $body['name'], $item['name'] ) ) {
 		$data['name'] = sanitize_text_field( $body['name'] );
 	}
 	$retargets = ( isset( $body['snippet_type'] ) && in_array( $body['snippet_type'], MINN_ADMIN_HFCM_TYPES, true ) && (string) $body['snippet_type'] !== (string) $item['snippet_type'] )
@@ -211,7 +211,9 @@ function minn_admin_hfcm_edit( array $item, WP_REST_Request $request ) {
 	if ( ( array_key_exists( 'code', $body ) || $retargets || ! empty( $body['active'] ) ) && ! minn_admin_hfcm_can_write_code() ) {
 		return minn_admin_hfcm_code_error();
 	}
-	if ( array_key_exists( 'code', $body ) ) {
+	// Code sent back as stored (or as served: a credential in it reads as its
+	// egress mask) is not written.
+	if ( array_key_exists( 'code', $body ) && ! Minn_Admin::unchanged( $body['code'], $item['code'] ) ) {
 		$data['snippet'] = (string) $body['code'];
 	}
 	foreach ( array( 'snippet_type' => MINN_ADMIN_HFCM_TYPES, 'location' => MINN_ADMIN_HFCM_LOCATIONS, 'device_type' => MINN_ADMIN_HFCM_DEVICES ) as $key => $allowed ) {
@@ -222,7 +224,8 @@ function minn_admin_hfcm_edit( array $item, WP_REST_Request $request ) {
 	if ( array_key_exists( 'active', $body ) ) {
 		$data['status'] = $body['active'] ? 'active' : 'inactive';
 	}
-	return $data;
+	$masked = Minn_Admin_Egress::refuse_masks( $data, array( 'name' => $item['name'], 'snippet' => $item['code'] ) );
+	return $masked ? $masked : $data;
 }
 
 /** Whether the stored row reads as written (the timestamps aside). */
@@ -280,6 +283,11 @@ minn_admin_resource( 'hfcm/snippets', function () {
 				}
 				if ( ! minn_admin_hfcm_can_write_code() ) {
 					return minn_admin_hfcm_code_error();
+				}
+				// A new snippet holds nothing a mask could stand for.
+				$masked = Minn_Admin_Egress::refuse_masks( array( 'name' => $name, 'snippet' => isset( $body['code'] ) ? $body['code'] : '' ), array() );
+				if ( $masked ) {
+					return $masked;
 				}
 				$now = current_time( 'mysql' );
 				$who = minn_admin_hfcm_who();

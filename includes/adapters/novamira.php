@@ -891,11 +891,12 @@ add_action( 'rest_api_init', function () {
 				$b     = (array) $req->get_json_params();
 				$types = minn_admin_novamira_memory_types();
 				$upd   = array( 'ID' => $post->ID );
-				// The dialog sends every field, an untouched one as stored: only
-				// a field that differs is cleaned and written, so changing the
-				// type never strips tags or code from the content.
+				// The dialog sends every field, an untouched one as stored (or
+				// as served, a credential in it masked): only a field that
+				// differs is cleaned and written, so changing the type never
+				// strips tags or code from the content.
 				$changed = function ( $key, $stored ) use ( $b ) {
-					return isset( $b[ $key ] ) && (string) $b[ $key ] !== (string) $stored;
+					return isset( $b[ $key ] ) && ! Minn_Admin::unchanged( $b[ $key ], (string) $stored );
 				};
 				if ( $changed( 'name', $post->post_title ) ) {
 					$upd['post_title'] = sanitize_text_field( (string) $b['name'] );
@@ -905,6 +906,10 @@ add_action( 'rest_api_init', function () {
 				}
 				if ( $changed( 'content', $post->post_content ) ) {
 					$upd['post_content'] = wp_strip_all_tags( (string) $b['content'] );
+				}
+				$masked = Minn_Admin_Egress::refuse_masks( $upd, array( 'post_title' => $post->post_title, 'post_excerpt' => $post->post_excerpt, 'post_content' => $post->post_content ) );
+				if ( $masked ) {
+					return $masked;
 				}
 				if ( count( $upd ) > 1 ) {
 					$r = wp_update_post( wp_slash( $upd ), true );
