@@ -2110,11 +2110,26 @@ class Minn_Admin_DB {
 		$data  = self::health_data( $fresh );
 		// The run is shared by every viewer, and a row's table opens the
 		// browser on it: a table this viewer may not open is not offered.
+		// A row whose detail or command names such a table (by its table, or
+		// in the list it prints) keeps its label, count and severity, and
+		// offers neither.
 		self::$hidden = array();
 		foreach ( (array) ( $data['checks'] ?? array() ) as $i => $c ) {
-			if ( ! empty( $c['table'] ) && self::store_table_hidden( (string) $c['table'] ) ) {
-				$data['checks'][ $i ]['table'] = null;
+			$named = isset( $c['names'] ) && is_array( $c['names'] ) ? $c['names'] : array();
+			if ( ! empty( $c['table'] ) ) {
+				$named[] = (string) $c['table'];
+				if ( self::store_table_hidden( (string) $c['table'] ) ) {
+					$data['checks'][ $i ]['table'] = null;
+				}
 			}
+			foreach ( $named as $name ) {
+				if ( self::store_table_hidden( (string) $name ) ) {
+					$data['checks'][ $i ]['detail']  = '';
+					$data['checks'][ $i ]['command'] = null;
+					break;
+				}
+			}
+			unset( $data['checks'][ $i ]['names'] );
 		}
 		return rest_ensure_response( $data );
 	}
@@ -2228,6 +2243,7 @@ class Minn_Admin_DB {
 					'label'    => __( 'Tables without a primary key', 'minn-admin' ),
 					'severity' => $rows ? 'warn' : 'ok',
 					'value'    => number_format_i18n( count( $rows ) ),
+					'names'    => array_slice( $rows, 0, 8 ),
 					'detail'   => $rows
 						? sprintf(
 							/* translators: %s: comma-separated list of database table names. */
@@ -2239,15 +2255,18 @@ class Minn_Admin_DB {
 			},
 
 			'storage_engine' => function () {
-				$old = array();
+				$old   = array();
+				$names = array();
 				foreach ( self::table_index() as $t ) {
 					if ( $t->engine && 0 !== strcasecmp( (string) $t->engine, 'InnoDB' ) ) {
-						$old[] = $t->name . ' (' . $t->engine . ')';
+						$old[]   = $t->name . ' (' . $t->engine . ')';
+						$names[] = $t->name;
 					}
 				}
 				return array(
 					'label'    => __( 'Storage engine', 'minn-admin' ),
 					'severity' => $old ? 'warn' : 'ok',
+					'names'    => array_slice( $names, 0, 8 ),
 					'value'    => $old ? number_format_i18n( count( $old ) ) : 'InnoDB',
 					'detail'   => $old
 						? sprintf(
@@ -2369,6 +2388,7 @@ class Minn_Admin_DB {
 					'severity' => $tight ? 'warn' : 'ok',
 					'value'    => $tight ? number_format_i18n( count( $tight ) ) : __( 'Healthy', 'minn-admin' ),
 					'table'    => $tight ? $tight[0] : null,
+					'names'    => array_slice( $tight, 0, 8 ),
 					'detail'   => $tight
 						? sprintf(
 							/* translators: %s: comma-separated list of database table names. */
