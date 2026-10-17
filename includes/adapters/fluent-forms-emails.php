@@ -253,6 +253,11 @@ add_action( 'rest_api_init', function () {
 			$service = new \FluentForm\App\Services\Settings\SettingsService();
 			$stored  = minn_admin_fluent_notifications( $form->id );
 
+			// Every notification and the confirmation is built and checked
+			// before the first write, so a refusal leaves nothing saved.
+			$writes  = array();
+			$general = null;
+
 			// Notifications: each existing one through their store().
 			foreach ( (array) ( $body['notifications'] ?? array() ) as $in ) {
 				$id = (int) ( $in['metaId'] ?? 0 );
@@ -302,16 +307,7 @@ add_action( 'rest_api_init', function () {
 				if ( $masked ) {
 					return $masked;
 				}
-				try {
-					$service->store( array(
-						'form_id'  => (int) $form->id,
-						'meta_key' => 'notifications',
-						'meta_id'  => $id,
-						'value'    => wp_json_encode( $n ),
-					) );
-				} catch ( \Throwable $e ) {
-					return minn_admin_fluent_validation_error( $e, 'n' . $id . '.' );
-				}
+				$writes[ $id ] = $n;
 			}
 
 			// The confirmation: their saveGeneral() with both settings whole.
@@ -364,10 +360,26 @@ add_action( 'rest_api_init', function () {
 					return $masked;
 				}
 				$settings['confirmation'] = $c;
+				$general                  = $settings;
+			}
+
+			foreach ( $writes as $id => $n ) {
+				try {
+					$service->store( array(
+						'form_id'  => (int) $form->id,
+						'meta_key' => 'notifications',
+						'meta_id'  => $id,
+						'value'    => wp_json_encode( $n ),
+					) );
+				} catch ( \Throwable $e ) {
+					return minn_admin_fluent_validation_error( $e, 'n' . $id . '.' );
+				}
+			}
+			if ( null !== $general ) {
 				try {
 					$service->saveGeneral( array(
 						'form_id'                    => (int) $form->id,
-						'formSettings'               => wp_json_encode( $settings ),
+						'formSettings'               => wp_json_encode( $general ),
 						'advancedValidationSettings' => wp_json_encode( minn_admin_fluent_meta( $form->id, 'advancedValidationSettings' ) ),
 					) );
 				} catch ( \Throwable $e ) {
