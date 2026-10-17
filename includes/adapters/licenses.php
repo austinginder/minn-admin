@@ -6022,7 +6022,10 @@ function minn_admin_license_vendor_gates() {
 				return false;
 			}
 			$wl = BrizyPro_Admin_WhiteLabel::_init();
-			return ! $wl->getEnabled() || $wl->showLicenseTab() || 1 == get_transient( BrizyPro_Admin_WhiteLabel::WL_SESSION_KEY ); // phpcs:ignore Universal.Operators.StrictComparisons -- their own loose test (admin/license.php).
+			// Their network screen adds the licence tab whatever the white
+			// label says (brizy_network_settings_tabs), for the network's owner.
+			return ! $wl->getEnabled() || $wl->showLicenseTab() || 1 == get_transient( BrizyPro_Admin_WhiteLabel::WL_SESSION_KEY ) // phpcs:ignore Universal.Operators.StrictComparisons -- their own loose test (admin/license.php).
+				|| ( is_multisite() && Minn_Admin::network_owner() );
 		},
 	);
 }

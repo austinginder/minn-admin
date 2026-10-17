@@ -85,6 +85,12 @@ class Minn_Admin_REST {
 							continue;
 						}
 						foreach ( $tr->$bucket as $file => $data ) {
+							// A site's Plugins screen and core's plugins endpoint do
+							// not show a site's administrator a network-only plugin
+							// that is not active there (as plugin_changelog()).
+							if ( is_multisite() && is_network_only_plugin( $file ) && ! is_plugin_active( $file ) && ! Minn_Admin::network_owner() ) {
+								continue;
+							}
 							$data  = (object) $data;
 							$icons = isset( $data->icons ) ? (array) $data->icons : array();
 							$slug  = isset( $data->slug ) && $data->slug ? $data->slug : dirname( $file );
