@@ -176,10 +176,14 @@ In order of preference:
   sizes, and stored encodings beyond entities.
 - **Generic readers ask the resource.** A screen that shows tables raw (the
   database browser) asks `Minn_Admin_Kernel::table_refused( $table )`, so the
-  view gate and row scope a resource declares for the tables it reads hold
-  there too: a table is refused when a resource reading it as its source would
-  not show the viewer every row, or when every resource joining it says no. A
-  gate that cannot answer, a plugin being off included, says no.
+  gates and row scope a resource declares for the tables it reads hold there
+  too: a table is refused when a resource reading it as its source would not
+  show the viewer every row and every column (its view gate, the gate its item
+  and each further read answer to, and its `table` gate for what its rows mask
+  past any gate, such as a gift card code), or when every resource joining it
+  says no. A viewer-scoped source (`'viewer'`) is shown only to someone its
+  scope narrows nothing for, or whom its `'viewer'` callable says it shows
+  everything. A gate that cannot answer, a plugin being off included, says no.
 - **The descriptor.** Columns come from fields, tabs from views, and row and
   detail actions from one list. An adapter overrides only what is unusual.
 
