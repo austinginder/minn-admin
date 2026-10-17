@@ -110,6 +110,42 @@ function minn_admin_jet_cct_row( $slug, $id ) {
 }
 
 /**
+ * Did an edit their handler ran leave the row as it was, although it had
+ * something to change?
+ *
+ * Item_Handler::update_item() answers a WP_Error only when the database
+ * error is still the last one by the time it asks, and its update hooks run
+ * queries in between, so a refused UPDATE can come back as the item id. The
+ * row decides: a written edit changes at least the modified time, and a row
+ * that came back byte for byte while a sent value, cleaned by their own
+ * sanitizer, differs from what it held was not written.
+ *
+ * @param object $factory The type.
+ * @param array  $itemarr What was handed to their handler (no _ID).
+ * @param array  $before  The row as read before the write.
+ * @param array  $after   The row as read after it.
+ * @return bool
+ */
+function minn_admin_jet_cct_unwritten( $factory, $itemarr, $before, $after ) {
+	if ( $before !== $after ) {
+		return false;
+	}
+	$handler = $factory->get_item_handler();
+	$fields  = method_exists( $factory, 'get_formatted_fields' ) ? (array) $factory->get_formatted_fields() : array();
+	foreach ( $itemarr as $name => $value ) {
+		if ( '_ID' === $name || 'cct_status' === $name || ! isset( $fields[ $name ] ) ) {
+			continue;
+		}
+		$clean = method_exists( $handler, 'sanitize_field_value' ) ? $handler->sanitize_field_value( $value, $fields[ $name ] ) : $value;
+		$clean = is_array( $clean ) ? maybe_serialize( $clean ) : $clean;
+		if ( (string) $clean !== (string) ( $before[ $name ] ?? '' ) ) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
  * Decode a stored CCT cell without instantiating classes.
  *
  * JetEngine decodes these cells through jet_engine_safe_unserialize(), and only
@@ -375,7 +411,13 @@ add_action( 'rest_api_init', function () {
 			} catch ( \Throwable $e ) {
 				return new WP_Error( 'insert_failed', __( 'JetEngine could not save that item.', 'minn-admin' ), array( 'status' => 500 ) );
 			}
-			$row = $id ? minn_admin_jet_cct_row( sanitize_key( Minn_Admin::path_param( $request, 'slug' ) ), $id ) : null;
+			// Their handler answers a WP_Error (or false) when the insert
+			// failed, and a WP_Error cast to an id is 1: row #1 came back as
+			// the item just added.
+			if ( is_wp_error( $id ) || ! is_numeric( $id ) || (int) $id < 1 ) {
+				return new WP_Error( 'insert_failed', __( 'JetEngine could not save that item.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
+			$row = minn_admin_jet_cct_row( sanitize_key( Minn_Admin::path_param( $request, 'slug' ) ), (int) $id );
 			if ( ! $row ) {
 				return new WP_Error( 'insert_failed', __( 'JetEngine could not save that item.', 'minn-admin' ), array( 'status' => 500 ) );
 			}
@@ -413,15 +455,22 @@ add_action( 'rest_api_init', function () {
 			if ( ! $itemarr ) {
 				return rest_ensure_response( minn_admin_jet_cct_item( $factory, minn_admin_jet_cct_row( $slug, $id ) ) );
 			}
+			$sent           = $itemarr;
 			$itemarr['_ID'] = $id;
 			try {
 				// Their handler merges the stored row under the edits, so
 				// untouched columns survive; the stored status rides along.
-				$factory->get_item_handler()->update_item( $itemarr );
+				$done = $factory->get_item_handler()->update_item( $itemarr );
 			} catch ( \Throwable $e ) {
 				return new WP_Error( 'update_failed', __( 'JetEngine could not update that item.', 'minn-admin' ), array( 'status' => 500 ) );
 			}
-			return rest_ensure_response( minn_admin_jet_cct_item( $factory, minn_admin_jet_cct_row( $slug, $id ) ) );
+			$after = minn_admin_jet_cct_row( $slug, $id );
+			// A save says it worked only once it did: their refusal, or a row
+			// their handler left as it was, is not "Saved".
+			if ( is_wp_error( $done ) || ! $done || ! $after || minn_admin_jet_cct_unwritten( $factory, $sent, $row, $after ) ) {
+				return new WP_Error( 'update_failed', __( 'JetEngine could not update that item.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
+			return rest_ensure_response( minn_admin_jet_cct_item( $factory, $after ) );
 		},
 	) );
 	minn_admin_endpoint( '/jet-cct/(?P<slug>[a-z0-9_]+)/items/(?P<id>\d+)', array(
@@ -461,12 +510,12 @@ add_action( 'rest_api_init', function () {
 				return new WP_Error( 'not_found', __( 'Item not found', 'minn-admin' ), array( 'status' => 404 ) );
 			}
 			try {
-				$factory->get_item_handler()->update_item( array( '_ID' => $id, 'cct_status' => $status ) );
+				$done = $factory->get_item_handler()->update_item( array( '_ID' => $id, 'cct_status' => $status ) );
 			} catch ( \Throwable $e ) {
 				return new WP_Error( 'update_failed', __( 'JetEngine could not update that item.', 'minn-admin' ), array( 'status' => 500 ) );
 			}
 			$after = minn_admin_jet_cct_row( $slug, $id );
-			if ( ! $after || $status !== (string) $after['cct_status'] ) {
+			if ( is_wp_error( $done ) || ! $after || $status !== (string) $after['cct_status'] ) {
 				return new WP_Error( 'update_failed', __( 'JetEngine could not update that item.', 'minn-admin' ), array( 'status' => 400 ) );
 			}
 			/* translators: %s: status label */

@@ -14,6 +14,8 @@
  *  - 09-3 ACF: a taxonomy field resolved a stored term id from any taxonomy.
  *  - 09-4 ACF: a post field with no type filter stored and resolved core's
  *    user_request posts (a privacy requester's email is the title).
+ *  - 09-5 JetEngine content types: a create or edit JetEngine refused
+ *    reported success (a WP_Error cast to id 1 answered with row #1).
  *  - The held-refusal store every panel shares (ACPT, Pods).
  *
  * Sections SKIP when their plugin is inactive. Everything a section makes
@@ -660,6 +662,92 @@ $tag   = (string) wp_rand( 1000, 9999 );
 		$rel = array_map( 'strval', (array) $meta( $epost, 'minnrc_related' ) );
 		$check( 'ACF 09-4: a save of what was served keeps the withheld request where it was', array( (string) $reqid, (string) $other ) === $rel && (string) $reqid === (string) $meta( $epost, 'minnrc_obj' ), wp_json_encode( array( $rel, $meta( $epost, 'minnrc_obj' ) ) ) );
 	} finally {
+		$clean();
+	}
+} )();
+
+/*
+ * 09-5 JetEngine content types. A type whose fields name a column its table
+ * does not have (a field added without updating the table): JetEngine's
+ * handler answers a WP_Error. Row #1 exists, so the cast answered with it.
+ */
+( function () use ( $check, $skip, $call, $once, $tag ) {
+	if ( ! function_exists( 'minn_admin_jet_cct_active' ) || ! minn_admin_jet_cct_active() || ! class_exists( '\Jet_Engine\Modules\Custom_Content_Types\Factory' ) ) {
+		$skip( 'JetEngine content types: inactive' );
+		return;
+	}
+	global $wpdb;
+	$slug    = 'minnrc' . $tag;
+	$table   = $wpdb->prefix . 'jet_cct_' . $slug;
+	$factory = null;
+	$manager = \Jet_Engine\Modules\Custom_Content_Types\Module::instance()->manager;
+	$hook    = null;
+	$clean   = $once( function () use ( &$factory, &$hook, $table, $slug ) {
+		if ( $hook ) {
+			remove_action( 'jet-engine/custom-content-types/updated-item/' . $slug, $hook );
+		}
+		if ( $factory && $table === $factory->db->table() ) {
+			$factory->db->drop_table();
+		}
+	} );
+	$errors = $wpdb->suppress_errors( true );
+	try {
+		$fields  = array( array( 'title' => 'Name', 'name' => 'name', 'object_type' => 'field', 'type' => 'text' ) );
+		$factory = new \Jet_Engine\Modules\Custom_Content_Types\Factory( array( 'slug' => $slug, 'name' => 'Minn rc', 'capability' => 'manage_options' ), $fields );
+		$factory->db->create_table();
+		$manager->register_instance( $slug, $factory );
+		$wpdb->insert( $table, array( 'name' => 'Row one', 'cct_status' => 'publish' ) );
+		$one = (int) $wpdb->insert_id;
+		$check( 'JetEngine CCT: a test type and its row #1 exist', 1 === $one, $wpdb->last_error );
+		if ( 1 !== $one ) {
+			return;
+		}
+		$name_of = function ( $id ) use ( $wpdb, $table ) {
+			return $wpdb->get_var( $wpdb->prepare( "SELECT name FROM {$table} WHERE _ID = %d", $id ) ); // phpcs:ignore
+		};
+		$rows = function () use ( $wpdb, $table ) {
+			return (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" ); // phpcs:ignore
+		};
+		// The same type with a field its table lacks.
+		$broken = new \Jet_Engine\Modules\Custom_Content_Types\Factory( array( 'slug' => $slug, 'name' => 'Minn rc', 'capability' => 'manage_options' ), array_merge( $fields, array( array( 'title' => 'Extra', 'name' => 'extra', 'object_type' => 'field', 'type' => 'text' ) ) ) );
+		$manager->register_instance( $slug, $broken );
+		$base = '/minn-admin/v1/jet-cct/' . $slug . '/items';
+
+		list( $st, $d ) = $call( 'POST', $base, array( 'name' => 'Never added', 'extra' => 'x' ) );
+		$check( 'JetEngine CCT: a create JetEngine refuses is not answered as added', 200 !== $st && empty( $d['ok'] ), $st . ' ' . wp_json_encode( $d ) );
+		$check( 'JetEngine CCT: and row #1 is not named as the new item', (int) ( $d['id'] ?? 0 ) !== 1, wp_json_encode( $d ) );
+		$check( 'JetEngine CCT: nothing was added', 1 === $rows(), (string) $rows() );
+
+		list( $st, $d ) = $call( 'POST', $base . '/1', array( 'name' => 'Lost edit', 'extra' => 'y' ) );
+		$check( 'JetEngine CCT: an edit JetEngine refuses is not answered as saved', 200 !== $st, $st . ' ' . wp_json_encode( $d ) );
+		$check( 'JetEngine CCT: and the row is as it was', 'Row one' === $name_of( 1 ), (string) $name_of( 1 ) );
+
+		// A refused edit whose error JetEngine loses before it asks (an update
+		// hook runs a query in between): the row decides.
+		$hook = function () use ( $wpdb ) {
+			$wpdb->query( 'SELECT 1' ); // phpcs:ignore
+		};
+		add_action( 'jet-engine/custom-content-types/updated-item/' . $slug, $hook );
+		list( $st, $d ) = $call( 'POST', $base . '/1', array( 'name' => 'Lost quietly', 'extra' => 'z' ) );
+		$check( 'JetEngine CCT: an edit that left the row as it was is not answered as saved', 200 !== $st && 'Row one' === $name_of( 1 ), $st . ' ' . wp_json_encode( $d ) . ' ' . $name_of( 1 ) );
+		list( $st, $d ) = $call( 'POST', $base . '/1/status', array( 'status' => 'draft' ) );
+		$check( 'JetEngine CCT: a status change JetEngine refuses is not answered as done', 200 !== $st, $st . ' ' . wp_json_encode( $d ) );
+		remove_action( 'jet-engine/custom-content-types/updated-item/' . $slug, $hook );
+		$hook = null;
+
+		// Controls: with the table up to date, the same saves are written.
+		$manager->register_instance( $slug, $factory );
+		list( $st, $d ) = $call( 'POST', $base, array( 'name' => 'Added ' . $tag ) );
+		$new = (int) ( $d['id'] ?? 0 );
+		$check( 'JetEngine CCT: a create is answered with the new item (control)', 200 === $st && ! empty( $d['ok'] ) && $new > 1 && 'Added ' . $tag === $name_of( $new ), $st . ' ' . wp_json_encode( $d ) );
+		list( $st, $d ) = $call( 'POST', $base . '/1', array( 'name' => 'Edited ' . $tag ) );
+		$check( 'JetEngine CCT: an edit is written and answered 200 (control)', 200 === $st && 'Edited ' . $tag === $name_of( 1 ) && 'Edited ' . $tag === ( $d['name'] ?? null ), $st . ' ' . wp_json_encode( $d ) );
+		list( $st, $d ) = $call( 'POST', $base . '/1', array( 'name' => 'Edited ' . $tag ) );
+		$check( 'JetEngine CCT: an edit that changes nothing answers 200 (control)', 200 === $st, $st . ' ' . wp_json_encode( $d ) );
+		list( $st ) = $call( 'POST', $base . '/1/status', array( 'status' => 'draft' ) );
+		$check( 'JetEngine CCT: a status change is written (control)', 200 === $st && 'draft' === $wpdb->get_var( "SELECT cct_status FROM {$table} WHERE _ID = 1" ), (string) $st ); // phpcs:ignore
+	} finally {
+		$wpdb->suppress_errors( $errors );
 		$clean();
 	}
 } )();
