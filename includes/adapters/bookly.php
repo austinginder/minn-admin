@@ -216,6 +216,26 @@ minn_admin_resource( 'bookly/appointments', function () use ( $minn_bookly_list,
 						if ( ! $ca->load( $id ) ) {
 							return new WP_Error( 'not_found', __( 'Appointment not found', 'minn-admin' ), array( 'status' => 404 ) );
 						}
+						// Their own status change refuses a move that would put
+						// more people in the appointment than the staff member's
+						// service holds (card/Ajax.php changeBookingStatus →
+						// failIfOverCapacity): a booking taken off the waiting list
+						// overfills it as surely as added seats do.
+						$busy = (array) \Bookly\Lib\Proxy\CustomStatuses::prepareBusyStatuses( array( \Bookly\Lib\Entities\CustomerAppointment::STATUS_PENDING, \Bookly\Lib\Entities\CustomerAppointment::STATUS_APPROVED ) );
+						$appt = $status !== $ca->getStatus() && in_array( $status, $busy, true ) ? \Bookly\Lib\Entities\Appointment::find( $ca->getAppointmentId() ) : null;
+						if ( $appt && $appt->getServiceId() ) {
+							$taken = (int) $ca->getNumberOfPersons();
+							foreach ( $appt->getCustomerAppointments() as $other ) {
+								if ( (int) $other->getId() !== (int) $ca->getId() && in_array( $other->getStatus(), $busy, true ) ) {
+									$taken += (int) $other->getNumberOfPersons();
+								}
+							}
+							$ss = new \Bookly\Lib\Entities\StaffService();
+							if ( $ss->loadBy( array( 'staff_id' => $appt->getStaffId(), 'service_id' => $appt->getServiceId(), 'location_id' => null ) ) && $taken > (int) $ss->getCapacityMax() ) {
+								/* translators: %d: the most people the service takes at once. */
+								return new WP_Error( 'minn_bookly_full', sprintf( __( 'That would put more people in this appointment than the service takes (%d).', 'minn-admin' ), (int) $ss->getCapacityMax() ), array( 'status' => 409 ) );
+							}
+						}
 						$ca->setStatus( $status );
 						if ( false === $ca->save() ) {
 							return new WP_Error( 'update_failed', __( 'Bookly could not update that appointment.', 'minn-admin' ), array( 'status' => 400 ) );

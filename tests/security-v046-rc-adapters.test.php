@@ -842,6 +842,97 @@ add_filter( 'pre_http_request', $no_http, 1 );
 	}
 } )();
 
+/*
+ * 10-2 peer · Bookly. Bookly's own status change refuses a move that would
+ * put more people in the appointment than the staff member's service holds
+ * (changeBookingStatus → failIfOverCapacity); Minn's move did not, so a
+ * cancelled booking could be put back into a full appointment.
+ */
+( function () use ( $check, $skip, $call, $once, $admin, $tag ) {
+	if ( ! function_exists( 'minn_admin_bookly_active' ) || ! minn_admin_bookly_active() || ! minn_admin_bookly_has_tables() || ! class_exists( '\Bookly\Lib\Entities\StaffService' ) ) {
+		$skip( '10-2 Bookly: not active' );
+		return;
+	}
+	global $wpdb;
+	$bk    = function ( $t ) use ( $wpdb ) {
+		return $wpdb->prefix . 'bookly_' . $t;
+	};
+	$email = 'minn-rc-bookly-' . $tag . '@example.com';
+	$title = 'Minn RC Bookly ' . $tag;
+	$made  = array();
+	// Everything runs in a transaction that is rolled back; the rows are
+	// then looked for by their own markers and removed if any survived.
+	$clean = $once( function () use ( &$made, $bk, $email, $title ) {
+		global $wpdb;
+		$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$service = (int) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$bk( 'services' )} WHERE title = %s", $title ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		foreach ( $wpdb->get_col( $wpdb->prepare( "SELECT id FROM {$bk( 'customers' )} WHERE email = %s", $email ) ) as $cust ) { // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$wpdb->delete( $bk( 'customer_appointments' ), array( 'customer_id' => (int) $cust ) );
+			$wpdb->delete( $bk( 'customers' ), array( 'id' => (int) $cust ) );
+		}
+		if ( $service > 0 ) {
+			$wpdb->delete( $bk( 'appointments' ), array( 'service_id' => $service ) );
+			$wpdb->delete( $bk( 'staff_services' ), array( 'service_id' => $service ) );
+			$wpdb->delete( $bk( 'services' ), array( 'id' => $service ) );
+		}
+	} );
+	try {
+		wp_set_current_user( $admin );
+		$staff = (int) $wpdb->get_var( "SELECT id FROM {$bk( 'staff' )} ORDER BY id LIMIT 1" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		if ( $staff < 1 ) {
+			$skip( '10-2 Bookly: no staff member to book with' );
+			return;
+		}
+		$wpdb->query( 'START TRANSACTION' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$now = gmdate( 'Y-m-d H:i:s' );
+		$wpdb->insert( $bk( 'services' ), array( 'title' => $title ) );
+		$made['service'] = (int) $wpdb->insert_id;
+		// The staff member's service holds one person; the lab's staff row is borrowed, never changed.
+		$wpdb->insert( $bk( 'staff_services' ), array( 'staff_id' => $staff, 'service_id' => $made['service'], 'location_id' => null, 'capacity_min' => 1, 'capacity_max' => 1 ) );
+		$made['link'] = (int) $wpdb->insert_id;
+		$local = wp_date( 'Y-m-d H:i:s', time() + 30 * DAY_IN_SECONDS );
+		$wpdb->insert( $bk( 'appointments' ), array( 'staff_id' => $staff, 'service_id' => $made['service'], 'start_date' => $local, 'end_date' => $local, 'internal_note' => '', 'created_from' => 'bookly', 'created_at' => $now, 'updated_at' => $now ) );
+		$made['appt'] = (int) $wpdb->insert_id;
+		$ca = function ( $who, $status ) use ( $wpdb, $bk, $email, $made, $now ) {
+			$wpdb->insert( $bk( 'customers' ), array( 'full_name' => 'Minn RC ' . $who, 'first_name' => 'Minn', 'last_name' => 'RC ' . $who, 'email' => $email, 'notes' => '', 'created_at' => $now ) );
+			$cust = (int) $wpdb->insert_id;
+			$wpdb->insert( $bk( 'customer_appointments' ), array( 'customer_id' => $cust, 'appointment_id' => $made['appt'], 'number_of_persons' => 1, 'notes' => '', 'status' => $status, 'created_from' => 'backend', 'created_at' => $now, 'updated_at' => $now ) );
+			return (int) $wpdb->insert_id;
+		};
+		$seated = $ca( 'A', 'approved' );
+		$waited = $ca( 'B', 'cancelled' );
+		if ( $made['service'] < 1 || $made['link'] < 1 || $made['appt'] < 1 || $seated < 1 || $waited < 1 ) {
+			$check( '10-2 Bookly fixtures', false, 'could not insert the service, the appointment or its bookings' );
+			return;
+		}
+		$status = function ( $id ) use ( $wpdb, $bk ) {
+			return (string) $wpdb->get_var( $wpdb->prepare( "SELECT status FROM {$bk( 'customer_appointments' )} WHERE id = %d", $id ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		};
+		$move = function ( $id, $to ) use ( $call ) {
+			return $call( 'POST', "/minn-admin/v1/bookly/appointments/{$id}/status", array( 'status' => $to ) );
+		};
+		list( $st, $d ) = $move( $waited, 'approved' );
+		$check( '10-2 Bookly: putting a cancelled booking back into a full appointment is refused (409)', 409 === $st, $st . ' ' . wp_json_encode( $d['code'] ?? $d ) );
+		$check( '10-2 Bookly: and it stays cancelled', 'cancelled' === $status( $waited ), $status( $waited ) );
+		list( $st ) = $move( $waited, 'pending' );
+		$check( '10-2 Bookly: nor can it move to pending, which also holds a seat', 409 === $st && 'cancelled' === $status( $waited ), $st . ' ' . $status( $waited ) );
+		list( $st ) = $move( $waited, 'rejected' );
+		$check( '10-2 Bookly control: a move to a status that holds no seat is not checked (200)', 200 === $st && 'rejected' === $status( $waited ), $st . ' ' . $status( $waited ) );
+		$wpdb->update( $bk( 'staff_services' ), array( 'capacity_max' => 2 ), array( 'id' => $made['link'] ) );
+		list( $st ) = $move( $waited, 'approved' );
+		$check( '10-2 Bookly control: with a seat to spare it goes back (200)', 200 === $st && 'approved' === $status( $waited ), $st . ' ' . $status( $waited ) );
+		$wpdb->update( $bk( 'staff_services' ), array( 'capacity_max' => 1 ), array( 'id' => $made['link'] ) );
+		list( $st ) = $move( $seated, 'cancelled' );
+		$check( '10-2 Bookly control: cancelling is never refused (200)', 200 === $st && 'cancelled' === $status( $seated ), $st . ' ' . $status( $seated ) );
+		list( $st ) = $move( $waited, 'pending' );
+		$check( '10-2 Bookly control: a move between seat-holding statuses that fits goes through (200)', 200 === $st && 'pending' === $status( $waited ), $st . ' ' . $status( $waited ) );
+	} catch ( \Throwable $e ) {
+		$check( 'section ran to the end', false, get_class( $e ) . ': ' . $e->getMessage() );
+	} finally {
+		$clean();
+	}
+} )();
+
 $drop_users();
 wp_set_current_user( $admin );
 remove_filter( 'pre_wp_mail', $mail_trap, 1 );
