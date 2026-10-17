@@ -163,10 +163,13 @@ class Minn_Admin_Egress {
 	/**
 	 * An option or network option was added, changed or deleted: when it is
 	 * a credential row, the list is read again next time. Nothing is asked
-	 * unless a list is held (this request's, or the object cache's). Before
-	 * init the row is not named, since naming the gateway rows starts
-	 * WooCommerce's gateways, and starting them that early would freeze the
-	 * list before gateway plugins add theirs: the list is just dropped.
+	 * unless a list is held (this request's, or the object cache's). Rows
+	 * are named only inside a minn-admin/v1 request and after init: naming
+	 * them starts WooCommerce's gateways and the licence readers, which no
+	 * other request (a front-end visit, cron writing its schedule) should pay
+	 * for, and which before init would freeze the list before gateway
+	 * plugins add theirs. Anywhere else the list is just dropped, and the
+	 * next Minn response reads it again.
 	 *
 	 * @param string $option Option name.
 	 */
@@ -174,7 +177,7 @@ class Minn_Admin_Egress {
 		if ( null === self::$credentials && ( ! wp_using_ext_object_cache() || false === wp_cache_get( 'egress_credentials', 'minn_admin' ) ) ) {
 			return;
 		}
-		if ( ! did_action( 'init' ) ) {
+		if ( ! did_action( 'init' ) || self::$depth < 1 ) {
 			self::forget();
 			return;
 		}
@@ -227,7 +230,20 @@ class Minn_Admin_Egress {
 		return self::$credentials;
 	}
 
-	/** The forms a credential takes inside JSON text: raw, slash-escaped, URL-encoded, and base64 cores of each. */
+	/**
+	 * The forms a credential takes inside JSON text: raw, URL-encoded, and
+	 * the base64 cores of each, as [ form, pattern ] pairs. A credential is
+	 * token characters only (Minn_Admin_DB::is_credential_leaf()), so the one
+	 * character JSON escapes in it is a slash, and JSON text carried inside
+	 * JSON text (an export file, a stored JSON string, a field holding JSON)
+	 * escapes it again at every level: "\/", then "\\\/" (or "\\/" where an
+	 * inner encoder left slashes alone). A form holding a slash is matched by
+	 * a pattern taking any run of backslashes before each slash; the others
+	 * by the string itself (pattern null).
+	 *
+	 * @param string $c Credential.
+	 * @return array[]
+	 */
 	private static function forms( $c ) {
 		$forms = array( $c => true, rawurlencode( $c ) => true );
 		for ( $s = 0; $s < 3; $s++ ) {
@@ -237,20 +253,50 @@ class Minn_Admin_Egress {
 				$forms[ strtr( $core, '+/', '-_' ) ] = true;
 			}
 		}
+		$out = array();
 		foreach ( array_keys( $forms ) as $f ) {
-			$forms[ str_replace( '/', '\\/', (string) $f ) ] = true;
+			$f     = (string) $f;
+			$out[] = array( $f, false === strpos( $f, '/' ) ? null : self::slash_pattern( $f ) );
 		}
-		return array_keys( $forms );
+		return $out;
+	}
+
+	/** A form with a slash, matched whatever run of backslashes JSON put before each slash. */
+	private static function slash_pattern( $f ) {
+		return '#' . implode( '\\\\*/', array_map( function ( $part ) {
+			return preg_quote( $part, '#' );
+		}, explode( '/', $f ) ) ) . '#';
+	}
+
+	/**
+	 * The text a form takes where it occurs in a value, or null: the form
+	 * itself, or for one with a slash the first escaped copy found.
+	 */
+	private static function found( $text, array $form ) {
+		list( $f, $re ) = $form;
+		if ( null === $re ) {
+			return false !== strpos( $text, $f ) ? $f : null;
+		}
+		// Only a pattern whose longest slash-free part occurs is run.
+		$parts = explode( '/', $f );
+		usort( $parts, function ( $a, $b ) {
+			return strlen( $b ) - strlen( $a );
+		} );
+		if ( '' !== $parts[0] && false === strpos( $text, $parts[0] ) ) {
+			return null;
+		}
+		return preg_match( $re, $text, $m ) ? $m[0] : null;
 	}
 
 	/**
 	 * Whether JSON text holds anything shaped like a key: a run of 16 or more
 	 * token characters with at least three digits and three letters, read
-	 * with escaped and URL-encoded slashes, pluses and equals decoded, and
-	 * broken at query separators so "_wpnonce=<nonce>" is two short runs.
+	 * with escaped slashes (at any depth) and URL-encoded slashes, pluses
+	 * and equals decoded, and broken at query separators so
+	 * "_wpnonce=<nonce>" is two short runs.
 	 */
 	private static function looks_keyed( $json ) {
-		$text = str_ireplace( array( '\\/', '%2B', '%2F', '%3D' ), array( '/', '+', '/', '=' ), $json );
+		$text = str_ireplace( array( '%2B', '%2F', '%3D' ), array( '+', '/', '=' ), (string) preg_replace( '#\\\\+/#', '/', $json ) );
 		if ( ! preg_match_all( '#[A-Za-z0-9_\-+/]{16,}#', $text, $m ) ) {
 			return false;
 		}
@@ -288,10 +334,13 @@ class Minn_Admin_Egress {
 		$n = 0;
 		foreach ( self::credentials() as $c => $fp ) {
 			foreach ( self::forms( (string) $c ) as $form ) {
-				if ( false !== strpos( $json, $form ) ) {
-					$json = str_replace( $form, self::MASK . ':' . $fp . ']', $json, $count );
-					$n   += $count;
+				if ( null === self::found( $json, $form ) ) {
+					continue;
 				}
+				$json = null === $form[1]
+					? str_replace( $form[0], self::MASK . ':' . $fp . ']', $json, $count )
+					: (string) preg_replace( $form[1], self::MASK . ':' . $fp . ']', $json, -1, $count );
+				$n   += $count;
 			}
 		}
 		if ( $held ) {
@@ -441,8 +490,11 @@ class Minn_Admin_Egress {
 			$was  = isset( $old[ $path ] ) ? $old[ $path ] : '';
 			$held = array();
 			foreach ( '' === $was ? array() : self::credentials() as $c => $fp ) {
-				if ( false !== strpos( $was, (string) $c ) ) {
-					$held[ self::MASK . ':' . $fp . ']' ] = (string) $c;
+				// The bytes the old value holds there: the credential, or a
+				// JSON string's escaped copy of it (a response masks both).
+				$at = self::found( $was, self::forms( (string) $c )[0] );
+				if ( null !== $at ) {
+					$held[ self::MASK . ':' . $fp . ']' ] = $at;
 				}
 			}
 			$new = $held ? strtr( $v, $held ) : $v;

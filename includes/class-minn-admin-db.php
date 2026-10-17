@@ -1333,7 +1333,8 @@ class Minn_Admin_DB {
 	 * holding one out of a value search. Each key or token is found in the
 	 * redacted rows through PHP serialization (no classes), JSON and a base64
 	 * wrapper, and kept raw and as the part of its base64 encoding that does
-	 * not depend on where it sits, standard and URL-safe.
+	 * not depend on where it sits, standard and URL-safe, each also with its
+	 * slashes as JSON text escapes them.
 	 *
 	 * @return array Needle => true.
 	 */
@@ -1428,15 +1429,26 @@ class Minn_Admin_DB {
 		}
 		self::$credentials = array_map( 'strval', array_keys( $credentials ) );
 		foreach ( array_keys( $credentials ) as $v ) {
-			$v             = (string) $v;
-			$needles[ $v ] = true;
+			$v    = (string) $v;
+			$mine = array( $v => true );
 			for ( $s = 0; $s < 3; $s++ ) {
 				$core = base64_encode( substr( $v, $s, (int) floor( ( strlen( $v ) - $s ) / 3 ) * 3 ) );
 				if ( strlen( $core ) >= 16 ) {
-					$needles[ $core ]                      = true;
-					$needles[ strtr( $core, '+/', '-_' ) ] = true;
+					$mine[ $core ]                      = true;
+					$mine[ strtr( $core, '+/', '-_' ) ] = true;
 				}
 			}
+			// A JSON string holding one escapes its slashes ("\/"), and JSON
+			// text inside a JSON string escapes them again ("\\\/", or "\\/"
+			// where the inner text left them alone).
+			foreach ( array_keys( $mine ) as $n ) {
+				if ( false !== strpos( (string) $n, '/' ) ) {
+					foreach ( array( '\\/', '\\\\\\/', '\\\\/' ) as $slash ) {
+						$mine[ str_replace( '/', $slash, (string) $n ) ] = true;
+					}
+				}
+			}
+			$needles += $mine;
 			if ( count( $needles ) >= 1500 ) {
 				$capped = true;
 				break;

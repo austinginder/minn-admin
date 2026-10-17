@@ -804,12 +804,20 @@ try {
 	$send( 'GET', '/minn-admin/v1/wpcode/status' );
 	// The list is read only for a response that looks keyed; ask it outright.
 	Minn_Admin::unchanged( 'x ' . $t1, 'x ' . $key );
-	wp_cache_set( 'egress_credentials', array( 'stale' ), 'minn_admin', 60 );
-	add_option( $plain, 'plain value', '', 'no' );
-	$check( '04-3 control: an ordinary option changing keeps the list', $held() );
-	add_option( $row4, $key3 . 'Late7', '', 'no' );
-	$check( '04-3: a credential row added drops the list held for this request', ! $held() );
-	$check( '04-3: and the object cache\'s copy', false === wp_cache_get( 'egress_credentials', 'minn_admin' ) );
+	// Rows are named only inside a minn-admin/v1 request, so the writes
+	// run in one.
+	register_rest_route( 'minn-admin/v1', '/minn-rc-egress-test/write', array( 'methods' => 'POST', 'permission_callback' => '__return_true', 'callback' => function () use ( $held, $plain, $row4, $key3, $t1, $key ) {
+		Minn_Admin::unchanged( 'x ' . $t1, 'x ' . $key );
+		wp_cache_set( 'egress_credentials', array( 'stale' ), 'minn_admin', 60 );
+		add_option( $plain, 'plain value', '', 'no' );
+		$kept = $held();
+		add_option( $row4, $key3 . 'Late7', '', 'no' );
+		return array( 'kept' => $kept, 'dropped' => ! $held(), 'cache' => false === wp_cache_get( 'egress_credentials', 'minn_admin' ) );
+	} ) );
+	list( , $w ) = $send( 'POST', '/minn-admin/v1/minn-rc-egress-test/write' );
+	$check( '04-3 control: an ordinary option changing keeps the list', true === ( $w['kept'] ?? null ), wp_json_encode( $w ) );
+	$check( '04-3: a credential row added drops the list held for this request', true === ( $w['dropped'] ?? null ) );
+	$check( '04-3: and the object cache\'s copy', true === ( $w['cache'] ?? null ) );
 	list( , $d ) = $send( 'GET', '/minn-admin/v1/minn-rc-egress-test/read' );
 	$check( '04-3: a key saved earlier in the request is masked in the next response', ! $has( $d['late'] ?? '', $key3 . 'Late7' ), wp_json_encode( $d ) );
 } finally {
