@@ -572,9 +572,30 @@ function minn_admin_network_setting_value( $field ) {
 	}
 }
 
+/** The site option a settings field writes (the plugins switch lives inside menu_items). */
+function minn_admin_network_setting_option( $field ) {
+	return 'menu_items' === $field['store'] ? 'menu_items' : $field['key'];
+}
+
+/**
+ * Whether only the network's owner may change a settings field: the write
+ * fence keeps its option for them (Minn_Admin_Fences::SITE_OPTIONS), though
+ * core's settings screen lets any manage_network_options holder save it.
+ * The form leaves such a field out for anyone else, and a save naming one
+ * is refused before anything is written.
+ *
+ * @param array $field A spec field.
+ * @return bool
+ */
+function minn_admin_network_setting_owner_only( $field ) {
+	return class_exists( 'Minn_Admin_Fences' ) && in_array( minn_admin_network_setting_option( $field ), Minn_Admin_Fences::SITE_OPTIONS, true );
+}
+
 /**
  * Write edited network settings, one option at a time, in core's own shapes.
  * Keys are matched against the spec — never an arbitrary site-option write.
+ * Every value is checked before any is written, so a refused one leaves the
+ * others as they were, and a value equal to the stored one is not written.
  */
 function minn_admin_network_settings_save( $tab, $values ) {
 	$spec = minn_admin_network_settings_spec();
@@ -585,17 +606,59 @@ function minn_admin_network_settings_save( $tab, $values ) {
 	foreach ( $spec[ $tab ]['fields'] as $f ) {
 		$by_key[ $f['key'] ] = $f;
 	}
+	$owner = Minn_Admin::network_owner();
+	$todo  = array();
 	foreach ( (array) $values as $key => $value ) {
 		if ( ! isset( $by_key[ $key ] ) ) {
 			continue; // not ours: ignore rather than write something unknown
 		}
 		$field = $by_key[ $key ];
+		if ( ! $owner && minn_admin_network_setting_owner_only( $field ) ) {
+			return new WP_Error( 'minn_network_owner', __( 'Only a super admin can change this network setting. Nothing was saved.', 'minn-admin' ), array( 'status' => 403 ) );
+		}
+		// What the form loaded comes back for a field the page did not
+		// change: it is not cleaned or written again.
+		$loaded = minn_admin_network_setting_value( $field );
+		if ( is_bool( $loaded ) ? (bool) $value === $loaded : ( is_scalar( $value ) && (string) $value === (string) $loaded ) ) {
+			continue;
+		}
 		switch ( $field['store'] ) {
 			case 'enum':
 				$allowed = wp_list_pluck( $field['options'], 0 );
-				if ( in_array( (string) $value, $allowed, true ) ) {
-					update_site_option( $key, (string) $value );
+				if ( ! is_scalar( $value ) || ! in_array( (string) $value, $allowed, true ) ) {
+					return new WP_Error( 'bad_value', __( 'That is not one of the choices. Nothing was saved.', 'minn-admin' ), array( 'status' => 400 ) );
 				}
+				$value = (string) $value;
+				break;
+			case 'yesno':
+			case 'onezero':
+			case 'menu_items':
+				$value = (bool) $value;
+				break;
+			case 'int':
+				$value = max( 0, (int) $value );
+				break;
+			case 'email':
+				$value = sanitize_email( is_scalar( $value ) ? (string) $value : '' );
+				if ( ! is_email( $value ) ) {
+					return new WP_Error( 'bad_email', __( 'Enter a valid email address.', 'minn-admin' ), array( 'status' => 400 ) );
+				}
+				break;
+			case 'types':
+				// Core's own normalization: a space-separated lowercase list.
+				$types = array_filter( array_map( 'sanitize_key', preg_split( '/[\s,]+/', strtolower( is_scalar( $value ) ? (string) $value : '' ) ) ) );
+				$value = implode( ' ', array_unique( $types ) );
+				break;
+		}
+		if ( $value === $loaded ) {
+			continue;
+		}
+		$todo[ $key ] = array( $field, $value );
+	}
+	foreach ( $todo as $key => list( $field, $value ) ) {
+		switch ( $field['store'] ) {
+			case 'enum':
+				update_site_option( $key, $value );
 				break;
 			case 'yesno':
 				update_site_option( $key, $value ? 'yes' : 'no' );
@@ -609,37 +672,29 @@ function minn_admin_network_settings_save( $tab, $values ) {
 				update_site_option( 'menu_items', $items );
 				break;
 			case 'int':
-				update_site_option( $key, (string) max( 0, (int) $value ) );
+				update_site_option( $key, (string) $value );
 				break;
 			case 'email':
-				$email = sanitize_email( (string) $value );
-				if ( ! is_email( $email ) ) {
-					return new WP_Error( 'bad_email', __( 'Enter a valid email address.', 'minn-admin' ), array( 'status' => 400 ) );
-				}
 				// Core does not change this in place: wp-admin/network/settings.php
 				// parks the address in new_admin_email and only commits it when
 				// the confirmation link is followed, so someone riding a super
 				// admin's session cannot silently redirect the network's mail
 				// with no notice to the current address.
-				if ( get_site_option( 'admin_email' ) !== $email ) {
-					update_site_option( 'new_admin_email', $email );
-					// The confirmation mailer is hooked in
-					// wp-admin/includes/ms-admin-filters.php, which a REST
-					// request never loads — so writing the option alone would
-					// send nothing and the change would go nowhere. The
-					// function itself lives in wp-includes/ms-functions.php and
-					// is always available; call it when the hook is absent, and
-					// do not double-send when it is not.
-					if ( ! has_action( 'update_site_option_new_admin_email', 'update_network_option_new_admin_email' )
-						&& function_exists( 'update_network_option_new_admin_email' ) ) {
-						update_network_option_new_admin_email( get_site_option( 'admin_email' ), $email );
-					}
+				update_site_option( 'new_admin_email', $value );
+				// The confirmation mailer is hooked in
+				// wp-admin/includes/ms-admin-filters.php, which a REST
+				// request never loads — so writing the option alone would
+				// send nothing and the change would go nowhere. The
+				// function itself lives in wp-includes/ms-functions.php and
+				// is always available; call it when the hook is absent, and
+				// do not double-send when it is not.
+				if ( ! has_action( 'update_site_option_new_admin_email', 'update_network_option_new_admin_email' )
+					&& function_exists( 'update_network_option_new_admin_email' ) ) {
+					update_network_option_new_admin_email( get_site_option( 'admin_email' ), $value );
 				}
 				break;
 			case 'types':
-				// Core's own normalization: a space-separated lowercase list.
-				$types = array_filter( array_map( 'sanitize_key', preg_split( '/[\s,]+/', strtolower( (string) $value ) ) ) );
-				update_site_option( $key, implode( ' ', array_unique( $types ) ) );
+				update_site_option( $key, $value );
 				break;
 		}
 	}
@@ -1285,7 +1340,13 @@ function minn_admin_network_settings_get( WP_REST_Request $request ) {
 	}
 	$fields = array();
 	$values = array();
+	$owner  = Minn_Admin::network_owner();
 	foreach ( $spec[ $tab ]['fields'] as $f ) {
+		// A field only the network's owner may change is not offered to
+		// anyone else (minn_admin_network_setting_owner_only()).
+		if ( ! $owner && minn_admin_network_setting_owner_only( $f ) ) {
+			continue;
+		}
 		$field = array(
 			'key'   => $f['key'],
 			'label' => $f['label'],

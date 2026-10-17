@@ -566,6 +566,118 @@ add_filter( 'pre_http_request', $no_http, 1 );
 	$check( '06-1 Brizy Pro control: with white label off the actions stay', array( 'activate', 'deactivate' ) === $acts( 'brizy-pro' ), implode( ',', $acts( 'brizy-pro' ) ) );
 } )();
 
+/*
+ * 11-1 · Network settings. Core lets any manage_network_options holder save
+ * the network settings screen; Minn's write fence keeps five of those
+ * options for the network's owner. A save from anyone else wrote the
+ * unfenced keys, then answered 403 for the rest; an invalid address
+ * answered 400 after the keys before it were written.
+ */
+( function () use ( $check, $skip, $call, $once, $admin, $tag, $valid_id ) {
+	if ( ! is_multisite() || ! is_super_admin() || ! function_exists( 'minn_admin_network_settings_save' ) || ! class_exists( 'Minn_Admin_Fences' ) ) {
+		$skip( '11-1 Network settings: needs a network and a super admin' );
+		return;
+	}
+	$keys = array( 'blog_upload_space', 'fileupload_maxk', 'upload_filetypes', 'menu_items', 'registration', 'registrationnotification', 'add_new_users', 'admin_email', 'new_admin_email' );
+	$net  = get_current_network_id();
+	$had  = array();
+	foreach ( $keys as $k ) {
+		$sentinel  = new stdClass();
+		$v         = get_network_option( $net, $k, $sentinel );
+		$had[ $k ] = $v === $sentinel ? $sentinel : $v;
+	}
+	$main  = (int) get_main_site_id();
+	$role  = 'minn_rc_netopt_' . $tag;
+	$uid   = 0;
+	$clean = $once( function () use ( &$uid, $had, $net, $main, $role, $admin ) {
+		wp_set_current_user( $admin );
+		foreach ( $had as $k => $v ) {
+			if ( $v instanceof stdClass ) {
+				delete_network_option( $net, $k );
+			} elseif ( get_network_option( $net, $k ) !== $v ) {
+				update_network_option( $net, $k, $v );
+			}
+		}
+		if ( is_int( $uid ) && $uid > 1 && $uid !== $admin && ! is_super_admin( $uid ) ) {
+			wpmu_delete_user( $uid );
+		}
+		switch_to_blog( $main );
+		remove_role( $role );
+		restore_current_blog();
+	} );
+	$opt = function ( $k ) use ( $net ) {
+		wp_cache_delete( $net . ':' . $k, 'site-options' );
+		return get_network_option( $net, $k );
+	};
+	$keys_of = function ( $d ) {
+		$out = array();
+		foreach ( (array) ( $d['groups'][0]['fields'] ?? array() ) as $f ) {
+			$out[] = $f['key'];
+		}
+		return $out;
+	};
+	try {
+		// A main-site role holding manage_network_options: core's network
+		// settings screen admits it; it is not a super admin.
+		switch_to_blog( $main );
+		add_role( $role, 'Minn RC network options', array( 'read' => true, 'manage_network' => true, 'manage_network_options' => true ) );
+		$login = 'minn-rc-netopt-' . $tag;
+		$uid   = wp_insert_user( array( 'user_login' => $login, 'user_email' => $login . '@example.com', 'user_pass' => wp_generate_password( 24 ), 'role' => $role ) );
+		restore_current_blog();
+		if ( ! $valid_id( $uid ) ) {
+			$check( '11-1 fixtures', false, 'could not create the main-site account' );
+			return;
+		}
+		$space = (int) $opt( 'blog_upload_space' );
+		$maxk  = (int) $opt( 'fileupload_maxk' );
+		$notif = 'yes' === $opt( 'registrationnotification' );
+
+		wp_set_current_user( $uid );
+		$check( '11-1 the account holds manage_network_options on the main site and is not a super admin', minn_admin_network_can( 'manage_network_options' ) && ! is_super_admin() );
+		list( $st, $d ) = $call( 'GET', '/minn-admin/v1/network/settings/uploads' );
+		$check( '11-1 the Uploads form leaves out the two fields only a super admin may change', 200 === $st && array( 'blog_upload_space' ) === $keys_of( $d ) && ! array_key_exists( 'fileupload_maxk', (array) ( $d['values'] ?? array() ) ), $st . ' ' . implode( ',', $keys_of( $d ) ) );
+		list( $st, $d ) = $call( 'GET', '/minn-admin/v1/network/settings/registration' );
+		$check( '11-1 the Registration form keeps only the notification switch', 200 === $st && array( 'registrationnotification' ) === $keys_of( $d ), $st . ' ' . implode( ',', $keys_of( $d ) ) );
+		list( $st, $d ) = $call( 'GET', '/minn-admin/v1/network/settings/sites' );
+		$check( '11-1 the Sites form leaves out the plugins switch', 200 === $st && array( 'admin_email' ) === $keys_of( $d ), $st . ' ' . implode( ',', $keys_of( $d ) ) );
+
+		list( $st, $d ) = $call( 'POST', '/minn-admin/v1/network/settings/uploads', array( 'values' => array( 'blog_upload_space' => $space + 7, 'fileupload_maxk' => $maxk + 3 ) ) );
+		$check( '11-1 a save naming a super-admin-only field is refused whole (403)', 403 === $st && 'minn_network_owner' === ( $d['code'] ?? '' ), $st . ' ' . ( $d['code'] ?? '' ) );
+		$check( '11-1 and writes neither field', $space === (int) $opt( 'blog_upload_space' ) && $maxk === (int) $opt( 'fileupload_maxk' ), $opt( 'blog_upload_space' ) . ' ' . $opt( 'fileupload_maxk' ) );
+		list( $st ) = $call( 'POST', '/minn-admin/v1/network/settings/registration', array( 'values' => array( 'registrationnotification' => ! $notif, 'registration' => 'all' ) ) );
+		$check( '11-1 the same on Registration: the notification switch stays as it was', 403 === $st && $notif === ( 'yes' === $opt( 'registrationnotification' ) ), $st . ' ' . $opt( 'registrationnotification' ) );
+		list( $st ) = $call( 'POST', '/minn-admin/v1/network/settings/uploads', array( 'values' => array( 'blog_upload_space' => $space + 7 ) ) );
+		$check( '11-1 control: the field core lets them change is written (200)', 200 === $st && $space + 7 === (int) $opt( 'blog_upload_space' ), $st . ' ' . $opt( 'blog_upload_space' ) );
+
+		wp_set_current_user( $admin );
+		update_network_option( $net, 'blog_upload_space', (string) $space );
+		list( $st, $d ) = $call( 'GET', '/minn-admin/v1/network/settings/uploads' );
+		$check( '11-1 control: a super admin gets every Uploads field', 200 === $st && array( 'blog_upload_space', 'fileupload_maxk', 'upload_filetypes' ) === $keys_of( $d ), implode( ',', $keys_of( $d ) ) );
+		list( $st ) = $call( 'POST', '/minn-admin/v1/network/settings/uploads', array( 'values' => array( 'blog_upload_space' => $space + 9, 'fileupload_maxk' => $maxk + 5 ) ) );
+		$check( '11-1 control: a super admin\'s save writes both', 200 === $st && $space + 9 === (int) $opt( 'blog_upload_space' ) && $maxk + 5 === (int) $opt( 'fileupload_maxk' ), $st );
+
+		$items = (array) $opt( 'menu_items' );
+		$on    = ! empty( $items['plugins'] );
+		list( $st ) = $call( 'POST', '/minn-admin/v1/network/settings/sites', array( 'values' => array( 'menu_items_plugins' => ! $on, 'admin_email' => 'not an address' ) ) );
+		$now = (array) $opt( 'menu_items' );
+		$check( '11-1 an invalid address refuses the save before the plugins switch is written', 400 === $st && $on === ! empty( $now['plugins'] ), $st . ' ' . wp_json_encode( $now ) );
+		list( $st ) = $call( 'POST', '/minn-admin/v1/network/settings/registration', array( 'values' => array( 'registrationnotification' => ! $notif, 'registration' => 'everyone' ) ) );
+		$check( '11-1 a choice the field does not offer refuses the save, nothing written', 400 === $st && $notif === ( 'yes' === $opt( 'registrationnotification' ) ), $st . ' ' . $opt( 'registrationnotification' ) );
+
+		// A list stored in a shape other than core's normalized one comes
+		// back from the form unchanged: it is not rewritten.
+		update_network_option( $net, 'upload_filetypes', 'jpg JPEG,png' );
+		list( $st ) = $call( 'POST', '/minn-admin/v1/network/settings/uploads', array( 'values' => array( 'upload_filetypes' => 'jpg JPEG,png', 'blog_upload_space' => $space + 1 ) ) );
+		$check( '11-1 a field sent back as loaded is not cleaned or written again', 200 === $st && 'jpg JPEG,png' === $opt( 'upload_filetypes' ) && $space + 1 === (int) $opt( 'blog_upload_space' ), $st . ' ' . wp_json_encode( $opt( 'upload_filetypes' ) ) );
+		list( $st ) = $call( 'POST', '/minn-admin/v1/network/settings/uploads', array( 'values' => array( 'upload_filetypes' => 'jpg JPEG,png gif' ) ) );
+		$check( '11-1 control: a changed list is normalized as core does', 200 === $st && 'jpg jpeg png gif' === $opt( 'upload_filetypes' ), $st . ' ' . wp_json_encode( $opt( 'upload_filetypes' ) ) );
+	} catch ( \Throwable $e ) {
+		$check( 'section ran to the end', false, get_class( $e ) . ': ' . $e->getMessage() );
+	} finally {
+		$clean();
+	}
+} )();
+
 $drop_users();
 wp_set_current_user( $admin );
 remove_filter( 'pre_wp_mail', $mail_trap, 1 );
