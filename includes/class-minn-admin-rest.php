@@ -88,7 +88,7 @@ class Minn_Admin_REST {
 							// A site's Plugins screen and core's plugins endpoint do
 							// not show a site's administrator a network-only plugin
 							// that is not active there (as plugin_changelog()).
-							if ( is_multisite() && is_network_only_plugin( $file ) && ! is_plugin_active( $file ) && ! Minn_Admin::network_owner() ) {
+							if ( is_multisite() && ! empty( $headers[ $file ]['Network'] ) && ! is_plugin_active( $file ) && ! Minn_Admin::network_owner() ) {
 								continue;
 							}
 							$data  = (object) $data;
