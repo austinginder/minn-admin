@@ -468,6 +468,104 @@ add_filter( 'pre_http_request', $no_http, 1 );
 	}
 } )();
 
+/*
+ * 06-1 · Licences. Beaver Builder's licence form sits on its settings screen
+ * (fl_builder_admin_settings_capability); Brizy Pro's licence tab exists
+ * only while white label is off, its "show license tab" is on, or the
+ * white-label session is open. Neither gated Minn's licence actions. No
+ * action reaches a vendor here: a check that finds an action still attached
+ * fails without calling it, and outbound HTTP is refused.
+ */
+( function () use ( $check, $skip, $call, $admin ) {
+	if ( ! function_exists( 'minn_admin_license_default_providers' ) || ! function_exists( 'minn_admin_licenses_can_manage' ) ) {
+		$skip( '06-1 Licences: the licences adapter is not loaded' );
+		return;
+	}
+	wp_set_current_user( $admin );
+	$prov = function () {
+		return apply_filters( 'minn_admin_license_providers', minn_admin_license_default_providers() );
+	};
+	$acts = function ( $id ) use ( $prov ) {
+		$p = $prov()[ $id ] ?? array();
+		return array_values( array_filter( array( 'activate', 'deactivate', 'verify' ), function ( $a ) use ( $p ) {
+			return ! empty( $p[ $a ] ) && is_callable( $p[ $a ] );
+		} ) );
+	};
+
+	if ( ! class_exists( 'FLUpdater' ) || ! in_array( 'activate', $acts( 'beaver-builder' ), true ) ) {
+		$skip( '06-1 Beaver Builder: not active here, or its licence save is missing' );
+	} else {
+		$cap  = function () {
+			return 'minn_rc_agency_only';
+		};
+		$back = function ( $p ) {
+			if ( isset( $p['beaver-builder'] ) ) {
+				$p['beaver-builder']['activate'] = function () {
+					return array( 'ok' => true );
+				};
+			}
+			return $p;
+		};
+		add_filter( 'fl_builder_admin_settings_capability', $cap );
+		try {
+			$check( '06-1 Beaver Builder: an administrator its settings screen refuses gets no licence action', array() === $acts( 'beaver-builder' ), implode( ',', $acts( 'beaver-builder' ) ) );
+			if ( array() === $acts( 'beaver-builder' ) ) {
+				list( $st, $d ) = $call( 'POST', '/minn-admin/v1/licenses/action', array( 'provider' => 'beaver-builder', 'action' => 'activate', 'secret' => 'minn-rc-not-a-key' ) );
+				$check( '06-1 Beaver Builder: the activate request is refused before any vendor call', 404 === $st && 'no_provider' === ( $d['code'] ?? '' ), $st . ' ' . ( $d['code'] ?? '' ) );
+			} else {
+				$check( '06-1 Beaver Builder: the activate request is refused before any vendor call', false, 'activate is still attached (not called)' );
+			}
+			add_filter( 'minn_admin_license_providers', $back, 50 );
+			$check( '06-1 Beaver Builder: an action a filter attaches again is held to the same gate', array() === $acts( 'beaver-builder' ), implode( ',', $acts( 'beaver-builder' ) ) );
+		} finally {
+			remove_filter( 'minn_admin_license_providers', $back, 50 );
+			remove_filter( 'fl_builder_admin_settings_capability', $cap );
+		}
+		$check( '06-1 Beaver Builder control: an administrator its screen admits keeps activate and verify', array( 'activate', 'verify' ) === $acts( 'beaver-builder' ), implode( ',', $acts( 'beaver-builder' ) ) );
+	}
+
+	if ( ! class_exists( 'BrizyPro_Admin_WhiteLabel' ) || ! class_exists( 'BrizyPro_Whitelabel_Value' ) || ! class_exists( 'BrizyPro_Admin_License' ) || ! in_array( 'deactivate', $acts( 'brizy-pro' ), true ) ) {
+		$skip( '06-1 Brizy Pro: not active here, or its white label is already on' );
+		return;
+	}
+	// Their white label as the agency would leave it, held on their own
+	// object for this process only: nothing is written to their settings.
+	$wl   = BrizyPro_Admin_WhiteLabel::_init();
+	$prop = new ReflectionProperty( $wl, 'values' );
+	$prop->setAccessible( true );
+	$orig = $prop->getValue( $wl );
+	$sess = 0;
+	$sess_f = function () use ( &$sess ) {
+		return $sess;
+	};
+	$with = function ( $brand, $show ) use ( $wl, $prop ) {
+		$vals                     = (array) $wl->getValues();
+		$vals['brizy']            = new BrizyPro_Whitelabel_Value( 'brizy', 'text', $brand, 'Company Name' );
+		$vals['show-license-tab'] = new BrizyPro_Whitelabel_Value( 'show-license-tab', 'checkbox', $show, 'Show license tab' );
+		$prop->setValue( $wl, $vals );
+	};
+	add_filter( 'pre_transient_' . BrizyPro_Admin_WhiteLabel::WL_SESSION_KEY, $sess_f );
+	try {
+		$with( 'Agency Builder', 0 );
+		$check( '06-1 Brizy Pro: with white label on and the licence tab hidden, no licence action', array() === $acts( 'brizy-pro' ), implode( ',', $acts( 'brizy-pro' ) ) );
+		if ( array() === $acts( 'brizy-pro' ) ) {
+			list( $st, $d ) = $call( 'POST', '/minn-admin/v1/licenses/action', array( 'provider' => 'brizy-pro', 'action' => 'deactivate' ) );
+			$check( '06-1 Brizy Pro: the deactivate request is refused before any vendor call', 404 === $st && 'no_provider' === ( $d['code'] ?? '' ), $st . ' ' . ( $d['code'] ?? '' ) );
+		} else {
+			$check( '06-1 Brizy Pro: the deactivate request is refused before any vendor call', false, 'deactivate is still attached (not called)' );
+		}
+		$with( 'Agency Builder', 1 );
+		$check( '06-1 Brizy Pro control: "show license tab" on brings the actions back', array( 'activate', 'deactivate' ) === $acts( 'brizy-pro' ), implode( ',', $acts( 'brizy-pro' ) ) );
+		$with( 'Agency Builder', 0 );
+		$sess = 1;
+		$check( '06-1 Brizy Pro control: an open white-label session brings them back, as it shows their tab', array( 'activate', 'deactivate' ) === $acts( 'brizy-pro' ), implode( ',', $acts( 'brizy-pro' ) ) );
+	} finally {
+		$prop->setValue( $wl, $orig );
+		remove_filter( 'pre_transient_' . BrizyPro_Admin_WhiteLabel::WL_SESSION_KEY, $sess_f );
+	}
+	$check( '06-1 Brizy Pro control: with white label off the actions stay', array( 'activate', 'deactivate' ) === $acts( 'brizy-pro' ), implode( ',', $acts( 'brizy-pro' ) ) );
+} )();
+
 $drop_users();
 wp_set_current_user( $admin );
 remove_filter( 'pre_wp_mail', $mail_trap, 1 );

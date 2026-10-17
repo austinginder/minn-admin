@@ -5839,22 +5839,37 @@ function minn_admin_license_default_providers() {
 		$providers['js-composer']['activate_url'] = admin_url( 'admin.php?page=vc-updater' );
 	}
 
-	// Each vendor's own licence gate. Their screens refuse licence actions to
-	// a user their rule leaves out (an agency hides ACF's Updates page from a
-	// client's administrators, a site narrows WPForms' manage capability), so
-	// the actions attach only when it passes; anyone else keeps the
-	// read-only row, as with WPMU DEV and Novamira above.
+	return minn_admin_license_gate_providers( $providers );
+}
+
+/**
+ * Each vendor's own licence gate, applied to a provider list. Their screens
+ * refuse licence actions to a user their rule leaves out (an agency hides
+ * ACF's Updates page from a client's administrators, a site narrows
+ * WPForms' manage capability), so the actions attach only when it passes;
+ * anyone else keeps the read-only row, as with WPMU DEV and Novamira. It
+ * runs on the default list and again last on minn_admin_license_providers,
+ * so a provider a filter adds or replaces under a gated id is held to the
+ * same rule.
+ *
+ * @param array $providers Provider id => provider.
+ * @return array
+ */
+function minn_admin_license_gate_providers( $providers ) {
+	if ( ! is_array( $providers ) ) {
+		return $providers;
+	}
 	$gates = minn_admin_license_vendor_gates();
 	foreach ( array_keys( $providers ) as $gate_id ) {
 		// Brainstorm Force products are one provider each, under bsf-<id>.
 		$gate = $gates[ $gate_id ] ?? ( 0 === strpos( (string) $gate_id, 'bsf-' ) ? $gates['bsf'] : null );
-		if ( $gate && ! $gate() ) {
+		if ( $gate && is_array( $providers[ $gate_id ] ) && ! $gate() ) {
 			unset( $providers[ $gate_id ]['activate'], $providers[ $gate_id ]['deactivate'], $providers[ $gate_id ]['verify'] );
 		}
 	}
-
 	return $providers;
 }
+add_filter( 'minn_admin_license_providers', 'minn_admin_license_gate_providers', PHP_INT_MAX );
 
 /**
  * The licence gate each vendor applies on its own screens: provider id =>
@@ -5896,6 +5911,12 @@ function minn_admin_license_default_providers() {
  *   Plugins screen) check activate_plugins, as does CleanTalk's key screen.
  * - WP Migrate checks its filterable wpmdb_ajax_cap (export, or
  *   manage_network_options on a network).
+ * - Beaver Builder's licence form sits on its settings screen, whose save
+ *   checks only a nonce printed there; the screen asks its filterable
+ *   fl_builder_admin_settings_capability.
+ * - Brizy Pro registers its licence tab, and with it the only nonce its
+ *   handler accepts, only while white label is off, its "show license tab"
+ *   is on, or the white-label session is open.
  *
  * @return callable[]
  */
@@ -5987,6 +6008,21 @@ function minn_admin_license_vendor_gates() {
 		},
 		'admin-columns-pro'   => function () {
 			return current_user_can( 'manage_admin_columns' );
+		},
+		'beaver-builder'      => function () {
+			if ( class_exists( 'FLBuilderAdmin' ) && method_exists( 'FLBuilderAdmin', 'current_user_can_access_settings' ) ) {
+				return (bool) FLBuilderAdmin::current_user_can_access_settings();
+			}
+			return current_user_can( (string) apply_filters( 'fl_builder_admin_settings_capability', 'manage_options' ) );
+		},
+		'brizy-pro'           => function () {
+			// Their licence handler loads the white label first, so with no
+			// white label there is nothing to reach the licence through.
+			if ( ! class_exists( 'BrizyPro_Admin_WhiteLabel' ) || ! method_exists( 'BrizyPro_Admin_WhiteLabel', '_init' ) ) {
+				return false;
+			}
+			$wl = BrizyPro_Admin_WhiteLabel::_init();
+			return ! $wl->getEnabled() || $wl->showLicenseTab() || 1 == get_transient( BrizyPro_Admin_WhiteLabel::WL_SESSION_KEY ); // phpcs:ignore Universal.Operators.StrictComparisons -- their own loose test (admin/license.php).
 		},
 	);
 }
