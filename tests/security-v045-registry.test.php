@@ -406,7 +406,7 @@ wp_set_current_user( $admin[0]->ID );
 	$was   = $types;
 	$types[ $slug ] = array( 'name' => $slug, 'label' => 'V045s', 'singular_label' => 'V045', 'description' => '', 'public' => 'false', 'show_ui' => 'false', 'show_in_rest' => 'true', 'has_archive' => 'false', 'hierarchical' => 'false', 'supports' => array( 'title' ), 'taxonomies' => array() );
 	update_option( 'cptui_post_types', $types );
-	register_post_type( $slug, array( 'public' => false, 'show_ui' => false, 'show_in_rest' => true, 'label' => 'V045s' ) );
+	register_post_type( $slug, array( 'public' => false, 'show_ui' => false, 'show_in_rest' => true, 'label' => 'V045s', 'supports' => array( 'title' ) ) );
 	try {
 		list( $status, $d ) = $call( 'POST', "/minn-admin/v1/post-types/{$slug}", array( 'singular' => 'V045 renamed', 'plural' => 'V045s', 'public' => false, 'show_in_rest' => true, 'supports' => array( 'title' ), 'taxonomies' => array() ) );
 		$now = (array) get_option( 'cptui_post_types', array() );

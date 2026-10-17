@@ -37,6 +37,10 @@ const ALLOWED = {
 		"'manage_network_users'": [ 2, "core: user-new.php's username lookup and the network user screens" ],
 		"'manage_network_plugins'": [ 1, 'core: network activation, to switch a network-active plugin back on after its update' ],
 	},
+	'includes/class-minn-admin-db.php': {
+		"'setup_network'": [ 1, "Independent Analytics: Capability_Manager::can_view()'s administrator test, asked as it asks it while the plugin is off" ],
+		'is_super_admin()': [ 2, "Matomo: its super-user rule (WpMatomo\\Capabilities), and AnalyticsWP: SuperSimpleWP's access resolver, each asked as the vendor asks it" ],
+	},
 	'includes/class-minn-admin-surfaces.php': {
 		"'delete_site'": [ 1, 'descriptor validator: meta caps core maps for a bare check (not a gate)' ],
 		"'setup_network'": [ 1, 'descriptor validator: meta caps core maps for a bare check (not a gate)' ],
