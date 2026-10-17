@@ -2017,8 +2017,12 @@ minn_admin_resource( 'wcm/members', function () {
 			'pause'        => minn_admin_wcm_transition( 'pause' ),
 			'resume'       => minn_admin_wcm_transition( 'resume' ),
 			'cancel'       => minn_admin_wcm_transition( 'cancel' ),
+			// An empty end_date means no end and revives an expired
+			// membership, so a body without one is refused (400) rather than
+			// read as empty.
 			'end-date'     => array(
 				'gate'   => 'edit',
+				'args'   => array( 'end_date' => array( 'type' => 'string', 'required' => true ) ),
 				'run'    => function ( $id, $row, WP_REST_Request $r ) {
 					$end = minn_admin_wcm_apply_end_date( wc_memberships_get_user_membership( (int) $id ), $r['end_date'] );
 					return is_wp_error( $end ) ? $end : array( 'end' => $end );
@@ -2070,9 +2074,11 @@ minn_admin_resource( 'wcm/members', function () {
 			// screen. Its handler is mirrored exactly, ownership included: it
 			// never checks that the subscription belongs to the member, because a
 			// gifted subscription is owned by the buyer while the membership
-			// belongs to the recipient.
+			// belongs to the recipient. 0 unlinks, so the id is required: a
+			// body without one is refused (400), never read as 0.
 			'subscription' => array(
 				'gate'   => 'edit',
+				'args'   => array( 'subscription_id' => array( 'type' => 'integer', 'required' => true ) ),
 				'run'    => function ( $id, $row, WP_REST_Request $r ) {
 					if ( ! class_exists( 'WC_Subscriptions' ) || ! class_exists( 'WC_Memberships_Integration_Subscriptions_User_Membership' ) || ! function_exists( 'wcs_get_subscription' ) ) {
 						return new WP_Error( 'unsupported', __( 'WooCommerce Subscriptions is not active on this site.', 'minn-admin' ), array( 'status' => 400 ) );

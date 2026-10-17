@@ -309,6 +309,87 @@ add_filter( 'pre_http_request', $no_http, 1 );
 	}
 } )();
 
+/*
+ * 10-1 · WooCommerce Memberships. A body without end_date read as "no end"
+ * (an expired membership revived with no end) and one without
+ * subscription_id as "unlink".
+ */
+( function () use ( $check, $skip, $call, $once, $make_user, $admin, $tag ) {
+	if ( ! function_exists( 'minn_admin_wcm_active' ) || ! minn_admin_wcm_active() || ! function_exists( 'wc_memberships_create_user_membership' ) ) {
+		$skip( '10-1 Memberships: WooCommerce Memberships inactive' );
+		return;
+	}
+	$plan_id = 0;
+	$mid     = 0;
+	$clean   = $once( function () use ( &$plan_id, &$mid, $admin ) {
+		wp_set_current_user( $admin );
+		if ( is_int( $mid ) && $mid > 1 && 'wc_user_membership' === get_post_type( $mid ) ) {
+			try {
+				wc_memberships()->get_user_memberships_instance()->deleteUserMembership( $mid );
+			} catch ( \Throwable $e ) {
+				wp_delete_post( $mid, true );
+			}
+		}
+		if ( is_int( $plan_id ) && $plan_id > 1 && 'wc_membership_plan' === get_post_type( $plan_id ) ) {
+			wp_delete_post( $plan_id, true );
+		}
+	} );
+	try {
+		wp_set_current_user( $admin );
+		$sm   = $make_user( 'shop_manager' );
+		$cust = $make_user( 'customer' );
+		$plan = wc_memberships()->get_plans_instance()->createPlan( array( 'name' => 'Minn RC plan ' . $tag, 'status' => 'publish' ) );
+		$plan_id = $plan ? (int) $plan->get_id() : 0;
+		$m       = ( $plan_id > 1 && $cust ) ? wc_memberships_create_user_membership( array( 'plan_id' => $plan_id, 'user_id' => $cust ) ) : null;
+		$mid     = $m ? (int) $m->get_id() : 0;
+		if ( ! $sm || $mid < 2 ) {
+			$check( '10-1 Memberships fixtures', false, 'could not create the shop manager, the plan or the membership' );
+			return;
+		}
+		$status = function () use ( &$mid ) {
+			clean_post_cache( $mid );
+			return (string) wc_memberships_get_user_membership( $mid )->get_status();
+		};
+		$end = function () use ( &$mid ) {
+			wp_cache_delete( $mid, 'post_meta' );
+			return (string) get_post_meta( $mid, '_end_date', true );
+		};
+		minn_admin_wcm_apply_end_date( wc_memberships_get_user_membership( $mid ), '2020-01-01' );
+		$was_end = $end();
+		$base    = "/minn-admin/v1/wcm/members/{$mid}";
+		wp_set_current_user( $sm );
+		$check( '10-1 the shop manager may edit the membership, which has expired', current_user_can( 'edit_post', $mid ) && 'expired' === $status(), $status() );
+
+		list( $st, $d ) = $call( 'POST', "{$base}/end-date", array() );
+		$check( '10-1 an end-date body without end_date is refused (400, missing parameter)', 400 === $st && 'rest_missing_callback_param' === ( $d['code'] ?? '' ), $st . ' ' . ( $d['code'] ?? '' ) );
+		$check( '10-1 and the expired membership stays expired with its end', 'expired' === $status() && $was_end === $end(), $status() . ' ' . $end() );
+		list( $st, $d ) = $call( 'POST', "{$base}/end-date", array( 'end_date' => null ) );
+		$check( '10-1 an end_date of null is refused as missing', 400 === $st && 'expired' === $status(), $st . ' ' . $status() );
+		list( $st, $d ) = $call( 'POST', "{$base}/end-date", array( 'end_date' => array( '2031-01-01' ) ) );
+		$check( '10-1 an end_date that is not text is refused', 400 === $st && 'rest_invalid_param' === ( $d['code'] ?? '' ) && 'expired' === $status(), $st . ' ' . ( $d['code'] ?? '' ) );
+
+		list( $st, $d ) = $call( 'POST', "{$base}/subscription", array() );
+		$check( '10-1 a subscription body without subscription_id is refused before the run (400, missing parameter)', 400 === $st && 'rest_missing_callback_param' === ( $d['code'] ?? '' ), $st . ' ' . ( $d['code'] ?? '' ) );
+		list( $st, $d ) = $call( 'POST', "{$base}/subscription", array( 'subscription_id' => 'abc' ) );
+		$check( '10-1 a subscription_id that is not a number is refused', 400 === $st && 'rest_invalid_param' === ( $d['code'] ?? '' ), $st . ' ' . ( $d['code'] ?? '' ) );
+		list( $st, $d ) = $call( 'POST', "{$base}/subscription", array( 'subscription_id' => 0 ) );
+		$check( '10-1 control: an explicit 0 still reaches the unlink (not linked here)', 400 === $st && in_array( $d['code'] ?? '', array( 'not_linked', 'unsupported' ), true ), $st . ' ' . ( $d['code'] ?? '' ) );
+
+		list( $st ) = $call( 'POST', "{$base}/end-date", array( 'end_date' => '' ) );
+		$check( '10-1 control: an explicit empty end_date still clears the end and revives it', 200 === $st && 'active' === $status() && '' === $end(), $st . ' ' . $status() . ' ' . $end() );
+		list( $st ) = $call( 'POST', "{$base}/end-date", array( 'end_date' => '2031-03-04' ) );
+		$check( '10-1 control: a date still sets the end', 200 === $st && 0 === strpos( (string) minn_admin_wcm_local_day( $end() ), '2031-03-04' ), $st . ' ' . $end() );
+
+		wp_set_current_user( $admin );
+		list( $st, $d ) = $call( 'POST', "{$base}/end-date", array() );
+		$check( '10-1 an administrator\'s body without end_date is refused too', 400 === $st && '' !== $end(), $st );
+	} catch ( \Throwable $e ) {
+		$check( 'section ran to the end', false, get_class( $e ) . ': ' . $e->getMessage() );
+	} finally {
+		$clean();
+	}
+} )();
+
 $drop_users();
 wp_set_current_user( $admin );
 remove_filter( 'pre_wp_mail', $mail_trap, 1 );
