@@ -1030,8 +1030,11 @@ class Minn_Admin_REST {
 					return current_user_can( 'manage_options' );
 				},
 				'args'                => array(
+					// Required: '' is English, so a body without it must not
+					// read as a choice of English.
 					'locale' => array(
 						'type'              => 'string',
+						'required'          => true,
 						'sanitize_callback' => 'sanitize_text_field',
 					),
 				),
@@ -3214,9 +3217,19 @@ class Minn_Admin_REST {
 					$rendered[] = '';
 					continue;
 				}
-				if ( $untrusted && self::park_untrusted_render_hooks() ) {
-					$rendered[] = '';
-					continue;
+				if ( $untrusted ) {
+					$rearmed = (bool) self::park_untrusted_render_hooks();
+					// The same for a shortcode a block registered while it
+					// rendered: the table is emptied again before the next
+					// block can call do_shortcode.
+					if ( $shortcode_tags ) {
+						$shortcode_tags = array();
+						$rearmed        = true;
+					}
+					if ( $rearmed ) {
+						$rendered[] = '';
+						continue;
+					}
 				}
 				// Embed blocks keep a bare URL in their saved HTML; the front end
 				// converts it via WP_Embed::autoembed on the_content — run the same
@@ -11098,6 +11111,12 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		$installed = isset( $all[ $file ] ) ? $all[ $file ] : null;
 		if ( ! $installed ) {
 			return new WP_Error( 'not_installed', __( 'That plugin is not installed.', 'minn-admin' ), array( 'status' => 404 ) );
+		}
+		// A site's Plugins screen and core's plugins endpoint do not show a
+		// site's administrator a network-only plugin that is not active
+		// there (WP_REST_Plugins_Controller::check_read_permission()).
+		if ( is_multisite() && is_network_only_plugin( $file ) && ! is_plugin_active( $file ) && ! Minn_Admin::network_owner() ) {
+			return new WP_Error( 'forbidden', __( 'Sorry, you are not allowed to manage this plugin.', 'minn-admin' ), array( 'status' => 403 ) );
 		}
 		$tr    = get_site_transient( 'update_plugins' );
 		$offer = isset( $tr->response[ $file ] ) ? (object) $tr->response[ $file ] : null;

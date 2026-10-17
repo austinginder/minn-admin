@@ -719,6 +719,146 @@ $drop_users = $once( function () use ( &$made, $admin ) {
 	}
 } )();
 
+/*
+ * I3: the site language route needs a locale; '' is English, so an empty
+ * body must not read as a choice of English.
+ */
+( function () use ( $check, $call, $wpdb ) {
+	$wpdb->query( 'START TRANSACTION' );
+	try {
+		// Raw: sanitize_option() keeps WPLANG to installed languages.
+		$wpdb->replace( $wpdb->options, array( 'option_name' => 'WPLANG', 'option_value' => 'en_GB', 'autoload' => 'yes' ) ); // phpcs:ignore WordPress.DB
+		wp_cache_delete( 'alloptions', 'options' );
+		wp_cache_delete( 'WPLANG', 'options' );
+		wp_cache_delete( 'notoptions', 'options' );
+		list( $st, $d ) = $call( 'POST', '/minn-admin/v1/site/language', array() );
+		$check( 'site language: a save with no locale is refused (400)', 400 === $st, $st . ' ' . wp_json_encode( $d ) );
+		$check( 'site language: and leaves the language as it was', 'en_GB' === get_option( 'WPLANG' ), wp_json_encode( get_option( 'WPLANG' ) ) );
+		list( $st ) = $call( 'POST', '/minn-admin/v1/site/language', array( 'locale' => '' ) );
+		$check( 'site language: choosing English explicitly is written (control)', 200 === $st && '' === get_option( 'WPLANG' ), $st . ' ' . wp_json_encode( get_option( 'WPLANG' ) ) );
+	} finally {
+		$wpdb->query( 'ROLLBACK' );
+		wp_cache_delete( 'alloptions', 'options' );
+		wp_cache_delete( 'WPLANG', 'options' );
+	}
+} )();
+
+/*
+ * I2: a shortcode a block registers while it renders reaches no later
+ * block's do_shortcode in a preview for a caller who may not author
+ * dynamic data.
+ */
+( function () use ( $check, $skip, $call, $once, $mkuser, $admin, $tag ) {
+	$writer = $mkuser( 'contrib', 'contributor' );
+	if ( ! $writer ) {
+		$skip( 'island preview: no contributor role' );
+		return;
+	}
+	$secret = 'MINNRCCORESECRET' . $tag;
+	$a      = 'minn-rccore/lazy-a' . $tag;
+	$b      = 'minn-rccore/lazy-b' . $tag;
+	$clean  = $once( function () use ( $a, $b, $admin ) {
+		wp_set_current_user( $admin );
+		remove_shortcode( 'minn_rccore_lazy' );
+		foreach ( array( $a, $b ) as $name ) {
+			if ( WP_Block_Type_Registry::get_instance()->is_registered( $name ) ) {
+				unregister_block_type( $name );
+			}
+		}
+	} );
+	try {
+		register_block_type( $a, array(
+			'render_callback' => function () use ( $secret ) {
+				add_shortcode( 'minn_rccore_lazy', function () use ( $secret ) {
+					return $secret;
+				} );
+				return '<p>a</p>';
+			},
+		) );
+		register_block_type( $b, array(
+			'render_callback' => function () {
+				return '<p>' . do_shortcode( '[minn_rccore_lazy]' ) . '</p>';
+			},
+		) );
+		$blocks = array( "<!-- wp:{$a} /-->", "<!-- wp:{$b} /-->", '<!-- wp:paragraph --><p>minnrccore plain words</p><!-- /wp:paragraph -->' );
+		wp_set_current_user( $writer );
+		list( $st, $d ) = $call( 'POST', '/minn-admin/v1/render-blocks', array( 'blocks' => $blocks ) );
+		$out = (array) ( $d['rendered'] ?? array() );
+		$check( 'island preview: a shortcode one block registers mid-render does not run in the next block for a Contributor', 200 === $st && false === strpos( (string) ( $out[1] ?? '' ), $secret ), $st . ' ' . wp_json_encode( $out ) );
+		$check( 'island preview: and the block that registered it previews empty', '' === ( $out[0] ?? null ), wp_json_encode( $out[0] ?? null ) );
+		$check( 'island preview: and a plain paragraph still previews (control)', false !== strpos( (string) ( $out[2] ?? '' ), 'minnrccore plain words' ), wp_json_encode( $out[2] ?? null ) );
+		remove_shortcode( 'minn_rccore_lazy' );
+		wp_set_current_user( $admin );
+		list( $st, $d ) = $call( 'POST', '/minn-admin/v1/render-blocks', array( 'blocks' => $blocks ) );
+		$out = (array) ( $d['rendered'] ?? array() );
+		$check( 'island preview: an Administrator\'s preview still runs shortcodes (control)', 200 === $st && false !== strpos( (string) ( $out[1] ?? '' ), $secret ), $st . ' ' . wp_json_encode( $out ) );
+	} finally {
+		$clean();
+	}
+} )();
+
+/*
+ * A network-only plugin that is not active on the site: the site's Plugins
+ * screen and core's plugins endpoint hide it from the site's
+ * administrators, so its changelog is not theirs to read either.
+ */
+( function () use ( $check, $skip, $mkuser, $admin, $wpdb ) {
+	if ( ! is_multisite() ) {
+		$skip( 'plugin changelog: network only' );
+		return;
+	}
+	require_once ABSPATH . 'wp-admin/includes/plugin.php';
+	$hidden = '';
+	$shown  = '';
+	foreach ( array_keys( get_plugins() ) as $f ) {
+		if ( is_network_only_plugin( $f ) && is_plugin_active_for_network( $f ) && 'minn-admin/minn-admin.php' !== $f ) {
+			if ( '' === $hidden ) {
+				$hidden = $f;
+			} elseif ( '' === $shown ) {
+				$shown = $f;
+			}
+		}
+	}
+	$siteadmin = $mkuser( 'cladmin', 'administrator' );
+	if ( '' === $hidden || '' === $shown || ! $siteadmin ) {
+		$skip( 'plugin changelog: needs two network-active network-only plugins and a site administrator' );
+		return;
+	}
+	// One of them reads as not active, for this process only.
+	$hide   = function ( $v ) use ( $hidden ) {
+		if ( is_array( $v ) ) {
+			unset( $v[ $hidden ] );
+		}
+		return $v;
+	};
+	$nohttp = function () {
+		return new WP_Error( 'minn_rccore_offline', 'offline' );
+	};
+	add_filter( 'site_option_active_sitewide_plugins', $hide );
+	add_filter( 'pre_http_request', $nohttp );
+	$wpdb->query( 'START TRANSACTION' );
+	try {
+		$read = function ( $who, $file ) {
+			wp_set_current_user( $who );
+			$r = new WP_REST_Request( 'GET', '/minn-admin/v1/plugin-changelog' );
+			$r->set_param( 'plugin', $file );
+			return rest_do_request( $r )->get_status();
+		};
+		wp_set_current_user( $siteadmin );
+		$reach = current_user_can( 'activate_plugins' ) && ! is_plugin_active( $hidden );
+		$check( "plugin changelog: the fixture's site administrator reaches the route and {$hidden} reads as inactive", $reach );
+		$check( "plugin changelog: a site administrator cannot read the inactive network-only {$hidden}'s changelog", 403 === $read( $siteadmin, $hidden ) );
+		$check( "plugin changelog: but can read a network-active one, as core's plugins endpoint shows it (control)", 200 === $read( $siteadmin, $shown ) );
+		$check( 'plugin changelog: and the network owner reads the inactive one (control)', 200 === $read( $admin, $hidden ) );
+	} finally {
+		remove_filter( 'site_option_active_sitewide_plugins', $hide );
+		remove_filter( 'pre_http_request', $nohttp );
+		$wpdb->query( 'ROLLBACK' );
+		wp_cache_delete( 'alloptions', 'options' );
+		wp_set_current_user( $admin );
+	}
+} )();
+
 $drop_users();
 printf( "\nsecurity-v046-rc-core: %d/%d passed\n", count( array_filter( $results ) ), count( $results ) );
 exit( count( array_filter( $results ) ) === count( $results ) ? 0 : 1 );
