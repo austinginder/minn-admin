@@ -8850,25 +8850,87 @@ Please click the following link to confirm the invite:
 		if ( ! $found || ! is_callable( array( $found, 'trigger' ) ) ) {
 			return new WP_Error( 'unknown_email', __( 'That email type is not available.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
+		// The customer note email tells the customer about one note, and
+		// WooCommerce sends it only as that note is added: its trigger takes
+		// the order and the note together. A resend is of the order's latest
+		// note to the customer; an order with none has nothing to resend.
+		$note = '';
+		if ( 'customer_note' === $found->id ) {
+			$notes  = function_exists( 'wc_get_order_notes' ) ? wc_get_order_notes( array( 'order_id' => $order->get_id(), 'type' => 'customer', 'orderby' => 'id', 'order' => 'DESC', 'limit' => 1 ) ) : array();
+			$latest = $notes ? reset( $notes ) : null;
+			$note   = is_object( $latest ) && isset( $latest->content ) ? (string) $latest->content : '';
+			if ( '' === trim( $note ) ) {
+				return new WP_Error( 'minn_no_customer_note', __( 'This order has no note to the customer, so there is nothing to resend.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
+		}
 		// Force-send even if the email is disabled in settings (admin intent).
 		// WC_Email::trigger checks is_enabled(); temporarily enable via filter.
 		$force = function ( $enabled, $email_obj ) use ( $found ) {
 			return ( $email_obj === $found ) ? true : $enabled;
 		};
 		add_filter( 'woocommerce_email_enabled_' . $found->id, $force, 100, 2 );
+		// The new order email goes out once per order unless this filter
+		// allows it again, as WooCommerce's own "Resend new order
+		// notification" order action does.
+		$resend = static function () {
+			return true;
+		};
+		if ( 'new_order' === $found->id ) {
+			add_filter( 'woocommerce_new_order_email_allows_resend', $resend );
+		}
+		// A trigger returns nothing, and returns quietly when the email has no
+		// recipient (an order without a billing address), when a plugin stops
+		// it, or when it was sent once already. Only WooCommerce's own report
+		// of this email's send says it went, and whether the mailer took it.
+		$sent   = null;
+		$listen = static function ( $ok, $id = '', $email = null ) use ( &$sent, $found ) {
+			if ( null === $email ? (string) $id === $found->id : $email === $found ) {
+				$sent = ( null === $sent || $sent ) && (bool) $ok;
+			}
+		};
+		add_action( 'woocommerce_email_sent', $listen, 10, 3 );
 		// Most order emails accept ( $order_id, $order ). customer_refunded_order
 		// takes ( $order_id, $partial_refund ). invoice takes ( $order_id, $order ).
+		$thrown = null;
 		try {
 			if ( 'customer_refunded_order' === $found->id ) {
 				$found->trigger( $order->get_id(), false );
+			} elseif ( 'customer_note' === $found->id ) {
+				$found->trigger(
+					array(
+						'order_id'      => $order->get_id(),
+						'customer_note' => $note,
+					)
+				);
 			} else {
 				$found->trigger( $order->get_id(), $order );
 			}
 		} catch ( \Throwable $e ) {
+			$thrown = $e;
+		} finally {
+			remove_action( 'woocommerce_email_sent', $listen, 10 );
+			remove_filter( 'woocommerce_new_order_email_allows_resend', $resend );
 			remove_filter( 'woocommerce_email_enabled_' . $found->id, $force, 100 );
-			return new WP_Error( 'send_failed', $e->getMessage(), array( 'status' => 500 ) );
 		}
-		remove_filter( 'woocommerce_email_enabled_' . $found->id, $force, 100 );
+		if ( $thrown ) {
+			return new WP_Error( 'send_failed', $thrown->getMessage(), array( 'status' => 500 ) );
+		}
+		if ( null === $sent ) {
+			return new WP_Error(
+				'minn_email_not_sent',
+				/* translators: %s: a WooCommerce email's title, such as Processing order. */
+				sprintf( __( 'WooCommerce sent no “%s” email: this order has no address for it, or a plugin on this site stopped it.', 'minn-admin' ), $found->get_title() ),
+				array( 'status' => 409 )
+			);
+		}
+		if ( ! $sent ) {
+			return new WP_Error(
+				'minn_email_failed',
+				/* translators: %s: a WooCommerce email's title, such as Processing order. */
+				sprintf( __( 'The “%s” email could not be sent. Check that this site can send email.', 'minn-admin' ), $found->get_title() ),
+				array( 'status' => 500 )
+			);
+		}
 
 		$order->add_order_note(
 			sprintf(
