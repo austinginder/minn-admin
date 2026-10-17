@@ -14083,6 +14083,25 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				}
 			}
 		}
+		// Every other file wp-config.php loads (a host's file, a local
+		// config), in or out of a branch: one that defines the constant
+		// before a define here runs leaves that define dead, whatever the
+		// values. A path with no string in it could name any file,
+		// wp-settings.php too.
+		$loads = array();
+		foreach ( $tokens as $i => $t ) {
+			if ( ! is_array( $t ) || ! in_array( $t[0], array( T_REQUIRE, T_REQUIRE_ONCE, T_INCLUDE, T_INCLUDE_ONCE ), true ) || $starts[ $i ] === $settings_at ) {
+				continue;
+			}
+			$named_path = false;
+			for ( $k = $i + 1; $k < $count && ';' !== $tokens[ $k ] && ! $is( $k, T_CLOSE_TAG ); $k++ ) {
+				if ( $is( $k, T_CONSTANT_ENCAPSED_STRING ) || $is( $k, T_ENCAPSED_AND_WHITESPACE ) ) {
+					$named_path = true;
+					break;
+				}
+			}
+			$loads[] = array( $starts[ $i ], $named_path );
+		}
 
 		// Every define( 'NAME', … ) PHP would run, and every comment's span.
 		// A define inside a block (an if, else, switch, loop, function) or
@@ -14192,7 +14211,19 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		if ( null === $hit || ! preg_match( $literal, $hit[0], $lit ) ) {
 			return $custom;
 		}
-		return array( 'kind' => 'bool', 'offset' => $hit[1], 'length' => strlen( $hit[0] ), 'value' => 'true' === strtolower( $lit[2] ) );
+		// What wp-config.php loads ahead of the define (config_define_live()
+		// asks whether one of those files defined the constant first).
+		$first = array_values( array_filter( $loads, static function ( $load ) use ( $target ) {
+			return $load[0] < $target['offset'];
+		} ) );
+		return array(
+			'kind'   => 'bool',
+			'offset' => $hit[1],
+			'length' => strlen( $hit[0] ),
+			'value'  => 'true' === strtolower( $lit[2] ),
+			'loads'  => count( $first ),
+			'blind'  => in_array( false, array_column( $first, 1 ), true ),
+		);
 	}
 
 	/**
@@ -14359,14 +14390,77 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	 * Whether the one literal define config_define_scan() found is the value
 	 * WordPress runs with. A literal under a branch that did not run, or
 	 * after something that defined the constant first, is not: rewriting it
-	 * would change nothing.
+	 * would change nothing. A file wp-config.php loads ahead of the line
+	 * can define it first to the very value the line holds, which the
+	 * running value cannot tell apart, so the line counts as live only when
+	 * none of the files loaded before WordPress may define the constant.
 	 *
-	 * @param string $name Constant name.
-	 * @param array  $scan config_define_scan()'s answer, kind 'bool'.
+	 * @param string        $name   Constant name.
+	 * @param array         $scan   config_define_scan()'s answer, kind 'bool'.
+	 * @param string[]|null $loaded The files wp-config.php loaded, or null to ask PHP.
 	 * @return bool
 	 */
-	private static function config_define_live( $name, array $scan ) {
-		return defined( $name ) && isset( $scan['value'] ) && constant( $name ) === $scan['value'];
+	private static function config_define_live( $name, array $scan, $loaded = null ) {
+		if ( ! defined( $name ) || ! isset( $scan['value'] ) || constant( $name ) !== $scan['value'] ) {
+			return false;
+		}
+		if ( ! empty( $scan['blind'] ) ) {
+			return false;
+		}
+		return empty( $scan['loads'] ) || ! self::config_defined_by_loaded( $name, null === $loaded ? self::config_loaded_files() : $loaded );
+	}
+
+	/**
+	 * The files wp-config.php loaded before WordPress, as PHP lists them
+	 * (between wp-config.php and wp-settings.php, what those files loaded
+	 * included), or null when that cannot be told: WP-CLI evaluates
+	 * wp-config.php's code instead of loading the file, and serves no
+	 * System page.
+	 *
+	 * @return string[]|null
+	 */
+	private static function config_loaded_files() {
+		$path     = self::wpconfig_path();
+		$config   = $path ? realpath( $path ) : false;
+		$settings = realpath( ABSPATH . 'wp-settings.php' );
+		$files    = get_included_files();
+		$from     = false === $config ? false : array_search( $config, $files, true );
+		$to       = false === $settings ? false : array_search( $settings, $files, true );
+		if ( false === $from || false === $to || $to < $from ) {
+			return null;
+		}
+		return array_slice( $files, $from + 1, $to - $from - 1 );
+	}
+
+	/**
+	 * Whether any of these files may define the constant: a define of it,
+	 * a define this cannot name (a loop over a list of settings), or a
+	 * const of that name. A file that cannot be read or is too large to
+	 * scan counts as one that may. With no list (WP-CLI) the running value
+	 * is all there is to judge by.
+	 *
+	 * @param string        $name  Constant name.
+	 * @param string[]|null $files Files to read.
+	 * @return bool
+	 */
+	private static function config_defined_by_loaded( $name, $files ) {
+		if ( ! is_array( $files ) ) {
+			return false;
+		}
+		foreach ( $files as $file ) {
+			$size = is_readable( (string) $file ) ? filesize( (string) $file ) : false;
+			$src  = false !== $size && $size <= 524288 ? file_get_contents( (string) $file ) : false;
+			if ( false === $src ) {
+				return true;
+			}
+			if ( false === stripos( $src, 'define' ) && false === strpos( $src, $name ) ) {
+				continue;
+			}
+			if ( 'absent' !== self::config_define_scan( $name, $src )['kind'] || preg_match( '/\bconst\s+' . preg_quote( $name, '/' ) . '\b/i', $src ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**

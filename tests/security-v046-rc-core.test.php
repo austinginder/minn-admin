@@ -246,6 +246,128 @@ $drop_users = $once( function () use ( &$made, $admin ) {
 	}
 } )();
 
+/*
+ * 02-1: a define after a require or include. PHP keeps the first define, so
+ * a line after a file that defined the constant first is dead even when the
+ * values match. Judged on sources in memory and scratch "loaded" files.
+ */
+( function () use ( $check, $skip, $once ) {
+	if ( ! method_exists( 'Minn_Admin_REST', 'config_switch' ) ) {
+		$skip( 'wp-config: no config_switch()' );
+		return;
+	}
+	$scan = new ReflectionMethod( 'Minn_Admin_REST', 'config_define_scan' );
+	$scan->setAccessible( true );
+	$live = new ReflectionMethod( 'Minn_Admin_REST', 'config_define_live' );
+	$live->setAccessible( true );
+	$name = 'MINN_RCCORE_CFG_PROBE';
+	if ( ! defined( $name ) ) {
+		define( $name, false );
+	}
+	$dir = trailingslashit( get_temp_dir() ) . 'minn-rccore-cfg-' . wp_generate_password( 8, false );
+	wp_mkdir_p( $dir );
+	$clean = $once( function () use ( $dir ) {
+		foreach ( (array) glob( $dir . '/*.php' ) as $f ) {
+			unlink( $f );
+		}
+		if ( is_dir( $dir ) ) {
+			rmdir( $dir );
+		}
+	} );
+	try {
+		$put     = function ( $file, $code ) use ( $dir ) {
+			file_put_contents( "{$dir}/{$file}", $code );
+			return "{$dir}/{$file}";
+		};
+		$defines = $put( 'defines.php', "<?php\ndefine( '{$name}', false );\n" );
+		$reads   = $put( 'reads.php', "<?php\ndefine( 'MINN_RCCORE_OTHER', 'x' );\nif ( {$name} ) {\n\terror_reporting( 0 );\n}\n" );
+		$looped  = $put( 'looped.php', "<?php\nforeach ( array( 'MINN_RCCORE_A' => 1 ) as \$k => \$v ) {\n\tdefine( \$k, \$v );\n}\n" );
+		$consts  = $put( 'consts.php', "<?php\nconst {$name} = false;\n" );
+		$is_live = function ( $src, $loaded ) use ( $scan, $live, $name ) {
+			$s = $scan->invoke( null, $name, "<?php\n" . $src );
+			return 'bool' === $s['kind'] && $live->invoke( null, $name, $s, $loaded );
+		};
+		$plain    = "define( '{$name}', false );\n";
+		$fallback = "if ( ! defined( '{$name}' ) ) {\n\tdefine( '{$name}', false );\n}\n";
+		$settings = "require_once ABSPATH . 'wp-settings.php';\n";
+		$cases    = array(
+			// label => [ source, loaded files, live? ]
+			'a plain define with nothing loaded ahead is a switch (control)' => array( $plain . $settings, array(), true ),
+			'a plain define after a require of a file that defines it is locked' => array( "require_once __DIR__ . '/wp-config-local.php';\n" . $plain . $settings, array( $defines ), false ),
+			'a top-of-file fallback after such a require is locked' => array( "require_once __DIR__ . '/wp-config-local.php';\n" . $fallback . $settings, array( $defines ), false ),
+			'a define after WP Freighter\'s branch include of a file that does not define it stays a switch (control)' => array( "if ( file_exists( dirname( __FILE__ ) . '/wp-content/freighter.php' ) ) { require_once( dirname( __FILE__ ) . '/wp-content/freighter.php' ); }\n" . $plain . $settings, array( $reads ), true ),
+			'the same branch include of a file that defines it is locked' => array( "if ( file_exists( dirname( __FILE__ ) . '/local.php' ) ) { require_once( dirname( __FILE__ ) . '/local.php' ); }\n" . $plain . $settings, array( $defines ), false ),
+			'an if: … endif; include of a file that defines it is locked' => array( "if ( file_exists( __DIR__ . '/local.php' ) ) :\n\tinclude __DIR__ . '/local.php';\nendif;\n" . $plain . $settings, array( $defines ), false ),
+			'an include whose path holds no string at all is locked' => array( "require \$minn_local_config;\n" . $plain . $settings, array(), false ),
+			'wp-settings.php loaded through a variable, then the define, is locked' => array( "\$s = 'wp-settings.php';\nrequire_once ABSPATH . \$s;\n" . $plain, array(), false ),
+			'a loaded file that defines constants in a loop locks the define' => array( "include __DIR__ . '/settings.php';\n" . $plain . $settings, array( $looped ), false ),
+			'a loaded file that declares it as a const locks the define' => array( "include __DIR__ . '/settings.php';\n" . $plain . $settings, array( $consts ), false ),
+			'a loaded file that cannot be read locks the define' => array( "include __DIR__ . '/settings.php';\n" . $plain . $settings, array( $dir . '/missing.php' ), false ),
+			'an include after the define does not count (control)' => array( $plain . "include __DIR__ . '/after.php';\n" . $settings, array( $defines ), true ),
+			'a define whose literal differs from the running value stays locked (control)' => array( "define( '{$name}', true );\n" . $settings, array(), false ),
+		);
+		foreach ( $cases as $label => $c ) {
+			$got = $is_live( $c[0], $c[1] );
+			$check( 'wp-config: ' . $label, $c[2] === $got, $got ? 'offered as a switch' : 'locked' );
+		}
+		// What the System page and the save see for the same source.
+		$sw = Minn_Admin_REST::config_switch( $name, "<?php\n" . $plain . $settings );
+		$check( 'wp-config: config_switch() still offers the plain define (control)', false === $sw['locked'], wp_json_encode( $sw ) );
+		$sw = Minn_Admin_REST::config_switch( $name, "<?php\nrequire \$minn_local_config;\n" . $plain . $settings );
+		$check( 'wp-config: config_switch() shows a define after an unnamed include as defined elsewhere', true === $sw['locked'] && 'elsewhere' === $sw['lock'], wp_json_encode( $sw ) );
+
+		// The shapes the earlier reviews ran keep the kinds they had.
+		$shapes = array(
+			'plain'                         => array( "<?php\ndefine( 'WP_DEBUG', false );\nrequire_once ABSPATH . 'wp-settings.php';\n", 'bool' ),
+			'late'                          => array( "<?php\nrequire_once ABSPATH . 'wp-settings.php';\ndefine( 'WP_DEBUG', false );\n", 'late' ),
+			'include_first_fallback'        => array( "<?php\nrequire_once __DIR__ . '/wp-config-local.php';\nif ( ! defined( 'WP_DEBUG' ) ) { define( 'WP_DEBUG', false ); }\nrequire_once ABSPATH . 'wp-settings.php';\n", 'bool' ),
+			'include_first_plain'           => array( "<?php\ninclude 'local.php';\ndefine( 'WP_DEBUG', false );\nrequire_once ABSPATH . 'wp-settings.php';\n", 'bool' ),
+			'alt_then_plain'                => array( "<?php\nif ( file_exists( 'x' ) ) : include 'x'; endif;\ndefine( 'WP_DEBUG', false );\nrequire_once ABSPATH . 'wp-settings.php';\n", 'bool' ),
+			'alt_inside'                    => array( "<?php\nif ( 1 ) : define( 'WP_DEBUG', false ); endif;\n", 'branch' ),
+			'alt_else'                      => array( "<?php\nif ( 1 ) : \$a=1; else : define( 'WP_DEBUG', false ); endif;\n", 'branch' ),
+			'alt_elseif'                    => array( "<?php\nif ( 1 ) : \$a=1; elseif ( 2 ) : define( 'WP_DEBUG', false ); endif;\n", 'branch' ),
+			'while_alt'                     => array( "<?php\nwhile ( 0 ) : define( 'WP_DEBUG', false ); endwhile;\n", 'branch' ),
+			'nested_fallback'               => array( "<?php\nif ( getenv('X') ) { if ( ! defined( 'WP_DEBUG' ) ) { define( 'WP_DEBUG', false ); } }\n", 'branch' ),
+			'top_fallback'                  => array( "<?php\nif ( ! defined( 'WP_DEBUG' ) ) { define( 'WP_DEBUG', false ); }\n", 'bool' ),
+			'or_fallback'                   => array( "<?php\ndefined( 'WP_DEBUG' ) || define( 'WP_DEBUG', false );\n", 'bool' ),
+			'or_fallback_in_if'             => array( "<?php\nif ( 1 ) { defined( 'WP_DEBUG' ) || define( 'WP_DEBUG', false ); }\n", 'branch' ),
+			'or_fallback_after_assign'      => array( "<?php\n\$x = defined( 'WP_DEBUG' ) || define( 'WP_DEBUG', false );\n", 'branch' ),
+			'elseif_fallback'               => array( "<?php\nif ( 0 ) { } elseif ( ! defined( 'WP_DEBUG' ) ) { define( 'WP_DEBUG', false ); }\n", 'branch' ),
+			'ternary_in_if_header'          => array( "<?php\nif ( \$a ? 1 : 0 ) define( 'WP_DEBUG', false );\n", 'branch' ),
+			'case_label'                    => array( "<?php\nswitch ( 1 ) : case 1 : define( 'WP_DEBUG', false ); endswitch;\n", 'branch' ),
+			'short_tag_close'               => array( "<?php\n\$a = 1 ?>\n<?php define( 'WP_DEBUG', false );\n", 'bool' ),
+			'after_close_tag_no_semicolon'  => array( "<?php if (1) ?><?php define( 'WP_DEBUG', false );\n", 'bool' ),
+			'goto_label'                    => array( "<?php\nlbl: define( 'WP_DEBUG', false );\n", 'branch' ),
+			'return_before'                 => array( "<?php\nreturn; define( 'WP_DEBUG', false );\n", 'bool' ),
+			'exit_before'                   => array( "<?php\nif ( PHP_SAPI === 'cli' ) exit;\ndefine( 'WP_DEBUG', false );\n", 'bool' ),
+			'settings_in_func'              => array( "<?php\nfunction boot() { require_once ABSPATH . 'wp-settings.php'; }\ndefine( 'WP_DEBUG', false );\nboot();\n", 'late' ),
+			'settings_double_quote'         => array( "<?php\nrequire_once( dirname( __FILE__ ) . \"/wp-settings.php\" );\ndefine( 'WP_DEBUG', false );\n", 'late' ),
+			'settings_concat_var'           => array( "<?php\n\$s = 'wp-settings.php';\nrequire_once ABSPATH . \$s;\ndefine( 'WP_DEBUG', false );\n", 'bool' ),
+			'heredoc'                       => array( "<?php\n\$x = <<<EOT\ndefine( 'WP_DEBUG', true );\nEOT;\ndefine( 'WP_DEBUG', false );\n", 'custom' ),
+			'at_sign'                       => array( "<?php\n@define( 'WP_DEBUG', false );\n", 'bool' ),
+			'declare_alt'                   => array( "<?php\ndeclare(ticks=1) : define( 'WP_DEBUG', false ); enddeclare;\n", 'branch' ),
+			'brace_if_no_paren_colon'       => array( "<?php\nif ( 1 ) { } define( 'WP_DEBUG', false );\n", 'bool' ),
+			'semicolon_inside_if_braceless' => array( "<?php\nif ( \$x ) \$y = 1; define( 'WP_DEBUG', false );\n", 'bool' ),
+			'else_braceless'                => array( "<?php\nif ( \$x ) \$y = 1; else define( 'WP_DEBUG', false );\n", 'branch' ),
+			'for_braceless_body'            => array( "<?php\nfor ( ;0; ) define( 'WP_DEBUG', false );\n", 'branch' ),
+			'and_chain'                     => array( "<?php\ngetenv('X') and define( 'WP_DEBUG', false );\n", 'branch' ),
+			'alt_for'                       => array( "<?php\nfor ( \$i=0;\$i<0;\$i++ ) : define( 'WP_DEBUG', false ); endfor;\n", 'branch' ),
+		);
+		$moved = array();
+		foreach ( $shapes as $k => $c ) {
+			$kind = Minn_Admin_REST::config_define_kind( 'WP_DEBUG', $c[0] );
+			if ( $kind !== $c[1] ) {
+				$moved[] = "{$k}: {$c[1]} → {$kind}";
+			}
+		}
+		$check( 'wp-config: the 34 shapes the earlier reviews ran keep their kinds', ! $moved, implode( '; ', $moved ) );
+		$new = Minn_Admin_REST::config_rewrite( 'WP_DEBUG', true, $shapes['plain'][0] );
+		$check( 'wp-config: the rewrite of a plain define is unchanged (control)', is_string( $new ) && false !== strpos( $new, "define( 'WP_DEBUG', true );" ), is_wp_error( $new ) ? $new->get_error_code() : '' );
+	} finally {
+		$clean();
+	}
+} )();
+
 $drop_users();
 printf( "\nsecurity-v046-rc-core: %d/%d passed\n", count( array_filter( $results ) ), count( $results ) );
 exit( count( array_filter( $results ) ) === count( $results ) ? 0 : 1 );
