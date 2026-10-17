@@ -5785,7 +5785,7 @@
 	// base: the layout the page showed before this pick. A slot sent as
 	// shown keeps the card the store holds there, which may be one this
 	// account cannot see right now and the page filled from the fallback.
-	function persistOverviewMetricKeys( keys, o, base ) {
+	function persistOverviewMetricKeys( keys, o, base, touched ) {
 		const defaults = overviewMetricDefaults( o );
 		const asDefault = overviewMetricKeysEqual( keys, defaults );
 		const next = asDefault ? defaults.slice() : keys.slice();
@@ -5795,9 +5795,17 @@
 		}
 		try { localStorage.removeItem( 'minn-overview-metrics' ); } catch ( e ) { /* ignore */ }
 		const seq = ++overviewMetricSaveSeq;
+		// base lets the server keep a card this account can't see right now
+		// in a slot nobody touched; touched names the slots the person acted
+		// on, so picking the fallback a hidden card shows under still takes.
+		const body = asDefault ? { keys: [] } : { keys: next };
+		if ( ! asDefault && base ) {
+			body.base = base;
+			if ( Array.isArray( touched ) && touched.length ) body.touched = touched;
+		}
 		api( 'minn-admin/v1/overview/metrics', {
 			method: 'POST',
-			body: JSON.stringify( asDefault ? { keys: [] } : ( base ? { keys: next, base } : { keys: next } ) ),
+			body: JSON.stringify( body ),
 		} ).then( ( r ) => {
 			if ( seq !== overviewMetricSaveSeq ) return;
 			const cur = state.cache.overview;
@@ -5842,7 +5850,7 @@
 	}
 
 	function setOverviewMetric( slot, key, o ) {
-		persistOverviewMetricKeys( overviewMetricKeysWithPick( o, slot, key ), o, readOverviewMetricKeys( o ) );
+		persistOverviewMetricKeys( overviewMetricKeysWithPick( o, slot, key ), o, readOverviewMetricKeys( o ), [ slot ] );
 		closeModal();
 		renderOverview();
 	}
@@ -5852,7 +5860,7 @@
 		const defaults = overviewMetricDefaults( o );
 		if ( slot < 0 || slot >= keys.length ) return;
 		keys[ slot ] = defaults[ slot ];
-		persistOverviewMetricKeys( keys, o, readOverviewMetricKeys( o ) );
+		persistOverviewMetricKeys( keys, o, readOverviewMetricKeys( o ), [ slot ] );
 		renderOverview();
 	}
 
@@ -5872,10 +5880,13 @@
 		const keys = ( m && m.type === 'overview-metric' )
 			? overviewMetricKeysWithPick( o, m.slot, m.pick )
 			: readOverviewMetricKeys( o );
+		const touched = ( m && m.type === 'overview-metric' && m.slot >= 0 ) ? [ m.slot ] : [];
 		try {
+			const body = { keys, base: readOverviewMetricKeys( o ) };
+			if ( touched.length ) body.touched = touched;
 			await api( 'minn-admin/v1/overview/metric-defaults', {
 				method: 'POST',
-				body: JSON.stringify( { keys, base: readOverviewMetricKeys( o ) } ),
+				body: JSON.stringify( body ),
 			} );
 			if ( o ) {
 				o.metricDefaults = keys.slice();
