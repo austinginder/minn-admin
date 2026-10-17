@@ -12,6 +12,13 @@
  *        every preview by sweeping them: a theme change stamped data-theme
  *        onto the look-alike and a broken image in it took Minn's
  *        missing-image class, and both were saved.
+ *   16-2 A Details, Buttons or Shortcode block nobody edited keeps its bytes
+ *        when the post is saved. The live-field rebuilds ran on every save
+ *        and dropped Gutenberg's inner block comments, the details anchor
+ *        and colour classes, summary and label markup, a custom rel, a lock
+ *        on the block comment and a multi-line shortcode's line breaks. A
+ *        field typed into and put back keeps them too; a real edit still
+ *        saves.
  *
  * Every check on a save fails on the RC app.js (452ef6cb). Posts are seeded
  * through REST as the role that writes them: a Contributor this suite
@@ -276,6 +283,81 @@ const ignorable = ( text ) => /Failed to load resource/.test( text )
 		t.check( '16-1 a theme change writes nothing into a look-alike in the text', !! themePara && ! /data-(root-)?theme/.test( themePara ), themePara );
 		t.check( '16-1 broken images in preview and tile look-alikes are saved without Minn\'s class', !! picPara && picPara.indexOf( 'minn-img-missing' ) === -1 && /alt="a"/.test( picPara ) && /alt="b"/.test( picPara ), picPara );
 		t.check( '16-1 the variants\' save stores no render anywhere', s.content.indexOf( 'action=logout' ) === -1 && s.content.indexOf( 'wp-block-loginout' ) === -1 && /Variants\./.test( s.content ), s.content.slice( 0, 200 ) );
+
+		/* ===== 16-2 an untouched Details, Buttons or Shortcode block ===== */
+		// Written the way Gutenberg writes them, by an Author in their own post
+		// (kses applies): inner block comments, an anchor and colour classes,
+		// summary and label markup, a custom rel, a lock, a multi-line body.
+		const DETAILS = '<!-- wp:details {"backgroundColor":"pale-cyan-blue"} -->\n<details class="wp-block-details has-pale-cyan-blue-background-color has-background" id="returns"><summary><strong>Returns</strong> policy</summary><!-- wp:paragraph -->\n<p>Thirty days.</p>\n<!-- /wp:paragraph --></details>\n<!-- /wp:details -->';
+		const BUTTONS = '<!-- wp:buttons -->\n<div class="wp-block-buttons"><!-- wp:button -->\n<div class="wp-block-button"><a class="wp-block-button__link wp-element-button" href="https://example.com/deal" rel="nofollow sponsored">Learn <em>more</em></a></div>\n<!-- /wp:button --></div>\n<!-- /wp:buttons -->';
+		const LOCKED_SC = '<!-- wp:shortcode {"lock":{"move":true,"remove":true}} -->\n[minn_rc_probe id="1"]\n<!-- /wp:shortcode -->';
+		const MULTI_SC = '<!-- wp:shortcode -->\n[minn_rc_probe a="1"\n  b="2"]\n<!-- /wp:shortcode -->';
+		const GUTENBERG = [ '<!-- wp:paragraph -->\n<p>Intro.</p>\n<!-- /wp:paragraph -->', DETAILS, BUTTONS, LOCKED_SC, MULTI_SC ].join( '\n\n' );
+		const blocksOf = ( content ) => ( {
+			details: ( content.match( /<!-- wp:details[\s\S]*?<!-- \/wp:details -->/ ) || [ '' ] )[ 0 ],
+			buttons: ( content.match( /<!-- wp:buttons[\s\S]*?<!-- \/wp:buttons -->/ ) || [ '' ] )[ 0 ],
+			lockedSc: ( content.match( /<!-- wp:shortcode \{"lock"[\s\S]*?<!-- \/wp:shortcode -->/ ) || [ '' ] )[ 0 ],
+			multiSc: ( content.match( /<!-- wp:shortcode -->\n\[minn_rc_probe a[\s\S]*?<!-- \/wp:shortcode -->/ ) || [ '' ] )[ 0 ],
+		} );
+		const p4 = await make( author.page, { title: 'RC 16-2 untouched', content: GUTENBERG } );
+		const before = blocksOf( ( await stored( p4 ) ).content );
+		t.check( '16-2 the Author\'s Gutenberg blocks are stored as written (the precondition)', before.details.indexOf( '<!-- wp:paragraph -->' ) !== -1 && before.details.indexOf( '<strong>Returns</strong>' ) !== -1
+			&& before.buttons.indexOf( 'rel="nofollow sponsored"' ) !== -1 && before.buttons.indexOf( '<em>more</em>' ) !== -1 && !! before.lockedSc && /\n {2}b="2"\]/.test( before.multiSc ), JSON.stringify( before ).slice( 0, 400 ) );
+		await open( author.page, p4 );
+		await typeElsewhere( author.page, 'Author note.' );
+		await saveNow( author.page, p4 );
+		let after = blocksOf( ( await stored( p4 ) ).content );
+		t.check( '16-2 a save keeps an untouched Details block byte for byte (inner comments, anchor, classes, summary markup)', !! before.details && after.details === before.details, after.details );
+		t.check( '16-2 a save keeps an untouched Buttons block byte for byte (custom rel, label markup)', !! before.buttons && after.buttons === before.buttons, after.buttons );
+		t.check( '16-2 a save keeps a Shortcode block\'s lock', !! before.lockedSc && after.lockedSc === before.lockedSc, after.lockedSc || '(lock gone)' );
+		t.check( '16-2 a save keeps a multi-line Shortcode block\'s line breaks', !! before.multiSc && after.multiSc === before.multiSc, JSON.stringify( after.multiSc || '(rewritten)' ) );
+
+		// Typed into and put back: still untouched.
+		const typeAndUndo = async ( p, sel ) => {
+			await p.click( sel );
+			await p.keyboard.press( 'End' );
+			await p.keyboard.type( 'x' );
+			await p.keyboard.press( 'Backspace' );
+		};
+		await open( author.page, p4 );
+		await typeAndUndo( author.page, '#minn-editor-body .minn-details-island .minn-details-summary' );
+		await typeAndUndo( author.page, '#minn-editor-body .minn-buttons-island .minn-btn-label' );
+		await typeAndUndo( author.page, '#minn-editor-body .minn-shortcode-island .minn-shortcode-input' );
+		await typeElsewhere( author.page, 'Second note.' );
+		await saveNow( author.page, p4 );
+		after = blocksOf( ( await stored( p4 ) ).content );
+		t.check( '16-2 fields typed into and put back keep the stored bytes', after.details === before.details && after.buttons === before.buttons && after.lockedSc === before.lockedSc, JSON.stringify( after ).slice( 0, 400 ) );
+
+		// Control: the Author's real edits still save.
+		await open( author.page, p4 );
+		await author.page.click( '#minn-editor-body .minn-details-island .minn-details-body p' );
+		await author.page.keyboard.press( 'End' );
+		await author.page.keyboard.type( ' Ask us.' );
+		await author.page.click( '#minn-editor-body .minn-details-island .minn-details-summary' );
+		await author.page.keyboard.press( 'End' );
+		await author.page.keyboard.type( ' (updated)' );
+		await author.page.click( '#minn-editor-body .minn-buttons-island .minn-btn-label' );
+		await author.page.keyboard.press( 'End' );
+		await author.page.keyboard.type( ' now' );
+		await author.page.click( '#minn-editor-body .minn-shortcode-island .minn-shortcode-input' );
+		await author.page.keyboard.press( 'End' );
+		await author.page.keyboard.press( 'ArrowLeft' );
+		await author.page.keyboard.type( ' c="3"' );
+		await saveNow( author.page, p4 );
+		after = blocksOf( ( await stored( p4 ) ).content );
+		t.check( '16-2 control: an edited Details summary and body save', /<summary>Returns policy \(updated\)<\/summary>/.test( after.details ) && /Thirty days\.(?: |&nbsp;|\u00a0)Ask us\./.test( after.details ), after.details );
+		t.check( '16-2 control: an edited button label saves, its link kept', />Learn more now<\/a>/.test( after.buttons ) && after.buttons.indexOf( 'href="https://example.com/deal"' ) !== -1, after.buttons );
+		const edited4 = ( await stored( p4 ) ).content;
+		t.check( '16-2 control: an edited shortcode saves', /<!-- wp:shortcode[^>]*-->\n\[minn_rc_probe id="1" c="3"\]\n<!-- \/wp:shortcode -->/.test( edited4 ), edited4.slice( -400 ) );
+
+		// A lower role's blocks, saved by the Editor reviewing them.
+		const p5 = await make( contrib.page, { title: 'RC 16-2 planted', content: [ DETAILS, BUTTONS ].join( '\n\n' ) } );
+		const planted5 = blocksOf( ( await stored( p5 ) ).content );
+		await open( editor.page, p5 );
+		await typeElsewhere( editor.page, 'Looks good.' );
+		await saveNow( editor.page, p5 );
+		const after5 = blocksOf( ( await stored( p5 ) ).content );
+		t.check( '16-2 the Editor\'s save keeps a Contributor\'s untouched Details and Buttons blocks', !! planted5.details && after5.details === planted5.details && !! planted5.buttons && after5.buttons === planted5.buttons, JSON.stringify( after5 ).slice( 0, 400 ) );
 	} catch ( e ) {
 		t.check( 'suite ran to the end', false, e && e.stack ? e.stack.split( '\n' ).slice( 0, 3 ).join( ' | ' ) : String( e ) );
 	} finally {

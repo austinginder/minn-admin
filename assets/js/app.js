@@ -33329,9 +33329,7 @@
 			// Free <details> in the main contenteditable traps the caret; nesting
 			// the widget inside contenteditable=false keeps expand/type safe.
 			const parts = parseDetailsRaw( raw );
-			const bodyInner = parts.bodyHtml && parts.bodyHtml.trim()
-				? parts.bodyHtml
-				: '<p><br></p>';
+			const bodyInner = detailsBodyInner( parts );
 			return `<div class="minn-block-island minn-details-island" contenteditable="false" data-island="${ idx }" data-block="${ esc( name ) }">
 				<button class="minn-island-chip" data-inspect="${ idx }" title="${ esc( __( 'Configure block' ) ) }" type="button" aria-label="${ esc( __( 'Configure details block' ) ) }">⚙ ${ esc( __( 'details' ) ) }</button>
 				<details class="minn-details-edit" open>
@@ -33757,12 +33755,36 @@
 		return `${ openComment }\n<details class="wp-block-details"${ openAttr }><summary>${ esc( s ) }</summary>${ body }</details>\n<!-- /wp:details -->`;
 	}
 
+	// What the details body field is filled with, from parseDetailsRaw().
+	function detailsBodyInner( parts ) {
+		return parts.bodyHtml && parts.bodyHtml.trim() ? parts.bodyHtml : '<p><br></p>';
+	}
+	// The stored block rebuilt from its fields as they were filled and never
+	// touched: a commit reads the body back through the inert copy, so the
+	// filling takes the same way (parse inert, park, put back).
+	function detailsAsShown( raw ) {
+		const parts = parseDetailsRaw( raw );
+		return buildDetailsRaw( parts.summary, rtUnpark( rtNeutralize( inertParse( detailsBodyInner( parts ) ) ) ).innerHTML, parts.attrs );
+	}
+
 	// An island's fields are always <input>s Minn rendered. Post content can
 	// wear their classes and point data-* at any island (kses keeps class,
 	// data-* and a button's value for every role), but never an <input>, so
 	// only a real one may write its island back; a look-alike's value would
 	// otherwise land in the post as that block's markup.
 	const islandField = ( el ) => !! el && 'INPUT' === el.tagName;
+
+	// The stored block a live-field island's fields were filled from: what
+	// it held at the island's first commit (the fields are filled when the
+	// island is drawn, and nothing commits before that), or what an inspector
+	// Apply filled them with again. Fields that still read as that block
+	// showed them commit its bytes, not a rebuild: the rebuilds keep only
+	// what the fields hold, so every save rewrote a block written elsewhere,
+	// and a field typed into and put back would rewrite it too.
+	const islandFilledFrom = ( island, raw ) => {
+		if ( null == island._minnFilled ) island._minnFilled = raw;
+		return island._minnFilled;
+	};
 
 	// Keep ed.islands in sync with the in-island shortcode field. Serialize
 	// reads islands[] (not DOM), so every keystroke must land here.
@@ -33775,7 +33797,12 @@
 		if ( ! island || island.dataset.island !== input.dataset.shortcode ) return;
 		const idx = parseInt( input.dataset.shortcode, 10 );
 		if ( ! Number.isFinite( idx ) || ed.islands[ idx ] == null ) return;
-		const next = shortcodeTemplate( input.value );
+		const filled = islandFilledFrom( island, ed.islands[ idx ] );
+		let next = shortcodeTemplate( input.value );
+		// The template keeps only the text: a lock or metadata on the block
+		// comment, and the line breaks a one-line field strips, went with it.
+		// A text input's value is the filled value without its line breaks.
+		if ( next === shortcodeTemplate( stripBlockComments( filled ).trim().replace( /[\r\n]+/g, '' ) ) ) next = filled;
 		if ( ed.islands[ idx ] === next ) return;
 		ed.islands[ idx ] = next;
 		// Nested in a slot: ancestors must re-splice (idempotent elsewhere).
@@ -33793,11 +33820,16 @@
 		const sum = islandEl.querySelector( '.minn-details-summary' );
 		const body = islandEl.querySelector( '.minn-details-body' );
 		if ( ! islandField( sum ) || ! body || islandOf( sum ) !== islandEl || islandOf( body ) !== islandEl ) return;
+		const filled = islandFilledFrom( islandEl, ed.islands[ idx ] );
 		const prev = parseDetailsRaw( ed.islands[ idx ] );
 		// Read the body back through a clone with the parked attributes put
 		// back, or an untouched details block would be rewritten inert on the
 		// first commit after load.
-		const next = buildDetailsRaw( sum.value, rtUnpark( rtInertCopy( body ) ).innerHTML, prev.attrs );
+		let next = buildDetailsRaw( sum.value, rtUnpark( rtInertCopy( body ) ).innerHTML, prev.attrs );
+		// The rebuild drops Gutenberg's inner block comments (the block then
+		// fails validation), the accordion name, an anchor, colour classes
+		// and summary markup.
+		if ( next === detailsAsShown( filled ) ) next = filled;
 		if ( ed.islands[ idx ] === next ) return;
 		ed.islands[ idx ] = next;
 		stampSlotDirtyFor( islandEl );
@@ -33992,7 +34024,12 @@
 			wrapAttrs = parsed.wrapAttrs;
 			islandEl.dataset.btnStamped = '1';
 		}
-		const next = buildButtonsRaw( collectButtonsFromIsland( islandEl ), wrapAttrs );
+		const filled = islandFilledFrom( islandEl, ed.islands[ idx ] );
+		let next = buildButtonsRaw( collectButtonsFromIsland( islandEl ), wrapAttrs );
+		// The rebuild drops a rel other than the new-tab one and any markup
+		// in a label.
+		const shown = parseButtonsRaw( filled );
+		if ( next === buildButtonsRaw( shown.buttons, shown.wrapAttrs ) ) next = filled;
 		if ( ed.islands[ idx ] === next ) return;
 		ed.islands[ idx ] = next;
 		stampSlotDirtyFor( islandEl );
@@ -44693,14 +44730,20 @@
 		// A nested island's raw changed via popover buttons (no input event)
 		// — ancestor slot islands must re-splice on save.
 		stampSlotDirtyFor( islandEl );
+		// The fields now show newRaw, so a commit that finds them untouched
+		// keeps newRaw's bytes.
 		const scInput = islandEl && islandEl.querySelector( '.minn-shortcode-input' );
-		if ( scInput ) scInput.value = stripBlockComments( newRaw ).trim();
+		if ( scInput ) {
+			scInput.value = stripBlockComments( newRaw ).trim();
+			islandEl._minnFilled = newRaw;
+		}
 		if ( islandEl && islandEl.classList.contains( 'minn-details-island' ) ) {
 			const parts = parseDetailsRaw( newRaw );
 			const sum = islandEl.querySelector( '.minn-details-summary' );
 			const bodyEl = islandEl.querySelector( '.minn-details-body' );
 			if ( sum ) sum.value = parts.summary;
-			if ( bodyEl ) rtNeutralizeInto( bodyEl, parts.bodyHtml && parts.bodyHtml.trim() ? parts.bodyHtml : '<p><br></p>' );
+			if ( bodyEl ) rtNeutralizeInto( bodyEl, detailsBodyInner( parts ) );
+			islandEl._minnFilled = newRaw;
 		}
 		const previewEl = islandPreview( islandEl );
 		// The armed text runs describe the old markup and the preview is

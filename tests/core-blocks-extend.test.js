@@ -3,6 +3,11 @@
  * Details is deliberately NOT free top-level contenteditable — a live <details>
  * traps the caret in Blink. It is an island with interactive expand + in-card
  * summary/body fields instead.
+ *
+ * The Details fixture is the shape Gutenberg writes (inner paragraph comments,
+ * the accordion name, an anchor, colour classes, summary markup). A save that
+ * did not touch it keeps it byte for byte; the island's rebuild keeps only
+ * what its fields hold, and used to run on every save.
  */
 const { BASE, launch, login, createPost, deletePost, reporter } = require( './helpers' );
 
@@ -20,8 +25,10 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 		'<figure class="wp-block-pullquote"><blockquote><p>Original pull</p><cite>Ada</cite></blockquote></figure>',
 		'<!-- /wp:pullquote -->',
 		'',
-		'<!-- wp:details -->',
-		'<details class="wp-block-details"><summary>Orig summary</summary><p>Orig body</p></details>',
+		'<!-- wp:details {"name":"faq","backgroundColor":"pale-cyan-blue"} -->',
+		'<details class="wp-block-details has-pale-cyan-blue-background-color has-background" name="faq" id="faq-orig"><summary><strong>Orig</strong> summary</summary><!-- wp:paragraph -->',
+		'<p>Orig body</p>',
+		'<!-- /wp:paragraph --></details>',
 		'<!-- /wp:details -->',
 		'',
 		'<!-- wp:spacer {"height":"40px"} -->',
@@ -39,6 +46,16 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 		status: 'draft',
 	} );
 	t.check( 'created fixture post', !! id, String( id ) );
+	const savedContent = () => page.evaluate( async ( pid ) => {
+		const r = await fetch( window.MINN.restUrl + 'wp/v2/posts/' + pid + '?context=edit&_fields=content&_cb=' + Math.random(), {
+			headers: { 'X-WP-Nonce': window.MINN.nonce },
+		} );
+		const j = await r.json();
+		return ( j.content && j.content.raw ) || '';
+	}, id );
+	const detailsRaw = ( c ) => ( String( c || '' ).match( /<!-- wp:details[\s\S]*?<!-- \/wp:details -->/ ) || [ '' ] )[ 0 ];
+	const seededDetails = detailsRaw( await savedContent() );
+	t.check( 'fixture details stored in Gutenberg\'s shape', /name="faq"/.test( seededDetails ) && /<!-- wp:paragraph -->/.test( seededDetails ) && /<strong>Orig<\/strong>/.test( seededDetails ), seededDetails );
 
 	await page.goto( BASE + '/minn-admin/editor/posts/' + id, { waitUntil: 'domcontentloaded' } );
 	await page.waitForSelector( '#minn-editor-body', { timeout: 20000 } );
@@ -99,6 +116,19 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 		if ( p ) p.textContent = 'Edited pullquote line';
 		document.querySelector( '#minn-editor-body' ).dispatchEvent( new Event( 'input', { bubbles: true } ) );
 	} );
+
+	// Save with only the pullquote changed: the Details block nobody touched
+	// keeps its bytes.
+	const firstSave = page.waitForResponse( ( res ) => res.request().method() === 'POST'
+		&& new RegExp( '/wp/v2/posts/' + id + '(\\?|$)' ).test( res.url() ), { timeout: 30000 } );
+	await page.keyboard.down( 'Meta' );
+	await page.keyboard.press( 's' );
+	await page.keyboard.up( 'Meta' );
+	await firstSave.catch( () => null );
+	await page.waitForTimeout( 400 );
+	const untouched = await savedContent();
+	t.check( 'saved pullquote text (details untouched)', /Edited pullquote line/.test( untouched ), untouched.slice( 0, 400 ) );
+	t.check( 'an untouched Gutenberg details block saves byte for byte', !! seededDetails && detailsRaw( untouched ) === seededDetails, detailsRaw( untouched ) );
 
 	// Edit details in-island (summary input + body contenteditable)
 	const detailsEdited = await page.evaluate( () => {
