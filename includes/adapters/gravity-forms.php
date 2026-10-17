@@ -633,7 +633,10 @@ add_action( 'rest_api_init', function () {
 			$form    = GFAPI::get_form( $entry['form_id'] );
 			$answers = array();
 			foreach ( $form['fields'] as $field ) {
-				if ( in_array( $field->type, array( 'html', 'section', 'page', 'captcha' ), true ) ) {
+				// Gravity Forms' entry screen skips password fields too: with
+				// gform_encrypt_password on, the entry holds the password and
+				// GFAPI hands it back decrypted.
+				if ( in_array( $field->type, array( 'html', 'section', 'page', 'captcha', 'password' ), true ) ) {
 					continue;
 				}
 				// use_text=true resolves choice values to their labels.

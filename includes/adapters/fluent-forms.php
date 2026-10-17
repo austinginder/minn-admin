@@ -193,6 +193,29 @@ function minn_admin_fluent_forms_mask_passwords( $map, $form_id ) {
 }
 
 /**
+ * Whether anyone may read Fluent's submission tables whole. Its entry
+ * screens mask a password answer for every viewer while its truncate filter
+ * holds for the form (minn_admin_fluent_forms_mask_passwords()), and the
+ * stored answer is the password until the form's integrations replace it,
+ * so a form with a password field keeps everyone out of the tables that
+ * hold its answers (the database browser asks this as the resource's table
+ * gate). Asked as Fluent asks it: the form's fields hold an input_password
+ * element and the filter says truncate. Answered whether or not Fluent is
+ * active, since its tables outlive it.
+ *
+ * @return bool
+ */
+function minn_admin_fluent_forms_tables_whole() {
+	$forms = Minn_Admin_Kernel_SQL::select( 'fluentform_forms', array( 'id' ), array( 'form_fields' => array( 'contains' => '"element":"input_password"' ) ) );
+	foreach ( $forms as $f ) {
+		if ( apply_filters( 'fluentform/truncate_password_values', true, (int) $f['id'] ) ) {
+			return false;
+		}
+	}
+	return true;
+}
+
+/**
  * Decode a submission response JSON into a flat string map.
  *
  * @param string|array $response Raw response column or array.
@@ -347,6 +370,8 @@ minn_admin_resource( 'fluent-forms/entries', function () {
 		'gates'     => array(
 			'view'   => 'minn_admin_fluent_forms_can_view',
 			'manage' => 'minn_admin_fluent_forms_can_manage',
+			// Password answers are masked for everyone (see the function).
+			'table'  => 'minn_admin_fluent_forms_tables_whole',
 		),
 		'item_gate' => 'minn_admin_fluent_forms_can_entry',
 		'labels'    => array(
