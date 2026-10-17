@@ -174,6 +174,12 @@ if ( class_exists( 'Minn_Admin_CPT' ) && function_exists( 'cptui_get_post_type_d
 	$o                    = (array) get_option( 'cptui_post_types', array() );
 	$o[ $pt ]['supports'] = array( 'none' );
 	update_option( 'cptui_post_types', $o );
+	// CPT UI registers a type stored as none with no supports at all, so the
+	// modal shows none ticked; leaving this run's registered supports on would
+	// make the save below an untick of features the store does not hold.
+	foreach ( array( 'title', 'editor', 'post-formats', 'trackbacks' ) as $feature ) {
+		remove_post_type_support( $pt, $feature );
+	}
 	list( $st3 ) = $call( 'POST', "/minn-admin/v1/post-types/{$pt}", array( 'singular' => 'Thing 3', 'plural' => 'Things 3', 'public' => true, 'show_in_rest' => true, 'supports' => array(), 'taxonomies' => array() ) );
 	$sup3 = (array) ( ( (array) get_option( 'cptui_post_types', array() ) )[ $pt ]['supports'] ?? array() );
 	$check( 'post type edit: a save that ticks nothing keeps CPT UI\'s "none" (review R3-1)', 200 === $st3 && in_array( 'none', $sup3, true ), "update {$st3}, supports " . implode( ',', $sup3 ) );
