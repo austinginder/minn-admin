@@ -1235,9 +1235,18 @@ class Minn_Admin_DB {
 	 * copies its key. Freemius' API cache keeps its licence answers, secret keys
 	 * included, beside the redacted accounts row. WPForms keeps its Stripe
 	 * secret keys in its settings row and its Square tokens in their own row,
-	 * sealed with the key in wpforms_crypto_secret_key.
+	 * sealed with the key in wpforms_crypto_secret_key. The other mailers'
+	 * connection rows: FluentSMTP's connections (an SMTP password, an API key,
+	 * a mailbox's OAuth tokens, plaintext wherever its encryption is off or
+	 * older than the stored blob) and its alert channels' bot token and
+	 * webhook URLs, both of which its own screens mask; Post SMTP's Microsoft
+	 * 365 OAuth tokens and the tokens and keys its mobile app reads the mail
+	 * log with; SureMails' connections, kept base64-encoded only; GoSMTP's
+	 * mailer keys and passwords; Easy WP SMTP's settings and the key that
+	 * seals its password beside them; and Site Mailer's Connect client secret
+	 * and tokens and the key it seals unsubscribe links with.
 	 */
-	const SECRET_OPTION_KEYS = array( 'auth_key', 'secure_auth_key', 'logged_in_key', 'nonce_key', 'auth_salt', 'secure_auth_salt', 'logged_in_salt', 'nonce_salt', 'secret_key', 'jetpack_private_options', 'woocommerce_helper_data', 'wp_mail_smtp', 'wp_mail_smtp_mail_key', '_transient_wp_mail_smtp_connect_token', 'aio_wp_security_configs', 'postman_options', 'postman_auth_token', 'fs_accounts', 'wpmudev_apikey', 'wp_smush_api_auth', 'jetpack_secrets', '_site_transient_update_plugins', '_site_transient_update_themes', 'gf_telemetry_data', '_site_transient_wp_rocket_update_data', 'fs_api_cache', 'fs_dbg_api_cache', 'wpforms_settings', 'wpforms_crypto_secret_key', 'wpforms_square_connections', 'frm-usage-uuid', 'itsec-storage', 'suretrigger_options', 'wp_statistics', 'wp_statistics_licenses', 'wp_statistics_cipher_key', 'iawp_salt', 'iawp_request_payload_salt', 'surecart_recaptcha_secret_key', 'surecart_registered_webhook', 'surecart_previous_webhook', 'cleantalk_sfw_worker_self_tokens' );
+	const SECRET_OPTION_KEYS = array( 'auth_key', 'secure_auth_key', 'logged_in_key', 'nonce_key', 'auth_salt', 'secure_auth_salt', 'logged_in_salt', 'nonce_salt', 'secret_key', 'jetpack_private_options', 'woocommerce_helper_data', 'wp_mail_smtp', 'wp_mail_smtp_mail_key', '_transient_wp_mail_smtp_connect_token', 'aio_wp_security_configs', 'postman_options', 'postman_auth_token', 'fs_accounts', 'wpmudev_apikey', 'wp_smush_api_auth', 'jetpack_secrets', '_site_transient_update_plugins', '_site_transient_update_themes', 'gf_telemetry_data', '_site_transient_wp_rocket_update_data', 'fs_api_cache', 'fs_dbg_api_cache', 'wpforms_settings', 'wpforms_crypto_secret_key', 'wpforms_square_connections', 'frm-usage-uuid', 'itsec-storage', 'suretrigger_options', 'wp_statistics', 'wp_statistics_licenses', 'wp_statistics_cipher_key', 'iawp_salt', 'iawp_request_payload_salt', 'surecart_recaptcha_secret_key', 'surecart_registered_webhook', 'surecart_previous_webhook', 'cleantalk_sfw_worker_self_tokens', 'fluentmail-settings', '_fluent_smtp_notify_settings', 'postman_office365_oauth', 'post_smtp_mobile_app_connection', 'suremails_connections', 'gosmtp_options', 'swpsmtp_options', 'swpsmtp_enc_key', 'site_mailer_client_secret', 'site_mailer_access_token', 'site_mailer_refresh_token', 'site_mailer_user_access_token', 'site_mailer_unsubscribe_encryption_data' );
 
 	/**
 	 * Whether a whole COLUMN can hold a credential on some row, so it must
