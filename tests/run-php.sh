@@ -124,6 +124,8 @@ MINN_SWAP_ADD=custom-css-js/custom-css-js.php,eps-301-redirects/eps-301-redirect
 run security-v046-rc-fields single --user=admin
 # Safe Redirect Manager stays inactive on the lab; the swap loads it for this process only.
 MINN_SWAP_ADD=safe-redirect-manager/safe-redirect-manager.php run security-v046-rc-adapters single --user=admin --require=tests/lib/plugin-swap.php
+# Safe Redirect Manager and Simple 301 Redirects stay inactive on the lab; the swap loads them for this process only.
+MINN_SWAP_ADD=safe-redirect-manager/safe-redirect-manager.php,simple-301-redirects/wp-simple-301-redirects.php run security-v046-rc-round2 single --user=admin --require=tests/lib/plugin-swap.php --require=tests/security-v046-rc-round2.test.php
 run sweep-v044 single --user=admin
 run write-fences single --user=admin
 
@@ -148,6 +150,7 @@ run security-v046-registry-rest subsite --user=admin
 run security-v046-registry-reads subsite --user=admin
 run security-v046-rc-core subsite --user=admin
 run security-v046-rc-adapters subsite --user=admin
+run security-v046-rc-round2 subsite --user=admin
 run security-v045-delta-surfaces net2
 run multi-network-system net2
 run security-v046-registry-rest net2

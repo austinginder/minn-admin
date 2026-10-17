@@ -119,9 +119,15 @@ A few properties worth knowing before auditing (details in
   anywhere else refuses the save (400) and the stored value stays. Every
   other store (snippet code, posts, table rows, files) has no restore: its
   routes treat a field sent back exactly as the read served it as
-  unchanged, and refuse a write that would store a token. An export file
+  unchanged, and refuse a write that would store a token, with two
+  exceptions: a kernel edit action passes the body to its adapter without
+  that compare, and an editor field panel (ACF, Meta Box, Pods, ACPT,
+  JetEngine) skips an untouched value but writes an edited one, or a
+  repeater edited beside a masked row, as sent. Because a field served
+  masked is compared against the real value, a save's 200 or 400 tells
+  whether that field holds a given masked key. An export file
   that would carry a credential is refused rather than handed out with the
-  token in it. The transients list hides a value whose whole stored form
+  token in it, keys holding a "/" included however the JSON escapes it. The transients list hides a value whose whole stored form
   the browser would redact or withhold, before cutting it short. A copy in
   another case, in hex, cut short or split across two values is not
   caught, as it is not in the browser either. Keys shorter than 16
