@@ -390,6 +390,84 @@ add_filter( 'pre_http_request', $no_http, 1 );
 	}
 } )();
 
+/*
+ * 10-2 · JetBooking. Their update endpoint checks the unit and dates are
+ * free before any change; a status move skipped it, so a cancelled booking
+ * could be put back over nights another booking now holds.
+ */
+( function () use ( $check, $skip, $call, $once, $admin, $tag, $valid_id ) {
+	if ( ! function_exists( 'minn_admin_jet_booking_active' ) || ! minn_admin_jet_booking_active() || ! minn_admin_jet_booking_has_tables() || ! function_exists( 'jet_abaf' ) ) {
+		$skip( '10-2 JetBooking: not active' );
+		return;
+	}
+	global $wpdb;
+	$jt    = minn_admin_jet_booking_table();
+	$ids   = array();
+	$email = 'minn-rc-jb-' . $tag . '@example.com';
+	$clean = $once( function () use ( &$ids, $jt, $email ) {
+		global $wpdb;
+		foreach ( $ids as $id ) {
+			if ( is_int( $id ) && $id > 0 ) {
+				$wpdb->delete( $jt, array( 'booking_id' => $id, 'user_email' => $email ) );
+			}
+		}
+	} );
+	try {
+		wp_set_current_user( $admin );
+		// An item id no post holds, so no real stay shares the nights.
+		$item = (int) $wpdb->get_var( "SELECT MAX(ID) FROM {$wpdb->posts}" ) + 100000 + (int) $tag; // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$day  = strtotime( ( (int) gmdate( 'Y' ) + 2 ) . '-02-10 00:00:00 UTC' );
+		$add  = function ( $status, $in_days, $nights ) use ( $wpdb, $jt, $item, $day, $email, $valid_id, &$ids ) {
+			$in = $day + $in_days * DAY_IN_SECONDS;
+			$wpdb->insert( $jt, array( 'status' => $status, 'apartment_id' => $item, 'apartment_unit' => 0, 'check_in_date' => $in + 1, 'check_out_date' => $in + $nights * DAY_IN_SECONDS, 'user_id' => 0, 'user_email' => $email ) );
+			$id = (int) $wpdb->insert_id;
+			if ( $id > 0 ) {
+				$ids[] = $id;
+			}
+			return $id;
+		};
+		$status = function ( $id ) use ( $wpdb, $jt ) {
+			return (string) $wpdb->get_var( $wpdb->prepare( "SELECT status FROM {$jt} WHERE booking_id = %d", $id ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		};
+		// Their own rule for the item's days (days off, weekdays switched
+		// off) applies to every check here, so the nights must pass it.
+		if ( ! jet_abaf()->tools->is_booking_period_available( array( 'apartment_id' => $item, 'check_in_date' => $day + 1, 'check_out_date' => $day + 4 * DAY_IN_SECONDS ) ) ) {
+			$skip( '10-2 JetBooking: the lab\'s booking days leave out the test nights' );
+			return;
+		}
+		$old  = $add( 'cancelled', 0, 2 );
+		$held = $add( 'pending', 0, 2 );
+		$temp = $add( 'created', 1, 1 );
+		$next = $add( 'cancelled', 2, 2 );
+		if ( ! $old || ! $held || ! $temp || ! $next ) {
+			$check( '10-2 JetBooking fixtures', false, 'could not insert the bookings' );
+			return;
+		}
+		$move = function ( $id, $to ) use ( $call ) {
+			return $call( 'POST', "/minn-admin/v1/jet-booking/bookings/{$id}/status", array( 'status' => $to ) );
+		};
+		list( $st, $d ) = $move( $old, 'pending' );
+		$check( '10-2 putting a cancelled booking back over nights another booking holds is refused (409)', 409 === $st, $st . ' ' . wp_json_encode( $d['code'] ?? $d ) );
+		$check( '10-2 and it stays cancelled', 'cancelled' === $status( $old ), $status( $old ) );
+		list( $st ) = $move( $old, 'completed' );
+		$check( '10-2 nor can it move to another status that holds the nights', 409 === $st && 'cancelled' === $status( $old ), $st . ' ' . $status( $old ) );
+		list( $st ) = $move( $temp, 'processing' );
+		$check( '10-2 a temporary booking is refused the same way', 409 === $st && 'created' === $status( $temp ), $st . ' ' . $status( $temp ) );
+		list( $st ) = $move( $next, 'pending' );
+		$check( '10-2 control: one checking in on the day the other checks out goes back (200)', 200 === $st && 'pending' === $status( $next ), $st . ' ' . $status( $next ) );
+		list( $st ) = $move( $held, 'processing' );
+		$check( '10-2 control: a move between statuses that both hold the nights is not checked (200)', 200 === $st && 'processing' === $status( $held ), $st . ' ' . $status( $held ) );
+		list( $st ) = $move( $held, 'cancelled' );
+		$check( '10-2 control: cancelling is never refused (200)', 200 === $st && 'cancelled' === $status( $held ), $st . ' ' . $status( $held ) );
+		list( $st ) = $move( $old, 'pending' );
+		$check( '10-2 control: once the nights are free the cancelled booking goes back (200)', 200 === $st && 'pending' === $status( $old ), $st . ' ' . $status( $old ) );
+	} catch ( \Throwable $e ) {
+		$check( 'section ran to the end', false, get_class( $e ) . ': ' . $e->getMessage() );
+	} finally {
+		$clean();
+	}
+} )();
+
 $drop_users();
 wp_set_current_user( $admin );
 remove_filter( 'pre_wp_mail', $mail_trap, 1 );

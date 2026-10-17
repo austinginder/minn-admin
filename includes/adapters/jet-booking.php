@@ -118,6 +118,55 @@ function minn_admin_jet_booking_status_set( $which ) {
 }
 
 /**
+ * Whether a booking in this status holds its unit and dates: their
+ * availability counts every booking but the invalid and the temporary ones
+ * (get_booked_items()). Without the statuses, every status holds.
+ */
+function minn_admin_jet_booking_holds_dates( $status ) {
+	$skip = minn_admin_jet_booking_status_set( 'invalid' );
+	try {
+		$skip[] = (string) jet_abaf()->statuses->temporary_status();
+	} catch ( \Throwable $e ) {
+		return true;
+	}
+	return ! in_array( (string) $status, $skip, true );
+}
+
+/**
+ * Whether a stored booking's unit and dates are still free of every other
+ * booking: their update endpoint's three checks, made on the stored row
+ * with its own id left out (rest-api/endpoints/update-booking.php),
+ * a unit that no longer exists standing in for the one they would pick,
+ * and their settings read for the booking's item as they set it.
+ *
+ * @param array $booking The stored row.
+ * @return bool
+ */
+function minn_admin_jet_booking_dates_free( array $booking ) {
+	$db   = jet_abaf()->db;
+	$id   = (int) $booking['booking_id'];
+	$item = $booking;
+	if ( $db->get_apartment_units( $item['apartment_id'] ) && ! $db->get_apartment_unit( $item['apartment_id'], $item['apartment_unit'] ?? 0 ) ) {
+		$item['apartment_unit'] = $db->get_available_unit( $item );
+	}
+	$key  = jet_abaf()->settings::CONTEXT_KEY;
+	$held = wp_cache_get( $key, 'jet-booking' );
+	wp_cache_set( $key, $item['apartment_id'], 'jet-booking', 60 );
+	try {
+		$available = $db->booking_availability( $item, $id );
+		$dates     = $db->is_booking_dates_available( $item, $id );
+		$days      = jet_abaf()->tools->is_booking_period_available( $item );
+	} finally {
+		if ( false === $held ) {
+			wp_cache_delete( $key, 'jet-booking' );
+		} else {
+			wp_cache_set( $key, $held, 'jet-booking', 60 );
+		}
+	}
+	return ! ( ( ! $available && ! $dates ) || ! $days );
+}
+
+/**
  * A stored day epoch floored to its midnight. insert_booking() adds one
  * second to every check-in so it never collides with the previous
  * check-out at the same midnight; that second is bookkeeping, not time.
@@ -372,6 +421,14 @@ minn_admin_resource( 'jet-booking/bookings', function () use ( $minn_jet_booking
 				'labels' => 'minn_admin_jet_booking_statuses',
 				'write'  => function ( $id, $status ) {
 					try {
+						// A cancelled or refunded booking has given its unit and
+						// dates back, and another guest may hold them now: moving
+						// it back to a status that holds them asks what their
+						// own update asks first.
+						$stored = jet_abaf()->db->get_booking_by( 'booking_id', (int) $id );
+						if ( is_array( $stored ) && ! minn_admin_jet_booking_holds_dates( $stored['status'] ?? '' ) && minn_admin_jet_booking_holds_dates( $status ) && ! minn_admin_jet_booking_dates_free( $stored ) ) {
+							return new WP_Error( 'minn_jet_booking_taken', __( 'Those dates are no longer available: another booking holds them.', 'minn-admin' ), array( 'status' => 409 ) );
+						}
 						jet_abaf()->db->update_booking( $id, array( 'status' => $status ) );
 					} catch ( \Throwable $e ) {
 						return new WP_Error( 'update_failed', __( 'JetBooking could not update that booking.', 'minn-admin' ), array( 'status' => 500 ) );
