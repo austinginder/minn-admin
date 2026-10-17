@@ -678,6 +678,82 @@ add_filter( 'pre_http_request', $no_http, 1 );
 	}
 } )();
 
+/*
+ * 13-2 · Safe Redirect Manager. The edit turned a status left out (or
+ * empty) into 301, refused a body without the source or target, and ran an
+ * untouched target through SRM's sanitizer (a 410 rule's empty target
+ * became "/").
+ */
+( function () use ( $check, $skip, $call, $once, $admin, $tag ) {
+	if ( ! function_exists( 'minn_admin_srm_active' ) || ! minn_admin_srm_active() ) {
+		$skip( '13-2 Safe Redirect Manager: inactive (load it with MINN_SWAP_ADD, see the header)' );
+		return;
+	}
+	wp_set_current_user( $admin );
+	if ( ! minn_admin_srm_can() ) {
+		$skip( '13-2 Safe Redirect Manager: this administrator lacks its capability' );
+		return;
+	}
+	$ids   = array();
+	$clean = $once( function () use ( &$ids ) {
+		foreach ( $ids as $id ) {
+			if ( is_int( $id ) && $id > 1 && 'redirect_rule' === get_post_type( $id ) ) {
+				wp_delete_post( $id, true );
+			}
+		}
+		if ( function_exists( 'srm_flush_cache' ) ) {
+			srm_flush_cache();
+		}
+	} );
+	try {
+		$one  = srm_create_redirect( '/minn-rc-src-' . $tag, '/minn-rc-dst-' . $tag, 301 );
+		$gone = srm_create_redirect( '/minn-rc-gone-' . $tag, '/minn-rc-x-' . $tag, 410 );
+		foreach ( array( $one, $gone ) as $id ) {
+			if ( is_int( $id ) && $id > 1 ) {
+				$ids[] = $id;
+			}
+		}
+		if ( 2 !== count( $ids ) ) {
+			$check( '13-2 SRM fixtures', false, 'could not create the rules' );
+			return;
+		}
+		// SRM ignores a 410's target; a rule stored that way keeps none.
+		update_post_meta( $gone, '_redirect_rule_to', '' );
+		$rule = function ( $id ) {
+			wp_cache_delete( $id, 'post_meta' );
+			return minn_admin_srm_rule( $id );
+		};
+		$put = function ( $id, $body ) use ( $call ) {
+			return $call( 'PUT', "/minn-admin/v1/srm/redirects/{$id}", $body );
+		};
+		$src = '/minn-rc-src-' . $tag;
+		$dst = '/minn-rc-dst-' . $tag;
+
+		list( $st ) = $put( $one, array( 'status_code' => 302 ) );
+		$r = $rule( $one );
+		$check( '13-2 a body with only the status writes it and keeps the source and target', 200 === $st && 302 === $r['status_code'] && $src === $r['from'] && $dst === $r['to'], $st . ' ' . wp_json_encode( $r ) );
+		list( $st ) = $put( $one, array( 'from' => $src, 'to' => $dst ) );
+		$check( '13-2 a body without the status keeps it (never 301)', 200 === $st && 302 === $rule( $one )['status_code'], $st . ' ' . $rule( $one )['status_code'] );
+		list( $st ) = $put( $one, array( 'from' => $src, 'to' => $dst, 'status_code' => '' ) );
+		$check( '13-2 an empty status is refused, not turned into 301', 400 === $st && 302 === $rule( $one )['status_code'], $st . ' ' . $rule( $one )['status_code'] );
+		list( $st ) = $put( $one, array( 'status_code' => 999 ) );
+		$check( '13-2 a status SRM does not know is refused', 400 === $st && 302 === $rule( $one )['status_code'], (string) $st );
+		list( $st ) = $put( $one, array( 'from' => array( 'x' ) ) );
+		$check( '13-2 a source that is not text is refused and nothing changes', 400 === $st && $src === $rule( $one )['from'], $st . ' ' . $rule( $one )['from'] );
+		list( $st ) = $put( $gone, array( 'from' => '/minn-rc-gone-' . $tag, 'to' => '', 'status_code' => 410 ) );
+		$check( '13-2 a 410 rule saved untouched keeps its empty target (not "/")', 200 === $st && '' === $rule( $gone )['to'], $st . ' ' . wp_json_encode( $rule( $gone )['to'] ) );
+
+		list( $st ) = $put( $one, array( 'from' => 'minn-rc-renamed-' . $tag, 'to' => $dst, 'status_code' => 302 ) );
+		$check( '13-2 control: a changed source is cleaned as SRM cleans it and written', 200 === $st && '/minn-rc-renamed-' . $tag === $rule( $one )['from'], $st . ' ' . $rule( $one )['from'] );
+		list( $st ) = $put( $one, array( 'to' => 'www.example.com/minn-rc' ) );
+		$check( '13-2 control: a changed target is cleaned as SRM cleans it and written', 200 === $st && 'http://www.example.com/minn-rc' === $rule( $one )['to'], $st . ' ' . $rule( $one )['to'] );
+	} catch ( \Throwable $e ) {
+		$check( 'section ran to the end', false, get_class( $e ) . ': ' . $e->getMessage() );
+	} finally {
+		$clean();
+	}
+} )();
+
 $drop_users();
 wp_set_current_user( $admin );
 remove_filter( 'pre_wp_mail', $mail_trap, 1 );

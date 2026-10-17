@@ -42,44 +42,67 @@ function minn_admin_srm_cap() {
  *
  * srm_create_redirect upserts by source path, which would fork a new post if
  * the user renames the source — so edit-by-id writes meta directly, same as
- * SRM's own save_post handler.
+ * SRM's own save_post handler. The dialog sends every field, an untouched
+ * one as the list serves it: that one, or one the request leaves out
+ * (null), keeps its stored bytes and is not written. Only a changed field
+ * goes through SRM's own sanitizer, and a changed status SRM does not know
+ * is refused, never turned into 301.
  *
- * @param int    $id          redirect_rule post ID.
- * @param string $from        Source path.
- * @param string $to          Target path/URL.
- * @param int    $status_code HTTP status.
- * @return array|WP_Error The values as sanitized and stored: id, from, to, status_code.
+ * @param int             $id          redirect_rule post ID.
+ * @param string|null     $from        Source path, or null to keep it.
+ * @param string|null     $to          Target path/URL, or null to keep it.
+ * @param int|string|null $status_code HTTP status, or null to keep it.
+ * @return array|WP_Error The values as stored: id, from, to, status_code.
  */
-function minn_admin_srm_update_redirect( $id, $from, $to, $status_code = 301 ) {
-	$post = get_post( (int) $id );
-	if ( ! $post || 'redirect_rule' !== $post->post_type ) {
+function minn_admin_srm_update_redirect( $id, $from, $to, $status_code = null ) {
+	$stored = minn_admin_srm_rule( (int) $id );
+	if ( ! $stored ) {
 		return new WP_Error( 'not_found', __( 'Redirect not found.', 'minn-admin' ), array( 'status' => 404 ) );
 	}
-
-	$allow_regex = (bool) get_post_meta( $post->ID, '_redirect_rule_from_regex', true );
-	$from        = function_exists( 'srm_sanitize_redirect_from' )
-		? srm_sanitize_redirect_from( $from, $allow_regex )
-		: sanitize_text_field( $from );
-	$to          = function_exists( 'srm_sanitize_redirect_to' )
-		? srm_sanitize_redirect_to( $to )
-		: esc_url_raw( $to );
-	$code        = absint( $status_code );
-
-	if ( '' === $from || '' === $to ) {
-		return new WP_Error( 'invalid', __( 'Source and target are both required.', 'minn-admin' ), array( 'status' => 400 ) );
+	$changed = function ( $sent, $key ) use ( $stored ) {
+		return null !== $sent && (string) $sent !== (string) $stored[ $key ];
+	};
+	$write = array();
+	if ( $changed( $from, 'from' ) ) {
+		$allow_regex = (bool) get_post_meta( $stored['id'], '_redirect_rule_from_regex', true );
+		$from        = function_exists( 'srm_sanitize_redirect_from' )
+			? srm_sanitize_redirect_from( (string) $from, $allow_regex )
+			: sanitize_text_field( (string) $from );
+		if ( '' === $from ) {
+			return new WP_Error( 'invalid', __( 'Source and target are both required.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		$write['_redirect_rule_from'] = wp_slash( $from );
+	} else {
+		$from = $stored['from'];
 	}
-	if ( function_exists( 'srm_get_valid_status_codes' )
-		&& ! in_array( $code, srm_get_valid_status_codes(), true ) ) {
-		return new WP_Error( 'invalid', __( 'Invalid status code.', 'minn-admin' ), array( 'status' => 400 ) );
+	if ( $changed( $to, 'to' ) ) {
+		$to = function_exists( 'srm_sanitize_redirect_to' )
+			? srm_sanitize_redirect_to( (string) $to )
+			: esc_url_raw( (string) $to );
+		if ( '' === $to ) {
+			return new WP_Error( 'invalid', __( 'Source and target are both required.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		$write['_redirect_rule_to'] = $to;
+	} else {
+		$to = $stored['to'];
+	}
+	if ( $changed( $status_code, 'status_code' ) ) {
+		$code = absint( $status_code );
+		if ( ! $code || ( function_exists( 'srm_get_valid_status_codes' ) && ! in_array( $code, srm_get_valid_status_codes(), true ) ) ) {
+			return new WP_Error( 'invalid', __( 'Invalid status code.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		$write['_redirect_rule_status_code'] = $code;
+	} else {
+		$code = $stored['status_code'];
 	}
 
-	update_post_meta( $post->ID, '_redirect_rule_from', wp_slash( $from ) );
-	update_post_meta( $post->ID, '_redirect_rule_to', $to );
-	update_post_meta( $post->ID, '_redirect_rule_status_code', $code );
-	if ( function_exists( 'srm_flush_cache' ) ) {
+	foreach ( $write as $key => $value ) {
+		update_post_meta( $stored['id'], $key, $value );
+	}
+	if ( $write && function_exists( 'srm_flush_cache' ) ) {
 		srm_flush_cache();
 	}
-	return array( 'id' => (int) $post->ID, 'from' => $from, 'to' => $to, 'status_code' => $code );
+	return array( 'id' => $stored['id'], 'from' => $from, 'to' => $to, 'status_code' => (int) $code );
 }
 
 function minn_admin_srm_can() {
@@ -213,7 +236,13 @@ minn_admin_resource( 'srm/redirects', function () {
 				'method' => 'PUT',
 				'gate'   => 'view',
 				'run'    => function ( $id, array $row, WP_REST_Request $request ) {
-					return minn_admin_srm_update_redirect( $id, (string) $request['from'], (string) $request['to'], (int) ( $request['status_code'] ?: 301 ) );
+					// A value that is not text is no value of theirs: it is
+					// refused as an empty one would be, never cast.
+					$sent = function ( $key ) use ( $request ) {
+						$v = $request[ $key ];
+						return null === $v || is_scalar( $v ) ? $v : '';
+					};
+					return minn_admin_srm_update_redirect( $id, $sent( 'from' ), $sent( 'to' ), $sent( 'status_code' ) );
 				},
 				'expect' => function ( $id, $fresh, $saved ) {
 					return is_array( $fresh ) && is_array( $saved ) && $fresh['from'] === $saved['from'] && $fresh['to'] === $saved['to'] && $fresh['status_code'] === $saved['status_code'];
