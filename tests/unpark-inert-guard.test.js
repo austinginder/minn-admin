@@ -32,6 +32,9 @@ lines.forEach( ( line, i ) => {
 	if ( 'el.content' === arg ) return;
 	calls++;
 	if ( /^rtInertCopy\(/.test( arg ) ) return;
+	// A tree parsed straight into the inert document (inertParse) is already
+	// a copy there (the Details block's untouched-rebuild path).
+	if ( /^(rtNeutralize\(\s*)?inertParse\(/.test( arg ) ) return;
 	const name = ( arg.match( /^([A-Za-z_$][\w$]*)$/ ) || [] )[ 1 ];
 	const before = lines.slice( Math.max( 0, i - 40 ), i ).join( '\n' );
 	if ( name && new RegExp( `const ${ name } = rtInertCopy\\(` ).test( before ) ) return;
