@@ -4,7 +4,7 @@
 checking on things, keeping plugins current. No code in here. If you build
 plugins, you want [for-plugin-authors.md](for-plugin-authors.md) instead.*
 
-*Current as of v0.45.0. This file ships inside the plugin, so the copy you
+*Current as of v0.46.0. This file ships inside the plugin, so the copy you
 are reading always matches the version you have installed.*
 
 ## What Minn is (and is not)
@@ -63,7 +63,8 @@ card to open that view. Right-click it and choose Customize to pick a
 different number: drafts, pending comments, users, and on a store the
 month's sales, orders, items sold and average order, plus the usual
 catalog and queue counts. Picking a number that is already on the
-dashboard swaps the two cards. Save keeps the layout for you; it
+dashboard swaps the two cards, and a card hidden for the moment (a
+store card while WooCommerce is off) keeps its slot. Save keeps the layout for you; it
 follows you on any browser you sign in with. Reset to defaults puts
 the starting cards back. Only administrators see Save as defaults,
 which sets those starting cards for anyone who has not picked their
@@ -130,7 +131,12 @@ an address, a title and the email of someone who already has an account.
 Network users lists every account on the network, shows how many sites each
 belongs to, and lets you promote someone to network administrator or take
 that away. Network settings covers registration, uploads, what site
-administrators may do, and where network mail goes. If WP Multi Network is
+administrators may do, and where network mail goes. Deleting a site and
+changing network administrators need a network administrator's own
+account: a role that merely carries those capabilities is not offered
+them, and an account with network settings rights that is not a network
+administrator sees only the settings it may change, so a save never half
+lands. If WP Multi Network is
 active, Networks lists every network with its address, site count and
 administrator count. You can create a network and its root site there, move
 an ordinary site to another network from its right-click menu or detail card, and delete a
@@ -163,7 +169,8 @@ tenant you are working in.
 
 Network-wide plugin and theme controls stay in Extensions. A network
 administrator can activate or deactivate a plugin for the whole network and
-enable or disable a theme for every site. Per-site activation stays separate,
+enable or disable a theme for every site. Per-site activation stays separate
+(a site's own plugin switch never reaches network-wide for anyone else),
 and Minn will not offer to deactivate itself network-wide from inside Minn.
 
 **The topbar** carries the page title, a button that shows or hides the
@@ -237,7 +244,8 @@ away:
   click on "Block editor ↗" opens the same post in Gutenberg whenever you
   want the full toolkit. Posts built with page builders (Elementor,
   Breakdance, Bricks, Divi and friends) open read-only with an "Edit in your builder"
-  button, because the builder owns that content. Elementor's Exit to WordPress
+  button, because the builder owns that content; the page's row menu in
+  Content offers the same link. Elementor's Exit to WordPress
   and Brizy's Go to Dashboard open Minn instead when Minn is the default admin.
   Headers, footers, popups, floating buttons and other site parts live under
   Templates in Tools (Elementor, and Bricks while it is the active theme):
@@ -309,6 +317,11 @@ counted as locked, with a link to edit them in wp-admin):
   post. A save sends only the fields you changed, so one someone else
   changed meanwhile keeps their value. Fields show and hide the way their rules intend as you flip the
   switches that control them, and a hidden field always keeps its value.
+  When ACPT or Pods refuses a value (a choice the field does not offer,
+  a malformed email), the post still saves once, the rest of the fields
+  with it, and the editor names the field that was not saved and keeps
+  it unsaved. An ACPT box its plugin shows only to certain accounts or
+  on posts in a certain state stays out of Minn the same way.
 - **The everyday types edit in place**: text, choices, switches,
   checkboxes, colors with a real picker, dates and times on the same
   calendar the editor's scheduling uses, files and images from the media
@@ -453,6 +466,8 @@ form plugin's permission to email entry notes, or administrator access.
 **Edit answers** (Gravity Forms, WPForms Pro, Ninja Forms and Elementor
 Pro) turns the answers into a form, so a mistyped email can be fixed
 before you reply, and saves each answer through the plugin's own edit.
+A checkbox pick the form no longer offers shows ticked and marked "no
+longer on the form", and stays unless you untick it.
 Files and payments stay in the form plugin, and if someone else changed
 an answer while you were editing, Minn asks you to reload instead of
 overwriting it. A form's own page holds what it sends and shows:
@@ -461,10 +476,14 @@ and Send test) and confirmations (a message, a page or a redirect, with
 conditions), the emails and confirmations of WPForms and Fluent Forms,
 and Contact Form 7's mail, second mail and messages. Previews fill in
 the form's latest entry for people allowed to read its entries; anyone
-else sees the tags as typed. Tags that reach past the entry (the
-submitter's account settings, the page the form was sent from, a
-password-reset or activation link) stay placeholders in every preview and
-test email; real emails fill them in as usual. Gravity Forms forms also open in a
+else sees the tags as typed. A preview or test email fills in only what
+the entry holds: its answers, the form, the site, and the submitter's
+name and email as the entry screen shows them (to a role that may not
+list users, Gravity Forms shows only the username and WPForms leaves
+those tags as placeholders). Tags that read more of the submitter's
+account, the page the form was sent from, or anything another plugin
+adds stay placeholders, a Gravity Forms test runs no shortcodes and adds
+no note to the entry, and real emails fill everything in as usual. Gravity Forms forms also open in a
 builder: add fields from the list or drag them in, reorder, duplicate
 and remove them, edit their settings, and save through Gravity Forms'
 own save. Removing a field deletes its answers in past entries, as it
@@ -597,7 +616,12 @@ chosen on their profile cannot be removed, and the row says which is
 holding it. On a network every site shares the same language files, so a
 language another site runs in (its own or the network's default) is kept
 too, and its row says how many sites use it; on a very large network
-nothing is offered for removal. Removing is not permanent: WordPress
+nothing is offered for removal. A language a multilingual plugin (WPML,
+Polylang, TranslatePress and others) serves to visitors, here or on
+another site of the network, is kept and its row names the plugin; when
+Minn cannot read that plugin's list, every language is kept. Other code
+that switches the site's language is named when you confirm, so you can
+check it does not use the one you are removing. Removing is not permanent: WordPress
 reinstalls a language the moment it is selected again.
 
 ## Your store
@@ -618,12 +642,23 @@ group.
   button to the customer's own page. You can take a payment by hand,
   refund whole lines or an arbitrary amount, apply or remove a coupon,
   resend an email and read the order's notes without leaving Minn, and
-  the Back button returns you to wherever the visit started. When the
+  the Back button returns you to wherever the visit started. A resent
+  email says it was sent, and is noted on the order, only once
+  WooCommerce really sent it; Customer note resends the order's latest
+  note. When the
   payment gateway links its transactions (Stripe's dashboard, for one),
   the transaction ID carries a "View in" link to that payment. Refund
-  stays in the header; sending an email, copying the payment URL, the PDF
-  documents, the WooCommerce link and Move to Trash live behind a More
-  menu.
+  stays in the header; sending an email, copying the payment URL, the
+  WooCommerce link and Move to Trash live behind a More menu.
+- **Invoices and packing slips.** With PDF Invoices & Packing Slips
+  active, the order page and quick view carry a Documents card with a
+  PDF button for every document, plus the invoice's number, date and
+  notes; its ⋯ menu creates, edits, regenerates or deletes it through the
+  plugin. Changing a number or a date follows the plugin's own rule:
+  someone who manages the plugin, once document data editing is on in its
+  Advanced settings. The orders list gains an Invoice column linking each
+  number to its PDF, and right-clicking an order opens any of its
+  documents.
 - **New order** opens a page in the same layout: several products (a
   variable product asks which variation), coupons, a shipping charge,
   the payment method and transaction ID, a customer from your store
@@ -838,7 +873,8 @@ group.
   site in a candidate theme before switching. The Licenses tab
   gathers every external service relationship in one place: paid plugins'
   license keys (activate, verify or deactivate without hunting through
-  each plugin's settings screen), service keys like Akismet's, account
+  each plugin's settings screen; a licence whose plugin keeps you off its
+own licence screen shows without those buttons), service keys like Akismet's, account
   connections like Envato Market and WPMU DEV, and the AI connector keys
   WordPress itself manages, which link out to Settings → Connectors for
   editing. Small chips mark which rows are service keys or connections
@@ -876,14 +912,18 @@ group.
   setting of its own follows it, including roles a plugin adds later.
   Enforcement is an overlay, never a write: changing a policy
   does not erase anyone's saved preference, and a role returned to Person
-  chooses hands each person their previous choice back.
+  chooses hands each person their previous choice back. If another
+  administrator saved role defaults after you opened them, Minn asks you
+  to reload.
 - **Settings** — the settings people actually change: identity and logo,
   reading and discussion, permalinks, visibility (search engines,
   maintenance mode, and a switch that turns a detected coming-soon or
   maintenance plugin's mode off in place, with Undo), site language, spam
   protection (with Akismet or CleanTalk, paste or change your key right
   on its card), Connectors (AI providers plus spam services like Akismet
-  and CleanTalk: activate the plugin, then paste the key), custom CSS,
+  and CleanTalk: activate the plugin, then paste the key), custom CSS
+  (shown as it is saved, and if someone else saved it after you opened
+  it, Minn asks you to reload rather than overwrite theirs),
   and **Appearance**: the palette everyone sees in Minn until they pick
   their own, and the light or dark mode a device starts in. A save the
   site refuses leaves the form as you typed it, to correct and try
@@ -892,7 +932,10 @@ group.
   reason, not a bug.
 - **System** — a health check (PHP, HTTPS, caching, backups, loopback),
   an activity view of what is installed, and debug tools when someone
-  technical asks you to turn on logging. It also says plainly when a
+  technical asks you to turn on logging. A debug switch that wp-config.php
+  sets in a way a switch could not safely rewrite (more than once, inside
+  a condition, after the line that loads WordPress, or in another file it
+  loads) shows locked with the reason. It also says plainly when a
   custom post type is hidden from Minn by its own REST setting, naming
   the post types affected and where the fix lives.
 - **Design** (block themes) — three tabs: Templates, Navigation and
@@ -902,7 +945,9 @@ group.
   first and the active one marked. Applying one asks first, because it
   changes the site for every visitor immediately, then offers Undo,
   which restores the exact look you had, including any customizations
-  made in the Site Editor. Some sites cannot store a variation's colors
+  made in the Site Editor. Every Undo on this tab refuses, changing
+  nothing, if the look changed again since (in another tab or the Site
+  Editor), so it never removes someone else's change. Some sites cannot store a variation's colors
   and fonts at all: a site on a network, or one whose owner has turned
   off unfiltered HTML, keeps the layout and drops the palette it refers
   to. On those the tab says so and does not apply the style, rather than
@@ -940,7 +985,9 @@ group.
   side by side against what is on screen, and one click to put it back.
   A template still coming straight from the theme has no history to show
   and says nothing. The Site Editor stays one click away for layout
-  work, and a plugin's templates still open there.
+  work, and a plugin's templates still open there: while you edit a
+  template or part, the editor's Block editor button (and ⌘K) opens it
+  in the Site Editor, saving what you typed first.
   **Navigation** is your site's menus, with the question the
   Site Editor never answers: where each one actually renders. A menu used
   in your header says so, and a menu left behind by a previous theme reads
@@ -972,7 +1019,12 @@ group.
   to that type's content, start a new item, manage a taxonomy's terms, or
   remove an editable definition. Entries only appear where they can
   actually work. Removing a definition asks first, and spells out that
-  existing content and terms stay in the database. A new type or taxonomy
+  existing content and terms stay in the database. Editing a definition
+  saves only what you changed, and if someone changed it after you opened
+  it, Minn asks you to reopen it. Unticking a taxonomy or feature that
+  another definition, the theme or a plugin adds changes the definition
+  that holds it when you may edit that, and otherwise says where it comes
+  from instead of reporting a change. A new type or taxonomy
   cannot take a name WordPress already uses for itself (order, author,
   type and the other query words), because a definition under one of those
   breaks the site's own queries the moment it exists.
@@ -982,12 +1034,19 @@ group.
   or the /minn-admin/database address. It has three parts. **Tables** lists
   every table with its size and rough row count, and opening one shows its
   rows, with sorting, a per-column filter and a detail view for any single
-  row. **Structure** (a tab on any open table) shows that table's columns
+  row. A table follows its plugin's own rule for who may read it: one
+  whose plugin keeps you off its screen (an activity log kept to
+  administrators, form entries or visitor logs you may not read, a
+  booking list held to your own rows) is left out for you, along with
+  the plugin's other tables holding the same data and any copies of
+  them, and a log whose plugin is inactive is left out too.
+  **Structure** (a tab on any open table) shows that table's columns
   and indexes, which is what someone technical will ask for when a page is
   slow. **Health** runs a set of storage checks: leftover rows pointing at
   posts or users that no longer exist, missing indexes, tables using an
   old storage engine, space that could be reclaimed, and backlogs like
-  expired shop sessions.
+  expired shop sessions. Its checks never name or open a table you cannot
+  browse.
 
   Two things are true of all of it. It is **read-only**: Minn will never
   change or delete anything in the database, because doing so behind a
@@ -1048,6 +1107,28 @@ Pages that keep your edits until you press Save (the builders, a notification or
 
 On Windows and Linux, use Ctrl wherever ⌘ appears.
 
+## Moving a site to Minn
+
+Minn Admin also runs on Minn, the engine that stands in for WordPress
+under the same database and wp-content. With Minn Admin active, whoever
+looks after the site on the command line has three WP-CLI commands:
+`wp minn preflight` reports what the site will and will not get on Minn
+and changes nothing; `wp minn install` downloads Minn from the Minn
+update service, checks its checksum and release signature, shows that
+report and, once you confirm, runs the site on Minn, moving WordPress's
+own files to a folder beside the site while wp-config.php, wp-content
+and the database stay as they are; and once Minn runs the site,
+`wp minn eject` brings WordPress back.
+
+On Minn, Add plugin searches WordPress.org and the plugin catalog as it
+does on WordPress. Page builders whose editors need WordPress's own
+scripts (Elementor, Brizy, Beaver Builder, Bricks) keep their "Edit in"
+links; following one before the Minn Legacy Pack is on offers to install
+it, then opens the editor, and the Plugins tab offers it too. When a
+plugin's scripts on your public pages need the pack (WooCommerce's
+product options and block cart do), the Overview names the plugin and a
+page where visitors hit it, with the same offer.
+
 ## Safety, honestly stated
 
 - **Is my content locked in?** No. Minn writes standard WordPress data
@@ -1065,7 +1146,18 @@ On Windows and Linux, use Ctrl wherever ⌘ appears.
 - **Can a post's own markup reach Minn?** No. Scripts, event handlers and
   stylesheets inside content stay switched off while you edit, block
   styles apply only inside the editor, and the post is saved exactly as
-  it was written.
+  it was written. When a Contributor or Author previews a block, every
+  plugin's dynamic block code and every shortcode is switched off for
+  that preview, so it cannot show them what they could not read.
+- **Will Minn show my keys?** No. A licence key, API token or other
+  credential the database browser hides is hidden on every Minn screen,
+  shown as [redacted:…], even inside a log or a link. Screens that hand
+  you a key on purpose (WP Migrate's connection info, the Disembark
+  command, one-time login links) still show it. Saving a screen that
+  showed a hidden key keeps the real one; a change that would store the
+  placeholder instead (moved to another field, or edited around) is
+  refused with a message asking for the real value, and an export that
+  would carry a hidden key is refused rather than handed over broken.
 - **Who can open `/minn-admin/`?** Only logged-in users your site already
   trusts to edit content, and each person sees only what their role
   allows. Everything is re-checked on the server on every action.

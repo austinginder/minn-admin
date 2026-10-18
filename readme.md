@@ -124,7 +124,9 @@ Expand only the part of Minn you want to explore.
   owes, enable/disable, change the balance, resend, and Add gift card.
   Orders, products and customers carry **right-click menus** for
   the common moves (status changes, stock and publish toggles, email, jump to a customer's orders).
-  Invoice / packing-slip downloads when PDF Invoices & Packing Slips is active. Product, coupon and
+  With PDF Invoices & Packing Slips active: an Invoice column on the orders list, every document
+  on an order's right-click menu, and a **Documents** card on the order with each PDF and the
+  invoice's number, date and notes (create, edit, regenerate, delete). Product, coupon and
   subscription CPTs are fenced out of Content. **Store settings**: every settings page WooCommerce
   registers (General, Products, Tax, Shipping, Accounts & Privacy, Emails, Page setup, Features,
   and any extension's page) read from WooCommerce's own settings registry and saved through its own
