@@ -1013,6 +1013,11 @@
             "kind": "create",
             "why": "Makes a new item: there is no stored value it could rewrite."
         },
+        "POST /minn-admin/v1/wcm/members/(?P<id>\\d+)": {
+            "kind": "edit",
+            "why": "Membership page Save: the pages pass covers it when the page loads within the capture's wait (a slow load in a full run left it unreached).",
+            "pass": "pages (membership)"
+        },
         "POST /minn-admin/v1/wcm/members/(?P<id>\\d+)/cancel": {
             "kind": "action",
             "why": "A one-shot action: it carries no loaded values back."
