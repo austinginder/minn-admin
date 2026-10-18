@@ -344,7 +344,15 @@ if ( ! defined( 'SIMPLE_HISTORY_VERSION' ) || ! class_exists( 'Simple_History\\S
 					$status = array_search( 'draft → future', $fields, true );
 					$title  = array_search( $marker . ' old → ' . $marker . ' post', $fields, true );
 					$check( 'D-35 a post\'s changes are separate entries, each old → new', false !== $status && false !== $title && $status !== $title, wp_json_encode( $fields ) );
-					$check( 'D-35 control: their own response, asked without Minn\'s marker, is as they ship it', ! isset( $them['run']['who'] ) && false === strpos( wp_json_encode( $them['post']['details_data'] ?? array() ), '"prev_value"' ), wp_json_encode( $them['post']['details_data'] ?? null ) );
+					// Simple History 5.36 ships prev_value itself, beside its own
+					// slug_prev; an item with prev_value and no slug_prev is Minn's.
+					$minn_shaped = false;
+					foreach ( (array) ( $them['post']['details_data'] ?? array() ) as $group ) {
+						foreach ( (array) ( $group['items'] ?? array() ) as $item ) {
+							$minn_shaped = $minn_shaped || ( is_array( $item ) && array_key_exists( 'prev_value', $item ) && ! array_key_exists( 'slug_prev', $item ) );
+						}
+					}
+					$check( 'D-35 control: their own response, asked without Minn\'s marker, is as they ship it', ! isset( $them['run']['who'] ) && ! $minn_shaped, wp_json_encode( $them['post']['details_data'] ?? null ) );
 				}
 			}
 		}
