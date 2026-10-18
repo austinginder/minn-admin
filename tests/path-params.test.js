@@ -392,7 +392,9 @@ for ( const f of files ) {
 	}
 }
 
-check( `found routes with path parameters (${ routes })`, routes > 100 );
+// The floor only proves the scan found routes: adapters on the resource kernel
+// declare theirs to the kernel, which reads ids through path_param() itself.
+check( `found routes with path parameters (${ routes })`, routes > 40 );
 check( `followed hand-offs from route callbacks (${ followed })`, followed > 50 );
 console.log( `\npath-params: ${ pass }/${ pass + fail } passed` );
 process.exit( fail ? 1 : 0 );
