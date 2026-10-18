@@ -592,19 +592,22 @@ async function gotoRoute( page, site, route ) {
 					headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin',
 				} ) ).json() ).values.registration;
 				const saved = await post( 'user' );
-				// An unknown key must be ignored rather than written anywhere.
+				// An unknown choice refuses the whole save (400, nothing written),
+				// and an unknown key is never written anywhere.
 				const r2 = await fetch( window.MINN.restUrl + 'minn-admin/v1/network/settings/registration', {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
 					credentials: 'same-origin',
 					body: JSON.stringify( { values: { registration: 'not-a-real-value', siteurl: 'http://evil.test' } } ),
 				} );
-				const after = ( await r2.json() ).values.registration;
+				const after = ( await ( await fetch( window.MINN.restUrl + 'minn-admin/v1/network/settings/registration', {
+					headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin',
+				} ) ).json() ).values.registration;
 				await post( before );
-				return { saved: saved.registration, afterBogus: after, restored: before };
+				return { saved: saved.registration, bogusStatus: r2.status, afterBogus: after, restored: before };
 			} );
 			check( 'a network setting saves', trip.saved === 'user', JSON.stringify( trip ) );
-			check( 'an out-of-vocabulary value is refused', trip.afterBogus === 'user', JSON.stringify( trip ) );
+			check( 'an out-of-vocabulary value is refused', 400 === trip.bogusStatus && trip.afterBogus === 'user', JSON.stringify( trip ) );
 			allErrors.push( ...errors );
 			await ctx.close();
 		}
