@@ -5518,7 +5518,7 @@ html[dir="rtl"] .minn-notif-panel { animation-name: minnSlideInRtl; }
   .minn-order-cols > :nth-child(3), .minn-order-cols > :nth-child(4),
   .minn-order-cols > :nth-child(5), .minn-order-cols > :nth-child(7) { display: none; }
   /* The Invoice column shifts Total to the 7th cell and the row end to the 8th. */
-  .minn-order-cols.minn-order-cols-docs { grid-template-columns: 86px 1fr 84px; }
+  .minn-order-cols.minn-order-cols-docs { grid-template-columns: 86px minmax(0, 1fr) 84px; }
   .minn-order-cols.minn-order-cols-docs > :nth-child(6), .minn-order-cols.minn-order-cols-docs > :nth-child(8) { display: none; }
   .minn-order-cols.minn-order-cols-docs > :nth-child(7) { display: block; }
   .minn-sub-cols { grid-template-columns: 86px 1fr 84px; }
