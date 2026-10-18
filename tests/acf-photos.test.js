@@ -43,16 +43,20 @@ const ISL = '.minn-block-island[data-block="acf/minn-photo"]';
 		const h = { headers: { 'X-WP-Nonce': window.MINN.nonce } };
 		const bt = await fetch( window.MINN.restUrl + 'wp/v2/block-types/acf/minn-photo', h );
 		if ( ! bt.ok ) return null;
-		// The picker lists newest first: index 0 is the newest image.
-		const r = await fetch( window.MINN.restUrl + 'wp/v2/media?media_type=image&per_page=5&orderby=date&order=desc&_fields=id', h );
-		return ( await r.json() ).map( ( m ) => m.id );
+		// The picker lists newest first: index 0 is the newest image. The three
+		// placed in blocks are hovered near a corner, so they must be big enough
+		// to hover (a 1×1 test upload never is).
+		const r = await fetch( window.MINN.restUrl + 'wp/v2/media?media_type=image&per_page=30&orderby=date&order=desc&_fields=id,media_details', h );
+		const list = await r.json();
+		const big = list.slice( 1 ).filter( ( m ) => ( m.media_details && m.media_details.width || 0 ) >= 150 && ( m.media_details.height || 0 ) >= 150 );
+		return list.length ? [ list[ 0 ].id, ...big.slice( 0, 3 ).map( ( m ) => m.id ) ] : [];
 	} );
 	if ( ! ids ) {
 		console.log( 'SKIP  acf/minn-photo is not registered (ACF Pro inactive?) — suite not run' );
 		await browser.close();
 		process.exit( 0 );
 	}
-	if ( ids.length < 4 ) throw new Error( 'need four image attachments' );
+	if ( ids.length < 4 ) throw new Error( 'need four image attachments, three of them at least 150px' );
 	const [ D, A, B, C ] = ids; // D is what the picker offers first
 	const S = ( n ) => String( n );
 
