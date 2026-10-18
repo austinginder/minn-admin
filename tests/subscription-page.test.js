@@ -412,7 +412,8 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			await page.waitForFunction( () => /\/minn-admin\/orders$/.test( location.pathname ), null, { timeout: 15000 } );
 			const orderRow = await page.waitForSelector( `[data-order="${ orderId }"]`, { timeout: 25000 } ).catch( () => null );
 			if ( orderRow ) {
-				await orderRow.click();
+				// The Order cell: a row's middle can be its Items cell, which opens the items popover.
+				await ( await orderRow.$( ':scope > :first-child' ) ).click();
 				await page.waitForSelector( '#minn-op-back', { timeout: 25000 } );
 				const orderBack = await page.evaluate( () => document.getElementById( 'minn-op-back' ).textContent.trim() );
 				t.check( 'an order reached from the sidebar afterwards goes back to Orders', ! /Paige/.test( orderBack ), orderBack );

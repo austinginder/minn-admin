@@ -68,7 +68,9 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			await page.fill( '#minn-order-search', String( id ) );
 			await page.keyboard.press( 'Enter' );
 			await page.waitForSelector( `.minn-table-row[data-order="${ id }"]`, { timeout: 20000 } );
-			await page.click( `.minn-table-row[data-order="${ id }"]` );
+			// The Order cell: a row's middle now lands on its Items cell (PDF Invoices'
+			// column shifted the grid), which opens the items popover, not the order.
+			await page.click( `.minn-table-row[data-order="${ id }"] > :first-child` );
 			await page.waitForSelector( '.minn-order-payment', { timeout: 20000 } );
 			await page.waitForFunction( () => ! document.querySelector( '.minn-order-payment .minn-loading' ), null, { timeout: 20000 } );
 		};
