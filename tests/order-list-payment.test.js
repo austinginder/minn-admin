@@ -77,18 +77,21 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 				.map( ( el ) => el.textContent.trim() );
 			return { cells, paymentAt: cells.indexOf( 'Payment' ), totalAt: cells.indexOf( 'Total' ) };
 		} );
+		// PDF Invoices & Packing Slips, when active, adds its Invoice column between them.
+		const between = head.cells.slice( head.paymentAt + 1, head.totalAt );
 		t.check( 'list head includes Payment between Items and Total',
-			head.paymentAt === 4 && head.totalAt === 5, JSON.stringify( head ) );
+			head.cells[ 3 ] === 'Items' && head.paymentAt === 4 && head.totalAt > 4
+				&& between.every( ( c ) => c === 'Invoice' ), JSON.stringify( head ) );
 
 		t.check( 'list request asks WooCommerce for payment_method_title',
 			/_fields=[^&]*payment_method_title/.test( listedFields ), listedFields.slice( 0, 220 ) );
 
-		const paidRow = await page.evaluate( ( id ) => {
+		const paidRow = await page.evaluate( ( { id, totalAt } ) => {
 			const row = document.querySelector( `.minn-table-row[data-order="${ id }"]` );
 			if ( ! row ) return { found: false };
 			const cells = [ ...row.children ].map( ( el ) => el.textContent.trim() );
-			return { found: true, payment: cells[ 4 ] || '', total: cells[ 5 ] || '' };
-		}, paidId );
+			return { found: true, payment: cells[ 4 ] || '', total: cells[ totalAt ] || '' };
+		}, { id: paidId, totalAt: head.totalAt } );
 		t.check( 'paid row shows the method title in the Payment cell',
 			paidRow.found && paidRow.payment === title, JSON.stringify( paidRow ) );
 
@@ -103,7 +106,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 
 		await page.setViewportSize( { width: 390, height: 800 } );
 		await page.waitForTimeout( 250 );
-		const phone = await page.evaluate( ( id ) => {
+		const phone = await page.evaluate( ( { id, totalAt } ) => {
 			const row = document.querySelector( `.minn-table-row[data-order="${ id }"]` );
 			if ( ! row ) return { found: false };
 			const vis = [ ...row.children ].map( ( el ) => getComputedStyle( el ).display !== 'none' );
@@ -111,10 +114,10 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 				found: true,
 				vis,
 				paymentHidden: vis[ 4 ] === false,
-				totalShown: vis[ 5 ] === true,
+				totalShown: vis[ totalAt ] === true,
 				noHScroll: document.documentElement.scrollWidth <= window.innerWidth + 1,
 			};
-		}, paidId );
+		}, { id: paidId, totalAt: head.totalAt } );
 		t.check( 'phone hides Payment and keeps Total',
 			phone.found && phone.paymentHidden && phone.totalShown && phone.noHScroll, JSON.stringify( phone ) );
 	} finally {
