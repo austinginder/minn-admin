@@ -106,6 +106,10 @@ $hints = array(
 	'minn_ssp:date_recorded'    => array( '2026-10-11', '2026-09-30' ),
 	'minn_ssp:itunes_episode_number' => array( 12, 7 ),
 	'minn_ssp:itunes_season_number'  => array( 3, 2 ),
+	'minn_powerpress:size'          => array( '123456', '7890' ),
+	'minn_powerpress:duration'      => array( '01:02:03', '45:10' ),
+	'minn_powerpress:episode_no'    => array( 12, 7 ),
+	'minn_powerpress:season'        => array( 3, 2 ),
 	'minn_seo:canonical'        => array( 'https://example.com/canon?a=1&b=2', 'https://example.org/other/' ),
 );
 

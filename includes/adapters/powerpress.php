@@ -88,90 +88,77 @@ function minn_admin_powerpress_read_values( $post_id ) {
 	);
 }
 
-/** The panel's field labels, by key (the fields route draws the same). */
-function minn_admin_powerpress_labels() {
+/**
+ * The episode group (fields tier, minn_admin_fields()).
+ *
+ * @return array[]
+ */
+function minn_admin_powerpress_groups() {
 	return array(
-		'url'           => __( 'Media file URL', 'minn-admin' ),
-		'size'          => __( 'File size (bytes)', 'minn-admin' ),
-		'duration'      => __( 'Duration', 'minn-admin' ),
-		'subtitle'      => __( 'Subtitle', 'minn-admin' ),
-		'episode_title' => __( 'Episode title (Apple)', 'minn-admin' ),
-		'episode_no'    => __( 'Episode number', 'minn-admin' ),
-		'season'        => __( 'Season', 'minn-admin' ),
-		'episode_type'  => __( 'Episode type', 'minn-admin' ),
+		array(
+			'group'  => __( 'Episode (default channel)', 'minn-admin' ),
+			'fields' => array(
+				array( 'name' => 'url', 'label' => __( 'Media file URL', 'minn-admin' ), 'type' => 'url', 'placeholder' => __( 'https://example.com/episode.mp3 — clearing this removes the episode', 'minn-admin' ) ),
+				array(
+					'name'        => 'size',
+					'label'       => __( 'File size (bytes)', 'minn-admin' ),
+					'type'        => 'text',
+					'placeholder' => __( 'Detected by PowerPress when blank', 'minn-admin' ),
+					'check'       => function ( $v ) {
+						return ctype_digit( (string) $v ) ? true : __( 'Enter the file size as a number of bytes.', 'minn-admin' );
+					},
+				),
+				array(
+					'name'        => 'duration',
+					'label'       => __( 'Duration', 'minn-admin' ),
+					'type'        => 'text',
+					'placeholder' => __( 'HH:MM:SS', 'minn-admin' ),
+					'check'       => function ( $v ) {
+						return preg_match( '/^\d{1,2}(:[0-5]?\d){1,2}$/', (string) $v ) ? true : __( 'Enter the duration as HH:MM:SS or MM:SS.', 'minn-admin' );
+					},
+				),
+				array( 'name' => 'subtitle', 'label' => __( 'Subtitle', 'minn-admin' ), 'type' => 'text' ),
+				array( 'name' => 'episode_title', 'label' => __( 'Episode title (Apple)', 'minn-admin' ), 'type' => 'text' ),
+				array( 'name' => 'episode_no', 'label' => __( 'Episode number', 'minn-admin' ), 'type' => 'number', 'integer' => true, 'min' => 0 ),
+				array( 'name' => 'season', 'label' => __( 'Season', 'minn-admin' ), 'type' => 'number', 'integer' => true, 'min' => 0 ),
+				array(
+					'name'    => 'episode_type',
+					'label'   => __( 'Episode type', 'minn-admin' ),
+					'type'    => 'select',
+					'choices' => array( '' => __( 'Full (default)', 'minn-admin' ), 'full' => __( 'Full Episode', 'minn-admin' ), 'trailer' => __( 'Trailer', 'minn-admin' ), 'bonus' => __( 'Bonus', 'minn-admin' ) ),
+				),
+			),
+			// Artwork, explicit/block, chapters, transcripts stay on
+			// PowerPress's metabox.
+			'locked' => 4,
+		),
 	);
 }
 
 /**
- * A refusal naming panel fields, in the shape the post's answer carries
- * (minn_admin_panel_report_held(), adapters/acpt.php).
- *
- * @param string   $code    Error code.
- * @param string   $message What to tell the person.
- * @param int      $status  HTTP status the refusal stands for.
- * @param string[] $keys    Panel field keys.
- * @return WP_Error
- */
-function minn_admin_powerpress_refusal( $code, $message, $status, $keys ) {
-	$labels = minn_admin_powerpress_labels();
-	$fields = array();
-	foreach ( $keys as $key ) {
-		$fields[] = array(
-			'key'     => (string) $key,
-			'label'   => $labels[ $key ] ?? (string) $key,
-			'message' => $message,
-		);
-	}
-	return new WP_Error( $code, $message, array( 'status' => $status, 'fields' => $fields ) );
-}
-
-/**
- * Diff-based write: rebuild the blob only when something actually changed.
+ * Store the panel's changes in the enclosure blob, rebuilt only when
+ * something actually changed.
  *
  * @param int   $post_id Post ID.
- * @param array $values  Panel values.
- * @return WP_Error[] What was refused, each naming its fields (kept as
- *                    stored); empty when nothing was.
+ * @param array $changes Field => cleaned value, null to clear.
+ * @return array Field => why it was not stored.
  */
-function minn_admin_powerpress_write_values( $post_id, $values ) {
-	if ( ! is_array( $values ) ) {
-		return array();
-	}
-	$raw     = get_post_meta( $post_id, 'enclosure', true );
-	$enc     = minn_admin_powerpress_parse( $raw );
-	$current = minn_admin_powerpress_read_values( $post_id );
+function minn_admin_powerpress_store( $post_id, $changes ) {
+	$enc     = minn_admin_powerpress_parse( get_post_meta( $post_id, 'enclosure', true ) );
 	$changed = false;
-	$refused = array();
-
-	// Clearing the URL removes the episode entirely (their remove flow,
-	// including the legacy itunes:duration meta).
-	// A URL sent back as stored is left alone before any cleaning: esc_url_raw()
-	// would rewrite a stored one ('my ep.mp3' to 'my%20ep.mp3') and re-derive
-	// its content type.
-	if ( array_key_exists( 'url', $values ) && ! Minn_Admin::unchanged( $values['url'], $enc['url'] ) ) {
-		// A list or object is no address, and coerced it read as an emptied
-		// box: refused like an address the cleaner empties, never a clear.
-		$shape = null === $values['url'] || is_scalar( $values['url'] );
-		$typed = $shape ? trim( (string) $values['url'] ) : '';
-		$url   = '' === $typed ? '' : esc_url_raw( $typed );
-		if ( ! $shape ) {
-			$refused[] = minn_admin_powerpress_refusal( 'minn_powerpress_bad_url', __( 'That URL is not valid.', 'minn-admin' ), 400, array( 'url' ) );
-		} elseif ( '' === $typed && '' !== $enc['url'] ) {
-			delete_post_meta( $post_id, 'enclosure' );
-			delete_post_meta( $post_id, 'itunes:duration' );
-			return $refused;
-		}
-		// Only an empty box clears. An address esc_url_raw() empties (a
-		// javascript: URL, an unknown scheme) or the house rule refuses is
-		// refused: reading its '' as a clear deleted the stored episode.
-		if ( '' !== $typed && ( '' === $url || null === minn_admin_url_clean( $typed ) ) ) {
-			$refused[] = minn_admin_powerpress_refusal( 'minn_powerpress_bad_url', __( 'That URL is not valid.', 'minn-admin' ), 400, array( 'url' ) );
-			$url       = '';
-		}
-		if ( '' !== $url && $url !== $enc['url'] ) {
-			$enc['url'] = $url;
+	if ( array_key_exists( 'url', $changes ) ) {
+		if ( null === $changes['url'] ) {
+			// Clearing the URL removes the episode entirely (their remove
+			// flow, including the legacy itunes:duration meta).
+			if ( '' !== $enc['url'] ) {
+				delete_post_meta( $post_id, 'enclosure' );
+				delete_post_meta( $post_id, 'itunes:duration' );
+				return array();
+			}
+		} elseif ( $changes['url'] !== $enc['url'] ) {
+			$enc['url'] = $changes['url'];
 			// A new file usually means a new content type.
-			$type = powerpress_get_contenttype( $url );
+			$type = powerpress_get_contenttype( $enc['url'] );
 			if ( $type ) {
 				$enc['type'] = $type;
 			}
@@ -182,248 +169,71 @@ function minn_admin_powerpress_write_values( $post_id, $values ) {
 	// whatever else was typed is named rather than dropped.
 	if ( '' === $enc['url'] ) {
 		$orphans = array();
-		foreach ( array_keys( minn_admin_powerpress_labels() ) as $key ) {
-			if ( 'url' !== $key && array_key_exists( $key, $values ) && is_scalar( $values[ $key ] ) && '' !== trim( (string) $values[ $key ] ) && ! Minn_Admin::unchanged( $values[ $key ], $current[ $key ] ) ) {
-				$orphans[] = $key;
+		foreach ( $changes as $key => $value ) {
+			if ( 'url' !== $key && null !== $value ) {
+				$orphans[ $key ] = __( 'Add the media file URL first: PowerPress keeps these details with the episode file.', 'minn-admin' );
 			}
 		}
-		if ( $orphans ) {
-			$refused[] = minn_admin_powerpress_refusal( 'minn_powerpress_no_episode', __( 'Add the media file URL first: PowerPress keeps these details with the episode file.', 'minn-admin' ), 400, $orphans );
-		}
-		return $refused;
+		return $orphans;
 	}
-
-	if ( array_key_exists( 'size', $values ) ) {
-		$size = preg_replace( '/[^0-9]/', '', is_scalar( $values['size'] ) ? (string) $values['size'] : '' );
-		if ( '' === $size && is_scalar( $values['size'] ) && '' !== trim( (string) $values['size'] ) ) {
-			$refused[] = minn_admin_powerpress_refusal( 'minn_powerpress_bad_size', __( 'Enter the file size as a number of bytes.', 'minn-admin' ), 400, array( 'size' ) );
-		}
-		if ( '' !== $size && $size !== $enc['size'] ) {
-			$enc['size'] = $size;
-			// Their metabox "modify" checkbox semantics.
+	if ( array_key_exists( 'size', $changes ) ) {
+		// Their metabox "modify" checkbox semantics: a typed size is kept
+		// over the detected one; an emptied box hands it back to detection.
+		$enc['size'] = null === $changes['size'] ? '' : $changes['size'];
+		if ( null === $changes['size'] ) {
+			unset( $enc['extras']['set_size'] );
+		} else {
 			$enc['extras']['set_size'] = 1;
-			$changed = true;
 		}
+		$changed = true;
 	}
-	if ( array_key_exists( 'duration', $values ) ) {
-		$duration = trim( (string) $values['duration'] );
-		if ( $duration !== $current['duration'] ) {
-			if ( '' === $duration ) {
-				unset( $enc['extras']['duration'], $enc['extras']['set_duration'] );
-				$changed = true;
-			} elseif ( preg_match( '/^\d{1,2}(:[0-5]?\d){1,2}$/', $duration ) ) {
-				$enc['extras']['duration']     = $duration;
-				$enc['extras']['set_duration'] = 1;
-				$changed = true;
-			} else {
-				// Unreadable durations keep the stored value, and say so.
-				$refused[] = minn_admin_powerpress_refusal( 'minn_powerpress_bad_duration', __( 'Enter the duration as HH:MM:SS or MM:SS.', 'minn-admin' ), 400, array( 'duration' ) );
-			}
+	if ( array_key_exists( 'duration', $changes ) ) {
+		if ( null === $changes['duration'] ) {
+			unset( $enc['extras']['duration'], $enc['extras']['set_duration'] );
+		} else {
+			$enc['extras']['duration']     = $changes['duration'];
+			$enc['extras']['set_duration'] = 1;
 		}
+		$changed = true;
 	}
-	foreach ( array( 'subtitle', 'episode_title' ) as $key ) {
-		// The panel resends every field: compare what came in with what the
-		// read served BEFORE cleaning it, or a stored value the cleaner would
-		// alter ("Episode <3") never compares equal and is rewritten.
-		if ( ! array_key_exists( $key, $values ) || Minn_Admin::unchanged( $values[ $key ], $current[ $key ] ) ) {
+	foreach ( array( 'subtitle', 'episode_title', 'episode_no', 'season', 'episode_type' ) as $key ) {
+		if ( ! array_key_exists( $key, $changes ) ) {
 			continue;
 		}
-		$typed = is_scalar( $values[ $key ] ) ? (string) $values[ $key ] : '';
-		$val   = sanitize_text_field( $typed );
-		// Text the cleaner takes away whole (a lone tag, say) is not an
-		// emptied box: refused, so the stored text stays.
-		if ( '' === $val && '' !== trim( $typed ) ) {
-			$refused[] = minn_admin_powerpress_refusal( 'minn_powerpress_bad_text', __( 'That text could not be saved as typed.', 'minn-admin' ), 400, array( $key ) );
-			continue;
+		if ( null === $changes[ $key ] ) {
+			unset( $enc['extras'][ $key ] );
+		} else {
+			$enc['extras'][ $key ] = (string) $changes[ $key ];
 		}
-		if ( $val !== $current[ $key ] ) {
-			if ( '' === $val ) {
-				unset( $enc['extras'][ $key ] );
-			} else {
-				$enc['extras'][ $key ] = $val;
-			}
-			$changed = true;
-		}
+		$changed = true;
 	}
-	foreach ( array( 'episode_no', 'season' ) as $key ) {
-		if ( ! array_key_exists( $key, $values ) || Minn_Admin::unchanged( $values[ $key ], $current[ $key ], 'number' ) ) {
-			continue;
-		}
-		// A whole number, or empty to clear. Stripping the rest turned 1.5
-		// into 15 and 'abc' into a clear of the stored number.
-		// An emptied number box arrives as null: empty, so it clears.
-		$val = null === $values[ $key ] ? '' : ( is_scalar( $values[ $key ] ) ? trim( (string) $values[ $key ] ) : null );
-		if ( null === $val || ( '' !== $val && ! ctype_digit( $val ) ) ) {
-			$refused[] = minn_admin_powerpress_refusal( 'minn_powerpress_bad_number', __( 'Enter a whole number.', 'minn-admin' ), 400, array( $key ) );
-			continue;
-		}
-		if ( $val !== $current[ $key ] ) {
-			if ( '' === $val ) {
-				unset( $enc['extras'][ $key ] );
-			} else {
-				$enc['extras'][ $key ] = $val;
-			}
-			$changed = true;
-		}
+	if ( $changed ) {
+		// Slashed: update_post_meta() unslashes, and a backslash taken out of
+		// an extras string nobody edited ('AC\DC live') left its serialized
+		// length wrong, so the whole extras array (duration, chapters,
+		// hosting) stopped reading back.
+		update_post_meta(
+			$post_id,
+			'enclosure',
+			wp_slash( "{$enc['url']}\n{$enc['size']}\n{$enc['type']}\n" . serialize( $enc['extras'] ) ) // phpcs:ignore -- their exact storage format
+		);
 	}
-	if ( array_key_exists( 'episode_type', $values ) ) {
-		$val = is_scalar( $values['episode_type'] ) ? (string) $values['episode_type'] : '';
-		if ( ! in_array( $val, array( '', 'full', 'trailer', 'bonus' ), true ) ) {
-			$refused[] = minn_admin_powerpress_refusal( 'minn_powerpress_bad_type', __( 'That is not one of this field\'s choices.', 'minn-admin' ), 400, array( 'episode_type' ) );
-		} elseif ( $val !== $current['episode_type'] ) {
-			if ( '' === $val ) {
-				unset( $enc['extras']['episode_type'] );
-			} else {
-				$enc['extras']['episode_type'] = $val;
-			}
-			$changed = true;
-		}
-	}
-
-	if ( ! $changed ) {
-		return $refused;
-	}
-	// Slashed: update_post_meta() unslashes, and a backslash taken out of an
-	// extras string nobody edited ('AC\DC live') left its serialized length
-	// wrong, so the whole extras array (duration, chapters, hosting) stopped
-	// reading back.
-	update_post_meta(
-		$post_id,
-		'enclosure',
-		wp_slash( "{$enc['url']}\n{$enc['size']}\n{$enc['type']}\n" . serialize( $enc['extras'] ) ) // phpcs:ignore -- their exact storage format
-	);
-	return $refused;
+	return array();
 }
 
-add_filter( 'minn_admin_editor_panels', function ( $panels ) {
-	if ( ! minn_admin_powerpress_active() || ! minn_admin_powerpress_can_podcast() ) {
-		return $panels;
-	}
-	$panels['powerpress'] = array(
+minn_admin_fields( 'powerpress', function () {
+	return array(
+		'active'      => 'minn_admin_powerpress_active',
 		'label'       => __( 'Podcast episode', 'minn-admin' ),
 		'sub'         => 'PowerPress',
-		'cap'         => 'edit_posts',
-		'fieldsRoute' => 'minn-admin/v1/powerpress/fields?post_id={id}&post_type={type}',
-		'valuesKey'   => 'minn_powerpress',
-		'writeKey'    => 'minn_powerpress',
-	);
-	return $panels;
-} );
-
-add_action( 'rest_api_init', function () {
-	if ( ! minn_admin_powerpress_active() ) {
-		return;
-	}
-
-	minn_admin_endpoint( '/powerpress/fields', array(
-		'methods'             => 'GET',
-		'gate'                => function () {
-			return current_user_can( 'edit_posts' ) && minn_admin_powerpress_can_podcast();
-		},
-		'args'                => array(
-			'post_id'   => array( 'type' => 'integer' ),
-			'post_type' => array( 'type' => 'string' ),
-		),
-		'run'                 => function ( WP_REST_Request $request ) {
-			$post_id   = (int) $request['post_id'];
-			$rest_base = sanitize_key( (string) ( $request['post_type'] ?? 'posts' ) );
-			$post_type = $post_id && get_post( $post_id ) ? get_post( $post_id )->post_type : ( 'posts' === $rest_base ? 'post' : $rest_base );
-			// Default-channel podcasting lives on plain posts.
-			if ( 'post' !== $post_type ) {
-				return rest_ensure_response( array( 'groups' => array() ) );
-			}
-			if ( $post_id ) {
-				if ( ! get_post( $post_id ) ) {
-					return new WP_Error( 'not_found', __( 'Post not found.', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				if ( ! current_user_can( 'edit_post', $post_id ) ) {
-					return new WP_Error( 'rest_forbidden', __( 'You cannot edit this post.', 'minn-admin' ), array( 'status' => 403 ) );
-				}
-			} else {
-				// No post to authorize against, so authorize against the TYPE,
-				// the way meta-box and pods already do. The field list here is
-				// fixed today, but the gate should not depend on that staying
-				// true.
-				$type_obj = get_post_type_object( $post_type );
-				if ( ! $type_obj || ! current_user_can( $type_obj->cap->edit_posts ) ) {
-					return new WP_Error( 'rest_forbidden', __( 'You cannot edit posts.', 'minn-admin' ), array( 'status' => 403 ) );
-				}
-			}
-			return rest_ensure_response( array(
-				'groups' => array(
-					array(
-						'group'  => __( 'Episode (default channel)', 'minn-admin' ),
-						'fields' => array(
-							array( 'name' => 'url', 'label' => __( 'Media file URL', 'minn-admin' ), 'type' => 'url', 'placeholder' => __( 'https://example.com/episode.mp3 — clearing this removes the episode', 'minn-admin' ) ),
-							array( 'name' => 'size', 'label' => __( 'File size (bytes)', 'minn-admin' ), 'type' => 'text', 'placeholder' => __( 'Detected by PowerPress when blank', 'minn-admin' ) ),
-							array( 'name' => 'duration', 'label' => __( 'Duration', 'minn-admin' ), 'type' => 'text', 'placeholder' => __( 'HH:MM:SS', 'minn-admin' ) ),
-							array( 'name' => 'subtitle', 'label' => __( 'Subtitle', 'minn-admin' ), 'type' => 'text' ),
-							array( 'name' => 'episode_title', 'label' => __( 'Episode title (Apple)', 'minn-admin' ), 'type' => 'text' ),
-							array( 'name' => 'episode_no', 'label' => __( 'Episode number', 'minn-admin' ), 'type' => 'number' ),
-							array( 'name' => 'season', 'label' => __( 'Season', 'minn-admin' ), 'type' => 'number' ),
-							array(
-								'name'    => 'episode_type',
-								'label'   => __( 'Episode type', 'minn-admin' ),
-								'type'    => 'select',
-								'choices' => array( '' => __( 'Full (default)', 'minn-admin' ), 'full' => __( 'Full Episode', 'minn-admin' ), 'trailer' => __( 'Trailer', 'minn-admin' ), 'bonus' => __( 'Bonus', 'minn-admin' ) ),
-							),
-						),
-						// Artwork, explicit/block, chapters, transcripts stay on
-						// PowerPress's metabox.
-						'locked' => 4,
-					),
-				),
-			) );
-		},
-	) );
-
-	register_rest_field(
-		'post',
-		'minn_powerpress',
-		array(
-			'get_callback'    => function ( $obj ) {
-				$id = isset( $obj['id'] ) ? (int) $obj['id'] : 0;
-				if ( ! $id || ! current_user_can( 'edit_post', $id ) || ! minn_admin_powerpress_can_podcast() ) {
-					return new stdClass();
-				}
-				return (object) minn_admin_powerpress_read_values( $id );
-			},
-			'update_callback' => function ( $value, $post, $field_name = '', $request = null ) {
-				if ( ! $post instanceof WP_Post || ! current_user_can( 'edit_post', $post->ID ) ) {
-					return;
-				}
-				if ( is_object( $value ) ) {
-					$value = (array) $value;
-				}
-				// Never an error from here. The post is already saved, a new
-				// one included, so an error answer would hide its id from the
-				// editor (each retry and autosave then made another draft).
-				// A refusal rides on the post's own answer instead, naming its
-				// fields (minn_admin_panel_report_held(), adapters/acpt.php).
-				// The panel and its fields route are not offered to a user
-				// PowerPress keeps from episodes, so this is a body sent anyway.
-				if ( ! minn_admin_powerpress_can_podcast() ) {
-					$keys    = is_array( $value ) ? array_values( array_intersect( array_map( 'strval', array_keys( $value ) ), array_keys( minn_admin_powerpress_labels() ) ) ) : array();
-					$refused = array( minn_admin_powerpress_refusal( 'rest_forbidden', __( 'PowerPress limits podcast episodes to podcast editors on this site.', 'minn-admin' ), 403, $keys ) );
-				} else {
-					$refused = minn_admin_powerpress_write_values( $post->ID, $value );
-				}
-				if ( ! $refused ) {
-					return;
-				}
-				if ( $request instanceof WP_REST_Request && function_exists( 'minn_admin_panel_held' ) ) {
-					foreach ( $refused as $error ) {
-						minn_admin_panel_held( $request, $error, 'minn_powerpress' );
-					}
-					return;
-				}
-				return $refused[0];
-			},
-			'schema'          => array(
-				'description' => __( 'PowerPress default-channel episode fields for Minn Admin.', 'minn-admin' ),
-				'type'        => 'object',
-				'context'     => array( 'edit' ),
-			),
-		)
+		'key'         => 'minn_powerpress',
+		// Default-channel podcasting lives on plain posts.
+		'types'       => array( 'post' ),
+		'can'         => 'minn_admin_powerpress_can_podcast',
+		'refuse'      => __( 'PowerPress limits podcast episodes to podcast editors on this site.', 'minn-admin' ),
+		'groups'      => 'minn_admin_powerpress_groups',
+		'read'        => 'minn_admin_powerpress_read_values',
+		'write'       => 'minn_admin_powerpress_store',
+		'description' => __( 'PowerPress default-channel episode fields for Minn Admin.', 'minn-admin' ),
 	);
 } );

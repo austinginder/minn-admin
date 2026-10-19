@@ -421,10 +421,10 @@ wp_set_current_user( $admin[0]->ID );
  * 04-8: the PowerPress panel compared each title after sanitize_text_field
  * with the stored one, so a stored title the cleaner alters ("Episode <3")
  * never matched and was rewritten on every save of the panel. Driven through
- * the adapter's writer, which does not need PowerPress active.
+ * the panel's save (the fields tier), which does not need PowerPress active.
  */
 ( function () use ( $check ) {
-	if ( ! function_exists( 'minn_admin_powerpress_write_values' ) ) {
+	if ( ! class_exists( 'Minn_Admin_Kernel_Panels' ) || ! Minn_Admin_Kernel_Panels::panel( 'powerpress' ) ) {
 		echo "SKIP  04-8 no PowerPress adapter\n";
 		return;
 	}
@@ -434,7 +434,7 @@ wp_set_current_user( $admin[0]->ID );
 	try {
 		$vals = minn_admin_powerpress_read_values( $id );
 		$vals['season'] = '2';
-		minn_admin_powerpress_write_values( $id, $vals );
+		Minn_Admin_Kernel_Panels::save( Minn_Admin_Kernel_Panels::panel( 'powerpress' ), get_post( $id ), $vals );
 		wp_cache_delete( $id, 'post_meta' );
 		$now = minn_admin_powerpress_read_values( $id );
 		$check( '04-8 an untouched episode title is left as stored', 'Episode <3 & more' === $now['episode_title'] && '100%Accurate notes' === $now['subtitle'], wp_json_encode( $now ) );
