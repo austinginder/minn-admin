@@ -226,7 +226,11 @@ A few properties worth knowing before auditing (details in
   (the SEO plugin's own edit rule, or its box switched off for the type of
   post being made) is not offered, and a field its own edit check refuses
   (WP Job Manager's Featured and Expiry) is left out. Every refused value
-  is named in `minn_field_errors` and never overwrites the stored one. A preview made from a real entry fills the
+  is named in `minn_field_errors` and never overwrites the stored one (a
+  refused PowerPress media address keeps the stored episode). A settings
+  save carrying a value the plugin refuses (Perfmatters' raw-code fields
+  without `unfiltered_html`, an ACF options page) is refused whole before
+  anything is written. A preview made from a real entry fills the
   submitter's account fields only as far as the vendor's own entry screen
   shows them, and their profile only for someone who may list users.
 - On a network, Minn's network routes read network capabilities on the
