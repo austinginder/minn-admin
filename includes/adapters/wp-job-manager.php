@@ -67,11 +67,37 @@ function minn_admin_wpjm_can_view_field( $f, $key, $post_id = 0 ) {
 	}
 }
 
+/**
+ * WPJM's own per-field EDIT authorization, the other callback their schema
+ * attaches.
+ *
+ * Their metabox leaves out any field this callback refuses (Featured and
+ * Listing Expiry ask manage_job_listings, because both are sold), so a
+ * listing editor without it never sees either. The panel draws what that box
+ * draws: a control the save can only refuse reads as saved while nothing
+ * changed.
+ *
+ * @param array  $f       Field schema.
+ * @param string $key     Meta key.
+ * @param int    $post_id Listing id, 0 when asking about the type.
+ * @return bool
+ */
+function minn_admin_wpjm_can_edit_field( $f, $key, $post_id = 0 ) {
+	if ( ! isset( $f['auth_edit_callback'] ) || ! is_callable( $f['auth_edit_callback'] ) ) {
+		return true;
+	}
+	try {
+		return (bool) call_user_func( $f['auth_edit_callback'], false, $key, (int) $post_id, get_current_user_id() );
+	} catch ( \Throwable $e ) {
+		return false;
+	}
+}
+
 function minn_admin_wpjm_mapped_fields( $post_id = 0 ) {
 	$fields = array();
 	$locked = 0;
 	foreach ( minn_admin_wpjm_raw_fields() as $key => $f ) {
-		if ( ! minn_admin_wpjm_can_view_field( $f, $key, $post_id ) ) {
+		if ( ! minn_admin_wpjm_can_view_field( $f, $key, $post_id ) || ! minn_admin_wpjm_can_edit_field( $f, $key, $post_id ) ) {
 			continue;
 		}
 		$type  = isset( $f['auth_edit_field_type'] ) ? (string) $f['auth_edit_field_type'] : ( isset( $f['type'] ) ? (string) $f['type'] : 'text' );
@@ -117,11 +143,11 @@ function minn_admin_wpjm_read_values( $post_id ) {
 			continue;
 		}
 		// WPJM attaches two callbacks per field and their own REST layer asks
-		// both. The write path below already asks auth_edit_callback; this is
-		// the other half, which decides whether a listing's applicant address
-		// and salary are readable on a site using their view-capability
-		// setting.
-		if ( ! minn_admin_wpjm_can_view_field( $f, $key, $post_id ) ) {
+		// both. The view callback decides whether a listing's applicant
+		// address and salary are readable on a site using their
+		// view-capability setting; the edit callback keeps a value out of the
+		// panel for a field the panel does not draw for this user.
+		if ( ! minn_admin_wpjm_can_view_field( $f, $key, $post_id ) || ! minn_admin_wpjm_can_edit_field( $f, $key, $post_id ) ) {
 			continue;
 		}
 		$val = get_post_meta( $post_id, $key, true );
@@ -130,12 +156,26 @@ function minn_admin_wpjm_read_values( $post_id ) {
 	return $out;
 }
 
-/** Write panel values through WPJM's own per-field sanitizers. */
+/**
+ * Write panel values through WPJM's own per-field sanitizers.
+ *
+ * @param int   $post_id Listing id.
+ * @param array $values  Sent values, by meta key.
+ * @return WP_Error|null The fields refused, each named, or null.
+ */
 function minn_admin_wpjm_write_values( $post_id, $values ) {
 	if ( ! is_array( $values ) ) {
-		return;
+		return null;
 	}
-	$schema = minn_admin_wpjm_raw_fields();
+	$schema  = minn_admin_wpjm_raw_fields();
+	$refused = array();
+	$refuse  = static function ( $key, $f, $message ) use ( &$refused ) {
+		$refused[] = array(
+			'key'     => (string) $key,
+			'label'   => isset( $f['label'] ) ? wp_strip_all_tags( (string) $f['label'] ) : (string) $key,
+			'message' => $message,
+		);
+	};
 	foreach ( $values as $key => $value ) {
 		if ( ! isset( $schema[ $key ] ) ) {
 			continue;
@@ -156,7 +196,10 @@ function minn_admin_wpjm_write_values( $post_id, $values ) {
 			case 'select':
 				$options = isset( $f['options'] ) && is_array( $f['options'] ) ? $f['options'] : array();
 				if ( ! array_key_exists( (string) $value, $options ) ) {
-					continue 2; // unknown choice — keep the stored value
+					// Not one of the field's choices: the stored value stays,
+					// and the answer says so.
+					$refuse( $key, $f, __( 'That is not one of this field\'s choices.', 'minn-admin' ) );
+					continue 2;
 				}
 				$value = (string) $value;
 				break;
@@ -178,16 +221,11 @@ function minn_admin_wpjm_write_values( $post_id, $values ) {
 		// listing duration). WPJM enforces this on both of its own doors; this
 		// is a third one, so it has to ask the same question. Without it any
 		// listing owner self-grants sticky placement and a new expiry date.
-		if ( isset( $f['auth_edit_callback'] ) && is_callable( $f['auth_edit_callback'] ) ) {
-			$allowed = false;
-			try {
-				$allowed = (bool) call_user_func( $f['auth_edit_callback'], false, $key, $post_id, get_current_user_id() );
-			} catch ( \Throwable $e ) {
-				$allowed = false;
-			}
-			if ( ! $allowed ) {
-				continue;
-			}
+		// The panel does not draw such a field for this user, so one sent
+		// anyway is refused on the post's own answer rather than dropped.
+		if ( ! minn_admin_wpjm_can_edit_field( $f, $key, $post_id ) ) {
+			$refuse( $key, $f, __( 'WP Job Manager does not let you change this field.', 'minn-admin' ) );
+			continue;
 		}
 		// Their own field sanitizer wins when declared (application's
 		// email-or-url rule, the expiry date's Y-m-d validation).
@@ -195,6 +233,7 @@ function minn_admin_wpjm_write_values( $post_id, $values ) {
 			try {
 				$value = call_user_func( $f['sanitize_callback'], $value, $key );
 			} catch ( \Throwable $e ) {
+				$refuse( $key, $f, __( 'WP Job Manager did not accept this value.', 'minn-admin' ) );
 				continue;
 			}
 		} elseif ( 'text' === $type ) {
@@ -202,6 +241,14 @@ function minn_admin_wpjm_write_values( $post_id, $values ) {
 		}
 		update_post_meta( $post_id, $key, wp_slash( $value ) ); // update_post_meta() unslashes
 	}
+	if ( ! $refused ) {
+		return null;
+	}
+	return new WP_Error(
+		'minn_wpjm_refused',
+		_n( 'One listing field was not saved.', 'Some listing fields were not saved.', count( $refused ), 'minn-admin' ),
+		array( 'status' => 403, 'fields' => $refused )
+	);
 }
 
 add_filter( 'minn_admin_editor_panels', function ( $panels ) {
@@ -289,14 +336,26 @@ add_action( 'rest_api_init', function () {
 				}
 				return (object) minn_admin_wpjm_read_values( $id );
 			},
-			'update_callback' => function ( $value, $post ) {
+			'update_callback' => function ( $value, $post, $field_name = '', $request = null ) {
 				if ( ! $post instanceof WP_Post || ! current_user_can( 'edit_post', $post->ID ) ) {
 					return;
 				}
 				if ( is_object( $value ) ) {
 					$value = (array) $value;
 				}
-				minn_admin_wpjm_write_values( $post->ID, $value );
+				$error = minn_admin_wpjm_write_values( $post->ID, $value );
+				if ( ! is_wp_error( $error ) ) {
+					return;
+				}
+				// Never an error from here: the post is already saved, a new
+				// one included. The refusal rides on the post's own answer
+				// instead, beside any other panel's
+				// (minn_admin_panel_report_held(), adapters/acpt.php).
+				if ( $request instanceof WP_REST_Request && function_exists( 'minn_admin_panel_held' ) ) {
+					minn_admin_panel_held( $request, $error, 'minn_wpjm' );
+					return;
+				}
+				return $error;
 			},
 			'schema'          => array(
 				'description' => __( 'WP Job Manager listing fields for Minn Admin.', 'minn-admin' ),
