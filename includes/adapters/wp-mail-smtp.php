@@ -128,10 +128,8 @@ minn_admin_resource( 'wp-mail-smtp/events', function () {
 			'range'  => array( 'column' => 'created_at', 'clock' => 'utc' ),
 			'order'  => array( 'column' => 'id' ),
 			'row'    => function ( array $r ) {
-				$content = trim( preg_replace( '/\s+/', ' ', (string) $r['content'] ) );
-				if ( function_exists( 'mb_substr' ) && mb_strlen( $content ) > 120 ) {
-					$content = mb_substr( $content, 0, 119 ) . '…';
-				}
+				// Cut after the fence has seen it whole (Minn_Admin_Egress::clip()).
+				$content = Minn_Admin_Egress::clip( trim( preg_replace( '/\s+/', ' ', (string) $r['content'] ) ), 119 );
 				return array(
 					'id'         => (int) $r['id'],
 					'content'    => $content,

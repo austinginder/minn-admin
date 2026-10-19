@@ -218,8 +218,8 @@ minn_admin_resource( 'wsal/events', function () use ( $minn_wsal_meta ) {
 				foreach ( $pairs as $p ) {
 					// Serialized/JSON blobs render as raw (truncated) strings — never
 					// unserialize third-party data. Most values are plain scalars.
-					$val       = (string) $p['value'];
-					$context[] = array( 'label' => $p['name'], 'value' => strlen( $val ) > 300 ? substr( $val, 0, 300 ) . '…' : $val );
+					// Cut after the fence has seen them whole (Minn_Admin_Egress::clip()).
+					$context[] = array( 'label' => $p['name'], 'value' => Minn_Admin_Egress::clip( (string) $p['value'], 300 ) );
 				}
 				return array(
 					'title'    => $title,

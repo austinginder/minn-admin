@@ -645,12 +645,9 @@ class Minn_Admin_Notices {
 		}
 		$text = implode( ' ', $parts );
 		$text = preg_replace( '/\s+([.,:;!?…)\]])/u', '$1', $text );
-		if ( function_exists( 'mb_substr' ) && mb_strlen( $text ) > 400 ) {
-			$text = mb_substr( $text, 0, 399 ) . '…';
-		} elseif ( strlen( $text ) > 400 ) {
-			$text = substr( $text, 0, 399 ) . '…';
-		}
-		return $text;
+		// The capture is stored and served later, so it is cut after the
+		// fence has seen it whole (Minn_Admin_Egress::clip()).
+		return Minn_Admin_Egress::clip( $text, 399 );
 	}
 
 	/**
@@ -675,8 +672,7 @@ class Minn_Admin_Notices {
 				$parts[] = $chunk;
 			}
 		}
-		$label = implode( ' ', $parts );
-		return function_exists( 'mb_substr' ) ? mb_substr( $label, 0, 80 ) : substr( $label, 0, 80 );
+		return Minn_Admin_Egress::clip( implode( ' ', $parts ), 80, '' );
 	}
 
 	/**
@@ -1285,10 +1281,8 @@ class Minn_Admin_Notices {
 			if ( isset( $hidden[ $n['id'] ] ) ) {
 				continue;
 			}
-			$text = $n['text'];
-			if ( function_exists( 'mb_substr' ) && mb_strlen( $text ) > 160 ) {
-				$text = mb_substr( $text, 0, 159 ) . '…';
-			}
+			// A credential saved since the capture is masked before the cut too.
+			$text    = Minn_Admin_Egress::clip( $n['text'], 159 );
 			$items[] = array(
 				'id'       => 'notice-' . $n['id'],
 				'kind'     => 'notices',

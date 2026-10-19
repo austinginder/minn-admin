@@ -143,9 +143,8 @@ function minn_admin_crontrol_row( $ev ) {
 		$args_out = '';
 	}
 	// Cap long args; never expand PHP code (get_args_display already says "PHP Code").
-	if ( strlen( $args_out ) > 200 ) {
-		$args_out = substr( $args_out, 0, 200 ) . '…';
-	}
+	// Cut after the fence has seen them whole (Minn_Admin_Egress::clip()).
+	$args_out = Minn_Admin_Egress::clip( $args_out, 200 );
 
 	return array(
 		'id'         => minn_admin_crontrol_id( $ev->hook, $ev->sig, $ev->timestamp ),

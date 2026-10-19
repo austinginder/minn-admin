@@ -24,6 +24,10 @@
  * value with Minn_Admin_Egress::intended() while it answers; that value, and
  * only it, passes in that response.
  *
+ * A route that shortens a value for display cuts it with clip(), which masks
+ * the whole value first: cut first, a key straddling the cut would no longer
+ * be recognised and its first part would be served.
+ *
  * The write side: while a minn-admin/v1 request runs, a save of an option
  * that carries "[redacted:<fingerprint>]" gets back the credential with that
  * fingerprint, but only at the place in the option that held it (the same
@@ -347,6 +351,50 @@ class Minn_Admin_Egress {
 			$json = strtr( $json, $held );
 		}
 		return array( $json, $n );
+	}
+
+	/**
+	 * Text cut short for a response, with the credential copies in the WHOLE
+	 * text masked first. The fence recognises a key only whole, so a cut
+	 * made before it runs can keep the first part of one, which it then no
+	 * longer matches. Masking first leaves the cut nothing to split but a
+	 * mask, and a mask the cut would split is kept whole. Text that fits
+	 * comes back as it is: the fence sees it whole in the response. A screen
+	 * that shortens a stored or captured value asks this instead of cutting
+	 * it itself.
+	 *
+	 * @param string $text The whole text.
+	 * @param int    $keep Characters kept when the text is longer (bytes without mbstring).
+	 * @param string $more Appended to cut text.
+	 * @return string
+	 */
+	public static function clip( $text, $keep, $more = '…' ) {
+		$text = (string) $text;
+		$keep = max( 0, (int) $keep );
+		$mb   = function_exists( 'mb_strlen' ) && function_exists( 'mb_substr' );
+		if ( ( $mb ? mb_strlen( $text, 'UTF-8' ) : strlen( $text ) ) <= $keep ) {
+			return $text;
+		}
+		$json = wp_json_encode( $text );
+		if ( false === $json ) {
+			return '';
+		}
+		list( $masked, $n ) = self::mask_json( $json );
+		if ( $n ) {
+			$text = json_decode( $masked );
+			if ( ! is_string( $text ) ) {
+				return '';
+			}
+		}
+		$cut = strlen( $mb ? mb_substr( $text, 0, $keep, 'UTF-8' ) : substr( $text, 0, $keep ) );
+		if ( false !== strpos( $text, self::MASK ) && preg_match_all( self::TOKEN, $text, $m, PREG_OFFSET_CAPTURE ) ) {
+			foreach ( $m[0] as $hit ) {
+				if ( $hit[1] < $cut && $cut < $hit[1] + strlen( $hit[0] ) ) {
+					$cut = $hit[1] + strlen( $hit[0] );
+				}
+			}
+		}
+		return substr( $text, 0, $cut ) . $more;
 	}
 
 	/**
