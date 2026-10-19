@@ -1064,6 +1064,10 @@ class Minn_Admin_DB {
 		// SureCart's hash of the account password a shopper typed at
 		// checkout, kept a day until the order creates the account.
 		array( '_transient_sc_checkout_password_hash_', '' ),
+		// UpdraftPlus' running jobs copy the storage destinations' settings
+		// into their job row, a typed password among them, which no needle
+		// recognises as a key.
+		array( 'updraft_jobdata_', '' ),
 	);
 
 	/**
@@ -1231,11 +1235,13 @@ class Minn_Admin_DB {
 	 * destination's keys, passwords and OAuth tokens in its own row
 	 * (updraft_<destination>; the email destination holds addresses only),
 	 * the private keys UpdraftCentral and the Migrator sign with in two more,
-	 * the keys for the sites it sends backups to in a third, and the phrase
-	 * that encrypts its database backups. Its job rows copy the storage rows
-	 * while a backup runs; the copies are found as copies.
+	 * the keys for the sites it sends backups to in a third, the phrase
+	 * that encrypts its database backups, the password that locks its
+	 * settings, the extra databases it backs up (host, user and password),
+	 * its account's email and password for updates, and the single rows
+	 * older versions kept a destination's secret or token in.
 	 */
-	const SECRET_OPTION_KEYS = array( 'auth_key', 'secure_auth_key', 'logged_in_key', 'nonce_key', 'auth_salt', 'secure_auth_salt', 'logged_in_salt', 'nonce_salt', 'secret_key', 'jetpack_private_options', 'woocommerce_helper_data', 'wp_mail_smtp', 'wp_mail_smtp_mail_key', '_transient_wp_mail_smtp_connect_token', 'aio_wp_security_configs', 'postman_options', 'postman_auth_token', 'fs_accounts', 'wpmudev_apikey', 'wp_smush_api_auth', 'jetpack_secrets', '_site_transient_update_plugins', '_site_transient_update_themes', 'gf_telemetry_data', '_site_transient_wp_rocket_update_data', 'fs_api_cache', 'fs_dbg_api_cache', 'wpforms_settings', 'wpforms_crypto_secret_key', 'wpforms_square_connections', 'frm-usage-uuid', 'itsec-storage', 'suretrigger_options', 'wp_statistics', 'wp_statistics_licenses', 'wp_statistics_cipher_key', 'iawp_salt', 'iawp_request_payload_salt', 'surecart_recaptcha_secret_key', 'surecart_registered_webhook', 'surecart_previous_webhook', 'cleantalk_sfw_worker_self_tokens', 'fluentmail-settings', '_fluent_smtp_notify_settings', 'postman_office365_oauth', 'post_smtp_mobile_app_connection', 'suremails_connections', 'gosmtp_options', 'swpsmtp_options', 'swpsmtp_enc_key', 'site_mailer_client_secret', 'site_mailer_access_token', 'site_mailer_refresh_token', 'site_mailer_user_access_token', 'site_mailer_unsubscribe_encryption_data', 'wpcf7', 'wpseo', 'amelia_settings', 'updraft_updraftvault', 'updraft_dropbox', 'updraft_s3', 'updraft_cloudfiles', 'updraft_googledrive', 'updraft_onedrive', 'updraft_ftp', 'updraft_azure', 'updraft_sftp', 'updraft_googlecloud', 'updraft_backblaze', 'updraft_webdav', 'updraft_s3generic', 'updraft_pcloud', 'updraft_openstack', 'updraft_dreamobjects', 'updraft_central_localkeys', 'updraft_migrator_localkeys', 'updraft_remotesites', 'updraft_encryptionphrase' );
+	const SECRET_OPTION_KEYS = array( 'auth_key', 'secure_auth_key', 'logged_in_key', 'nonce_key', 'auth_salt', 'secure_auth_salt', 'logged_in_salt', 'nonce_salt', 'secret_key', 'jetpack_private_options', 'woocommerce_helper_data', 'wp_mail_smtp', 'wp_mail_smtp_mail_key', '_transient_wp_mail_smtp_connect_token', 'aio_wp_security_configs', 'postman_options', 'postman_auth_token', 'fs_accounts', 'wpmudev_apikey', 'wp_smush_api_auth', 'jetpack_secrets', '_site_transient_update_plugins', '_site_transient_update_themes', 'gf_telemetry_data', '_site_transient_wp_rocket_update_data', 'fs_api_cache', 'fs_dbg_api_cache', 'wpforms_settings', 'wpforms_crypto_secret_key', 'wpforms_square_connections', 'frm-usage-uuid', 'itsec-storage', 'suretrigger_options', 'wp_statistics', 'wp_statistics_licenses', 'wp_statistics_cipher_key', 'iawp_salt', 'iawp_request_payload_salt', 'surecart_recaptcha_secret_key', 'surecart_registered_webhook', 'surecart_previous_webhook', 'cleantalk_sfw_worker_self_tokens', 'fluentmail-settings', '_fluent_smtp_notify_settings', 'postman_office365_oauth', 'post_smtp_mobile_app_connection', 'suremails_connections', 'gosmtp_options', 'swpsmtp_options', 'swpsmtp_enc_key', 'site_mailer_client_secret', 'site_mailer_access_token', 'site_mailer_refresh_token', 'site_mailer_user_access_token', 'site_mailer_unsubscribe_encryption_data', 'wpcf7', 'wpseo', 'amelia_settings', 'updraft_updraftvault', 'updraft_dropbox', 'updraft_s3', 'updraft_cloudfiles', 'updraft_googledrive', 'updraft_onedrive', 'updraft_ftp', 'updraft_azure', 'updraft_sftp', 'updraft_googlecloud', 'updraft_backblaze', 'updraft_webdav', 'updraft_s3generic', 'updraft_pcloud', 'updraft_openstack', 'updraft_dreamobjects', 'updraft_central_localkeys', 'updraft_migrator_localkeys', 'updraft_remotesites', 'updraft_encryptionphrase', 'updraft_adminlocking', 'updraft_extradbs', 'updraftplus-addons_options', 'updraft_googledrive_secret', 'updraft_googledrive_token', 'updraft_dropboxtk_access_token', 'updraft_dropboxtk_request_token', 'updraft_s3_pass', 'updraft_s3generic_pass', 'updraft_dreamobjects_pass', 'updraft_cloudfiles_apikey' );
 
 	/**
 	 * Whether a whole COLUMN can hold a credential on some row, so it must

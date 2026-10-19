@@ -18,6 +18,8 @@
  *    tokens printed in full.
  *  - S3 (review round, the same class): Amelia's settings row, UpdraftPlus'
  *    remote storage rows and its UpdraftCentral and Migrator key rows.
+ *  - O3 (review round): UpdraftPlus' remaining secret rows and its job
+ *    rows, which copy a typed storage password while a backup runs.
  *  - S4 (review round): the licences screen cut Slider Revolution's and
  *    Avada's refusal messages, which can quote the purchase code, at 120
  *    characters before the fence saw them.
@@ -471,6 +473,49 @@ if ( strlen( $jwt ) < 16 || preg_match_all( '/\d/', $jwt ) < 3 || preg_match_all
 }
 $n = count( Minn_Admin_DB::egress_credentials() );
 $check( "S3 the fence's credential list stays bounded on this site ({$n} credentials)", $n > 0 && $n < 500 );
+
+/*
+ * O3 (review round): UpdraftPlus' remaining secret rows (its settings lock
+ * password, the extra databases' logins, its account login for updates,
+ * the single-value secret rows of older versions) and its job rows, which
+ * copy the destinations' settings, a typed password among them, while a
+ * backup runs.
+ */
+$miss = array();
+foreach ( array( 'updraft_adminlocking', 'updraft_extradbs', 'updraftplus-addons_options', 'updraft_googledrive_secret', 'updraft_googledrive_token', 'updraft_dropboxtk_access_token', 'updraft_dropboxtk_request_token', 'updraft_s3_pass', 'updraft_s3generic_pass', 'updraft_dreamobjects_pass', 'updraft_cloudfiles_apikey', 'updraft_jobdata_' . $tag ) as $o ) {
+	if ( ! Minn_Admin_DB::is_credential_option( $o ) || ! Minn_Admin_DB::redacts_cell( $wpdb->options, 'option_value', array( 'option_name' => $o, 'option_value' => 'x' ) ) ) {
+		$miss[] = $o;
+	}
+}
+$check( 'O3 every remaining UpdraftPlus secret row, and its job rows by name, are redacted whole in the browser', ! $miss, implode( ', ', $miss ) );
+$check( 'O3 control: UpdraftPlus rows holding no secret (history, last backup, last message, schedule stamps, the S3 access key id) stay readable', ! Minn_Admin_DB::is_credential_option( 'updraft_backup_history' ) && ! Minn_Admin_DB::is_credential_option( 'updraft_last_backup' ) && ! Minn_Admin_DB::is_credential_option( 'updraft_lastmessage' ) && ! Minn_Admin_DB::is_credential_option( 'updraft_last_scheduled_fd' ) && ! Minn_Admin_DB::is_credential_option( 'updraft_s3_login' ) );
+// A job row as UpdraftPlus writes it (update_site_option), holding a typed
+// FTP password no needle would recognise.
+$nonce = 'm047' . $tag . 'ab12';
+$jrow  = 'updraft_jobdata_' . $nonce;
+$pass  = 'p@ss W0rd!#' . $tag;
+$clean = $once( static function () use ( $jrow ) {
+	delete_site_option( $jrow );
+} );
+try {
+	if ( false !== get_site_option( $jrow, false ) ) {
+		$skip( 'O3 the probe job row exists already' );
+	} else {
+		update_site_option( $jrow, array( 'jobstatus' => 'begun', 'backup_time' => time(), 'option_cache' => array( 'updraft_ftp' => array( 'version' => 1, 'settings' => array( 's-' . md5( $tag ) => array( 'host' => 'ftp.example.test', 'user' => 'minn', 'pass' => $pass, 'path' => '/' ) ) ) ) ) );
+		$table = is_multisite() ? $wpdb->sitemeta : $wpdb->options;
+		$kcol  = is_multisite() ? 'meta_key' : 'option_name';
+		list( $st, $d ) = $send( 'GET', '/minn-admin/v1/db/rows', array( 'table' => $table, 'fcol' => $kcol, 'fq' => $jrow ) );
+		$check( "O3 a running job's row opens redacted in the browser, its typed FTP password unseen ({$st})", 200 === $st && $has( $d, $jrow ) && ! $has( $d, $pass ) && ! $has( $d, 'ftp.example.test' ), wp_json_encode( $d['rows'] ?? $d ) );
+		if ( function_exists( 'minn_admin_updraft_job_status' ) ) {
+			$js = minn_admin_updraft_job_status( array( 'started' => time() - 10, 'nonce' => $nonce ) );
+			$check( "O3 control: Minn's own backup progress still reads the job row (status {$js['status']})", 'running' === ( $js['status'] ?? '' ) && ! $has( $js, $pass ), wp_json_encode( $js ) );
+		} else {
+			$skip( 'O3 control: UpdraftPlus is not active' );
+		}
+	}
+} finally {
+	$clean();
+}
 
 /*
  * S4 (review round): the licences screen quoted Slider Revolution's and
