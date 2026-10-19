@@ -190,6 +190,23 @@ class Minn_Admin_Kernel_SQL {
 		return array( $sql, $args );
 	}
 
+	/**
+	 * Conditions with a tag after each key ("site_id\0fixed"), so they join
+	 * other conditions on the same columns without replacing any: the tag is
+	 * dropped where a key is read as a column.
+	 *
+	 * @param array  $where Conditions.
+	 * @param string $why   Tag.
+	 * @return array
+	 */
+	public static function tag( array $where, $why ) {
+		$out = array();
+		foreach ( $where as $col => $rule ) {
+			$out[ $col . "\0" . $why ] = $rule;
+		}
+		return $out;
+	}
+
 	/** Whether a condition's key is '#any' (its tag after a NUL aside): groups, not a column. */
 	private static function is_groups( $key ) {
 		return '#any' === explode( "\0", (string) $key, 2 )[0];

@@ -438,7 +438,7 @@ function minn_admin_cfdb7_status_model() {
 	// form_date is site-local current_time, so the chart groups on the site's
 	// days. CFDB7 keeps no spam: every row counts into the one series.
 	$n = Minn_Admin_Kernel::inbox_counts( array(
-		'table'    => 'db7_forms',
+		'resource' => 'cfdb7/entries',
 		'received' => array(),
 		'chart'    => array( 'column' => 'form_date', 'clock' => 'local', 'split' => 'form_post_id', 'secondary' => array() ),
 	) );

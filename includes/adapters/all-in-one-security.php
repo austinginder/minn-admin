@@ -102,13 +102,11 @@ function minn_admin_aios_login_posture() {
 	if ( Minn_Admin_Kernel_SQL::exists( 'aiowps_permanent_block' ) ) {
 		$out['blocks'] = Minn_Admin_Kernel_SQL::count( 'aiowps_permanent_block' );
 	}
-	$audit = array( 'table' => 'aiowps_audit_log', 'network' => true );
-	if ( Minn_Admin_Kernel_SQL::exists( $audit ) ) {
-		$out['failed_24h'] = Minn_Admin_Kernel_SQL::count( $audit, array_merge( minn_admin_aios_site_scope(), array(
-			'event_type' => 'failed_login',
-			'created'    => Minn_Admin_Kernel::since( 'epoch', DAY_IN_SECONDS ),
-		) ) );
-	}
+	// Over the rows the audit log's list shows: this site's, on a network.
+	$out['failed_24h'] = Minn_Admin_Kernel::count( 'aios/events', array(
+		'event_type' => 'failed_login',
+		'created'    => Minn_Admin_Kernel::since( 'epoch', DAY_IN_SECONDS ),
+	) );
 	return $out;
 }
 

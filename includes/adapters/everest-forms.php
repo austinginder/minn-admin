@@ -287,8 +287,7 @@ function minn_admin_everest_status_model() {
 	}
 	// date_created is UTC: the chart buckets each row onto the site's day.
 	$n = Minn_Admin_Kernel::inbox_counts( array(
-		'table'    => 'evf_entries',
-		'scope'    => array( 'column' => 'form_id', 'allowed' => $scope ),
+		'resource' => 'everest/entries',
 		'received' => array( 'status' => 'publish' ),
 		'unread'   => array( 'status' => 'publish', 'viewed' => 1 ),
 		'spam'     => array( 'status' => 'spam' ),

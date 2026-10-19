@@ -1924,30 +1924,52 @@ $check( "an error's nested data loses debug keys and quoted SQL, and keeps the r
 list( $st, $d ) = $call( 'GET', '/minn-admin/v1/minn-conformance/review-err-response' );
 $check( "a vendor's error response keeps its status and shape, scrubbed as an error is", 500 === $st && 'vendor' === ( $d['code'] ?? '' ) && __( 'That did not work. Nothing was reported as done.', 'minn-admin' ) === ( $d['message'] ?? null ) && ! isset( $d['data']['sql'] ), wp_json_encode( $d ) );
 
-// Inbox counts under a scope.
-$rv_inbox = function ( $scope ) {
-	$c = array(
-		'table'    => 'minn_conf_review',
-		'received' => array(),
+// Inbox counts: over a table no resource lists, or over a resource's rows
+// under the same rules as its list (fixed conditions and scope).
+$rv_sc    = null;
+$rv_fixed = array();
+Minn_Admin_Kernel::resource( 'minn-conformance/review-inbox', array_merge( $rv_def, array(
+	'source' => array_merge( $rv_def['source'], array( 'where' => function () use ( &$rv_fixed ) {
+		return $rv_fixed;
+	} ) ),
+	'list'   => array_merge( $rv_def['list'], array( 'scope' => array( 'column' => 'owner', 'allowed' => function () use ( &$rv_sc ) {
+		return $rv_sc;
+	} ) ) ),
+) ) );
+Minn_Admin_Kernel::resource( 'minn-conformance/review-inbox-unread', array_merge( $rv_def, array( 'list' => array_merge( $rv_def['list'], array( 'scope' => array( 'column' => 'owner' ) ) ) ) ) );
+$rv_inbox = function ( $on, array $received = array() ) {
+	return Minn_Admin_Kernel::inbox_counts( array(
+		$on ? 'resource' : 'table' => $on ? $on : 'minn_conf_review',
+		'received' => $received,
 		'spam'     => array( 'status' => 'spam' ),
 		'chart'    => array( 'column' => 'created', 'clock' => 'local', 'split' => 'status', 'secondary' => array( 'spam' ) ),
-	);
-	if ( false !== $scope ) {
-		$c['scope'] = $scope;
-	}
-	return Minn_Admin_Kernel::inbox_counts( $c );
+	) );
 };
-$n_open = $rv_inbox( false );
-$n_null = $rv_inbox( array( 'column' => 'owner', 'allowed' => null ) );
-$n_10   = $rv_inbox( array( 'column' => 'owner', 'allowed' => array( 10 ) ) );
-$check( 'inbox counts: no scope or a null one counts every row; ids count theirs, the chart too', 8 === $n_open['received'] && 2 === $n_open['spam'] && 2 === $n_open['days'][ $rv_today ]['value'] && 8 === $n_null['received'] && 3 === $n_10['received'] && 0 === $n_10['spam'] && 1 === $n_10['days'][ $rv_today ]['value'], wp_json_encode( array( $n_open['received'], $n_null['received'], $n_10['received'], $n_10['days'][ $rv_today ] ?? null ) ) );
-$rv_empty = true;
-foreach ( array( array(), false, 'all', new WP_Error( 'x' ), 'missing' ) as $allowed ) {
-	$sc       = 'missing' === $allowed ? array( 'column' => 'owner' ) : array( 'column' => 'owner', 'allowed' => $allowed );
-	$n        = $rv_inbox( $sc );
-	$rv_empty = $rv_empty && 0 === $n['received'] && 0 === $n['spam'] && 0 === $n['days'][ $rv_today ]['value'];
+$rv_n = function ( $n ) use ( $rv_today ) {
+	return array( $n['received'], $n['spam'], $n['days'][ $rv_today ]['value'] ?? -1 );
+};
+$n_open  = $rv_n( $rv_inbox( false ) );
+$n_null  = $rv_n( $rv_inbox( 'minn-conformance/review-inbox' ) );
+$rv_sc   = array( 10 );
+$n_10    = $rv_n( $rv_inbox( 'minn-conformance/review-inbox' ) );
+$rv_sc   = null;
+$rv_fixed = array( 'owner' => 20 );
+$n_20    = $rv_n( $rv_inbox( 'minn-conformance/review-inbox' ) );
+$n_20_10 = $rv_n( $rv_inbox( 'minn-conformance/review-inbox', array( 'owner' => 10 ) ) );
+$rv_fixed = array();
+$check( "inbox counts: a table counts every row; a resource's count only the rows its list shows, its scope and its fixed conditions alike, and a card's own condition on the same column narrows further, never replacing them", array( 8, 2, 2 ) === $n_open && array( 8, 2, 2 ) === $n_null && array( 3, 0, 1 ) === $n_10 && array( 3, 1, 1 ) === $n_20 && array( 0, 1, 1 ) === $n_20_10, wp_json_encode( array( $n_open, $n_null, $n_10, $n_20, $n_20_10 ) ) );
+$rv_empty = array();
+foreach ( array( array(), false, 'all', new WP_Error( 'x' ) ) as $allowed ) {
+	$rv_sc      = $allowed;
+	$rv_empty[] = $rv_n( $rv_inbox( 'minn-conformance/review-inbox' ) );
 }
-$check( 'inbox counts: an empty scope, or one that is not ids, counts nothing', $rv_empty );
+$rv_sc      = null;
+$rv_fixed   = false;
+$rv_empty[] = $rv_n( $rv_inbox( 'minn-conformance/review-inbox' ) );
+$rv_fixed   = array();
+$rv_empty[] = $rv_n( $rv_inbox( 'minn-conformance/review-inbox-unread' ) );
+$rv_empty[] = $rv_n( $rv_inbox( 'minn-conformance/review-nowhere' ) );
+$check( 'inbox counts: an empty scope, one that is not ids, a fixed condition that cannot answer, a declaration the kernel refused or one never made counts nothing', array_fill( 0, 7, array( 0, 0, 0 ) ) === $rv_empty, wp_json_encode( $rv_empty ) );
 
 // Gone is proven by the store, never by a read that could not be made.
 $rv_where = true;

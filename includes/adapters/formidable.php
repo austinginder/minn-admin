@@ -158,7 +158,7 @@ function minn_admin_formidable_status_model() {
 	// row onto the site's day and the week's window is UTC too. Formidable
 	// keeps no spam: every row counts into the one series.
 	$n    = Minn_Admin_Kernel::inbox_counts( array(
-		'table'    => 'frm_items',
+		'resource' => 'formidable/entries',
 		'received' => $submitted,
 		'chart'    => array( 'column' => 'created_at', 'clock' => 'utc', 'where' => $submitted, 'split' => 'form_id', 'secondary' => array() ),
 	) );

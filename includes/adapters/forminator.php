@@ -191,14 +191,14 @@ function minn_admin_forminator_status_model() {
 	// join with AND) and their days added together.
 	$chart    = array( 'column' => 'date_created', 'clock' => 'local', 'split' => 'is_spam', 'secondary' => array( 1 ) );
 	$received = Minn_Admin_Kernel::inbox_counts( array(
-		'table'    => 'frmt_form_entry',
+		'resource' => 'forminator/entries',
 		'received' => minn_admin_forminator_bucket( 'received' ),
 		'chart'    => $chart + array( 'where' => minn_admin_forminator_bucket( 'received' ) ),
 	) );
 	$spammed  = Minn_Admin_Kernel::inbox_counts( array(
-		'table' => 'frmt_form_entry',
-		'spam'  => minn_admin_forminator_bucket( 'spam' ),
-		'chart' => $chart + array( 'where' => minn_admin_forminator_bucket( 'spam' ) ),
+		'resource' => 'forminator/entries',
+		'spam'     => minn_admin_forminator_bucket( 'spam' ),
+		'chart'    => $chart + array( 'where' => minn_admin_forminator_bucket( 'spam' ) ),
 	) );
 	$days = $received['days'];
 	foreach ( $spammed['days'] as $d => $p ) {

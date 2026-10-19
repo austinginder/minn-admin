@@ -420,7 +420,7 @@ minn_admin_endpoint( 'sureforms/status', array(
 		// created_at is site-local, so the chart groups on the site's day.
 		$kept = array( 'status' => array( 'not' => array( 'trash' ) ) );
 		$n    = Minn_Admin_Kernel::inbox_counts( array(
-			'table'    => 'srfm_entries',
+			'resource' => 'sureforms/entries',
 			'received' => $kept,
 			'unread'   => array( 'status' => 'unread' ),
 			'chart'    => array( 'column' => 'created_at', 'clock' => 'local', 'where' => $kept, 'split' => 'status' ),

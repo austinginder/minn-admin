@@ -223,8 +223,7 @@ function minn_admin_wpforms_status_model() {
 	// arrive from unauthenticated submissions, so a per-row fetch is unbounded.
 	$inbox = array( 'status' => array( 'not' => array( 'spam', 'trash' ) ) );
 	$n     = Minn_Admin_Kernel::inbox_counts( array(
-		'table'    => 'wpforms_entries',
-		'scope'    => array( 'column' => 'form_id', 'allowed' => $allowed ),
+		'resource' => 'wpforms/entries',
 		'received' => $inbox,
 		'unread'   => $inbox + array( 'viewed' => 0 ),
 		'spam'     => array( 'status' => 'spam' ),

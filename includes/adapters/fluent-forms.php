@@ -251,8 +251,7 @@ function minn_admin_fluent_forms_status_model() {
 	// created_at is site-local current_time, so the chart groups on the site's days.
 	$kept = array( 'status' => array( 'not' => array( 'trashed' ) ) );
 	$n    = Minn_Admin_Kernel::inbox_counts( array(
-		'table'    => 'fluentform_submissions',
-		'scope'    => array( 'column' => 'form_id', 'allowed' => $scope ),
+		'resource' => 'fluent-forms/entries',
 		'received' => $kept,
 		'unread'   => array( 'status' => 'unread' ),
 		'spam'     => array( 'status' => 'spam' ),

@@ -459,20 +459,16 @@ class Minn_Admin_Kernel {
 				return false;
 			}
 		}
-		$l = (array) ( $res['list'] ?? array() );
-		if ( null !== self::scope( $res ) || ( ! empty( $l['tab']['gate'] ) && empty( $l['scope'] ) ) ) {
+		$l     = (array) ( $res['list'] ?? array() );
+		$rules = self::rules( $res );
+		if ( null !== $rules['allowed'] || null === $rules['fixed'] || ( ! empty( $l['tab']['gate'] ) && empty( $l['scope'] ) ) ) {
 			return false;
 		}
-		$src   = (array) ( $res['source'] ?? array() );
-		$fixed = self::fixed( $src );
-		if ( null === $fixed ) {
-			return false;
-		}
-		$viewer = $src['viewer'] ?? null;
+		$viewer = $res['source']['viewer'] ?? null;
 		// A viewer's own scope admits someone it narrows nothing for, or
 		// someone the adapter's own answer says it shows all the plugin shows
 		// anyone (a scope that is never empty, as a log's own list of types).
-		return empty( $viewer ) || array() === $fixed || ( true !== $viewer && self::yes( $viewer ) );
+		return empty( $viewer ) || array() === $rules['fixed'] || ( true !== $viewer && self::yes( $viewer ) );
 	}
 
 	/**
@@ -1190,8 +1186,9 @@ class Minn_Admin_Kernel {
 		if ( ! is_array( $res ) ) {
 			return self::fail( 'not_found', __( 'Not found.', 'minn-admin' ), 404 );
 		}
-		$id  = (int) $id;
-		$row = $id > 0 ? self::fetch( $res, $id, 'detail' ) : null;
+		$id    = (int) $id;
+		$rules = self::rules( $res );
+		$row   = $id > 0 && null !== $rules['fixed'] ? self::fetch( $res, $id, $rules['fixed'] ) : null;
 		if ( ! $row ) {
 			return self::fail( 'not_found', self::label( $res, 'not_found', __( 'Not found.', 'minn-admin' ) ), 404 );
 		}
@@ -1201,12 +1198,9 @@ class Minn_Admin_Kernel {
 		}
 		// The list's scope holds for the row too, so a resource whose row
 		// gate is missing or narrower than its scope cannot be read by id.
-		$allowed = self::scope( $res );
-		$col     = array_key_exists( '_minn_scope', $row ) ? '_minn_scope' : ( isset( $res['list']['scope']['column'] ) ? self::bare( $res['list']['scope']['column'] ) : '' );
-		if ( is_array( $allowed ) ) {
-			if ( '' === $col || ! array_key_exists( $col, $row ) || ! in_array( (int) $row[ $col ], $allowed, true ) ) {
-				return $forbidden;
-			}
+		// The fixed conditions held when the row was read.
+		if ( ! self::kept( array( 'fixed' => array() ) + $rules, $row, array_key_exists( '_minn_scope', $row ) ? '_minn_scope' : null ) ) {
+			return $forbidden;
 		}
 		unset( $row['_minn_scope'] );
 		return $row;
@@ -1234,34 +1228,82 @@ class Minn_Admin_Kernel {
 		return is_array( $allowed ) ? array_values( array_map( 'intval', $allowed ) ) : array();
 	}
 
-	/** One row from the source, or null. */
-	private static function fetch( array $res, $id, $which = 'detail' ) {
+	/**
+	 * The one rule every reader holds a resource's rows to: the source's
+	 * fixed conditions and the list's scope. The list, an item and its
+	 * actions, a callable source's rows, the status card readers, a tab list
+	 * and a reader of the whole table all ask it, so none can hold less.
+	 *
+	 * @param array $res Resource.
+	 * @return array{where: array, fixed: ?array, allowed: ?int[], none: bool}
+	 *               where: both as conditions, each keyed apart so neither
+	 *               replaces a rule on the same column; fixed: null when its
+	 *               function cannot answer; allowed: null for no scope; none:
+	 *               no row can meet them.
+	 */
+	private static function rules( array $res ) {
+		$fixed   = self::fixed( $res['source'] ?? array() );
+		$allowed = self::scope( $res );
+		$where   = Minn_Admin_Kernel_SQL::tag( (array) $fixed, 'fixed' );
+		if ( is_array( $allowed ) ) {
+			$where[ $res['list']['scope']['column'] . "\0scope" ] = $allowed;
+		}
+		return array(
+			'where'   => $where,
+			'fixed'   => $fixed,
+			'allowed' => $allowed,
+			'column'  => (string) ( $res['list']['scope']['column'] ?? '' ),
+			'none'    => null === $fixed || array() === $allowed,
+		);
+	}
+
+	/**
+	 * Whether a row read outside SQL (a callable source's) meets the rules.
+	 * A row without the scope's column cannot show that it belongs.
+	 *
+	 * @param array       $rules rules().
+	 * @param array       $row   Row.
+	 * @param string|null $col   The scope's column in the row, when not its declared name.
+	 * @return bool
+	 */
+	private static function kept( array $rules, array $row, $col = null ) {
+		if ( null === $rules['fixed'] ) {
+			return false;
+		}
+		try {
+			if ( $rules['fixed'] && ! Minn_Admin_Kernel_SQL::matches( $row, $rules['fixed'] ) ) {
+				return false;
+			}
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+		if ( ! is_array( $rules['allowed'] ) ) {
+			return true;
+		}
+		$col = $col ?? self::bare( $rules['column'] );
+		return '' !== $col && array_key_exists( $col, $row ) && in_array( (int) $row[ $col ], $rules['allowed'], true );
+	}
+
+	/**
+	 * One row from the source under its fixed conditions, or null.
+	 *
+	 * @param array $res   Resource.
+	 * @param int   $id    Row id.
+	 * @param array $fixed The source's fixed conditions (rules()).
+	 * @return array|null
+	 */
+	private static function fetch( array $res, $id, array $fixed ) {
 		$src = $res['source'] ?? array();
 		if ( ! empty( $src['get'] ) ) {
 			$row = call_user_func( $src['get'], (int) $id );
-			if ( ! is_array( $row ) ) {
-				return null;
-			}
 			// The source's fixed conditions hold for a row read by id as they
 			// do for the list, which reads them in list_where().
-			if ( isset( $src['where'] ) ) {
-				$fixed = self::fixed( $src );
-				try {
-					return null !== $fixed && Minn_Admin_Kernel_SQL::matches( $row, $fixed ) ? $row : null;
-				} catch ( \Throwable $e ) {
-					return null;
-				}
-			}
-			return $row;
+			return is_array( $row ) && self::kept( array( 'fixed' => $fixed, 'allowed' => null ), $row ) ? $row : null;
 		}
 		if ( empty( $src['table'] ) || ! Minn_Admin_Kernel_SQL::exists( self::table_of( $src ) ) ) {
 			return null;
 		}
-		$fixed = self::fixed( $src );
-		if ( null === $fixed ) {
-			return null;
-		}
-		$cols = self::cols( $src[ $which ] ?? $src['columns'] ?? array() );
+		$cols = self::cols( $src['detail'] ?? $src['columns'] ?? array() );
 		// The scope column under a name no other column can take, so a joined
 		// column of the same name can never stand in for it in load().
 		if ( ! empty( $res['list']['scope']['column'] ) ) {
@@ -1322,11 +1364,15 @@ class Minn_Admin_Kernel {
 	}
 
 	/**
-	 * The list's request, read once: page, size, filter, tab, search, range.
+	 * The list's request, read once: page, size, filter, tab, search, range,
+	 * all under the resource's rules.
 	 *
+	 * @param array           $res   Resource.
+	 * @param WP_REST_Request $r     Request.
+	 * @param array           $rules rules().
 	 * @return array|WP_Error
 	 */
-	private static function list_query( array $res, WP_REST_Request $r ) {
+	private static function list_query( array $res, WP_REST_Request $r, array $rules ) {
 		$l        = $res['list'];
 		$size     = (int) ( $l['per_page'] ?? 25 );
 		$q        = array(
@@ -1366,12 +1412,8 @@ class Minn_Admin_Kernel {
 				$q['where'][ $f['column'] ] = $v;
 			}
 		}
-		if ( ! empty( $l['scope'] ) ) {
-			$allowed = self::scope( $res );
-			if ( is_array( $allowed ) ) {
-				$q['allowed'] = $allowed;
-				$q['where'][ $l['scope']['column'] . "\0scope" ] = $allowed;
-			}
+		if ( is_array( $rules['allowed'] ) ) {
+			$q['allowed'] = $rules['allowed'];
 		}
 		if ( ! empty( $l['tab'] ) ) {
 			$tab = (int) self::param( $r, $l['tab']['param'] );
@@ -1420,26 +1462,16 @@ class Minn_Admin_Kernel {
 				continue;
 			}
 			$q['facets'][ (string) $f['param'] ] = $v;
-			foreach ( $conds as $col => $rule ) {
-				$q['where'][ $col . "\0facet{$i}" ] = $rule;
-			}
+			$q['where']                         += Minn_Admin_Kernel_SQL::tag( $conds, "facet{$i}" );
 		}
 		if ( ! empty( $l['search'] ) ) {
 			$q['search'] = self::param( $r, $l['search']['param'] ?? 'search' );
 		}
-		// What every read of the source meets (a site column), first; an
-		// array source is held to it in PHP, a callable one reads it in
-		// list_where().
-		$fixed = self::fixed( $res['source'] ?? array() );
-		if ( null === $fixed ) {
-			$q['none'] = true;
-			return $q;
-		}
-		$own = array();
-		foreach ( $fixed as $col => $rule ) {
-			$own[ $col . "\0fixed" ] = $rule;
-		}
-		$q['where'] = array_merge( $own, $q['where'] );
+		// What every read of the source meets (a site column, the scope),
+		// first; an array source is held to it in PHP, a callable one reads
+		// it in list_where().
+		$q['none']  = ! empty( $q['none'] ) || $rules['none'];
+		$q['where'] = array_merge( $rules['where'], $q['where'] );
 		return $q;
 	}
 
@@ -1508,57 +1540,34 @@ class Minn_Admin_Kernel {
 	}
 
 	public static function handle_list( array $res, WP_REST_Request $r ) {
-		$l = $res['list'];
-		$q = self::list_query( $res, $r );
+		$l     = $res['list'];
+		$rules = self::rules( $res );
+		$q     = self::list_query( $res, $r, $rules );
 		if ( is_wp_error( $q ) ) {
 			return $q;
 		}
 		$src = $res['source'];
-		if ( ( isset( $q['allowed'] ) && ! $q['allowed'] ) || ! empty( $q['none'] )
-			|| ( ! empty( $src['table'] ) && ! Minn_Admin_Kernel_SQL::exists( self::table_of( $src ) ) ) ) {
+		if ( $q['none'] || ( ! empty( $src['table'] ) && ! Minn_Admin_Kernel_SQL::exists( self::table_of( $src ) ) ) ) {
 			return array( 'items' => array(), 'total' => 0 );
 		}
 		if ( ! empty( $src['rows'] ) ) {
 			list( $rows, $total ) = self::array_page( $l, $q, (array) call_user_func( $src['rows'] ) );
 		} elseif ( ! empty( $src['list'] ) ) {
 			list( $rows, $total ) = call_user_func( $src['list'], $q );
-			// And to the source's fixed conditions, which it reads in
-			// list_where(): a row outside them never shows, and a total that
-			// counted one cannot be trusted.
-			if ( isset( $src['where'] ) ) {
-				$fixed = self::fixed( $src );
-				$kept  = array();
-				foreach ( (array) $rows as $row ) {
-					try {
-						$ok = null !== $fixed && Minn_Admin_Kernel_SQL::matches( (array) $row, $fixed );
-					} catch ( \Throwable $e ) {
-						$ok = false;
-					}
-					if ( $ok ) {
-						$kept[] = $row;
-					}
+			// A callable source reads the rules in list_where() and is handed
+			// the scope in $q['allowed']; its rows are held to them here as
+			// well, and a source that let one through cannot be trusted for
+			// the total either: count only what is shown.
+			$kept = array();
+			foreach ( (array) $rows as $row ) {
+				if ( self::kept( $rules, (array) $row ) ) {
+					$kept[] = $row;
 				}
-				if ( count( $kept ) !== count( (array) $rows ) ) {
-					$total = count( $kept );
-				}
-				$rows = $kept;
 			}
-			// A callable source is handed the scope in $q['allowed']; its rows
-			// are held to it here as well, and a row without the scope column
-			// cannot show that it belongs.
-			if ( isset( $q['allowed'] ) ) {
-				$col  = self::bare( $l['scope']['column'] );
-				$kept = array_values( array_filter( (array) $rows, function ( $row ) use ( $col, $q ) {
-					$row = (array) $row;
-					return array_key_exists( $col, $row ) && in_array( (int) $row[ $col ], $q['allowed'], true );
-				} ) );
-				// A source that ignored the scope cannot be trusted for the
-				// total either: count only what is shown.
-				if ( count( $kept ) !== count( (array) $rows ) ) {
-					$total = count( $kept );
-				}
-				$rows = $kept;
+			if ( count( $kept ) !== count( (array) $rows ) ) {
+				$total = count( $kept );
 			}
+			$rows = $kept;
 		} else {
 			list( $sql, $args ) = Minn_Admin_Kernel_SQL::where( $q['where'], 'e' );
 			if ( '' !== $q['search'] ) {
@@ -1906,7 +1915,8 @@ class Minn_Admin_Kernel {
 		}
 		// Nothing is read back after a send: a read that failed then would
 		// answer 500 for mail that went, and invite sending it twice.
-		$fresh = $send ? null : self::fetch( $res, $id, 'detail' );
+		$fixed = self::fixed( $res['source'] ?? array() );
+		$fresh = $send || null === $fixed ? null : self::fetch( $res, $id, $fixed );
 		$held  = false;
 		if ( 'gone' === $expect ) {
 			// A callable source's own read may hide a row from this caller,
@@ -1922,8 +1932,7 @@ class Minn_Admin_Kernel {
 			} elseif ( ! empty( $res['source']['table'] ) ) {
 				// A read that failed returns no row too: gone only once the
 				// store answers that it holds none.
-				$fixed = self::fixed( $res['source'] );
-				$held  = null !== $fixed && Minn_Admin_Kernel_SQL::absent( self::table_of( $res['source'] ), $res['source']['key'], $id, $fixed );
+				$held = null !== $fixed && Minn_Admin_Kernel_SQL::absent( self::table_of( $res['source'] ), $res['source']['key'], $id, $fixed );
 			} else {
 				$held = null === $fresh;
 			}
@@ -2161,44 +2170,33 @@ class Minn_Admin_Kernel {
 	}
 
 	/**
-	 * Counts and a 14-day chart for an inbox status card, under the same
-	 * scope as the list.
+	 * Counts and a 14-day chart for an inbox status card: over the rows a
+	 * resource's list may show (its fixed conditions and scope, as every
+	 * reader of it), or over a table no resource lists.
 	 *
-	 * @param array $c table, scope (column + allowed ids or null), received,
-	 *                 unread and spam (conditions), chart (column, clock,
-	 *                 where, split, secondary).
+	 * @param array $c resource (its id) or table, received, unread and spam
+	 *                 (conditions), chart (column, clock, where, split,
+	 *                 secondary).
 	 * @return array received, unread, spam (ints), chart (built, or null)
 	 */
 	public static function inbox_counts( array $c ) {
-		$scope = array();
-		if ( isset( $c['scope'] ) ) {
-			$allowed = is_array( $c['scope'] ) && array_key_exists( 'allowed', $c['scope'] ) ? $c['scope']['allowed'] : false;
-			// null is no restriction; anything but ids (false, a WP_Error, a
-			// missing key) is an empty scope, never an open one.
-			if ( null !== $allowed && ! is_array( $allowed ) ) {
-				$allowed = array();
-			}
-			if ( is_array( $allowed ) ) {
-				$scope = array( $c['scope']['column'] => array_values( array_map( 'intval', $allowed ) ) );
-			}
-		}
-		$out = array();
+		$rows = isset( $c['resource'] ) ? self::card_rows( (string) $c['resource'], array() ) : array( $c['table'], array() );
+		$out  = array();
 		foreach ( array( 'received', 'unread', 'spam' ) as $k ) {
-			$out[ $k ] = isset( $c[ $k ] ) ? Minn_Admin_Kernel_SQL::count( $c['table'], array_merge( (array) $c[ $k ], $scope ) ) : 0;
+			$out[ $k ] = isset( $c[ $k ] ) && $rows ? Minn_Admin_Kernel_SQL::count( $rows[0], $rows[1] + Minn_Admin_Kernel_SQL::tag( (array) $c[ $k ], 'card' ) ) : 0;
 		}
 		$out['days'] = null;
 		if ( ! empty( $c['chart'] ) ) {
-			$out['days'] = Minn_Admin_Kernel_SQL::chart_days( array_merge( $c['chart'], array(
-				'table' => $c['table'],
-				'where' => array_merge( (array) ( $c['chart']['where'] ?? array() ), $scope ),
+			$out['days'] = ! $rows ? Minn_Admin_Kernel_SQL::empty_days( ! empty( $c['chart']['ahead'] ), (string) ( $c['chart']['label'] ?? '' ) ) : Minn_Admin_Kernel_SQL::chart_days( array_merge( $c['chart'], array(
+				'table' => $rows[0],
+				'where' => $rows[1] + Minn_Admin_Kernel_SQL::tag( (array) ( $c['chart']['where'] ?? array() ), 'card' ),
 			) ) );
 		}
 		return $out;
 	}
 
 	/**
-	 * What every count over a table resource's rows meets: its fixed
-	 * conditions and the list's scope, keyed so neither replaces the other.
+	 * What every count over a table resource's rows meets: its rules().
 	 * null when the caller may see none of its rows or the table is missing.
 	 *
 	 * @param array $res Resource.
@@ -2209,19 +2207,8 @@ class Minn_Admin_Kernel {
 		if ( empty( $src['table'] ) || ! Minn_Admin_Kernel_SQL::exists( self::table_of( $src ) ) ) {
 			return null;
 		}
-		$fixed   = self::fixed( $src );
-		$allowed = self::scope( $res );
-		if ( null === $fixed || ( is_array( $allowed ) && ! $allowed ) ) {
-			return null;
-		}
-		$where = array();
-		foreach ( $fixed as $col => $rule ) {
-			$where[ $col . "\0fixed" ] = $rule;
-		}
-		if ( is_array( $allowed ) ) {
-			$where[ $res['list']['scope']['column'] . "\0scope" ] = $allowed;
-		}
-		return $where;
+		$rules = self::rules( $res );
+		return $rules['none'] ? null : $rules['where'];
 	}
 
 	/**
@@ -2315,9 +2302,7 @@ class Minn_Admin_Kernel {
 			return $out;
 		}
 		$w = function ( array $extra = array(), $window = 0 ) use ( $base, $col, $clock ) {
-			foreach ( $extra as $k => $rule ) {
-				$base[ $k . "\0extra" ] = $rule;
-			}
+			$base += Minn_Admin_Kernel_SQL::tag( $extra, 'extra' );
 			if ( $window > 0 ) {
 				$base[ $col . "\0since" ] = Minn_Admin_Kernel::since( $clock, $window );
 			}
@@ -2389,10 +2374,7 @@ class Minn_Admin_Kernel {
 		if ( null === $base ) {
 			return array();
 		}
-		foreach ( $where as $k => $rule ) {
-			$base[ $k . "\0extra" ] = $rule;
-		}
-		return Minn_Admin_Kernel_SQL::distinct( self::table_of( $res['source'] ), $column, $base );
+		return Minn_Admin_Kernel_SQL::distinct( self::table_of( $res['source'] ), $column, $base + Minn_Admin_Kernel_SQL::tag( $where, 'extra' ) );
 	}
 
 	/**
@@ -2459,10 +2441,7 @@ class Minn_Admin_Kernel {
 		if ( null === $base ) {
 			return null;
 		}
-		foreach ( $where as $k => $rule ) {
-			$base[ $k . "\0card" ] = $rule;
-		}
-		return array( self::table_of( $res['source'] ), $base );
+		return array( self::table_of( $res['source'] ), $base + Minn_Admin_Kernel_SQL::tag( $where, 'card' ) );
 	}
 
 	/**
