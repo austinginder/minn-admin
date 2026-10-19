@@ -844,6 +844,25 @@ class Minn_Admin_Kernel {
 		self::wrong( 'minn_admin_resource', "{$where} names no declared gate \"{$name}\", so it has no route." );
 	}
 
+	/**
+	 * A route endpoint the kernel owns: the declaring file, the method, the
+	 * gate, and the handler answering in one shape (guarded()).
+	 *
+	 * @param array    $res     Resource.
+	 * @param string   $method  Method.
+	 * @param callable $gate    Permission callback.
+	 * @param callable $handler Handler, called with the request.
+	 * @return array
+	 */
+	private static function ep( array $res, $method, callable $gate, callable $handler ) {
+		return array(
+			'minn_file'           => $res['file'],
+			'methods'             => $method,
+			'permission_callback' => $gate,
+			'callback'            => self::guarded( $handler ),
+		);
+	}
+
 	private static function register_resource( array $res ) {
 		$base = '/' . $res['id'];
 		$item = $base . '/(?P<id>\d+)';
@@ -852,15 +871,63 @@ class Minn_Admin_Kernel {
 			self::missing_gate( $res['id'], 'view' );
 			return;
 		}
-		// No list route, and nothing else changed: the item, reads and actions
-		// still hold the list's scope (a filter's values built from the
-		// vendor's data can come out empty).
-		$listed = ! empty( $res['list'] );
-		if ( $listed && ! empty( $res['list']['filter'] ) && empty( $res['list']['filter']['values'] ) ) {
-			self::wrong( 'minn_admin_resource', "{$res['id']} declares a filter with no values, so it has no list route." );
-			$listed = false;
+		$listed = self::listed( $res );
+		$create = self::create_ep( $res );
+		$eps    = array();
+		if ( $listed ) {
+			$eps[] = self::ep( $res, 'GET', $view, function ( WP_REST_Request $r ) use ( $res ) {
+				return Minn_Admin_Kernel::handle_list( $res, $r );
+			} );
 		}
-		if ( ! empty( $res['list']['filter']['many'] ) && ( isset( $res['list']['filter']['default'] ) || isset( $res['list']['filter']['order'] ) ) ) {
+		if ( $create ) {
+			$eps[] = $create;
+		}
+		if ( $eps ) {
+			self::route( $base, $eps, $res['id'] );
+		}
+		self::register_reads( $res, $item );
+		// Each method on each route once: a second would be shadowed by the first.
+		$taken = array( 'GET ' . $base => $listed, 'POST ' . $base => ! empty( $res['create'] ), 'GET ' . $item => ! empty( $res['item'] ) );
+		foreach ( array_keys( (array) ( $res['reads'] ?? array() ) ) as $slug ) {
+			$taken[ 'GET ' . $item . '/' . sanitize_key( (string) $slug ) ] = true;
+		}
+		$on_item   = array();
+		$item_gate = (string) ( $res['item']['gate'] ?? 'view' );
+		$item_perm = ! empty( $res['item'] ) ? self::gate( $res, $item_gate ) : null;
+		if ( ! empty( $res['item'] ) && ! $item_perm ) {
+			self::missing_gate( $res['id'] . ' item', $item_gate );
+		}
+		if ( $item_perm ) {
+			$on_item[] = self::ep( $res, 'GET', $item_perm, function ( WP_REST_Request $r ) use ( $res ) {
+				return Minn_Admin_Kernel::handle_item( $res, $r );
+			} );
+		}
+		foreach ( (array) ( $res['actions'] ?? array() ) as $slug => $action ) {
+			$ep = self::action_ep( $res, (string) $slug, (array) $action, $item, $taken );
+			if ( $ep && self::on_item( $action ) ) {
+				$on_item[] = $ep;
+			} elseif ( $ep ) {
+				self::route( $item . '/' . sanitize_key( (string) $slug ), $ep, $res['id'] );
+			}
+		}
+		if ( $on_item ) {
+			self::route( $item, $on_item, $res['id'] );
+		}
+	}
+
+	/**
+	 * Whether a resource has its list route: it declares a list, and its
+	 * filter has values (built from the vendor's data, they can come out
+	 * empty: then only the list route goes, and the item, reads and actions
+	 * still hold the list's scope). A sort it cannot apply is dropped here,
+	 * so the list keeps its declared order.
+	 *
+	 * @param array $res Resource, its sort removed when it cannot be applied.
+	 * @return bool
+	 */
+	private static function listed( array &$res ) {
+		$f = $res['list']['filter'] ?? array();
+		if ( ! empty( $f['many'] ) && ( isset( $f['default'] ) || isset( $f['order'] ) ) ) {
 			self::wrong( 'minn_admin_resource', "{$res['id']} declares a default or an order on a filter taking several values, which it never applies." );
 		}
 		if ( isset( $res['list']['sort'] ) ) {
@@ -870,45 +937,55 @@ class Minn_Admin_Kernel {
 				unset( $res['list']['sort'] );
 			}
 		}
-		$base_eps = array();
-		if ( $listed ) {
-			$base_eps[] = array(
-				'minn_file'           => $res['file'],
-				'methods'             => 'GET',
-				'permission_callback' => $view,
-				'callback'            => self::guarded( function ( WP_REST_Request $r ) use ( $res ) {
-					return Minn_Admin_Kernel::handle_list( $res, $r );
-				} ),
-			);
+		if ( empty( $res['list'] ) ) {
+			return false;
 		}
-		if ( ! empty( $res['create'] ) ) {
-			$c_gate = (string) ( $res['create']['gate'] ?? '' );
-			$c_perm = '' === $c_gate ? null : self::gate( $res, $c_gate );
-			if ( ! $c_perm || empty( $res['create']['run'] ) ) {
-				self::missing_gate( $res['id'] . ' create', $c_gate );
-			} elseif ( ! empty( $res['list']['scope'] ) || ! empty( $res['item_gate'] ) ) {
-				// A create cannot ask a scope or a row gate before its row exists.
-				self::wrong( 'minn_admin_resource', "{$res['id']} declares a create beside a scope or a row gate, so it has no route." );
-			} elseif ( isset( $res['create']['expect'] ) && 'exists' !== $res['create']['expect'] && ( is_string( $res['create']['expect'] ) || ! is_callable( $res['create']['expect'] ) ) ) {
-				// A misspelt expect would answer 500 after the vendor made the row.
-				self::wrong( 'minn_admin_resource', "{$res['id']} create declares an expect that is neither 'exists' nor a function, so it has no route." );
-			} elseif ( empty( $res['source']['table'] ) && ( empty( $res['create']['expect'] ) || 'exists' === $res['create']['expect'] ) ) {
-				// Only a table proves a row is new (its key); any other source says how.
-				self::wrong( 'minn_admin_resource', "{$res['id']} creates through a source that is not a table and declares no expect, so it has no route." );
-			} else {
-				$base_eps[] = array(
-					'minn_file'           => $res['file'],
-					'methods'             => 'POST',
-					'permission_callback' => $c_perm,
-					'callback'            => self::guarded( function ( WP_REST_Request $r ) use ( $res ) {
-						return Minn_Admin_Kernel::handle_create( $res, $r );
-					} ),
-				);
-			}
+		if ( ! empty( $f ) && empty( $f['values'] ) ) {
+			self::wrong( 'minn_admin_resource', "{$res['id']} declares a filter with no values, so it has no list route." );
+			return false;
 		}
-		if ( $base_eps ) {
-			self::route( $base, $base_eps, $res['id'] );
+		return true;
+	}
+
+	/**
+	 * A resource's create on its collection route, or null (with a notice
+	 * for each reason it cannot have one).
+	 *
+	 * @param array $res Resource.
+	 * @return array|null
+	 */
+	private static function create_ep( array $res ) {
+		if ( empty( $res['create'] ) ) {
+			return null;
 		}
+		$c    = $res['create'];
+		$gate = (string) ( $c['gate'] ?? '' );
+		$perm = '' === $gate ? null : self::gate( $res, $gate );
+		if ( ! $perm || empty( $c['run'] ) ) {
+			self::missing_gate( $res['id'] . ' create', $gate );
+			return null;
+		}
+		$expect = $c['expect'] ?? 'exists';
+		if ( ! empty( $res['list']['scope'] ) || ! empty( $res['item_gate'] ) ) {
+			// A create cannot ask a scope or a row gate before its row exists.
+			$why = 'declares a create beside a scope or a row gate';
+		} elseif ( 'exists' !== $expect && ( is_string( $expect ) || ! is_callable( $expect ) ) ) {
+			// A misspelt expect would answer 500 after the vendor made the row.
+			$why = "create declares an expect that is neither 'exists' nor a function";
+		} elseif ( empty( $res['source']['table'] ) && 'exists' === $expect ) {
+			// Only a table proves a row is new (its key); any other source says how.
+			$why = 'creates through a source that is not a table and declares no expect';
+		} else {
+			return self::ep( $res, 'POST', $perm, function ( WP_REST_Request $r ) use ( $res ) {
+				return Minn_Admin_Kernel::handle_create( $res, $r );
+			} );
+		}
+		self::wrong( 'minn_admin_resource', "{$res['id']} {$why}, so it has no route." );
+		return null;
+	}
+
+	/** Each further read of an item on its own route, behind its gate (the item's when it names none). */
+	private static function register_reads( array $res, $item ) {
 		foreach ( (array) ( $res['reads'] ?? array() ) as $slug => $read ) {
 			$gate_name = (string) ( $read['gate'] ?? ( $res['item']['gate'] ?? 'view' ) );
 			$gate      = self::gate( $res, $gate_name );
@@ -916,90 +993,65 @@ class Minn_Admin_Kernel {
 				self::missing_gate( $res['id'] . ' read ' . $slug, $gate_name );
 				continue;
 			}
-			self::route( $item . '/' . sanitize_key( (string) $slug ), array(
-				'minn_file'           => $res['file'],
-				'methods'             => 'GET',
-				'permission_callback' => $gate,
-				'callback'            => self::guarded( function ( WP_REST_Request $r ) use ( $res, $read, $gate_name ) {
-					$row = Minn_Admin_Kernel::load( $res, (int) Minn_Admin::path_param( $r ), $gate_name );
-					$out = is_wp_error( $row ) ? $row : call_user_func( $read['view'], $row, $r );
-					return is_wp_error( $out ) || empty( $read['fields'] ) ? $out : Minn_Admin_Kernel_Fields::out( $read['fields'], (array) $out );
-				} ),
-			), $res['id'] );
+			self::route( $item . '/' . sanitize_key( (string) $slug ), self::ep( $res, 'GET', $gate, function ( WP_REST_Request $r ) use ( $res, $read, $gate_name ) {
+				$row = Minn_Admin_Kernel::load( $res, (int) Minn_Admin::path_param( $r ), $gate_name );
+				$out = is_wp_error( $row ) ? $row : call_user_func( $read['view'], $row, $r );
+				return is_wp_error( $out ) || empty( $read['fields'] ) ? $out : Minn_Admin_Kernel_Fields::out( $read['fields'], (array) $out );
+			} ), $res['id'] );
 		}
-		$item_eps = array();
-		// Each method on each route once: a second would be shadowed by the first.
-		$taken = array( 'GET ' . $base => $listed, 'POST ' . $base => ! empty( $res['create'] ), 'GET ' . $item => ! empty( $res['item'] ) );
-		foreach ( array_keys( (array) ( $res['reads'] ?? array() ) ) as $slug ) {
-			$taken[ 'GET ' . $item . '/' . sanitize_key( (string) $slug ) ] = true;
+	}
+
+	/**
+	 * An action's endpoint, or null (with a notice saying why it has none):
+	 * a declared gate, a post-condition, a write method, a slug that is a
+	 * key, a method its route does not already answer, a source that can
+	 * prove gone, and args that are schemas.
+	 *
+	 * @param array  $res    Resource.
+	 * @param string $slug   Action slug.
+	 * @param array  $action The action.
+	 * @param string $item   The item route.
+	 * @param array  $taken  "METHOD route" already answered, this one added when it registers.
+	 * @return array|null
+	 */
+	private static function action_ep( array $res, $slug, array $action, $item, array &$taken ) {
+		$gate_name = (string) ( $action['gate'] ?? '' );
+		$gate      = '' === $gate_name ? null : self::gate( $res, $gate_name );
+		if ( ! $gate ) {
+			self::missing_gate( $res['id'] . ' action ' . $slug, $gate_name );
+			return null;
 		}
-		$item_gate = (string) ( $res['item']['gate'] ?? 'view' );
-		$item_perm = ! empty( $res['item'] ) ? self::gate( $res, $item_gate ) : null;
-		if ( ! empty( $res['item'] ) && ! $item_perm ) {
-			self::missing_gate( $res['id'] . ' item', $item_gate );
+		// A write says what must hold after it runs, or it has no route:
+		// without one the kernel could not tell a refusal from success.
+		$expect = $action['expect'] ?? null;
+		if ( ! ( 'gone' === $expect || 'ran' === $expect || ( is_array( $expect ) && $expect ) || ( ! is_string( $expect ) && is_callable( $expect ) ) ) ) {
+			self::wrong( 'minn_admin_resource', "{$res['id']} action {$slug} declares no post-condition ('expect'), so it has no route." );
+			return null;
 		}
-		if ( $item_perm ) {
-			$item_eps[] = array(
-				'minn_file'           => $res['file'],
-				'methods'             => 'GET',
-				'permission_callback' => $item_perm,
-				'callback'            => self::guarded( function ( WP_REST_Request $r ) use ( $res ) {
-					return Minn_Admin_Kernel::handle_item( $res, $r );
-				} ),
-			);
+		$method = strtoupper( (string) ( $action['method'] ?? 'POST' ) );
+		$path   = self::on_item( $action ) ? $item : $item . '/' . $slug;
+		$why    = '';
+		if ( ! in_array( $method, array( 'POST', 'PUT', 'PATCH', 'DELETE' ), true ) ) {
+			$why = "method {$method} is not one of POST, PUT, PATCH, DELETE";
+		} elseif ( '' === $slug || sanitize_key( $slug ) !== $slug ) {
+			$why = 'its slug is not a key';
+		} elseif ( ! empty( $taken[ $method . ' ' . $path ] ) ) {
+			$why = "{$method} on its route is taken";
+		} elseif ( 'gone' === $expect && empty( $res['source']['table'] ) && ! is_callable( $res['source']['exists'] ?? null ) ) {
+			// A callable source's own read can fail, or hide the row from
+			// this caller, and either reads as gone.
+			$why = 'it proves gone, and its source is no table and declares no exists';
+		} elseif ( isset( $action['args'] ) && ! self::args_ok( $action['args'], $item ) ) {
+			$why = 'its args are not schemas (a type each, no callbacks, no default, a boolean required, no name the route captures)';
 		}
-		foreach ( (array) ( $res['actions'] ?? array() ) as $slug => $action ) {
-			$gate_name = (string) ( $action['gate'] ?? '' );
-			$gate      = '' === $gate_name ? null : self::gate( $res, $gate_name );
-			if ( ! $gate ) {
-				self::missing_gate( $res['id'] . ' action ' . $slug, $gate_name );
-				continue;
-			}
-			// A write says what must hold after it runs, or it has no route:
-			// without one the kernel could not tell a refusal from success.
-			$expect = $action['expect'] ?? null;
-			if ( ! ( 'gone' === $expect || 'ran' === $expect || ( is_array( $expect ) && $expect ) || ( ! is_string( $expect ) && is_callable( $expect ) ) ) ) {
-				self::wrong( 'minn_admin_resource', "{$res['id']} action {$slug} declares no post-condition ('expect'), so it has no route." );
-				continue;
-			}
-			$method = strtoupper( (string) ( $action['method'] ?? 'POST' ) );
-			$path   = self::on_item( $action ) ? $item : $item . '/' . (string) $slug;
-			$why    = '';
-			if ( ! in_array( $method, array( 'POST', 'PUT', 'PATCH', 'DELETE' ), true ) ) {
-				$why = "method {$method} is not one of POST, PUT, PATCH, DELETE";
-			} elseif ( '' === (string) $slug || sanitize_key( (string) $slug ) !== (string) $slug ) {
-				$why = 'its slug is not a key';
-			} elseif ( ! empty( $taken[ $method . ' ' . $path ] ) ) {
-				$why = "{$method} on its route is taken";
-			} elseif ( 'gone' === $expect && empty( $res['source']['table'] ) && ! is_callable( $res['source']['exists'] ?? null ) ) {
-				// A callable source's own read can fail, or hide the row from
-				// this caller, and either reads as gone.
-				$why = 'it proves gone, and its source is no table and declares no exists';
-			} elseif ( isset( $action['args'] ) && ! self::args_ok( $action['args'], $item ) ) {
-				$why = 'its args are not schemas (a type each, no callbacks, no default, a boolean required, no name the route captures)';
-			}
-			if ( '' !== $why ) {
-				self::wrong( 'minn_admin_resource', "{$res['id']} action {$slug}: {$why}, so it has no route." );
-				continue;
-			}
-			$taken[ $method . ' ' . $path ] = true;
-			$ep     = array(
-				'minn_file'           => $res['file'],
-				'methods'             => $method,
-				'permission_callback' => $gate,
-				'callback'            => self::guarded( function ( WP_REST_Request $r ) use ( $res, $slug ) {
-					return Minn_Admin_Kernel::handle_action( $res, $slug, $r );
-				} ),
-			);
-			if ( self::on_item( $action ) ) {
-				$item_eps[] = $ep;
-			} else {
-				self::route( $item . '/' . sanitize_key( (string) $slug ), $ep, $res['id'] );
-			}
+		if ( '' !== $why ) {
+			self::wrong( 'minn_admin_resource', "{$res['id']} action {$slug}: {$why}, so it has no route." );
+			return null;
 		}
-		if ( $item_eps ) {
-			self::route( $item, $item_eps, $res['id'] );
-		}
+		$taken[ $method . ' ' . $path ] = true;
+		return self::ep( $res, $method, $gate, function ( WP_REST_Request $r ) use ( $res, $slug ) {
+			return Minn_Admin_Kernel::handle_action( $res, $slug, $r );
+		} );
 	}
 
 	private static function register_endpoint( array $ep ) {
@@ -1391,10 +1443,9 @@ class Minn_Admin_Kernel {
 	 * @return array|WP_Error
 	 */
 	private static function list_query( array $res, WP_REST_Request $r, array $rules ) {
-		$l        = $res['list'];
-		$size     = (int) ( $l['per_page'] ?? 25 );
-		$q        = array(
-			'per_page' => min( 100, max( 1, (int) ( $r['per_page'] ?: $size ) ) ),
+		$l = $res['list'];
+		$q = array(
+			'per_page' => min( 100, max( 1, (int) ( $r['per_page'] ?: (int) ( $l['per_page'] ?? 25 ) ) ) ),
 			// Capped so the offset can never overflow into a negative LIMIT.
 			'page'     => min( 100000, max( 1, (int) ( $r['page'] ?: 1 ) ) ),
 			'where'    => array(),
@@ -1403,65 +1454,130 @@ class Minn_Admin_Kernel {
 			'search'   => '',
 			'request'  => $r,
 		);
-		if ( ! empty( $l['filter'] ) && ! empty( $l['filter']['many'] ) ) {
-			$q = self::many( $l['filter'], $r, $q );
-		} elseif ( ! empty( $l['filter'] ) ) {
-			$f      = $l['filter'];
-			$values = (array) $f['values'];
-			$mapped = array_keys( $values ) !== range( 0, count( $values ) - 1 );
-			$names  = $mapped ? array_map( 'strval', array_keys( $values ) ) : array_map( 'strval', $values );
-			$v      = self::param( $r, $f['param'] ?? 'status' );
-			if ( '' === $v || ! in_array( $v, $names, true ) ) {
-				$v = (string) ( $f['default'] ?? $names[0] );
-			}
-			$q['filter'] = $v;
-			if ( isset( $f['order'][ $v ] ) ) {
-				$q['dir'] = 'ASC' === strtoupper( (string) $f['order'][ $v ] ) ? 'ASC' : 'DESC';
-			}
-			if ( $mapped ) {
-				$conds = is_callable( $values[ $v ] ) && ! is_array( $values[ $v ] ) ? call_user_func( $values[ $v ] ) : $values[ $v ];
-				if ( ! is_array( $conds ) ) {
-					$q['none'] = true; // A view that cannot say what it holds shows nothing.
-				}
-				// Under their own names, as a callable source reads them
-				// ($q['where']['post_status']); every other rule is tagged.
-				$q['where'] = array_merge( $q['where'], (array) $conds );
-			} else {
-				$q['where'][ $f['column'] ] = $v;
-			}
+		if ( ! empty( $l['filter'] ) ) {
+			$q = empty( $l['filter']['many'] ) ? self::one( $l['filter'], $r, $q ) : self::many( $l['filter'], $r, $q );
 		}
 		if ( is_array( $rules['allowed'] ) ) {
 			$q['allowed'] = $rules['allowed'];
 		}
 		if ( ! empty( $l['tab'] ) ) {
-			$tab = (int) self::param( $r, $l['tab']['param'] );
-			if ( $tab && ! empty( $l['tab']['gate'] ) && ! self::yes( $l['tab']['gate'], $tab ) ) {
-				return self::fail( 'forbidden', $l['tab']['refuse'] ?? self::label( $res, 'forbidden', __( 'You cannot access that item.', 'minn-admin' ) ), 403 );
-			}
-			if ( $tab ) {
-				// An empty scope answers an empty list whatever is asked; a
-				// form outside a non-empty one is refused outright.
-				if ( ! empty( $q['allowed'] ) && ! in_array( $tab, $q['allowed'], true ) ) {
-					return self::fail( 'forbidden', $l['scope']['refuse'] ?? self::label( $res, 'forbidden', __( 'You cannot access that item.', 'minn-admin' ) ), 403 );
-				}
-				$q['tab']                                       = $tab;
-				$q['where'][ $l['tab']['column'] . "\0tab" ] = $tab;
+			$q = self::tab( $res, $r, $q );
+			if ( is_wp_error( $q ) ) {
+				return $q;
 			}
 		}
-		// A sort a person picked, among the declared columns only.
-		if ( ! empty( $l['sort'] ) ) {
-			$map = '' === self::sort_problem( $l['sort'], $res ) ? self::sort_map( $l['sort'] ) : null;
-			$by  = self::param( $r, 'orderby' );
-			if ( $map && '' !== $by && isset( $map[ $by ] ) ) {
-				$q['sort'] = array(
-					'by'     => $by,
-					'column' => $map[ $by ],
-					'dir'    => 'asc' === strtolower( self::param( $r, 'order' ) ) ? 'ASC' : 'DESC',
-				);
-			}
+		$sort = empty( $l['sort'] ) ? null : self::picked( $res, $r );
+		if ( $sort ) {
+			$q['sort'] = $sort;
 		}
+		$q = self::facets( (array) ( $l['facets'] ?? array() ), $r, $q );
+		if ( ! empty( $l['search'] ) ) {
+			$q['search'] = self::param( $r, $l['search']['param'] ?? 'search' );
+		}
+		// What every read of the source meets (a site column, the scope),
+		// first; an array source is held to it in PHP, a callable one reads
+		// it in list_where().
+		$q['none']  = ! empty( $q['none'] ) || $rules['none'];
+		$q['where'] = array_merge( $rules['where'], $q['where'] );
+		return $q;
+	}
+
+	/**
+	 * A filter that takes one value: the one asked for when it is declared,
+	 * its default otherwise; a mapped value's conditions (or a function's
+	 * answer, read now) or the column's equality, and its own order.
+	 *
+	 * @param array           $f The filter declaration.
+	 * @param WP_REST_Request $r Request.
+	 * @param array           $q The list query so far.
+	 * @return array
+	 */
+	private static function one( array $f, WP_REST_Request $r, array $q ) {
+		$values = (array) $f['values'];
+		$mapped = array_keys( $values ) !== range( 0, count( $values ) - 1 );
+		$names  = $mapped ? array_map( 'strval', array_keys( $values ) ) : array_map( 'strval', $values );
+		$v      = self::param( $r, $f['param'] ?? 'status' );
+		if ( '' === $v || ! in_array( $v, $names, true ) ) {
+			$v = (string) ( $f['default'] ?? $names[0] );
+		}
+		$q['filter'] = $v;
+		if ( isset( $f['order'][ $v ] ) ) {
+			$q['dir'] = 'ASC' === strtoupper( (string) $f['order'][ $v ] ) ? 'ASC' : 'DESC';
+		}
+		if ( ! $mapped ) {
+			$q['where'][ $f['column'] ] = $v;
+			return $q;
+		}
+		$conds = is_callable( $values[ $v ] ) && ! is_array( $values[ $v ] ) ? call_user_func( $values[ $v ] ) : $values[ $v ];
+		if ( ! is_array( $conds ) ) {
+			$q['none'] = true; // A view that cannot say what it holds shows nothing.
+		}
+		// Under their own names, as a callable source reads them
+		// ($q['where']['post_status']); every other rule is tagged.
+		$q['where'] = array_merge( $q['where'], (array) $conds );
+		return $q;
+	}
+
+	/**
+	 * The tab asked for, as an integer: refused when its gate says no, or
+	 * when it is outside a scope that is not empty (an empty scope answers
+	 * an empty list whatever is asked).
+	 *
+	 * @param array           $res Resource.
+	 * @param WP_REST_Request $r   Request.
+	 * @param array           $q   The list query so far.
+	 * @return array|WP_Error
+	 */
+	private static function tab( array $res, WP_REST_Request $r, array $q ) {
+		$t   = $res['list']['tab'];
+		$tab = (int) self::param( $r, $t['param'] );
+		if ( ! $tab ) {
+			return $q;
+		}
+		if ( ! empty( $t['gate'] ) && ! self::yes( $t['gate'], $tab ) ) {
+			return self::fail( 'forbidden', $t['refuse'] ?? self::label( $res, 'forbidden', __( 'You cannot access that item.', 'minn-admin' ) ), 403 );
+		}
+		if ( ! empty( $q['allowed'] ) && ! in_array( $tab, $q['allowed'], true ) ) {
+			return self::fail( 'forbidden', $res['list']['scope']['refuse'] ?? self::label( $res, 'forbidden', __( 'You cannot access that item.', 'minn-admin' ) ), 403 );
+		}
+		$q['tab']                               = $tab;
+		$q['where'][ $t['column'] . "\0tab" ] = $tab;
+		return $q;
+	}
+
+	/**
+	 * The sort a person picked, among the declared columns only: by, column
+	 * and dir, or null for the declared order.
+	 *
+	 * @param array           $res Resource.
+	 * @param WP_REST_Request $r   Request.
+	 * @return array|null
+	 */
+	private static function picked( array $res, WP_REST_Request $r ) {
+		$map = '' === self::sort_problem( $res['list']['sort'], $res ) ? self::sort_map( $res['list']['sort'] ) : null;
+		$by  = self::param( $r, 'orderby' );
+		if ( ! $map || '' === $by || ! isset( $map[ $by ] ) ) {
+			return null;
+		}
+		return array(
+			'by'     => $by,
+			'column' => $map[ $by ],
+			'dir'    => 'asc' === strtolower( self::param( $r, 'order' ) ) ? 'ASC' : 'DESC',
+		);
+	}
+
+	/**
+	 * The facets asked for, each narrowing by its conditions; an absent or
+	 * unknown value narrows nothing.
+	 *
+	 * @param array           $facets The list's facets.
+	 * @param WP_REST_Request $r      Request.
+	 * @param array           $q      The list query so far.
+	 * @return array
+	 */
+	private static function facets( array $facets, WP_REST_Request $r, array $q ) {
 		$q['facets'] = array();
-		foreach ( (array) ( $l['facets'] ?? array() ) as $i => $f ) {
+		foreach ( $facets as $i => $f ) {
 			$v = self::param( $r, (string) $f['param'] );
 			if ( '' === $v ) {
 				continue;
@@ -1476,20 +1592,11 @@ class Minn_Admin_Kernel {
 			} elseif ( isset( $f['values'] ) && is_callable( $f['values'] ) ) {
 				$conds = call_user_func( $f['values'], $v );
 			}
-			if ( ! is_array( $conds ) ) {
-				continue;
+			if ( is_array( $conds ) ) {
+				$q['facets'][ (string) $f['param'] ] = $v;
+				$q['where']                         += Minn_Admin_Kernel_SQL::tag( $conds, "facet{$i}" );
 			}
-			$q['facets'][ (string) $f['param'] ] = $v;
-			$q['where']                         += Minn_Admin_Kernel_SQL::tag( $conds, "facet{$i}" );
 		}
-		if ( ! empty( $l['search'] ) ) {
-			$q['search'] = self::param( $r, $l['search']['param'] ?? 'search' );
-		}
-		// What every read of the source meets (a site column, the scope),
-		// first; an array source is held to it in PHP, a callable one reads
-		// it in list_where().
-		$q['none']  = ! empty( $q['none'] ) || $rules['none'];
-		$q['where'] = array_merge( $rules['where'], $q['where'] );
 		return $q;
 	}
 
@@ -1571,53 +1678,80 @@ class Minn_Admin_Kernel {
 		if ( ! empty( $src['rows'] ) ) {
 			list( $rows, $total ) = self::array_page( $l, $q, (array) call_user_func( $src['rows'] ) );
 		} elseif ( ! empty( $src['list'] ) ) {
-			list( $rows, $total ) = call_user_func( $src['list'], $q );
-			// A callable source reads the rules in list_where() and is handed
-			// the scope in $q['allowed']; its rows are held to them here as
-			// well, and a source that let one through cannot be trusted for
-			// the total either: count only what is shown.
-			$kept = array();
-			foreach ( (array) $rows as $row ) {
-				if ( self::kept( $rules, (array) $row ) ) {
-					$kept[] = $row;
-				}
-			}
-			if ( count( $kept ) !== count( (array) $rows ) ) {
-				$total = count( $kept );
-			}
-			$rows = $kept;
+			list( $rows, $total ) = self::callable_page( $src, $q, $rules );
 		} else {
-			list( $sql, $args ) = Minn_Admin_Kernel_SQL::where( $q['where'], 'e' );
-			if ( '' !== $q['search'] ) {
-				list( $s, $a ) = self::search_sql( $l['search'], $src, $q['search'] );
-				$sql[]         = $s;
-				$args          = array_merge( $args, $a );
-			}
-			if ( ! empty( $l['range'] ) ) {
-				list( $rs, $ra ) = self::range_sql( $r, $l['range']['column'], (string) ( $l['range']['clock'] ?? 'local' ) );
-				$sql             = array_merge( $sql, $rs );
-				$args            = array_merge( $args, $ra );
-			}
-			list( $rows, $total ) = Minn_Admin_Kernel_SQL::page( array(
-				'table'   => self::table_of( $src ),
-				'key'     => $src['key'],
-				'columns' => self::cols( $src['columns'] ),
-				'sql'     => $sql,
-				'args'    => $args,
-				'order'   => $q['sort']['column'] ?? ( $l['order']['column'] ?? $src['key'] ),
-				'dir'     => $q['sort']['dir'] ?? ( $q['dir'] ?? ( $l['order']['dir'] ?? 'DESC' ) ),
-				'limit'   => $q['per_page'],
-				'offset'  => ( $q['page'] - 1 ) * $q['per_page'],
-			) );
+			list( $rows, $total ) = self::table_page( $res, $q, $r );
 		}
+		return array( 'items' => self::items( $l, (array) $rows, $q ), 'total' => (int) $total );
+	}
+
+	/**
+	 * A page from a callable source. It reads the rules in list_where() and
+	 * is handed the scope in $q['allowed']; its rows are held to them here
+	 * as well, and a source that let one through cannot be trusted for the
+	 * total either: count only what is shown.
+	 *
+	 * @return array [ rows, total ]
+	 */
+	private static function callable_page( array $src, array $q, array $rules ) {
+		list( $rows, $total ) = call_user_func( $src['list'], $q );
+		$kept                 = array();
+		foreach ( (array) $rows as $row ) {
+			if ( self::kept( $rules, (array) $row ) ) {
+				$kept[] = $row;
+			}
+		}
+		return array( $kept, count( $kept ) !== count( (array) $rows ) ? count( $kept ) : $total );
+	}
+
+	/**
+	 * A page from a table source: the list's conditions, search and day
+	 * range in SQL, its order (or the person's sort) with the key breaking ties.
+	 *
+	 * @return array [ rows, total ]
+	 */
+	private static function table_page( array $res, array $q, WP_REST_Request $r ) {
+		$l                  = $res['list'];
+		$src                = $res['source'];
+		list( $sql, $args ) = Minn_Admin_Kernel_SQL::where( $q['where'], 'e' );
+		if ( '' !== $q['search'] ) {
+			list( $s, $a ) = self::search_sql( $l['search'], $src, $q['search'] );
+			$sql[]         = $s;
+			$args          = array_merge( $args, $a );
+		}
+		if ( ! empty( $l['range'] ) ) {
+			list( $rs, $ra ) = self::range_sql( $r, $l['range']['column'], (string) ( $l['range']['clock'] ?? 'local' ) );
+			$sql             = array_merge( $sql, $rs );
+			$args            = array_merge( $args, $ra );
+		}
+		return Minn_Admin_Kernel_SQL::page( array(
+			'table'   => self::table_of( $src ),
+			'key'     => $src['key'],
+			'columns' => self::cols( $src['columns'] ),
+			'sql'     => $sql,
+			'args'    => $args,
+			'order'   => $q['sort']['column'] ?? ( $l['order']['column'] ?? $src['key'] ),
+			'dir'     => $q['sort']['dir'] ?? ( $q['dir'] ?? ( $l['order']['dir'] ?? 'DESC' ) ),
+			'limit'   => $q['per_page'],
+			'offset'  => ( $q['page'] - 1 ) * $q['per_page'],
+		) );
+	}
+
+	/**
+	 * A page's rows as they leave: the batch hook once, each row built, then
+	 * only the declared fields, encoded.
+	 *
+	 * @return array[]
+	 */
+	private static function items( array $l, array $rows, array $q ) {
 		$items = array();
 		if ( ! empty( $l['batch'] ) ) {
 			$q['batch'] = call_user_func( $l['batch'], array_map( function ( $row ) {
 				return (array) $row;
-			}, (array) $rows ) );
+			}, $rows ) );
 		}
 		$built = array();
-		foreach ( (array) $rows as $row ) {
+		foreach ( $rows as $row ) {
 			$built[] = (array) ( empty( $l['row'] ) ? (array) $row : call_user_func( $l['row'], (array) $row, $q ) );
 		}
 		// The database's clock is read once for the page, not once per value.
@@ -1638,7 +1772,7 @@ class Minn_Admin_Kernel {
 		foreach ( $built as $b ) {
 			$items[] = empty( $l['fields'] ) ? $b : Minn_Admin_Kernel_Fields::out( $l['fields'], $b );
 		}
-		return array( 'items' => $items, 'total' => (int) $total );
+		return $items;
 	}
 
 	/**
@@ -1910,65 +2044,92 @@ class Minn_Admin_Kernel {
 			return self::fail( (string) ( $a['code'] ?? 'bad_status' ), $a['refuse'] ?? __( 'That cannot be done to this item now.', 'minn-admin' ), 400 );
 		}
 		$expect = $a['expect'] ?? null;
-		$send   = 'ran' === $expect;
-		// A send's mailer may swallow its failure (WP Mail Logging's
-		// dispatcher drops wp_mail()'s answer), so WordPress's own failure
-		// action fails it too.
+		if ( 'ran' === $expect ) {
+			return self::send( $a, $id, $row, $r );
+		}
+		$ran = call_user_func( $a['run'], $id, $row, $r );
+		if ( is_wp_error( $ran ) ) {
+			return $ran;
+		}
+		$fixed = self::fixed( $res['source'] ?? array() );
+		$fresh = null === $fixed ? null : self::fetch( $res, $id, $fixed );
+		if ( 'gone' === $expect ) {
+			$held = self::gone( $res, $id, $fixed, $fresh );
+		} elseif ( is_array( $expect ) ) {
+			$held = is_array( $fresh ) && self::holds( $expect, $fresh );
+		} else {
+			$held = self::yes( $expect, $id, $fresh, $ran );
+		}
+		if ( ! $held ) {
+			return self::fail( (string) ( $a['fail_code'] ?? 'not_applied' ), $a['fail'] ?? __( 'The plugin reported success, but the change is not there.', 'minn-admin' ), 500 );
+		}
+		return self::reply( $a, $id, $fresh, $ran );
+	}
+
+	/**
+	 * Whether a row is gone. A callable source's own read may hide a row
+	 * from this caller, so gone is asked of the store itself when the source
+	 * says how; a table's read that failed returns no row too, so gone there
+	 * is the store answering that it holds none. A check that throws proves
+	 * nothing, so the row counts as still there.
+	 *
+	 * @param array      $res   Resource.
+	 * @param int        $id    Row id.
+	 * @param array|null $fixed The source's fixed conditions.
+	 * @param array|null $fresh The row read back.
+	 * @return bool
+	 */
+	private static function gone( array $res, $id, $fixed, $fresh ) {
+		$exists = $res['source']['exists'] ?? null;
+		if ( is_callable( $exists ) ) {
+			try {
+				return false === call_user_func( $exists, $id );
+			} catch ( \Throwable $e ) {
+				return false;
+			}
+		}
+		if ( ! empty( $res['source']['table'] ) ) {
+			return null !== $fixed && Minn_Admin_Kernel_SQL::absent( self::table_of( $res['source'] ), $res['source']['key'], $id, $fixed );
+		}
+		return null === $fresh;
+	}
+
+	/**
+	 * A send ('expect' => 'ran'): it leaves nothing to read back (a read
+	 * that failed then would answer 500 for mail that went, and invite
+	 * sending it twice), so the run's own answer is the proof: true, the
+	 * addresses it sent to, or a list saying sent. A mailer may swallow its
+	 * failure (WP Mail Logging's dispatcher drops wp_mail()'s answer), so
+	 * WordPress's own failure action during the run fails it too.
+	 *
+	 * @param array           $a   The action.
+	 * @param int             $id  Row id.
+	 * @param array           $row The row.
+	 * @param WP_REST_Request $r   Request.
+	 * @return array|WP_Error
+	 */
+	private static function send( array $a, $id, array $row, WP_REST_Request $r ) {
 		$failed = false;
 		$listen = function () use ( &$failed ) {
 			$failed = true;
 		};
-		if ( $send ) {
-			add_action( 'wp_mail_failed', $listen );
-		}
+		add_action( 'wp_mail_failed', $listen );
 		try {
 			$ran = call_user_func( $a['run'], $id, $row, $r );
 		} finally {
-			if ( $send ) {
-				remove_action( 'wp_mail_failed', $listen );
-			}
+			remove_action( 'wp_mail_failed', $listen );
 		}
 		if ( is_wp_error( $ran ) ) {
 			return $ran;
 		}
-		// Nothing is read back after a send: a read that failed then would
-		// answer 500 for mail that went, and invite sending it twice.
-		$fixed = self::fixed( $res['source'] ?? array() );
-		$fresh = $send || null === $fixed ? null : self::fetch( $res, $id, $fixed );
-		$held  = false;
-		if ( 'gone' === $expect ) {
-			// A callable source's own read may hide a row from this caller,
-			// so gone is asked of the store itself when the source says how.
-			// A check that throws proves nothing, so the row counts as still there.
-			$exists = $res['source']['exists'] ?? null;
-			if ( is_callable( $exists ) ) {
-				try {
-					$held = false === call_user_func( $exists, $id );
-				} catch ( \Throwable $e ) {
-					$held = false;
-				}
-			} elseif ( ! empty( $res['source']['table'] ) ) {
-				// A read that failed returns no row too: gone only once the
-				// store answers that it holds none.
-				$held = null !== $fixed && Minn_Admin_Kernel_SQL::absent( self::table_of( $res['source'] ), $res['source']['key'], $id, $fixed );
-			} else {
-				$held = null === $fresh;
-			}
-		} elseif ( $send ) {
-			// A send leaves nothing to read back, so the run's own answer is
-			// the proof: true, the address it sent to, or a list saying sent.
-			$held = ! $failed && ( true === $ran || ( is_string( $ran ) && self::addresses( $ran ) ) || ( is_array( $ran ) && true === ( $ran['sent'] ?? null ) ) );
-		} elseif ( is_array( $expect ) ) {
-			$held = is_array( $fresh ) && self::holds( $expect, $fresh );
-		} elseif ( is_callable( $expect ) ) {
-			$held = self::yes( $expect, $id, $fresh, $ran );
+		if ( $failed || ! ( true === $ran || ( is_string( $ran ) && self::addresses( $ran ) ) || ( is_array( $ran ) && true === ( $ran['sent'] ?? null ) ) ) ) {
+			return self::fail( (string) ( $a['fail_code'] ?? 'not_sent' ), $a['fail'] ?? __( 'The mailer reported the message could not be sent.', 'minn-admin' ), 500 );
 		}
-		if ( ! $held ) {
-			if ( $send ) {
-				return self::fail( (string) ( $a['fail_code'] ?? 'not_sent' ), $a['fail'] ?? __( 'The mailer reported the message could not be sent.', 'minn-admin' ), 500 );
-			}
-			return self::fail( (string) ( $a['fail_code'] ?? 'not_applied' ), $a['fail'] ?? __( 'The plugin reported success, but the change is not there.', 'minn-admin' ), 500 );
-		}
+		return self::reply( $a, $id, null, $ran );
+	}
+
+	/** An action's success: { ok: true }, its reply merged over it, its message. */
+	private static function reply( array $a, $id, $fresh, $ran ) {
 		$reply = array( 'ok' => true );
 		if ( ! empty( $a['reply'] ) ) {
 			$reply = array_merge( $reply, (array) call_user_func( $a['reply'], $id, $fresh, $ran ) );
