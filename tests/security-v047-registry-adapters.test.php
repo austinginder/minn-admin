@@ -607,7 +607,7 @@ $s2_post = static function ( $label ) use ( $admin, $tag ) {
 } )();
 
 ( function () use ( $check, $skip, $call, $once, $field_err, $tag, $admin ) {
-	if ( ! function_exists( 'minn_admin_ssp_write_values' ) || ! minn_admin_ssp_active() || ! post_type_exists( 'podcast' ) ) {
+	if ( ! function_exists( 'minn_admin_ssp_active' ) || ! minn_admin_ssp_active() || ! post_type_exists( 'podcast' ) ) {
 		$skip( 'S2 SSP: not active' );
 		return;
 	}

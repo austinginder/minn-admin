@@ -37,11 +37,6 @@ function minn_admin_wpjm_raw_fields() {
 }
 
 /**
- * Map WPJM's schema onto the panel vocabulary.
- *
- * @return array{fields: array, locked: int}
- */
-/**
  * WPJM's own per-field VIEW authorization, asked once and the same way
  * everywhere.
  *
@@ -93,7 +88,14 @@ function minn_admin_wpjm_can_edit_field( $f, $key, $post_id = 0 ) {
 	}
 }
 
-function minn_admin_wpjm_mapped_fields( $post_id = 0 ) {
+/**
+ * The Listing details group for a listing (fields tier, minn_admin_fields()):
+ * the fields WPJM's own metabox would draw for this user.
+ *
+ * @param int $post_id Listing id, 0 for one not saved yet.
+ * @return array[]
+ */
+function minn_admin_wpjm_groups( $post_id = 0 ) {
 	$fields = array();
 	$locked = 0;
 	foreach ( minn_admin_wpjm_raw_fields() as $key => $f ) {
@@ -114,7 +116,7 @@ function minn_admin_wpjm_mapped_fields( $post_id = 0 ) {
 				$out['type'] = 'url';
 				break;
 			case 'checkbox':
-				$out['type'] = 'true_false';
+				$out['type'] = 'checkbox';
 				break;
 			case 'select':
 				$options = isset( $f['options'] ) && is_array( $f['options'] ) ? $f['options'] : array();
@@ -122,8 +124,10 @@ function minn_admin_wpjm_mapped_fields( $post_id = 0 ) {
 					$locked++;
 					continue 2;
 				}
-				$out['type']    = 'select';
-				$out['choices'] = $options;
+				$out['type']     = 'select';
+				$out['choices']  = $options;
+				// WPJM's own control always holds one of its choices.
+				$out['required'] = ! array_key_exists( '', $options );
 				break;
 			default:
 				$locked++;
@@ -131,7 +135,9 @@ function minn_admin_wpjm_mapped_fields( $post_id = 0 ) {
 		}
 		$fields[] = $out;
 	}
-	return array( 'fields' => $fields, 'locked' => $locked );
+	return array(
+		array( 'group' => __( 'Listing details', 'minn-admin' ), 'fields' => $fields, 'locked' => $locked ),
+	);
 }
 
 /** Read panel values: { key => value } (checkboxes as bool). */
@@ -142,233 +148,67 @@ function minn_admin_wpjm_read_values( $post_id ) {
 		if ( ! in_array( $type, array( 'text', 'file', 'checkbox', 'select' ), true ) ) {
 			continue;
 		}
-		// WPJM attaches two callbacks per field and their own REST layer asks
-		// both. The view callback decides whether a listing's applicant
-		// address and salary are readable on a site using their
-		// view-capability setting; the edit callback keeps a value out of the
-		// panel for a field the panel does not draw for this user.
-		if ( ! minn_admin_wpjm_can_view_field( $f, $key, $post_id ) || ! minn_admin_wpjm_can_edit_field( $f, $key, $post_id ) ) {
-			continue;
-		}
-		$val = get_post_meta( $post_id, $key, true );
+		$val         = get_post_meta( $post_id, $key, true );
 		$out[ $key ] = 'checkbox' === $type ? ( (int) $val > 0 ) : ( is_scalar( $val ) ? (string) $val : '' );
 	}
 	return $out;
 }
 
 /**
- * Write panel values through WPJM's own per-field sanitizers.
+ * Store cleaned values through WPJM's own per-field sanitizers.
  *
  * @param int   $post_id Listing id.
- * @param array $values  Sent values, by meta key.
- * @return WP_Error|null The fields refused, each named, or null.
+ * @param array $changes Meta key => cleaned value, null to clear.
+ * @param array $fields  The offered fields, by key.
+ * @return array Meta key => why WPJM did not take it.
  */
-function minn_admin_wpjm_write_values( $post_id, $values ) {
-	if ( ! is_array( $values ) ) {
-		return null;
-	}
+function minn_admin_wpjm_store( $post_id, $changes, $fields ) {
 	$schema  = minn_admin_wpjm_raw_fields();
 	$refused = array();
-	$refuse  = static function ( $key, $f, $message ) use ( &$refused ) {
-		$refused[] = array(
-			'key'     => (string) $key,
-			'label'   => isset( $f['label'] ) ? wp_strip_all_tags( (string) $f['label'] ) : (string) $key,
-			'message' => $message,
-		);
-	};
-	foreach ( $values as $key => $value ) {
-		if ( ! isset( $schema[ $key ] ) ) {
+	foreach ( $changes as $key => $value ) {
+		$f = isset( $schema[ $key ] ) ? $schema[ $key ] : array();
+		if ( 'checkbox' === $fields[ $key ]['type'] ) {
+			// WPJM stores 1/0 integers (data_type integer).
+			update_post_meta( $post_id, $key, $value ? 1 : 0 );
 			continue;
 		}
-		$f = $schema[ $key ];
-		// A field withheld from this caller is never written by them: they
-		// were shown no value for it, so whatever they submitted is not an
-		// edit, it is the empty box the panel drew.
-		if ( ! minn_admin_wpjm_can_view_field( $f, $key, $post_id ) ) {
-			continue;
-		}
-		$type = isset( $f['auth_edit_field_type'] ) ? (string) $f['auth_edit_field_type'] : ( isset( $f['type'] ) ? (string) $f['type'] : 'text' );
-		switch ( $type ) {
-			case 'checkbox':
-				// WPJM stores 1/0 integers (data_type integer).
-				$value = ( ! empty( $value ) && 'false' !== (string) $value && '0' !== (string) $value ) ? 1 : 0;
-				break;
-			case 'select':
-				$options = isset( $f['options'] ) && is_array( $f['options'] ) ? $f['options'] : array();
-				if ( ! array_key_exists( (string) $value, $options ) ) {
-					// Not one of the field's choices: the stored value stays,
-					// and the answer says so.
-					$refuse( $key, $f, __( 'That is not one of this field\'s choices.', 'minn-admin' ) );
-					continue 2;
-				}
-				$value = (string) $value;
-				break;
-			case 'file':
-				// Only an emptied box clears. An address the house rule
-				// refuses cleaned to '' and cleared the stored one.
-				$clean = null === $value || is_scalar( $value ) ? minn_admin_url_clean( trim( (string) $value ) ) : null;
-				if ( null === $clean ) {
-					$refuse( $key, $f, __( 'That URL is not valid.', 'minn-admin' ) );
-					continue 2;
-				}
-				$value = $clean;
-				break;
-			case 'text':
-				$value = is_scalar( $value ) ? (string) $value : '';
-				break;
-			default:
-				continue 2;
-		}
-		// Their own per-field AUTHORIZATION wins too. WPJM's schema is not
-		// uniformly gated: get_job_listing_fields() attaches an
-		// auth_edit_callback per field, and overrides it to
-		// auth_check_can_manage_job_listings for _featured and _job_expires —
-		// a capability WPJM grants to administrators only, because both are
-		// monetized (WooCommerce Paid Listings sells featured placement and
-		// listing duration). WPJM enforces this on both of its own doors; this
-		// is a third one, so it has to ask the same question. Without it any
-		// listing owner self-grants sticky placement and a new expiry date.
-		// The panel does not draw such a field for this user, so one sent
-		// anyway is refused on the post's own answer rather than dropped.
-		if ( ! minn_admin_wpjm_can_edit_field( $f, $key, $post_id ) ) {
-			$refuse( $key, $f, __( 'WP Job Manager does not let you change this field.', 'minn-admin' ) );
-			continue;
-		}
+		$typed = null === $value ? '' : (string) $value;
+		$value = $typed;
 		// Their own field sanitizer wins when declared (application's
-		// email-or-url rule, the expiry date's Y-m-d validation).
-		if ( 'checkbox' !== $type && isset( $f['sanitize_callback'] ) && is_callable( $f['sanitize_callback'] ) ) {
+		// email-or-url rule, the expiry date's Y-m-d validation). A value it
+		// takes away whole is refused, not stored as a clear.
+		if ( isset( $f['sanitize_callback'] ) && is_callable( $f['sanitize_callback'] ) ) {
 			try {
-				$value = call_user_func( $f['sanitize_callback'], $value, $key );
+				$value = call_user_func( $f['sanitize_callback'], $typed, $key );
 			} catch ( \Throwable $e ) {
-				$refuse( $key, $f, __( 'WP Job Manager did not accept this value.', 'minn-admin' ) );
+				$refused[ $key ] = __( 'WP Job Manager did not accept this value.', 'minn-admin' );
 				continue;
 			}
-		} elseif ( 'text' === $type ) {
-			$value = sanitize_text_field( $value );
+			if ( '' !== $typed && ( null === $value || '' === $value || false === $value ) ) {
+				$refused[ $key ] = __( 'WP Job Manager did not accept this value.', 'minn-admin' );
+				continue;
+			}
 		}
 		update_post_meta( $post_id, $key, wp_slash( $value ) ); // update_post_meta() unslashes
 	}
-	if ( ! $refused ) {
-		return null;
-	}
-	return new WP_Error(
-		'minn_wpjm_refused',
-		_n( 'One listing field was not saved.', 'Some listing fields were not saved.', count( $refused ), 'minn-admin' ),
-		array( 'status' => 403, 'fields' => $refused )
-	);
+	return $refused;
 }
 
-add_filter( 'minn_admin_editor_panels', function ( $panels ) {
-	if ( ! minn_admin_wpjm_active() ) {
-		return $panels;
-	}
-	$panels['wpjm'] = array(
+// Their per-field VIEW and EDIT callbacks decide what the panel offers
+// (minn_admin_wpjm_groups()), so a field withheld from this user is neither
+// read nor written: WPJM gates Featured and Listing Expiry behind
+// manage_job_listings because both are sold (WooCommerce Paid Listings), and
+// a third door has to ask the same question its own two do.
+minn_admin_fields( 'wpjm', function () {
+	return array(
+		'active'      => 'minn_admin_wpjm_active',
 		'label'       => __( 'Job listing', 'minn-admin' ),
 		'sub'         => 'WP Job Manager',
-		'cap'         => 'edit_posts',
-		'fieldsRoute' => 'minn-admin/v1/wpjm/fields?post_id={id}&post_type={type}',
-		'valuesKey'   => 'minn_wpjm',
-		'writeKey'    => 'minn_wpjm',
-	);
-	return $panels;
-} );
-
-add_action( 'rest_api_init', function () {
-	if ( ! minn_admin_wpjm_active() ) {
-		return;
-	}
-
-	minn_admin_endpoint( '/wpjm/fields', array(
-		'methods'             => 'GET',
-		'gate'                => function () {
-			return current_user_can( 'edit_posts' );
-		},
-		'args'                => array(
-			'post_id'   => array( 'type' => 'integer' ),
-			'post_type' => array( 'type' => 'string' ),
-		),
-		'run'                 => function ( WP_REST_Request $request ) {
-			$rest_base = sanitize_key( (string) ( $request['post_type'] ?? 'posts' ) );
-			$post_id   = (int) $request['post_id'];
-			$post_type = $post_id && get_post( $post_id ) ? get_post( $post_id )->post_type : '';
-			if ( '' === $post_type ) {
-				foreach ( get_post_types( array( 'show_in_rest' => true ), 'objects' ) as $obj ) {
-					$base = $obj->rest_base ? $obj->rest_base : $obj->name;
-					if ( $base === $rest_base || $obj->name === $rest_base ) {
-						$post_type = $obj->name;
-						break;
-					}
-				}
-			}
-			if ( 'job_listing' !== $post_type ) {
-				return rest_ensure_response( array( 'groups' => array() ) );
-			}
-			if ( $post_id ) {
-				// A missing post used to fall through with the caller's own
-				// post_type intact, which is the same hole as post_id=0.
-				if ( ! get_post( $post_id ) ) {
-					return new WP_Error( 'not_found', __( 'Listing not found.', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				if ( ! current_user_can( 'edit_post', $post_id ) ) {
-					return new WP_Error( 'rest_forbidden', __( 'You cannot edit this listing.', 'minn-admin' ), array( 'status' => 403 ) );
-				}
-			} else {
-				// No post to authorize against, so authorize against the TYPE.
-				// The field list is site-defined through the
-				// job_manager_job_listing_data_fields filter, so edit_posts
-				// alone let a Contributor read every custom listing field's
-				// meta key, label, placeholder and choices.
-				$type_obj = get_post_type_object( $post_type );
-				if ( ! $type_obj || ! current_user_can( $type_obj->cap->edit_posts ) ) {
-					return new WP_Error( 'rest_forbidden', __( 'You cannot edit listings.', 'minn-admin' ), array( 'status' => 403 ) );
-				}
-			}
-			$mapped = minn_admin_wpjm_mapped_fields( $post_id );
-			return rest_ensure_response( array(
-				'groups' => array(
-					array( 'group' => __( 'Listing details', 'minn-admin' ), 'fields' => $mapped['fields'], 'locked' => $mapped['locked'] ),
-				),
-			) );
-		},
-	) );
-
-	register_rest_field(
-		'job_listing',
-		'minn_wpjm',
-		array(
-			'get_callback'    => function ( $obj ) {
-				$id = isset( $obj['id'] ) ? (int) $obj['id'] : 0;
-				if ( ! $id || ! current_user_can( 'edit_post', $id ) ) {
-					return new stdClass();
-				}
-				return (object) minn_admin_wpjm_read_values( $id );
-			},
-			'update_callback' => function ( $value, $post, $field_name = '', $request = null ) {
-				if ( ! $post instanceof WP_Post || ! current_user_can( 'edit_post', $post->ID ) ) {
-					return;
-				}
-				if ( is_object( $value ) ) {
-					$value = (array) $value;
-				}
-				$error = minn_admin_wpjm_write_values( $post->ID, $value );
-				if ( ! is_wp_error( $error ) ) {
-					return;
-				}
-				// Never an error from here: the post is already saved, a new
-				// one included. The refusal rides on the post's own answer
-				// instead, beside any other panel's
-				// (minn_admin_panel_report_held(), adapters/acpt.php).
-				if ( $request instanceof WP_REST_Request && function_exists( 'minn_admin_panel_held' ) ) {
-					minn_admin_panel_held( $request, $error, 'minn_wpjm' );
-					return;
-				}
-				return $error;
-			},
-			'schema'          => array(
-				'description' => __( 'WP Job Manager listing fields for Minn Admin.', 'minn-admin' ),
-				'type'        => 'object',
-				'context'     => array( 'edit' ),
-			),
-		)
+		'key'         => 'minn_wpjm',
+		'types'       => array( 'job_listing' ),
+		'groups'      => 'minn_admin_wpjm_groups',
+		'read'        => 'minn_admin_wpjm_read_values',
+		'write'       => 'minn_admin_wpjm_store',
+		'description' => __( 'WP Job Manager listing fields for Minn Admin.', 'minn-admin' ),
 	);
 } );
