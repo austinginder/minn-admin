@@ -2711,6 +2711,55 @@ $ck = array(
 );
 $check( 'a clock passed in code that the kernel does not read narrows to nothing: no chart days, no window, no moment, no age; a comparison with no value meets no row', array( 'local' => 2, 'utcc' => 0, 'site' => 0, '' => 0 ) === $ck['chart'] && array( 8, 0 ) === $ck['since'] && array( true, null, null ) === $ck['at'] && '—' === $ck['ago'] && array( 0, false ) === $ck['null op'], wp_json_encode( $ck ) );
 
+// --- 1m. Closed by the review of this pass ---------------------------------
+// A 'none' holding an arm that cannot be answered matches nothing: NOT of a
+// comparison with no value, or of an empty list, would match every row.
+$nm = array(
+	'null op'     => Minn_Admin_Kernel_SQL::where( array( 'created' => array( 'none' => array( array( 'op' => '<', 'value' => null ) ) ) ), 'e' )[0],
+	'bad clock'   => Minn_Admin_Kernel_SQL::where( array( 'created' => array( 'none' => array( Minn_Admin_Kernel::since( 'utcc', DAY_IN_SECONDS ) ) ) ), 'e' )[0],
+	'nested'      => Minn_Admin_Kernel_SQL::where( array( 'created' => array( 'none' => array( array( 'any' => array( '2026-01-02 10:00:00', array( 'op' => '>', 'value' => Minn_Admin_Kernel::at( 'utcc' ) ) ) ) ) ) ), 'e' )[0],
+	'count'       => Minn_Admin_Kernel_SQL::count( 'minn_conf_review', array( 'created' => array( 'none' => array( array( 'op' => '<', 'value' => null ) ) ) ) ),
+	'answerable'  => Minn_Admin_Kernel_SQL::count( 'minn_conf_review', array( 'created' => array( 'none' => array( array( 'op' => '<', 'value' => '2026-01-04 00:00:00' ) ) ) ) ),
+	'empty none'  => Minn_Admin_Kernel_SQL::where( array( 'created' => array( 'none' => array() ) ), 'e' )[0],
+);
+$check( "a 'none' holding a comparison with no value, an empty list or such an arm deeper matches no row; an answerable one still narrows, an empty one still matches all", array( '1 = 0' ) === $nm['null op'] && array( '1 = 0' ) === $nm['bad clock'] && array( '1 = 0' ) === $nm['nested'] && 0 === $nm['count'] && 5 === $nm['answerable'] && array( '1 = 1' ) === $nm['empty none'], wp_json_encode( $nm ) );
+
+// Inbox counts take only what they read: a scope handed over by hand would
+// otherwise be ignored and every form counted.
+$ib_scope = Minn_Admin_Kernel::inbox_counts( array( 'resource' => 'minn-conformance/review-inbox', 'scope' => array( 'column' => 'owner', 'allowed' => array( 10 ) ), 'received' => array(), 'chart' => array( 'column' => 'created', 'clock' => 'local' ) ) );
+$ib_both  = Minn_Admin_Kernel::inbox_counts( array( 'table' => 'minn_conf_review', 'resource' => 'minn-conformance/review-inbox', 'received' => array() ) );
+$check( 'inbox counts holding a key they do not read, or naming both a resource and a table, count nothing and say why', 0 === $ib_scope['received'] && 0 === ( $ib_scope['days'][ $rv_today ]['value'] ?? -1 ) && 0 === $ib_both['received'] && $rv_drew( 'inbox counts over minn-conformance/review-inbox take no "scope"' ) && $rv_drew( 'inbox counts over minn-conformance/review-inbox name a resource and a table' ), wp_json_encode( array( $ib_scope['received'], $ib_both['received'] ) ) );
+
+// The rules' own keys win over a list-built key of the same name.
+Minn_Admin_Kernel::resource( 'minn-conformance/review-collide', array_merge( $rv_def, array( 'list' => array_merge( $rv_def['list'], array(
+	'scope'  => array( 'column' => 'owner', 'allowed' => function () {
+		return array( 30 );
+	} ),
+	'filter' => array( 'param' => 'view', 'values' => array( 'all' => array( "owner\0scope" => array( 10, 20, 30 ) ) ) ),
+) ) ) ) );
+list( , $d ) = $call( 'GET', $rv . '-collide' );
+$check( "a list condition keyed as the scope's own never replaces the scope", 2 === ( $d['total'] ?? -1 ), wp_json_encode( $d ) );
+
+// A route claim compares paths without regard to case, as WordPress
+// matches them, and a pattern it cannot read claims nothing and registers nothing.
+Minn_Admin_Kernel::endpoint( 'minn-conformance/case-claim/(?P<id>\d+)', array( 'gate' => '__return_true', 'run' => function () {
+	return array( 'which' => 'lower' );
+} ) );
+Minn_Admin_Kernel::endpoint( 'minn-conformance/Case-Claim/(?P<id>\d+)', array( 'gate' => '__return_true', 'run' => function () {
+	return array( 'which' => 'upper' );
+} ) );
+list( , $cc ) = $call( 'GET', '/minn-admin/v1/minn-conformance/case-claim/3' );
+$pc_limit = ini_get( 'pcre.backtrack_limit' );
+$pc_jit   = ini_get( 'pcre.jit' );
+ini_set( 'pcre.jit', '0' );
+ini_set( 'pcre.backtrack_limit', '1' );
+$pc_forced = null === @preg_replace_callback( '/\(\?P<\w+>((?:[^()\\\\]|\\\\.|\((?1)\))*)\)/', '__return_empty_string', '/y/(?P<id>\d+)' );
+Minn_Admin_Kernel::endpoint( 'minn-conformance/unread-a/(?P<id>\d+)', array( 'gate' => '__return_true', 'run' => '__return_empty_array' ) );
+Minn_Admin_Kernel::endpoint( 'minn-conformance/unread-b/(?P<id>\d+)', array( 'gate' => '__return_true', 'run' => '__return_empty_array' ) );
+ini_set( 'pcre.backtrack_limit', (string) $pc_limit );
+ini_set( 'pcre.jit', (string) $pc_jit );
+$check( 'a route claim ignores case, and a pattern the kernel cannot read is refused rather than claiming one shared nothing', 'lower' === ( $cc['which'] ?? '' ) && $rv_drew( 'minn-conformance/Case-Claim/(?P<id>\d+): GET /minn-conformance/Case-Claim/(?P<id>\d+) is already declared' ) && $pc_forced && $rv_drew( 'minn-conformance/unread-a/(?P<id>\d+): /minn-conformance/unread-a/(?P<id>\d+) is a pattern the kernel cannot read' ) && $rv_drew( 'minn-conformance/unread-b/(?P<id>\d+): /minn-conformance/unread-b/(?P<id>\d+) is a pattern the kernel cannot read' ), wp_json_encode( array( $cc, $pc_forced ) ) );
+
 // --- 2. Every real declaration ----------------------------------------------
 $real = array_filter( Minn_Admin_Kernel::resources(), function ( $r ) {
 	return 0 !== strpos( $r['id'], 'minn-conformance/' );

@@ -737,15 +737,17 @@ class Minn_Admin_Kernel {
 	 * whatever its pattern, unless it captures one word ("(?P<tab>general)"),
 	 * so "/x/(?P<id>\d+)" and "/x/(?P<id>[0-9]+)" are one route, and two
 	 * patterns for one place (which WordPress would both match, serving the
-	 * first) are taken for one.
+	 * first) are taken for one. Lowercased: WordPress matches routes without
+	 * regard to case.
 	 *
 	 * @param string $route Route pattern.
-	 * @return string
+	 * @return string|null null when the pattern cannot be read, so it claims nothing.
 	 */
 	private static function shape( $route ) {
-		return (string) preg_replace_callback( '/\(\?P<\w+>((?:[^()\\\\]|\\\\.|\((?1)\))*)\)/', function ( $m ) {
+		$shape = preg_replace_callback( '/\(\?P<\w+>((?:[^()\\\\]|\\\\.|\((?1)\))*)\)/', function ( $m ) {
 			return preg_match( '/^[\w-]+$/', $m[1] ) ? $m[1] : '{}';
 		}, (string) $route );
+		return is_string( $shape ) ? strtolower( $shape ) : null;
 	}
 
 	/**
@@ -769,6 +771,10 @@ class Minn_Admin_Kernel {
 				}
 			}
 			$shape = self::shape( $route );
+			if ( null === $shape ) {
+				self::wrong( 'minn_admin_resource', "{$who}: {$route} is a pattern the kernel cannot read, so it has no route." );
+				continue;
+			}
 			$taken = array();
 			foreach ( $methods as $m ) {
 				if ( isset( self::$claimed[ "{$m} {$shape}" ] ) ) {
@@ -1478,7 +1484,13 @@ class Minn_Admin_Kernel {
 		// first; an array source is held to it in PHP, a callable one reads
 		// it in list_where().
 		$q['none']  = ! empty( $q['none'] ) || $rules['none'];
-		$q['where'] = array_merge( $rules['where'], $q['where'] );
+		// The rules' keys win: a list-built key of the same name is kept
+		// under its own tag, never in their place.
+		$where = $rules['where'];
+		foreach ( $q['where'] as $k => $rule ) {
+			$where[ isset( $where[ $k ] ) ? $k . "\0list" : $k ] = $rule;
+		}
+		$q['where'] = $where;
 		return $q;
 	}
 
@@ -2355,11 +2367,19 @@ class Minn_Admin_Kernel {
 	 *
 	 * @param array $c resource (its id) or table, received, unread and spam
 	 *                 (conditions), chart (column, clock, where, split,
-	 *                 secondary).
+	 *                 secondary). Anything else (a scope handed over by
+	 *                 hand) counts nothing: it would otherwise be ignored.
 	 * @return array received, unread, spam (ints), chart (built, or null)
 	 */
 	public static function inbox_counts( array $c ) {
-		$rows = isset( $c['resource'] ) ? self::card_rows( (string) $c['resource'], array() ) : array( $c['table'], array() );
+		$unknown = array_diff( array_keys( $c ), array( 'resource', 'table', 'received', 'unread', 'spam', 'chart' ) );
+		if ( $unknown || isset( $c['resource'] ) === isset( $c['table'] ) ) {
+			$over = is_scalar( $c['resource'] ?? null ) ? (string) $c['resource'] : ( is_scalar( $c['table'] ?? null ) ? (string) $c['table'] : 'nothing' );
+			self::wrong( __METHOD__, "inbox counts over {$over} " . ( $unknown ? 'take no "' . implode( '", "', $unknown ) . '"' : 'name a resource and a table; they take one' ) . ', so they count nothing.' );
+			$rows = null;
+		} else {
+			$rows = isset( $c['resource'] ) ? self::card_rows( (string) $c['resource'], array() ) : array( $c['table'], array() );
+		}
 		$out  = array();
 		foreach ( array( 'received', 'unread', 'spam' ) as $k ) {
 			$out[ $k ] = isset( $c[ $k ] ) && $rows ? Minn_Admin_Kernel_SQL::count( $rows[0], $rows[1] + Minn_Admin_Kernel_SQL::tag( (array) $c[ $k ], 'card' ) ) : 0;

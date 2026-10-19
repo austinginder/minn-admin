@@ -368,7 +368,13 @@ class Minn_Admin_Kernel_SQL {
 			}
 		}
 		if ( 'any' === $kind || 'none' === $kind ) {
-			$none  = 'none' === $kind;
+			$none = 'none' === $kind;
+			// An arm that cannot be answered (a comparison with no value, an
+			// empty list) matches no row, and NOT of it would match every row:
+			// a 'none' holding one matches nothing.
+			if ( $none && self::unanswerable( $rule[ $kind ] ) ) {
+				return array( '1 = 0', array() );
+			}
 			$parts = array();
 			$args  = array();
 			foreach ( $rule[ $kind ] as $one ) {
@@ -397,6 +403,32 @@ class Minn_Admin_Kernel_SQL {
 		}
 		$vals = array_values( (array) $rule['not'] );
 		return $vals ? array( "{$c} NOT IN (" . implode( ',', array_map( array( __CLASS__, 'ph' ), $vals ) ) . ')', $vals ) : array( '1 = 1', array() );
+	}
+
+	/**
+	 * Whether rules hold one that cannot be answered, at any depth: a
+	 * comparison whose value is null (a moment its clock could not read) or
+	 * an empty list (an empty IN list, as since() answers for a clock it
+	 * cannot read).
+	 *
+	 * @param array $rules Rules.
+	 * @return bool
+	 */
+	private static function unanswerable( array $rules ) {
+		foreach ( $rules as $one ) {
+			if ( ! is_array( $one ) ) {
+				continue;
+			}
+			if ( ! $one || ( ! self::is_list( $one ) && isset( $one['op'] ) && null === ( $one['value'] ?? null ) ) ) {
+				return true;
+			}
+			foreach ( array( 'any', 'none' ) as $k ) {
+				if ( ! self::is_list( $one ) && isset( $one[ $k ] ) && is_array( $one[ $k ] ) && self::unanswerable( $one[ $k ] ) ) {
+					return true;
+				}
+			}
+		}
+		return false;
 	}
 
 	/** Whether an array is a list of values (integer keys only), not a keyed rule. */
