@@ -272,6 +272,21 @@ function minn_admin_cf7_mail_merge( $input, $current ) {
 	return $out;
 }
 
+/*
+ * Contact Form 7 keeps every integration's secret in its one settings row
+ * (the Stripe secret key, the reCAPTCHA and Turnstile secrets, the Brevo key,
+ * the Constant Contact client secret and OAuth tokens), which its Integration
+ * screen prints only masked. The captcha secrets are keyed by the public site
+ * key, so no name along their path says secret: they are named here. Declared
+ * whether or not CF7 is active (its row outlives it).
+ */
+minn_admin_secrets(
+	'contact-form-7',
+	array(
+		'options' => array( 'wpcf7' => array( 'recaptcha/*', 'turnstile/*' ) ),
+	)
+);
+
 add_action( 'rest_api_init', function () {
 	if ( ! defined( 'WPCF7_VERSION' ) || ! function_exists( 'wpcf7_save_contact_form' ) || ! function_exists( 'wpcf7_messages' ) ) {
 		return;

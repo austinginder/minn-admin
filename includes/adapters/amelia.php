@@ -28,6 +28,24 @@ function minn_admin_amelia_active() {
 	return defined( 'AMELIA_VERSION' ) && defined( 'AMELIA_PATH' );
 }
 
+/*
+ * Amelia keeps its calendar, mail, WhatsApp, Zoom and payment secrets in one
+ * settings row, beside the secrets its customer and employee panel sign-in
+ * links are signed with and its cron key, which no screen of its own shows;
+ * and each employee's Google and Outlook calendar OAuth tokens in a column.
+ * Declared whether or not Amelia is active (its rows outlive it).
+ */
+minn_admin_secrets(
+	'ameliabooking',
+	array(
+		'options' => array( 'amelia_settings' ),
+		'columns' => array(
+			'amelia_providers_to_google_calendar'  => array( 'token' ),
+			'amelia_providers_to_outlook_calendar' => array( 'token' ),
+		),
+	)
+);
+
 function minn_admin_amelia_can_read() {
 	return current_user_can( 'amelia_read_appointments' );
 }

@@ -769,6 +769,13 @@ class Minn_Admin_DB {
 			$key = isset( $row[ $keyed[0] ] ) ? (string) $row[ $keyed[0] ] : '';
 			return self::keyed_match( $key, $keyed );
 		}
+		// A column an adapter declares (minn_admin_secrets()), in its table
+		// or a copy of it.
+		foreach ( Minn_Admin_Kernel_Secrets::columns() as $declared => $cols ) {
+			if ( false !== strpos( $base, $declared ) && in_array( strtolower( $col ), array_map( 'strtolower', $cols ), true ) ) {
+				return true;
+			}
+		}
 		if ( 'woocommerce_api_keys' === $base ) {
 			return in_array( $col, array( 'consumer_key', 'consumer_secret' ), true );
 		}
@@ -991,28 +998,31 @@ class Minn_Admin_DB {
 			$keys   = self::secret_option_names();
 			$shapes = self::secret_option_shapes();
 		} elseif ( 'usermeta' === $base ) {
-			$shapes = self::SECRET_USERMETA_SHAPES;
+			list( $declared, $shapes ) = Minn_Admin_Kernel_Secrets::usermeta();
+			$keys                      = array_merge( $keys, $declared );
+			$shapes                    = array_merge( self::SECRET_USERMETA_SHAPES, $shapes );
 		}
 		return array( self::KEYED_SECRETS[ $base ][1], $keys, $shapes );
 	}
 
 	/**
 	 * Every option name whose row is a credential, for the options table and
-	 * the network's sitemeta alike: the fixed list, the payment gateways'
-	 * settings rows, the core Connectors' key rows and the rows the licences
-	 * screen reads a key or token from.
+	 * the network's sitemeta alike: the fixed list, the rows adapters declare
+	 * (minn_admin_secrets()), the payment gateways' settings rows, the core
+	 * Connectors' key rows and the rows the licences screen reads a key or
+	 * token from.
 	 *
 	 * @return string[]
 	 */
 	private static function secret_option_names() {
 		$licences = function_exists( 'minn_admin_license_secret_options' ) ? minn_admin_license_secret_options()[0] : array();
-		return array_values( array_unique( array_merge( self::SECRET_OPTION_KEYS, self::gateway_option_names(), self::connector_option_names(), $licences ) ) );
+		return array_values( array_unique( array_merge( self::SECRET_OPTION_KEYS, Minn_Admin_Kernel_Secrets::option_names(), self::gateway_option_names(), self::connector_option_names(), $licences ) ) );
 	}
 
-	/** The option name shapes redacted with them: the fixed shapes and the licences screen's. */
+	/** The option name shapes redacted with them: the fixed shapes, the declared ones and the licences screen's. */
 	private static function secret_option_shapes() {
 		$licences = function_exists( 'minn_admin_license_secret_options' ) ? minn_admin_license_secret_options()[1] : array();
-		return array_merge( self::SECRET_OPTION_SHAPES, $licences );
+		return array_merge( self::SECRET_OPTION_SHAPES, Minn_Admin_Kernel_Secrets::option_shapes(), $licences );
 	}
 
 	/**
@@ -1064,10 +1074,6 @@ class Minn_Admin_DB {
 		// SureCart's hash of the account password a shopper typed at
 		// checkout, kept a day until the order creates the account.
 		array( '_transient_sc_checkout_password_hash_', '' ),
-		// UpdraftPlus' running jobs copy the storage destinations' settings
-		// into their job row, a typed password among them, which no needle
-		// recognises as a key.
-		array( 'updraft_jobdata_', '' ),
 	);
 
 	/**
@@ -1168,9 +1174,8 @@ class Minn_Admin_DB {
 	 * Sucuri, All In One Security), the hash of the code an email second
 	 * factor sent (core Two Factor and Solid Security), and the plaintext
 	 * one-time sign-in tokens the One Time Login and WP Freighter routes
-	 * mint (each signs in as that user), and the access and refresh tokens
-	 * Yoast SEO's AI features keep for each user who consented to them
-	 * (they spend that user's AI subscription, and no screen shows them).
+	 * mint (each signs in as that user). Adapters declare their plugins'
+	 * keys beside them (minn_admin_secrets()).
 	 */
 	/**
 	 * usermeta rows redacted by name shape. Elementor Connect keeps each
@@ -1182,7 +1187,7 @@ class Minn_Admin_DB {
 		array( '', 'elementor_connect_common_data' ),
 	);
 
-	const SECRET_USERMETA_KEYS = array( 'session_tokens', '_application_passwords', '_two_factor_totp_key', '_two_factor_backup_codes', 'one_time_login_token', 'captaincore_login_token', 'sucuriscan_topt_secret_key', 'sucuriscan_topt_backup_codes', '_two_factor_email_token', 'tfa_priv_key_64', 'simba_tfa_emergency_codes_64', 'tfa_trusted_devices', 'updraftcentral_login_key', 'wpmdb_licence_key', '_yoast_wpseo_ai_generator_access_jwt', '_yoast_wpseo_ai_generator_refresh_jwt' );
+	const SECRET_USERMETA_KEYS = array( 'session_tokens', '_application_passwords', '_two_factor_totp_key', '_two_factor_backup_codes', 'one_time_login_token', 'captaincore_login_token', 'sucuriscan_topt_secret_key', 'sucuriscan_topt_backup_codes', '_two_factor_email_token', 'tfa_priv_key_64', 'simba_tfa_emergency_codes_64', 'tfa_trusted_devices', 'wpmdb_licence_key' );
 
 	/**
 	 * Option and network option rows redacted whole: core's keys and salts,
@@ -1222,27 +1227,13 @@ class Minn_Admin_DB {
 	 * log with; SureMails' connections, kept base64-encoded only; GoSMTP's
 	 * mailer keys and passwords; Easy WP SMTP's settings and the key that
 	 * seals its password beside them; and Site Mailer's Connect client secret
-	 * and tokens and the key it seals unsubscribe links with. Contact Form 7
-	 * keeps every integration's secret in its one settings row (the Stripe
-	 * secret key, the reCAPTCHA and Turnstile secrets, the Brevo key, the
-	 * Constant Contact client secret and OAuth tokens), which its Integration
-	 * screen prints only masked; Yoast SEO keeps its SEMrush, Wincher and
-	 * MyYoast OAuth tokens in its main settings row, which its own settings
-	 * screen withholds. Amelia keeps its calendar, mail, WhatsApp, Zoom and
-	 * payment secrets in one settings row, beside the secrets its customer
-	 * and employee panel sign-in links are signed with and its cron key,
-	 * which no screen of its own shows. UpdraftPlus keeps each remote storage
-	 * destination's keys, passwords and OAuth tokens in its own row
-	 * (updraft_<destination>; the email destination holds addresses only),
-	 * the private keys UpdraftCentral and the Migrator sign with in two more,
-	 * the keys for the sites it sends backups to in a third, the phrase
-	 * that encrypts its database backups, the password that locks its
-	 * settings, the extra databases it backs up (host, user and password),
-	 * its account's email and password for updates, and the rows older
-	 * versions kept a destination's secret, token or whole settings in
-	 * (which it still reads once, to move them into the current rows).
+	 * and tokens and the key it seals unsubscribe links with.
+	 *
+	 * A plugin Minn has an adapter for declares its rows beside the adapter
+	 * instead (minn_admin_secrets(), includes/kernel/class-minn-admin-kernel-secrets.php);
+	 * this list is for the plugins no adapter covers.
 	 */
-	const SECRET_OPTION_KEYS = array( 'auth_key', 'secure_auth_key', 'logged_in_key', 'nonce_key', 'auth_salt', 'secure_auth_salt', 'logged_in_salt', 'nonce_salt', 'secret_key', 'jetpack_private_options', 'woocommerce_helper_data', 'wp_mail_smtp', 'wp_mail_smtp_mail_key', '_transient_wp_mail_smtp_connect_token', 'aio_wp_security_configs', 'postman_options', 'postman_auth_token', 'fs_accounts', 'wpmudev_apikey', 'wp_smush_api_auth', 'jetpack_secrets', '_site_transient_update_plugins', '_site_transient_update_themes', 'gf_telemetry_data', '_site_transient_wp_rocket_update_data', 'fs_api_cache', 'fs_dbg_api_cache', 'wpforms_settings', 'wpforms_crypto_secret_key', 'wpforms_square_connections', 'frm-usage-uuid', 'itsec-storage', 'suretrigger_options', 'wp_statistics', 'wp_statistics_licenses', 'wp_statistics_cipher_key', 'iawp_salt', 'iawp_request_payload_salt', 'surecart_recaptcha_secret_key', 'surecart_registered_webhook', 'surecart_previous_webhook', 'cleantalk_sfw_worker_self_tokens', 'fluentmail-settings', '_fluent_smtp_notify_settings', 'postman_office365_oauth', 'post_smtp_mobile_app_connection', 'suremails_connections', 'gosmtp_options', 'swpsmtp_options', 'swpsmtp_enc_key', 'site_mailer_client_secret', 'site_mailer_access_token', 'site_mailer_refresh_token', 'site_mailer_user_access_token', 'site_mailer_unsubscribe_encryption_data', 'wpcf7', 'wpseo', 'amelia_settings', 'updraft_updraftvault', 'updraft_dropbox', 'updraft_s3', 'updraft_cloudfiles', 'updraft_googledrive', 'updraft_onedrive', 'updraft_ftp', 'updraft_azure', 'updraft_sftp', 'updraft_googlecloud', 'updraft_backblaze', 'updraft_webdav', 'updraft_s3generic', 'updraft_pcloud', 'updraft_openstack', 'updraft_dreamobjects', 'updraft_central_localkeys', 'updraft_migrator_localkeys', 'updraft_remotesites', 'updraft_encryptionphrase', 'updraft_adminlocking', 'updraft_extradbs', 'updraftplus-addons_options', 'updraft_googledrive_secret', 'updraft_googledrive_token', 'updraft_dropboxtk_access_token', 'updraft_dropboxtk_request_token', 'updraft_s3_pass', 'updraft_s3generic_pass', 'updraft_dreamobjects_pass', 'updraft_cloudfiles_apikey', 'updraft_ftp_pass', 'updraft_sftp_settings', 'updraft_webdav_settings' );
+	const SECRET_OPTION_KEYS = array( 'auth_key', 'secure_auth_key', 'logged_in_key', 'nonce_key', 'auth_salt', 'secure_auth_salt', 'logged_in_salt', 'nonce_salt', 'secret_key', 'jetpack_private_options', 'woocommerce_helper_data', 'wp_mail_smtp', 'wp_mail_smtp_mail_key', '_transient_wp_mail_smtp_connect_token', 'aio_wp_security_configs', 'postman_options', 'postman_auth_token', 'fs_accounts', 'wpmudev_apikey', 'wp_smush_api_auth', 'jetpack_secrets', '_site_transient_update_plugins', '_site_transient_update_themes', 'gf_telemetry_data', '_site_transient_wp_rocket_update_data', 'fs_api_cache', 'fs_dbg_api_cache', 'wpforms_settings', 'wpforms_crypto_secret_key', 'wpforms_square_connections', 'frm-usage-uuid', 'itsec-storage', 'suretrigger_options', 'wp_statistics', 'wp_statistics_licenses', 'wp_statistics_cipher_key', 'iawp_salt', 'iawp_request_payload_salt', 'surecart_recaptcha_secret_key', 'surecart_registered_webhook', 'surecart_previous_webhook', 'cleantalk_sfw_worker_self_tokens', 'fluentmail-settings', '_fluent_smtp_notify_settings', 'postman_office365_oauth', 'post_smtp_mobile_app_connection', 'suremails_connections', 'gosmtp_options', 'swpsmtp_options', 'swpsmtp_enc_key', 'site_mailer_client_secret', 'site_mailer_access_token', 'site_mailer_refresh_token', 'site_mailer_user_access_token', 'site_mailer_unsubscribe_encryption_data' );
 
 	/**
 	 * Whether a whole COLUMN can hold a credential on some row, so it must
@@ -1395,15 +1386,24 @@ class Minn_Admin_DB {
 		// array keys, the password a $-hash) and every user who ever signed in
 		// has a session row, so they stay out; so do TOTP seeds, one per user
 		// with two-factor, which would exhaust the needle cap on a large site,
-		// and Yoast's AI tokens, a pair per user of its AI features, which
-		// nothing copies (WP Activity Log skips underscored user meta).
-		// One Time Login keeps its sign-in token raw, and a delayed delete
-		// copies it into the cron option's arguments.
-		$um_keys = array( 'wpmdb_licence_key', 'updraftcentral_login_key', 'one_time_login_token' );
+		// and the per-user tokens adapters declare (user_tokens). One Time
+		// Login keeps its sign-in token raw, and a delayed delete copies it
+		// into the cron option's arguments. An adapter's declared user meta
+		// counts, a shape only when it has a prefix to search by.
+		list( $um_keys, $um_shapes ) = Minn_Admin_Kernel_Secrets::usermeta( true );
+		$um_keys = array_merge( $um_keys, array( 'wpmdb_licence_key', 'one_time_login_token' ) );
 		foreach ( array_unique( array( $wpdb->get_blog_prefix(), $wpdb->base_prefix ) ) as $prefix ) {
 			$um_keys[] = $prefix . 'elementor_connect_common_data';
 		}
-		$stores[] = array( $wpdb->usermeta, 'meta_key', 'meta_value', $um_keys, array() );
+		$um_shapes = array_values(
+			array_filter(
+				$um_shapes,
+				static function ( $shape ) {
+					return '' !== $shape[0];
+				}
+			)
+		);
+		$stores[] = array( $wpdb->usermeta, 'meta_key', 'meta_value', array_values( array_unique( $um_keys ) ), $um_shapes );
 		foreach ( $stores as $store ) {
 			list( $table, $kcol, $vcol, $keys, $key_shapes ) = $store;
 			$or   = array();
@@ -1441,8 +1441,13 @@ class Minn_Admin_DB {
 				$take( $wpdb->prepare( "SELECT `{$vcol}` FROM `{$t}` WHERE `{$kcol}` IN (" . implode( ',', array_fill( 0, count( $keys ), '%s' ) ) . ')', $keys ), 500 );
 			}
 		}
-		// The credential columns of the tables is_secret_cell() names.
-		foreach ( self::SECRET_COLUMN_SOURCES as $base => $cols ) {
+		// The credential columns of the tables is_secret_cell() names, and the
+		// ones adapters declare.
+		$columns = self::SECRET_COLUMN_SOURCES;
+		foreach ( Minn_Admin_Kernel_Secrets::columns() as $base => $cols ) {
+			$columns[ $base ] = array_values( array_unique( array_merge( $columns[ $base ] ?? array(), $cols ) ) );
+		}
+		foreach ( $columns as $base => $cols ) {
 			foreach ( array_unique( array( $wpdb->prefix, $wpdb->base_prefix ) ) as $prefix ) {
 				$t = $all[ strtolower( $prefix . $base ) ] ?? '';
 				foreach ( '' === $t ? array() : $cols as $col ) {
@@ -1452,6 +1457,32 @@ class Minn_Admin_DB {
 		}
 		foreach ( $values as $raw ) {
 			$credentials += self::credential_strings( (string) $raw );
+		}
+		// Leaves an adapter names inside a row, whatever they are called (a
+		// secret keyed by its public site key): each counts when it is
+		// shaped like a key.
+		$leafy = Minn_Admin_Kernel_Secrets::option_leaves();
+		if ( $leafy ) {
+			$in = implode( ',', array_fill( 0, count( $leafy ), '%s' ) );
+			$rows = array();
+			foreach ( $stores as $store ) {
+				list( $table, $kcol, $vcol ) = $store;
+				if ( $wpdb->usermeta === $table ) {
+					continue;
+				}
+				// phpcs:ignore WordPress.DB.PreparedSQL -- identifiers are this class's own; values prepared.
+				$rows = array_merge( $rows, (array) $wpdb->get_results( $wpdb->prepare( "SELECT `{$kcol}` AS k, `{$vcol}` AS v FROM `{$table}` WHERE `{$kcol}` IN ({$in})", array_keys( $leafy ) ), ARRAY_A ) );
+			}
+			foreach ( $rows as $row ) {
+				foreach ( self::credential_leaves( (string) $row['v'] ) as $leaf ) {
+					foreach ( $leafy[ $row['k'] ] ?? array() as $re ) {
+						$v = rtrim( $leaf[1], '=' );
+						if ( preg_match( $re, $leaf[0] ) && self::is_credential_leaf( '', $v ) ) {
+							$credentials[ $v ] = $leaf[0];
+						}
+					}
+				}
+			}
 		}
 		self::$credentials = array_map( 'strval', array_keys( $credentials ) );
 		foreach ( array_keys( $credentials ) as $v ) {

@@ -27,6 +27,40 @@ function minn_admin_updraftplus_active() {
 	return class_exists( 'UpdraftPlus_Options' ) && class_exists( 'UpdraftPlus_Backup_History' );
 }
 
+/*
+ * UpdraftPlus keeps each remote storage destination's keys, passwords and
+ * OAuth tokens in its own row (updraft_<destination>; the email destination
+ * holds addresses only), the private keys UpdraftCentral and the Migrator
+ * sign with in two more, the keys for the sites it sends backups to in a
+ * third, the phrase that encrypts its database backups, the password that
+ * locks its settings, the extra databases it backs up (host, user and
+ * password), its account's email and password for updates, and the rows
+ * older versions kept a destination's secret, token or whole settings in
+ * (which it still reads once, to move them into the current rows). Its
+ * running jobs copy the destinations' settings into their job row, a typed
+ * password among them, which no needle recognises as a key, so job rows
+ * are redacted by name. UpdraftCentral keeps each user's login key in user
+ * meta. Declared whether or not UpdraftPlus is active, or this install's
+ * owner is asking (its rows outlive it).
+ */
+minn_admin_secrets(
+	'updraftplus',
+	array(
+		'options'  => array(
+			'updraft_updraftvault', 'updraft_dropbox', 'updraft_s3', 'updraft_cloudfiles', 'updraft_googledrive', 'updraft_onedrive',
+			'updraft_ftp', 'updraft_azure', 'updraft_sftp', 'updraft_googlecloud', 'updraft_backblaze', 'updraft_webdav', 'updraft_s3generic',
+			'updraft_pcloud', 'updraft_openstack', 'updraft_dreamobjects',
+			'updraft_central_localkeys', 'updraft_migrator_localkeys', 'updraft_remotesites', 'updraft_encryptionphrase',
+			'updraft_adminlocking', 'updraft_extradbs', 'updraftplus-addons_options',
+			'updraft_googledrive_secret', 'updraft_googledrive_token', 'updraft_dropboxtk_access_token', 'updraft_dropboxtk_request_token',
+			'updraft_s3_pass', 'updraft_s3generic_pass', 'updraft_dreamobjects_pass', 'updraft_cloudfiles_apikey', 'updraft_ftp_pass',
+			'updraft_sftp_settings', 'updraft_webdav_settings',
+			'updraft_jobdata_*',
+		),
+		'usermeta' => array( 'updraftcentral_login_key' ),
+	)
+);
+
 /** Newest-first backup sets from UpdraftPlus's history option. */
 function minn_admin_updraft_history() {
 	$history = UpdraftPlus_Backup_History::get_history();

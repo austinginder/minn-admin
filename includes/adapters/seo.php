@@ -1744,6 +1744,23 @@ function minn_admin_seopress_role_blocked( $type ) {
 	return false;
 }
 
+/*
+ * Yoast SEO keeps its SEMrush, Wincher and MyYoast OAuth tokens in its main
+ * settings row, which its own settings screen withholds, and the access and
+ * refresh tokens its AI features keep for each user who consented to them
+ * (they spend that user's AI subscription, and no screen shows them; one
+ * pair per user, so they are hidden by name and not searched for).
+ * Declared whether or not Yoast is the active SEO plugin (its rows outlive
+ * it).
+ */
+minn_admin_secrets(
+	'wordpress-seo',
+	array(
+		'options'     => array( 'wpseo' ),
+		'user_tokens' => array( '_yoast_wpseo_ai_generator_access_jwt', '_yoast_wpseo_ai_generator_refresh_jwt' ),
+	)
+);
+
 function minn_admin_seo_plugin() {
 	if ( defined( 'WPSEO_VERSION' ) ) {
 		return minn_admin_seo_yoast_provider();

@@ -23,8 +23,10 @@
  * and stored text cut by hand rather than through Minn_Admin_Egress::clip().
  * Each should reach 0 outside the kernel as the tiers absorb them
  * (tests/surface-ratchet.test.js). credential_rows counts the rows only the
- * database browser's central lists know about, until adapters declare their
- * own stores. Each hand-written route also gets a kind and
+ * database browser's central lists know about (an entry an adapter also
+ * declares does not count), and declared_rows the stores adapters declare
+ * with minn_admin_secrets(); the first falls as the second grows. Each
+ * hand-written route also gets a kind and
  * a tier: "declarable" (a list, an item, an item action, a status card) or
  * "handler" (a job, a send, a builder, a licence flow and the like). An
  * adapter is "kernel" when it uses the kernel and registers no routes of its
@@ -107,20 +109,74 @@ function handClips( src ) {
 	} ).length;
 }
 
-// Entries in one of the database browser's credential lists: quoted names
-// in a *_KEYS list, array( prefix, suffix ) pairs in a *_SHAPES list.
-function constEntries( src, name ) {
-	const start = src.indexOf( 'const ' + name + ' = array(' );
-	if ( start < 0 ) return 0;
-	let i = src.indexOf( '(', start );
+// The text inside the parentheses that open at src[ i ].
+function parens( src, i ) {
 	let depth = 0;
 	let end = i;
 	for ( ; end < src.length; end++ ) {
 		if ( '(' === src[ end ] ) depth++;
 		if ( ')' === src[ end ] && 0 === --depth ) break;
 	}
-	const body = src.slice( i + 1, end );
-	return name.endsWith( '_SHAPES' ) ? count( body, /array\s*\(/g ) : count( body, /'[^']*'/g );
+	return src.slice( i + 1, end );
+}
+
+// The single-quoted strings in a PHP array body, each with how many
+// parentheses deep it sits (0: an entry or key of this array).
+function quoted( body ) {
+	// Comments first: an apostrophe in one ("Formidable's") is no string.
+	body = body.replace( /\/\*[\s\S]*?\*\//g, '' ).replace( /^\s*(\/\/|#).*$/gm, '' );
+	const out = [];
+	let depth = 0;
+	for ( let i = 0; i < body.length; i++ ) {
+		const ch = body[ i ];
+		if ( '(' === ch ) depth++;
+		else if ( ')' === ch ) depth--;
+		else if ( "'" === ch ) {
+			let j = i + 1;
+			while ( j < body.length && "'" !== body[ j ] ) j += '\\' === body[ j ] ? 2 : 1;
+			out.push( { value: body.slice( i + 1, j ), depth } );
+			i = j;
+		}
+	}
+	return out;
+}
+
+// Entries in one of the database browser's credential lists: quoted names
+// in a *_KEYS list, array( prefix, suffix ) pairs in a *_SHAPES list (as
+// "prefix*suffix", a declaration's spelling).
+function constEntries( src, name ) {
+	const start = src.indexOf( 'const ' + name + ' = array(' );
+	if ( start < 0 ) return [];
+	const body = parens( src, src.indexOf( '(', start ) );
+	if ( ! name.endsWith( '_SHAPES' ) ) return quoted( body ).map( ( q ) => q.value );
+	return quoted( body ).reduce( ( out, q, i, all ) => ( i % 2 ? out.concat( all[ i - 1 ].value + '*' + q.value ) : out ), [] );
+}
+
+// The stores adapters declare with minn_admin_secrets(), as "store:name"
+// (options and user meta, shapes spelt with their *; a column as
+// "column:table.column"). A row's leaves are part of the row, not entries.
+function declaredStores( src ) {
+	const out = [];
+	const re = /\bminn_admin_secrets\(\s*'/g;
+	let m;
+	while ( ( m = re.exec( src ) ) ) {
+		const body = parens( src, m.index + m[ 0 ].indexOf( '(' ) );
+		for ( const key of [ 'options', 'usermeta', 'user_tokens', 'columns' ] ) {
+			const at = body.search( new RegExp( "'" + key + "'\\s*=>\\s*array\\s*\\(" ) );
+			if ( at < 0 ) continue;
+			const list = quoted( parens( body, body.indexOf( '(', at ) ) );
+			if ( 'columns' === key ) {
+				let table = '';
+				list.forEach( ( q ) => {
+					if ( 0 === q.depth ) table = q.value;
+					else out.push( 'column:' + table + '.' + q.value );
+				} );
+			} else {
+				list.filter( ( q ) => 0 === q.depth ).forEach( ( q ) => out.push( ( 'options' === key ? 'option:' : 'usermeta:' ) + q.value ) );
+			}
+		}
+	}
+	return out;
 }
 
 // Hand-written routes, each with its path and a kind. The kind says which
@@ -256,6 +312,8 @@ const kernelLines = kernelFiles.reduce( ( n, f ) => n + read( f ).split( '\n' ).
 const kernelCode = kernelFiles.reduce( ( n, f ) => n + codeLines( read( f ) ), 0 );
 
 const sum = ( k, list = rows ) => list.reduce( ( n, r ) => n + r[ k ], 0 );
+const declared = new Set( adapterFiles.flatMap( ( f ) => declaredStores( read( f ) ) ) );
+const centralRows = ( ( db ) => db ? [ [ 'SECRET_OPTION_KEYS', 'option:' ], [ 'SECRET_OPTION_SHAPES', 'option:' ], [ 'SECRET_USERMETA_KEYS', 'usermeta:' ], [ 'SECRET_USERMETA_SHAPES', 'usermeta:' ] ].flatMap( ( [ c, store ] ) => constEntries( db, c ).map( ( e ) => store + e ) ) : [] )( readIfExists( 'includes/class-minn-admin-db.php' ) );
 const collection = rows.filter( ( r ) => r.shape.includes( 'collection' ) );
 const commit = git( 'rev-parse', '--short', ref || 'HEAD' ).trim();
 const pluginSrc = read( 'minn-admin.php' );
@@ -293,7 +351,8 @@ const snapshot = {
 	mask_rules: sum( 'mask_rules' ),
 	url_cleaning: sum( 'url_cleaning' ),
 	hand_clips: sum( 'hand_clips' ),
-	credential_rows: ( ( db ) => db ? [ 'SECRET_OPTION_KEYS', 'SECRET_OPTION_SHAPES', 'SECRET_USERMETA_KEYS', 'SECRET_USERMETA_SHAPES' ].reduce( ( n, c ) => n + constEntries( db, c ), 0 ) : 0 )( readIfExists( 'includes/class-minn-admin-db.php' ) ),
+	credential_rows: centralRows.filter( ( e ) => ! declared.has( e ) ).length,
+	declared_rows: declared.size,
 };
 
 if ( outDir ) {
