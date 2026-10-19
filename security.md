@@ -40,7 +40,8 @@ A few properties worth knowing before auditing (details in
   never reaches the app and their PHP never prints into Minn's render paths
   (the one place it runs, a check of which blocks render cleanly enough to
   offer for insertion, discards the output); values are escaped at the
-  render edge. Preview CSS that exists only once a page has run comes from a
+  render edge, for each context they land in (a URL in a style attribute
+  is escaped for the stylesheet and then for the page). Preview CSS that exists only once a page has run comes from a
   sandboxed copy of that page: an opaque origin with no cookies, no storage
   and no reach into the app, which can still load the page's scripts and
   stylesheets. A published page is fetched as a visitor sees it; only a
@@ -57,6 +58,16 @@ A few properties worth knowing before auditing (details in
   why the dev-mode flag that relaxes certificate checking is refused on a
   site whose environment type is production, and never applies to the
   package download.
+- Run on Minn installs a Minn release only when its sha256 matches, it
+  carries a signature from a key pinned in code, and it holds exactly the
+  version the update service named, downloaded from that version's own
+  path. It never installs a release older than the floor Minn Admin
+  carries (`Minn_Admin_Switch::ENGINE_FLOOR`): a signature covers bytes,
+  not which release they are, so the floor rises whenever a release fixes
+  something an older one would bring back. A wp-config switch is offered
+  only when nothing PHP ran before the define may define the same
+  constant (what wp-config.php loads, a PHP `auto_prepend_file`, every file
+  PHP lists ahead of wp-config.php); a file that cannot be read locks it.
 - Maintenance mode holds back the front end (including form posts that
   plugins process once the request is routed, from `parse_request`
   priority 15 on, such as Contact Form 7 and Gravity Forms; a plugin that
@@ -127,15 +138,23 @@ A few properties worth knowing before auditing (details in
   masked is compared against the real value, a save's 200 or 400 tells
   whether that field holds a given masked key. An export file
   that would carry a credential is refused rather than handed out with the
-  token in it, keys holding a "/" included however the JSON escapes it. The transients list hides a value whose whole stored form
-  the browser would redact or withhold, before cutting it short. A copy in
-  another case, in hex, cut short or split across two values is not
-  caught, as it is not in the browser either. Keys shorter than 16
+  token in it, keys holding a "/" included however the JSON escapes it.
+  Text a screen shortens is masked whole before it is cut
+  (`Minn_Admin_Egress::clip()`), so a key that runs across the cut never
+  shows in part; the transients list instead hides a value whose whole
+  stored form the browser would redact or withhold. A copy in another case,
+  in hex, or split across two values is not caught, as it is not in the
+  browser either. Keys shorter than 16
   characters (Akismet's 12-character key, short CleanTalk keys, WP
   Rocket's 8-character key) are hidden by their row's name only: the
   database browser redacts those rows and the licence readers report them
   as present or absent, but the fence does not search for their values,
-  since a needle that short would match ordinary text.
+  since a needle that short would match ordinary text. Per-user tokens
+  (Yoast SEO's AI tokens, two-factor seeds, sessions) are likewise hidden
+  by their row's name only, so the fence's list stays bounded on a site
+  with many users. Contact Form 7's reCAPTCHA and Turnstile secrets are
+  stored under the public site key's name and are hidden with their row,
+  not searched for.
 - The database browser is read-only and redacts credentials three ways: by
   column name (a column named like a password, secret or token, in any
   table, which also cannot be sorted or filtered), by known vendor row
@@ -188,7 +207,10 @@ A few properties worth knowing before auditing (details in
   that user (location rules, box visibility, field permissions, a
   relational field's own post types and taxonomy). A value the plugin
   refuses is reported on the post's own answer with its status kept,
-  never by ending the request. A preview made from a real entry fills the
+  never by ending the request. A panel the plugin would refuse altogether
+  (the SEO plugin's own edit rule, or its box switched off for the type of
+  post being made) is not offered, and a field its own edit check refuses
+  (WP Job Manager's Featured and Expiry) is left out. A preview made from a real entry fills the
   submitter's account fields only as far as the vendor's own entry screen
   shows them, and their profile only for someone who may list users.
 - On a network, Minn's network routes read network capabilities on the
