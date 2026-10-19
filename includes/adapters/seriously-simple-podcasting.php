@@ -144,13 +144,13 @@ function minn_admin_ssp_write_values( $post_id, $values ) {
 				// Only an emptied box clears. An address the house rule
 				// refuses (javascript:, an unknown scheme) cleaned to '' and
 				// cleared the stored file without a word.
-				$typed = is_scalar( $value ) ? trim( (string) $value ) : null;
+				$typed = null === $value ? '' : ( is_scalar( $value ) ? trim( (string) $value ) : null );
 				$clean = null === $typed ? null : minn_admin_url_clean( $typed );
 				if ( null === $clean ) {
 					$refused[] = array(
 						'key'     => (string) $key,
 						'label'   => isset( $schema[ $key ]['name'] ) ? rtrim( wp_strip_all_tags( (string) $schema[ $key ]['name'] ), ': ' ) : (string) $key,
-						'message' => __( 'Enter a file address that starts with http:// or https://.', 'minn-admin' ),
+						'message' => __( 'That URL is not valid.', 'minn-admin' ),
 					);
 					continue 2;
 				}
@@ -158,8 +158,8 @@ function minn_admin_ssp_write_values( $post_id, $values ) {
 				break;
 			case 'number':
 				// A whole number, or empty to clear: absint() made 'abc' a 0
-				// and -5 a 5.
-				$typed = is_scalar( $value ) ? trim( (string) $value ) : null;
+				// and -5 a 5. An emptied number box arrives as null: empty.
+				$typed = null === $value ? '' : ( is_scalar( $value ) ? trim( (string) $value ) : null );
 				if ( null === $typed || ( '' !== $typed && ! ctype_digit( $typed ) ) ) {
 					$refused[] = array(
 						'key'     => (string) $key,

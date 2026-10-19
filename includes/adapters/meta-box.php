@@ -276,7 +276,7 @@ function minn_admin_meta_box_write_values( $post_id, $values ) {
 				$refused[] = array(
 					'key'     => (string) $key,
 					'label'   => is_array( $field ) && isset( $field['name'] ) && '' !== (string) $field['name'] ? wp_strip_all_tags( (string) $field['name'] ) : (string) $key,
-					'message' => __( 'Enter a web address that starts with http:// or https://.', 'minn-admin' ),
+					'message' => __( 'That URL is not valid.', 'minn-admin' ),
 				);
 				continue;
 			}

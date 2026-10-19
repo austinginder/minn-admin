@@ -155,7 +155,7 @@ function minn_admin_powerpress_write_values( $post_id, $values ) {
 		$typed = $shape ? trim( (string) $values['url'] ) : '';
 		$url   = '' === $typed ? '' : esc_url_raw( $typed );
 		if ( ! $shape ) {
-			$refused[] = minn_admin_powerpress_refusal( 'minn_powerpress_bad_url', __( 'Enter a media file address that starts with http:// or https://.', 'minn-admin' ), 400, array( 'url' ) );
+			$refused[] = minn_admin_powerpress_refusal( 'minn_powerpress_bad_url', __( 'That URL is not valid.', 'minn-admin' ), 400, array( 'url' ) );
 		} elseif ( '' === $typed && '' !== $enc['url'] ) {
 			delete_post_meta( $post_id, 'enclosure' );
 			delete_post_meta( $post_id, 'itunes:duration' );
@@ -165,7 +165,7 @@ function minn_admin_powerpress_write_values( $post_id, $values ) {
 		// javascript: URL, an unknown scheme) or the house rule refuses is
 		// refused: reading its '' as a clear deleted the stored episode.
 		if ( '' !== $typed && ( '' === $url || null === minn_admin_url_clean( $typed ) ) ) {
-			$refused[] = minn_admin_powerpress_refusal( 'minn_powerpress_bad_url', __( 'Enter a media file address that starts with http:// or https://.', 'minn-admin' ), 400, array( 'url' ) );
+			$refused[] = minn_admin_powerpress_refusal( 'minn_powerpress_bad_url', __( 'That URL is not valid.', 'minn-admin' ), 400, array( 'url' ) );
 			$url       = '';
 		}
 		if ( '' !== $url && $url !== $enc['url'] ) {
@@ -251,7 +251,8 @@ function minn_admin_powerpress_write_values( $post_id, $values ) {
 		}
 		// A whole number, or empty to clear. Stripping the rest turned 1.5
 		// into 15 and 'abc' into a clear of the stored number.
-		$val = is_scalar( $values[ $key ] ) ? trim( (string) $values[ $key ] ) : null;
+		// An emptied number box arrives as null: empty, so it clears.
+		$val = null === $values[ $key ] ? '' : ( is_scalar( $values[ $key ] ) ? trim( (string) $values[ $key ] ) : null );
 		if ( null === $val || ( '' !== $val && ! ctype_digit( $val ) ) ) {
 			$refused[] = minn_admin_powerpress_refusal( 'minn_powerpress_bad_number', __( 'Enter a whole number.', 'minn-admin' ), 400, array( $key ) );
 			continue;

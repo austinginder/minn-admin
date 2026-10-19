@@ -441,7 +441,7 @@ add_action( 'rest_api_init', function () {
 					// cleared the stored website without a word.
 					$clean = null === $value['website'] || is_scalar( $value['website'] ) ? minn_admin_url_clean( trim( (string) $value['website'] ) ) : null;
 					if ( null === $clean ) {
-						$refuse( 'minn_tec_bad_url', __( 'Enter a web address that starts with http:// or https://.', 'minn-admin' ), 400, array( 'website' ) );
+						$refuse( 'minn_tec_bad_url', __( 'That URL is not valid.', 'minn-admin' ), 400, array( 'website' ) );
 					} else {
 						$data['EventURL'] = wp_slash( $clean );
 					}

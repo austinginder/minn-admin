@@ -206,9 +206,9 @@ function minn_admin_wpjm_write_values( $post_id, $values ) {
 			case 'file':
 				// Only an emptied box clears. An address the house rule
 				// refuses cleaned to '' and cleared the stored one.
-				$clean = is_scalar( $value ) ? minn_admin_url_clean( trim( (string) $value ) ) : null;
+				$clean = null === $value || is_scalar( $value ) ? minn_admin_url_clean( trim( (string) $value ) ) : null;
 				if ( null === $clean ) {
-					$refuse( $key, $f, __( 'Enter an address that starts with http:// or https://.', 'minn-admin' ) );
+					$refuse( $key, $f, __( 'That URL is not valid.', 'minn-admin' ) );
 					continue 2;
 				}
 				$value = $clean;

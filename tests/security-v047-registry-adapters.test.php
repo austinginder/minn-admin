@@ -30,6 +30,9 @@
  *    as a clear over the stored one (TEC website, SSP episode file, WP Job
  *    Manager file fields, the SEO canonical), and PowerPress's text and
  *    number fields stored what their cleaner made of a refused value.
+ *  - R5 (final review): an emptied number box arrives as null, and the
+ *    whole-number test refused it, so SSP and PowerPress episode and season
+ *    numbers could not be cleared.
  *
  * Each section calls what the route calls, as the role the finding named,
  * with a control where the fix could over-block. Fixtures (users, a listing,
@@ -903,6 +906,50 @@ $r4_bad = 'javascript:alert(1)';
 		list( $st, $d ) = $call( 'POST', '/wp/v2/posts/' . $pid, array( 'minn_powerpress' => array( 'episode_no' => '12', 'season' => '', 'subtitle' => '' ) ) );
 		$v = $vals();
 		$check( 'R4 PowerPress control: a whole number saves and emptied boxes clear', 200 === $st && empty( $d['minn_field_errors'] ) && '12' === $v['episode_no'] && '' === $v['season'] && '' === $v['subtitle'], $st . ' ' . wp_json_encode( $v ) );
+	} finally {
+		$clean();
+	}
+} )();
+
+/*
+ * R5 (final review). The panel sends an emptied number box as null
+ * (formControlValue()), and the whole-number test refused it, so an episode
+ * or season number could no longer be cleared. Null is an empty box.
+ */
+( function () use ( $check, $skip, $call, $once, $field_err, $admin, $tag ) {
+	$ssp = function_exists( 'minn_admin_ssp_active' ) && minn_admin_ssp_active() && post_type_exists( 'podcast' );
+	$pp  = function_exists( 'minn_admin_powerpress_active' ) && minn_admin_powerpress_active();
+	if ( ! $ssp && ! $pp ) {
+		$skip( 'R5: neither Seriously Simple Podcasting nor PowerPress is active' );
+		return;
+	}
+	$made  = array();
+	$clean = $once( static function () use ( &$made ) {
+		foreach ( $made as $pid ) {
+			wp_delete_post( $pid, true );
+		}
+	} );
+	try {
+		if ( $ssp ) {
+			$pid    = (int) wp_insert_post( array( 'post_title' => 'Minn v047 r5 ssp ' . $tag, 'post_status' => 'draft', 'post_type' => 'podcast', 'post_author' => $admin ) );
+			$made[] = $pid;
+			update_post_meta( $pid, 'itunes_episode_number', '7' );
+			update_post_meta( $pid, 'itunes_season_number', '2' );
+			list( $st, $d ) = $call( 'POST', '/wp/v2/podcast/' . $pid, array( 'minn_ssp' => array( 'itunes_episode_number' => null, 'itunes_season_number' => null ) ) );
+			$check( 'R5 SSP: emptied episode and season numbers (sent as null) clear, with no refusal', 200 === $st && empty( $d['minn_field_errors'] ) && '' === get_post_meta( $pid, 'itunes_episode_number', true ) && '' === get_post_meta( $pid, 'itunes_season_number', true ), $st . ' ' . wp_json_encode( array( $d['minn_field_errors'] ?? null, get_post_meta( $pid, 'itunes_episode_number', true ), get_post_meta( $pid, 'itunes_season_number', true ) ) ) );
+		} else {
+			$skip( 'R5 SSP: not active' );
+		}
+		if ( $pp ) {
+			$pid    = (int) wp_insert_post( array( 'post_title' => 'Minn v047 r5 pp ' . $tag, 'post_status' => 'draft', 'post_type' => 'post', 'post_author' => $admin ) );
+			$made[] = $pid;
+			update_post_meta( $pid, 'enclosure', wp_slash( "https://example.com/r5.mp3\n99\naudio/mpeg\n" . serialize( array( 'episode_no' => '7', 'season' => '2' ) ) ) ); // phpcs:ignore -- their storage format
+			list( $st, $d ) = $call( 'POST', '/wp/v2/posts/' . $pid, array( 'minn_powerpress' => array( 'episode_no' => null, 'season' => null ) ) );
+			$v = minn_admin_powerpress_read_values( $pid );
+			$check( 'R5 PowerPress: emptied episode and season numbers (sent as null) clear, with no refusal', 200 === $st && empty( $d['minn_field_errors'] ) && '' === $v['episode_no'] && '' === $v['season'], $st . ' ' . wp_json_encode( array( $d['minn_field_errors'] ?? null, $v['episode_no'], $v['season'] ) ) );
+		} else {
+			$skip( 'R5 PowerPress: not active (run with MINN_SWAP_ADD=powerpress/powerpress.php)' );
+		}
 	} finally {
 		$clean();
 	}

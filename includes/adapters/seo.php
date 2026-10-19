@@ -2312,7 +2312,7 @@ add_action( 'rest_api_init', function () {
 				}
 			}
 			if ( ! empty( $refused['url'] ) ) {
-				$error = $refuse( 'rest_invalid_param', __( 'Enter an address that starts with http:// or https://.', 'minn-admin' ), 400, $refused['url'] );
+				$error = $refuse( 'rest_invalid_param', __( 'That URL is not valid.', 'minn-admin' ), 400, $refused['url'] );
 				if ( is_wp_error( $error ) ) {
 					return $error;
 				}
