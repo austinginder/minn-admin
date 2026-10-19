@@ -122,97 +122,223 @@ function minn_admin_tec_multi_venue( $post_id ) {
 	return count( (array) get_post_meta( (int) $post_id, '_EventVenueID' ) ) > 1;
 }
 
-add_filter( 'minn_admin_editor_panels', function ( $panels ) {
-	if ( ! minn_admin_tec_active() ) {
-		return $panels;
+/**
+ * The Event details group for an event (fields tier, minn_admin_fields()).
+ *
+ * @param int $post_id Event id, 0 for one not saved yet.
+ * @return array[]
+ */
+function minn_admin_tec_groups( $post_id ) {
+	if ( $post_id && minn_admin_tec_is_recurring( $post_id ) ) {
+		// Every field is TEC's on a recurring event (see the helper).
+		return array(
+			array( 'group' => __( 'Event details', 'minn-admin' ), 'fields' => array(), 'locked' => 8 ),
+		);
 	}
-	$panels['tec'] = array(
+	// Dates are typed by hand in TEC's shape and cannot be emptied: an event
+	// always has both.
+	$date = function ( $name, $label, $side ) {
+		return array(
+			'name'        => $name,
+			'label'       => $label,
+			'type'        => 'datetime',
+			'input'       => 'text',
+			'required'    => true,
+			'placeholder' => __( 'YYYY-MM-DD HH:MM', 'minn-admin' ),
+			/* translators: %s: which date could not be parsed, "start" or "end". */
+			'refuse'      => sprintf( __( 'Could not read the %s date — use YYYY-MM-DD HH:MM.', 'minn-admin' ), $side ),
+		);
+	};
+	$fields = array(
+		$date( 'start', __( 'Starts', 'minn-admin' ), 'start' ),
+		$date( 'end', __( 'Ends', 'minn-admin' ), 'end' ),
+		array( 'name' => 'all_day', 'label' => __( 'All-day event', 'minn-admin' ), 'type' => 'checkbox' ),
+	);
+	$locked = 0;
+	if ( $post_id && minn_admin_tec_multi_venue( $post_id ) ) {
+		// Several venues: single-pick would silently drop the rest.
+		$locked++;
+	} else {
+		$fields[] = array( 'name' => 'venue', 'label' => __( 'Venue', 'minn-admin' ), 'type' => 'suggest', 'post_type' => 'tribe_venue', 'route' => 'minn-admin/v1/tec/suggest?kind=venue', 'placeholder' => __( 'Search venues…', 'minn-admin' ), 'refuse' => __( 'Pick a venue from the list.', 'minn-admin' ) );
+	}
+	if ( $post_id && minn_admin_tec_multi_organizer( $post_id ) ) {
+		// Several organizers: single-pick would silently drop the rest.
+		$locked++;
+	} else {
+		$fields[] = array( 'name' => 'organizer', 'label' => __( 'Organizer', 'minn-admin' ), 'type' => 'suggest', 'post_type' => 'tribe_organizer', 'route' => 'minn-admin/v1/tec/suggest?kind=organizer', 'placeholder' => __( 'Search organizers…', 'minn-admin' ), 'refuse' => __( 'Pick an organizer from the list.', 'minn-admin' ) );
+	}
+	$fields[] = array( 'name' => 'cost', 'label' => __( 'Cost', 'minn-admin' ), 'type' => 'text', 'placeholder' => __( 'e.g. 25 or Free', 'minn-admin' ) );
+	$fields[] = array( 'name' => 'website', 'label' => __( 'Event website', 'minn-admin' ), 'type' => 'url' );
+	// Recurrence / tickets / timezone stay TEC's (plus the organizer row
+	// when locked above).
+	return array(
+		array( 'group' => __( 'Event details', 'minn-admin' ), 'fields' => $fields, 'locked' => $locked + 1 ),
+	);
+}
+
+/**
+ * Store the panel's changes through TEC's own save.
+ *
+ * @param int   $post_id Event id.
+ * @param array $changes Field => cleaned value (null clears): dates as
+ *                       'Y-m-d H:i:s', the flag a boolean, picks an id.
+ * @return WP_Error|null What TEC refused, which is the whole submission.
+ */
+function minn_admin_tec_store( $post_id, $changes ) {
+	$post   = get_post( $post_id );
+	$served = minn_admin_tec_panel_values( $post_id );
+	$data   = array();
+	foreach ( array( 'start' => 'Start', 'end' => 'End' ) as $key => $side ) {
+		$ts = isset( $changes[ $key ] ) ? strtotime( (string) $changes[ $key ] ) : false;
+		if ( $ts ) {
+			// The exact shape TEC's own REST endpoint sends.
+			$data[ "Event{$side}Date" ] = date( 'Y-m-d', $ts );
+			$data[ "Event{$side}Time" ] = date( 'H:i:s', $ts );
+		}
+	}
+	// TEC takes new times only as a pair (both or it keeps the stored ones),
+	// so a changed side goes with the other as stored, to the second.
+	foreach ( array( 'Start' => 'End', 'End' => 'Start' ) as $side => $other ) {
+		if ( isset( $data[ "Event{$other}Date" ] ) && ! isset( $data[ "Event{$side}Date" ] ) ) {
+			$ts = strtotime( (string) get_post_meta( $post_id, "_Event{$side}Date", true ) );
+			if ( $ts ) {
+				$data[ "Event{$side}Date" ] = date( 'Y-m-d', $ts );
+				$data[ "Event{$side}Time" ] = date( 'H:i:s', $ts );
+			}
+		}
+	}
+	// saveEventMeta() is a full-form save: an absent all-day flag reads as
+	// off and an absent cost is deleted, so those go back as the event holds
+	// them when the panel did not change them. A venue or organizer left out
+	// keeps its links (the submission names the event, below).
+	$all_day             = array_key_exists( 'all_day', $changes ) ? $changes['all_day'] : ! empty( $served['all_day'] );
+	$data['EventAllDay'] = $all_day ? 'yes' : 'no';
+	if ( array_key_exists( 'venue', $changes ) ) {
+		$data['venue'] = array( 'VenueID' => (int) $changes['venue'] );
+	}
+	if ( array_key_exists( 'organizer', $changes ) ) {
+		$oid               = (int) $changes['organizer'];
+		$data['organizer'] = array( 'OrganizerID' => $oid ? array( $oid ) : array() );
+	}
+	// saveEventMeta() always rewrites the cost (an absent one is deleted) and
+	// stores through add_post_meta(), which unslashes, as its own form's
+	// slashed $_POST expects. It also runs every string it stores through
+	// tec_sanitize_string() (entity decode, then strip_tags), so a value
+	// passed back as stored still came out changed: a cost the block editor
+	// stored as 'Under &lt;$20' became 'Under '. An untouched cost has to be
+	// sent, so it is put back as stored once TEC is done (below). An edited
+	// one is slashed or a backslash would be lost. A website nobody touched
+	// is left out (an absent one is kept).
+	$stored_cost = (string) get_post_meta( $post_id, '_EventCost', true );
+	$cost_was    = null;
+	if ( array_key_exists( 'cost', $changes ) ) {
+		$data['EventCost'] = wp_slash( (string) $changes['cost'] );
+	} else {
+		$data['EventCost'] = wp_slash( $stored_cost );
+		if ( 1 === count( get_post_meta( $post_id, '_EventCost' ) ) ) {
+			$cost_was = $stored_cost;
+		}
+	}
+	if ( array_key_exists( 'website', $changes ) ) {
+		$data['EventURL'] = wp_slash( (string) $changes['website'] );
+	}
+
+	// TEC treats a linked type MISSING from the submission as "keep the
+	// existing links" only when the submission names the event
+	// (Linked_Posts::get_linked_post_type_data reads $submission['ID']);
+	// without it a missing venue or organizer reads as "link none" and the
+	// stored one is dropped. Its own REST endpoint sends the id too.
+	$data['ID'] = $post_id;
+
+	// saveEventMeta() is TEC's FULL-form save: a key its form always posts
+	// reads as "off" when absent. The panel draws none of these, so carry the
+	// stored state or an ordinary save unfeatures the event, un-hides it from
+	// listings, unpins it from the month view, switches its map off and moves
+	// it to the site timezone (shifting its UTC instant).
+	$hide = get_post_meta( $post_id, '_EventHideFromUpcoming', true );
+	if ( ! empty( $hide ) ) {
+		$data['EventHideFromUpcoming'] = $hide;
+	}
+	$tz = (string) get_post_meta( $post_id, '_EventTimezone', true );
+	if ( '' !== $tz ) {
+		$data['EventTimezone'] = $tz;
+	}
+	if ( '-1' === (string) $post->menu_order ) {
+		$data['EventShowInCalendar'] = 'yes';
+	}
+	try {
+		if ( tribe( 'tec.featured_events' )->is_featured( $post_id ) ) {
+			$data['feature_event'] = 'yes';
+		}
+	} catch ( \Throwable $e ) {
+		// No featured-events service: nothing to carry.
+		unset( $e );
+	}
+	// The map flags ride inside the venue submission, and a venue submission
+	// without an id makes TEC create a new venue. Carry them only alongside a
+	// real VenueID; otherwise put the stored values back after TEC has reset
+	// them.
+	$map_keys = array( 'EventShowMap' => '_EventShowMap', 'EventShowMapLink' => '_EventShowMapLink' );
+	$map_was  = array();
+	foreach ( $map_keys as $field => $meta_key ) {
+		if ( metadata_exists( 'post', $post_id, $meta_key ) ) {
+			$map_was[ $meta_key ] = get_post_meta( $post_id, $meta_key, true );
+		}
+	}
+	$venue_sent = ! empty( $data['venue']['VenueID'] );
+	if ( $venue_sent ) {
+		foreach ( $map_keys as $field => $meta_key ) {
+			$v = isset( $map_was[ $meta_key ] ) ? $map_was[ $meta_key ] : '';
+			if ( ! empty( $v ) && 'false' !== (string) $v ) {
+				$data['venue'][ $field ] = '1';
+			}
+		}
+	}
+
+	try {
+		// Pass the post: TEC's own save and its listeners (Community Events
+		// types the third argument) expect it.
+		$ok = Tribe__Events__API::saveEventMeta( $post_id, $data, $post );
+	} finally {
+		// TEC resets the map flags early in the save, so put them back even
+		// when a later listener throws.
+		if ( ! $venue_sent ) {
+			foreach ( $map_was as $meta_key => $v ) {
+				update_post_meta( $post_id, $meta_key, $v );
+			}
+		}
+		// One stored cost row, as it was (a ticketing add-on that writes
+		// several price rows is left to its own rows).
+		$now = null === $cost_was ? array() : get_post_meta( $post_id, '_EventCost' );
+		if ( 1 === count( $now ) && (string) $now[0] !== $cost_was ) {
+			update_post_meta( $post_id, '_EventCost', wp_slash( $cost_was ) );
+		}
+	}
+	if ( false === $ok ) {
+		// Their invalid-meta path (e.g. end before start).
+		return new WP_Error( 'minn_tec_refused', __( 'The Events Calendar refused those event details (check that the end is after the start).', 'minn-admin' ), array( 'status' => 400 ) );
+	}
+	return null;
+}
+
+minn_admin_fields( 'tec', function () {
+	return array(
+		'active'      => 'minn_admin_tec_active',
 		'label'       => __( 'Event details', 'minn-admin' ),
 		'sub'         => 'The Events Calendar',
-		'cap'         => 'edit_posts',
-		'fieldsRoute' => 'minn-admin/v1/tec/fields?post_id={id}&post_type={type}',
-		'valuesKey'   => 'minn_tec',
-		'writeKey'    => 'minn_tec',
+		'key'         => 'minn_tec',
+		'types'       => array( 'tribe_events' ),
+		'groups'      => 'minn_admin_tec_groups',
+		'read'        => 'minn_admin_tec_panel_values',
+		'write'       => 'minn_admin_tec_store',
+		'description' => __( 'The Events Calendar event details for Minn Admin.', 'minn-admin' ),
 	);
-	return $panels;
 } );
 
 add_action( 'rest_api_init', function () {
 	if ( ! minn_admin_tec_active() ) {
 		return;
 	}
-
-	minn_admin_endpoint( '/tec/fields', array(
-		'methods'             => 'GET',
-		'gate'                => function () {
-			return current_user_can( 'edit_posts' );
-		},
-		'args'                => array(
-			'post_id'   => array( 'type' => 'integer' ),
-			'post_type' => array( 'type' => 'string' ),
-		),
-		'run'                 => function ( WP_REST_Request $request ) {
-			$rest_base = sanitize_key( (string) ( $request['post_type'] ?? 'posts' ) );
-			$post_id   = (int) $request['post_id'];
-			$post_type = $post_id && get_post( $post_id ) ? get_post( $post_id )->post_type : $rest_base;
-			if ( ! in_array( $post_type, array( 'tribe_events' ), true ) ) {
-				return rest_ensure_response( array( 'groups' => array() ) );
-			}
-			if ( $post_id ) {
-				if ( ! get_post( $post_id ) ) {
-					return new WP_Error( 'not_found', __( 'Event not found.', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				if ( ! current_user_can( 'edit_post', $post_id ) ) {
-					return new WP_Error( 'rest_forbidden', __( 'You cannot edit this event.', 'minn-admin' ), array( 'status' => 403 ) );
-				}
-			} else {
-				// No post to authorize against, so authorize against the TYPE,
-				// the way meta-box and pods already do. The field list here is
-				// fixed today, but the gate should not depend on that staying
-				// true.
-				$type_obj = get_post_type_object( $post_type );
-				if ( ! $type_obj || ! current_user_can( $type_obj->cap->edit_posts ) ) {
-					return new WP_Error( 'rest_forbidden', __( 'You cannot edit events.', 'minn-admin' ), array( 'status' => 403 ) );
-				}
-			}
-			$fields = array(
-				array( 'name' => 'start', 'label' => __( 'Starts', 'minn-admin' ), 'type' => 'text', 'placeholder' => __( 'YYYY-MM-DD HH:MM', 'minn-admin' ) ),
-				array( 'name' => 'end', 'label' => __( 'Ends', 'minn-admin' ), 'type' => 'text', 'placeholder' => __( 'YYYY-MM-DD HH:MM', 'minn-admin' ) ),
-				array( 'name' => 'all_day', 'label' => __( 'All-day event', 'minn-admin' ), 'type' => 'true_false' ),
-			);
-			if ( $post_id && minn_admin_tec_is_recurring( $post_id ) ) {
-				// Every field is TEC's on a recurring event (see the helper).
-				return rest_ensure_response( array(
-					'groups' => array(
-						array( 'group' => __( 'Event details', 'minn-admin' ), 'fields' => array(), 'locked' => 8 ),
-					),
-				) );
-			}
-			$locked = 0;
-			if ( $post_id && minn_admin_tec_multi_venue( $post_id ) ) {
-				// Several venues: single-pick would silently drop the rest.
-				$locked++;
-			} else {
-				$fields[] = array( 'name' => 'venue', 'label' => __( 'Venue', 'minn-admin' ), 'type' => 'suggest', 'route' => 'minn-admin/v1/tec/suggest?kind=venue', 'placeholder' => __( 'Search venues…', 'minn-admin' ) );
-			}
-			if ( $post_id && minn_admin_tec_multi_organizer( $post_id ) ) {
-				// Several organizers: single-pick would silently drop the rest.
-				$locked++;
-			} else {
-				$fields[] = array( 'name' => 'organizer', 'label' => __( 'Organizer', 'minn-admin' ), 'type' => 'suggest', 'route' => 'minn-admin/v1/tec/suggest?kind=organizer', 'placeholder' => __( 'Search organizers…', 'minn-admin' ) );
-			}
-			$fields[] = array( 'name' => 'cost', 'label' => __( 'Cost', 'minn-admin' ), 'type' => 'text', 'placeholder' => __( 'e.g. 25 or Free', 'minn-admin' ) );
-			$fields[] = array( 'name' => 'website', 'label' => __( 'Event website', 'minn-admin' ), 'type' => 'url' );
-			// Recurrence / tickets / timezone stay TEC's (plus the organizer
-			// row when locked above).
-			$locked += 1;
-			return rest_ensure_response( array(
-				'groups' => array(
-					array( 'group' => __( 'Event details', 'minn-admin' ), 'fields' => $fields, 'locked' => $locked ),
-				),
-			) );
-		},
-	) );
 
 	// Venue / organizer suggestions: published records plus drafts the caller
 	// may edit, alphabetical, with q filtering.
@@ -267,308 +393,4 @@ add_action( 'rest_api_init', function () {
 		},
 	) );
 
-	register_rest_field(
-		'tribe_events',
-		'minn_tec',
-		array(
-			'get_callback'    => function ( $obj ) {
-				$id = isset( $obj['id'] ) ? (int) $obj['id'] : 0;
-				if ( ! $id || ! current_user_can( 'edit_post', $id ) || minn_admin_tec_is_recurring( $id ) ) {
-					return new stdClass();
-				}
-				return (object) minn_admin_tec_panel_values( $id );
-			},
-			'update_callback' => function ( $value, $post, $field_name = '', $request = null ) {
-				if ( ! $post instanceof WP_Post || ! current_user_can( 'edit_post', $post->ID ) ) {
-					return null;
-				}
-				if ( is_object( $value ) ) {
-					$value = (array) $value;
-				}
-				if ( ! is_array( $value ) || ! $value ) {
-					return null;
-				}
-				// Never an error from here. The post is already saved, a new
-				// event included, so an error answer would hide its id from
-				// the editor (each retry and autosave then made another event
-				// draft). A value TEC or this panel refuses keeps only itself
-				// from being stored and rides on the post's own answer, named,
-				// so the editor keeps it unsaved (minn_admin_panel_report_held(),
-				// adapters/acpt.php).
-				$labels  = array(
-					'start'     => __( 'Starts', 'minn-admin' ),
-					'end'       => __( 'Ends', 'minn-admin' ),
-					'all_day'   => __( 'All-day event', 'minn-admin' ),
-					'venue'     => __( 'Venue', 'minn-admin' ),
-					'organizer' => __( 'Organizer', 'minn-admin' ),
-					'cost'      => __( 'Cost', 'minn-admin' ),
-					'website'   => __( 'Event website', 'minn-admin' ),
-				);
-				$sent    = array_values( array_intersect( array_map( 'strval', array_keys( $value ) ), array_keys( $labels ) ) );
-				$refused = array();
-				$refuse  = function ( $code, $message, $status, $keys ) use ( &$refused, $labels ) {
-					$fields = array();
-					foreach ( $keys as $key ) {
-						$fields[] = array(
-							'key'     => (string) $key,
-							'label'   => $labels[ $key ] ?? (string) $key,
-							'message' => $message,
-						);
-					}
-					$refused[] = new WP_Error( $code, $message, array( 'status' => $status, 'fields' => $fields ) );
-				};
-				$finish = function () use ( &$refused, $request ) {
-					if ( ! $refused ) {
-						return null;
-					}
-					if ( $request instanceof WP_REST_Request && function_exists( 'minn_admin_panel_held' ) ) {
-						foreach ( $refused as $error ) {
-							minn_admin_panel_held( $request, $error, 'minn_tec' );
-						}
-						return null;
-					}
-					return $refused[0];
-				};
-				// The editor sends only the fields that changed, and
-				// saveEventMeta() is a full-form save: an absent all-day flag
-				// reads as off and an absent cost is deleted. Fields the body
-				// leaves out take what the event holds now, so they go back as
-				// stored (see the unchanged checks below). Not the dates: TEC
-				// keeps the stored ones when none are sent, to the second, and
-				// the panel reads them to the minute.
-				$served = minn_admin_tec_panel_values( $post->ID );
-				$value  = $value + array_diff_key( $served, array( 'start' => true, 'end' => true ) );
-				// Suggest fields arrive as { value, label } (untouched) or as
-				// the picked '' / { value, label } — normalize to the id.
-				$linked_id = function ( $v ) {
-					if ( is_array( $v ) && isset( $v['value'] ) ) {
-						return (int) $v['value'];
-					}
-					if ( is_object( $v ) && isset( $v->value ) ) {
-						return (int) $v->value;
-					}
-					return is_scalar( $v ) && '' !== (string) $v ? (int) $v : 0;
-				};
-				$data = array();
-				foreach ( array( 'start' => 'Start', 'end' => 'End' ) as $key => $side ) {
-					if ( ! array_key_exists( $key, $value ) ) {
-						continue;
-					}
-					$raw = trim( (string) $value[ $key ] );
-					if ( '' === $raw ) {
-						continue; // dates can't be unset; TEC events always have them
-					}
-					if ( isset( $served[ $key ] ) && Minn_Admin::unchanged( $raw, $served[ $key ] ) ) {
-						continue; // sent back as read: left to the second
-					}
-					$ts = strtotime( $raw );
-					if ( ! $ts ) {
-						/* translators: %s: which date could not be parsed, "start" or "end". */
-						$refuse( 'minn_tec_bad_date', sprintf( __( 'Could not read the %s date — use YYYY-MM-DD HH:MM.', 'minn-admin' ), strtolower( $side ) ), 400, array( $key ) );
-						continue;
-					}
-					// The exact shape TEC's own REST endpoint sends.
-					$data[ "Event{$side}Date" ] = date( 'Y-m-d', $ts );
-					$data[ "Event{$side}Time" ] = date( 'H:i:s', $ts );
-				}
-				// TEC takes new times only as a pair (both or it keeps the
-				// stored ones), so a changed side goes with the other as
-				// stored, to the second.
-				foreach ( array( 'Start' => 'End', 'End' => 'Start' ) as $side => $other ) {
-					if ( isset( $data[ "Event{$other}Date" ] ) && ! isset( $data[ "Event{$side}Date" ] ) ) {
-						$ts = strtotime( (string) get_post_meta( $post->ID, "_Event{$side}Date", true ) );
-						if ( $ts ) {
-							$data[ "Event{$side}Date" ] = date( 'Y-m-d', $ts );
-							$data[ "Event{$side}Time" ] = date( 'H:i:s', $ts );
-						}
-					}
-				}
-				if ( array_key_exists( 'all_day', $value ) ) {
-					$data['EventAllDay'] = ( ! empty( $value['all_day'] ) && 'false' !== (string) $value['all_day'] ) ? 'yes' : 'no';
-				}
-				// A linked record is a venue or organizer the caller may read (TEC's
-				// REST validates the type the same way); an id the event already
-				// links is unchanged and passes. Anything else is refused, so a
-				// private page's title can never be linked in as a venue.
-				$linkable = function ( $id, $type, $meta_key ) use ( $post ) {
-					if ( ! $id ) {
-						return true;
-					}
-					if ( in_array( (string) $id, array_map( 'strval', (array) get_post_meta( $post->ID, $meta_key ) ), true ) ) {
-						return true;
-					}
-					return $type === get_post_type( $id ) && current_user_can( 'read_post', $id );
-				};
-				if ( array_key_exists( 'venue', $value ) && ! minn_admin_tec_multi_venue( $post->ID ) ) {
-					$vid = $linked_id( $value['venue'] );
-					if ( ! $linkable( $vid, 'tribe_venue', '_EventVenueID' ) ) {
-						$refuse( 'minn_tec_bad_venue', __( 'Pick a venue from the list.', 'minn-admin' ), 400, array( 'venue' ) );
-					} else {
-						$data['venue'] = array( 'VenueID' => $vid );
-					}
-				}
-				if ( array_key_exists( 'organizer', $value ) && ! minn_admin_tec_multi_organizer( $post->ID ) ) {
-					$oid = $linked_id( $value['organizer'] );
-					if ( ! $linkable( $oid, 'tribe_organizer', '_EventOrganizerID' ) ) {
-						$refuse( 'minn_tec_bad_organizer', __( 'Pick an organizer from the list.', 'minn-admin' ), 400, array( 'organizer' ) );
-					} else {
-						$data['organizer'] = array( 'OrganizerID' => $oid ? array( $oid ) : array() );
-					}
-				}
-				// saveEventMeta() always rewrites the cost (an absent one is
-				// deleted) and stores through add_post_meta(), which unslashes,
-				// as its own form's slashed $_POST expects. It also runs every
-				// string it stores through tec_sanitize_string() (entity decode,
-				// then strip_tags), so a value passed back as stored still came
-				// out changed: a cost the block editor stored as 'Under &lt;$20'
-				// became 'Under '. A website nobody touched is left out (an absent
-				// one is kept); an untouched cost has to be sent, so it is put
-				// back as stored once TEC is done (below). An edited one is
-				// cleaned, slashed or a backslash would be lost.
-				$stored_cost = (string) get_post_meta( $post->ID, '_EventCost', true );
-				$stored_url  = (string) get_post_meta( $post->ID, '_EventURL', true );
-				$cost_was    = null;
-				if ( array_key_exists( 'cost', $value ) ) {
-					$same              = Minn_Admin::unchanged( $value['cost'], $stored_cost );
-					$data['EventCost'] = wp_slash( $same ? $stored_cost : sanitize_text_field( (string) $value['cost'] ) );
-					if ( $same && 1 === count( get_post_meta( $post->ID, '_EventCost' ) ) ) {
-						$cost_was = $stored_cost;
-					}
-				}
-				if ( array_key_exists( 'website', $value ) && ! Minn_Admin::unchanged( $value['website'], $stored_url ) ) {
-					// Only an emptied box clears. An address the house rule
-					// refuses (javascript:, an unknown scheme) cleaned to '' and
-					// cleared the stored website without a word.
-					$clean = null === $value['website'] || is_scalar( $value['website'] ) ? minn_admin_url_clean( trim( (string) $value['website'] ) ) : null;
-					if ( null === $clean ) {
-						$refuse( 'minn_tec_bad_url', __( 'That URL is not valid.', 'minn-admin' ), 400, array( 'website' ) );
-					} else {
-						$data['EventURL'] = wp_slash( $clean );
-					}
-				}
-				if ( ! $data ) {
-					return $finish();
-				}
-				// The panel is locked on a recurring event (the fields route
-				// offers nothing); values that still arrive are ignored rather
-				// than failing the post's own save.
-				if ( minn_admin_tec_is_recurring( $post->ID ) ) {
-					return $finish();
-				}
-
-				// TEC treats a linked type MISSING from the submission as "keep the
-				// existing links" only when the submission names the event
-				// (Linked_Posts::get_linked_post_type_data reads $submission['ID']);
-				// without it a missing venue or organizer reads as "link none" and
-				// the stored one is dropped. Its own REST endpoint sends the id too.
-				$data['ID'] = $post->ID;
-
-				// A linked venue or organizer the caller may not read comes back
-				// from the read as '' (minn_admin_tec_linked_pick withholds it),
-				// and sending that '' would unlink it. Keep the stored link by
-				// leaving the key out, the way the ACF relation preserve does.
-				$withheld = function ( $meta_key ) use ( $post ) {
-					foreach ( (array) get_post_meta( $post->ID, $meta_key ) as $stored ) {
-						$stored = (int) $stored;
-						if ( $stored && get_post( $stored ) && ! current_user_can( 'read_post', $stored ) ) {
-							return true;
-						}
-					}
-					return false;
-				};
-				if ( isset( $data['venue'] ) && ! $data['venue']['VenueID'] && $withheld( '_EventVenueID' ) ) {
-					unset( $data['venue'] );
-				}
-				if ( isset( $data['organizer'] ) && ! $data['organizer']['OrganizerID'] && $withheld( '_EventOrganizerID' ) ) {
-					unset( $data['organizer'] );
-				}
-
-				// saveEventMeta() is TEC's FULL-form save: a key its form always
-				// posts reads as "off" when absent. The panel draws none of these,
-				// so carry the stored state or an ordinary save unfeatures the
-				// event, un-hides it from listings, unpins it from the month view,
-				// switches its map off and moves it to the site timezone (shifting
-				// its UTC instant).
-				$hide = get_post_meta( $post->ID, '_EventHideFromUpcoming', true );
-				if ( ! empty( $hide ) ) {
-					$data['EventHideFromUpcoming'] = $hide;
-				}
-				$tz = (string) get_post_meta( $post->ID, '_EventTimezone', true );
-				if ( '' !== $tz ) {
-					$data['EventTimezone'] = $tz;
-				}
-				if ( '-1' === (string) $post->menu_order ) {
-					$data['EventShowInCalendar'] = 'yes';
-				}
-				try {
-					if ( tribe( 'tec.featured_events' )->is_featured( $post->ID ) ) {
-						$data['feature_event'] = 'yes';
-					}
-				} catch ( \Throwable $e ) {
-					// No featured-events service: nothing to carry.
-					unset( $e );
-				}
-				// The map flags ride inside the venue submission, and a venue
-				// submission without an id makes TEC create a new venue. Carry
-				// them only alongside a real VenueID; otherwise put the stored
-				// values back after TEC has reset them.
-				$map_keys = array( 'EventShowMap' => '_EventShowMap', 'EventShowMapLink' => '_EventShowMapLink' );
-				$map_was  = array();
-				foreach ( $map_keys as $field => $meta_key ) {
-					if ( metadata_exists( 'post', $post->ID, $meta_key ) ) {
-						$map_was[ $meta_key ] = get_post_meta( $post->ID, $meta_key, true );
-					}
-				}
-				$venue_sent = ! empty( $data['venue']['VenueID'] );
-				if ( $venue_sent ) {
-					foreach ( $map_keys as $field => $meta_key ) {
-						$v = isset( $map_was[ $meta_key ] ) ? $map_was[ $meta_key ] : '';
-						if ( ! empty( $v ) && 'false' !== (string) $v ) {
-							$data['venue'][ $field ] = '1';
-						}
-					}
-				}
-
-				// What TEC itself refuses is the whole submission: every field
-				// this save sent that was not already refused above.
-				$rest = $sent;
-				foreach ( $refused as $error ) {
-					$rest = array_diff( $rest, array_column( (array) ( $error->get_error_data()['fields'] ?? array() ), 'key' ) );
-				}
-				$rest = array_values( $rest );
-				$ok   = null;
-				try {
-					// Pass the post: TEC's own save and its listeners (Community
-					// Events types the third argument) expect it.
-					$ok = Tribe__Events__API::saveEventMeta( $post->ID, $data, $post );
-				} catch ( \Throwable $e ) {
-					$refuse( 'minn_tec_save_failed', $e->getMessage(), 500, $rest );
-				} finally {
-					// TEC resets the map flags early in the save, so put them
-					// back even when a later listener throws.
-					if ( ! $venue_sent ) {
-						foreach ( $map_was as $meta_key => $v ) {
-							update_post_meta( $post->ID, $meta_key, $v );
-						}
-					}
-					// One stored cost row, as it was (a ticketing add-on that
-					// writes several price rows is left to its own rows).
-					$now = null === $cost_was ? array() : get_post_meta( $post->ID, '_EventCost' );
-					if ( 1 === count( $now ) && (string) $now[0] !== $cost_was ) {
-						update_post_meta( $post->ID, '_EventCost', wp_slash( $cost_was ) );
-					}
-				}
-				if ( false === $ok ) {
-					// Their invalid-meta path (e.g. end before start).
-					$refuse( 'minn_tec_refused', __( 'The Events Calendar refused those event details (check that the end is after the start).', 'minn-admin' ), 400, $rest );
-				}
-				return $finish();
-			},
-			'schema'          => array(
-				'description' => __( 'The Events Calendar event details for Minn Admin.', 'minn-admin' ),
-				'type'        => 'object',
-				'context'     => array( 'edit' ),
-			),
-		)
-	);
 } );
