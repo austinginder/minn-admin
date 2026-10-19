@@ -12,7 +12,7 @@
  * SureRank section inspects the raw stored group with WP-CLI: reading ''
  * back is not proof, since a stored template also reads back as ''.
  * Squirrly is checked through its own getSeo API (never unserializing the
- * qss column). Yoast is restored in finally.
+ * qss column). Every SEO plugin is put back as the run found it in finally.
  */
 const { execSync } = require( 'child_process' );
 const path = require( 'path' );
@@ -332,13 +332,16 @@ const { BASE, launch, login, createPost, deletePost, openEditor, reporter } = re
 			JSON.stringify( deepSeo ) );
 	} finally {
 		await deletePost( page, postId ).catch( () => {} );
-		// Yoast back as the resident provider, everything else off.
-		await setStatus( IDS.seopress, 'inactive' ).catch( () => {} );
-		await setStatus( IDS.siteseo, 'inactive' ).catch( () => {} );
-		await setStatus( IDS.aioseo, 'inactive' ).catch( () => {} );
-		await setStatus( IDS.surerank, 'inactive' ).catch( () => {} );
-		await setStatus( IDS.squirrly, 'inactive' ).catch( () => {} );
-		await setStatus( IDS.yoast, 'active' ).catch( () => {} );
+		// Every SEO plugin back as the run found it. The lab can keep Rank
+		// Math active beside Yoast for other suites (its redirections), so
+		// "Yoast only" is not the state to restore.
+		const family = plugins.filter( ( p ) => /^(wordpress-seo|wordpress-seo-premium|all-in-one-seo-pack|wp-seopress|siteseo|seo-by-rank-math|seo-by-rank-math-pro|surerank|squirrly-seo)$/.test( p.plugin.split( '/' )[ 0 ] ) );
+		for ( const p of family ) {
+			if ( p.status !== 'active' ) await setStatus( p.plugin, 'inactive' ).catch( () => {} );
+		}
+		for ( const p of family ) {
+			if ( p.status === 'active' ) await setStatus( p.plugin, 'active' ).catch( () => {} );
+		}
 	}
 
 	// SEOPress's blocked-role rule without their 10.1.1 helper (older builds):

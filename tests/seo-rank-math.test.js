@@ -8,8 +8,8 @@
  * Math for its run (one SEO plugin at a time, like real sites), drives the
  * editor panel UI — conditional Twitter reveal, robots combobox, toggles —
  * and verifies STORED Rank Math meta shapes with WP-CLI (an array meta read
- * back over REST is not proof of vendor-shaped storage). Yoast is restored
- * in finally.
+ * back over REST is not proof of vendor-shaped storage). Every SEO plugin is
+ * put back as the run found it in finally.
  */
 const { execSync } = require( 'child_process' );
 const path = require( 'path' );
@@ -54,14 +54,24 @@ const { launch, login, createPost, deletePost, openEditor, reporter, pickCombo, 
 	}, { id, status } );
 
 	// One SEO plugin at a time; leave every other family member inactive.
+	const family = plugins.filter( ( p ) => /^(wordpress-seo|wordpress-seo-premium|all-in-one-seo-pack|wp-seopress|wp-seopress-pro|siteseo|seo-by-rank-math|seo-by-rank-math-pro|surerank|squirrly-seo)$/.test( p.plugin.split( '/' )[ 0 ] ) );
 	const activateOnly = async ( keep ) => {
-		for ( const p of plugins ) {
-			const dir = p.plugin.split( '/' )[ 0 ];
-			if ( ! /^(wordpress-seo|wordpress-seo-premium|all-in-one-seo-pack|wp-seopress|wp-seopress-pro|siteseo|seo-by-rank-math|seo-by-rank-math-pro|surerank|squirrly-seo)$/.test( dir ) ) continue;
+		for ( const p of family ) {
 			if ( p.plugin === keep ) continue;
 			if ( p.status === 'active' ) await setStatus( p.plugin, 'inactive' );
 		}
 		return ( await setStatus( keep, 'active' ) ) === 'active';
+	};
+	// Put every family member back as the run found it. The lab can keep
+	// Rank Math active beside Yoast for other suites (its redirections), so
+	// "Yoast only" is not the state to restore.
+	const restore = async () => {
+		for ( const p of family ) {
+			if ( p.status !== 'active' ) await setStatus( p.plugin, 'inactive' ).catch( () => {} );
+		}
+		for ( const p of family ) {
+			if ( p.status === 'active' ) await setStatus( p.plugin, 'active' ).catch( () => {} );
+		}
 	};
 
 	const readSeo = ( id ) => page.evaluate( async ( pid ) => {
@@ -188,7 +198,7 @@ const { launch, login, createPost, deletePost, openEditor, reporter, pickCombo, 
 		t.check( 'bogus enums are ignored', meta( postId, 'rank_math_twitter_card_type' ) === '"summary"'
 			&& meta( postId, 'rank_math_robots' ) === '""', meta( postId, 'rank_math_twitter_card_type' ) );
 	} finally {
-		await activateOnly( IDS.yoast ).catch( () => {} );
+		await restore();
 		await deletePost( page, postId ).catch( () => {} );
 	}
 
