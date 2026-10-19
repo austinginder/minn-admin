@@ -4,10 +4,10 @@
  *
  * Sibling of the ACF / Meta Box editor-panel adapters. Pods free stores field
  * values as post meta (for extended post types) and does not expose a first-class
- * REST object like ACF's `acf` field, so this adapter:
- *   1. Lists simple fields for the post being edited via fieldsRoute
- *   2. Registers a `minn_pods` REST field on every show_in_rest post type for
- *      read/write through pods( $pod, $id )->field() / ->save()
+ * REST object like ACF's `acf` field, so this adapter declares a fields-tier
+ * panel (minn_admin_fields()): the simple fields of the pods extending the
+ * post's type, read and written through pods( $pod, $id )->field() / ->save()
+ * under a `minn_pods` REST field on every show_in_rest post type.
  *
  * Complex field types (file, relationships, WYSIWYG, multi-pick, repeatable…)
  * count as locked and link out to wp-admin, same philosophy as ACF.
@@ -17,7 +17,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-/** Pods field types Minn can render as panel inputs. */
+/** Pods field types Minn can render as panel inputs, as the tier's types. */
 const MINN_ADMIN_PODS_SIMPLE = array(
 	'text'      => 'text',
 	'website'   => 'url',
@@ -30,7 +30,7 @@ const MINN_ADMIN_PODS_SIMPLE = array(
 	'currency'  => 'number',
 	// Single custom-simple pick only (see map_field).
 	'pick'      => 'select',
-	'boolean'   => 'true_false',
+	'boolean'   => 'checkbox',
 );
 
 /**
@@ -71,23 +71,6 @@ function minn_admin_pods_quiet( callable $fn ) {
 		remove_filter( 'pods_error_mode', $mode, PHP_INT_MAX );
 		remove_filter( 'pods_error_exception_fallback_enabled', $fallback, PHP_INT_MAX );
 	}
-}
-
-/**
- * Resolve REST base (or post type slug) to a post type name.
- *
- * @param string $rest_base From the editor.
- * @return string
- */
-function minn_admin_pods_resolve_type( $rest_base ) {
-	$rest_base = sanitize_key( $rest_base );
-	foreach ( get_post_types( array( 'show_in_rest' => true ), 'objects' ) as $obj ) {
-		$base = $obj->rest_base ? $obj->rest_base : $obj->name;
-		if ( $base === $rest_base || $obj->name === $rest_base ) {
-			return $obj->name;
-		}
-	}
-	return 'post';
 }
 
 /**
@@ -145,12 +128,6 @@ function minn_admin_pods_parse_pick_custom( $custom ) {
 }
 
 /**
- * Map one Pods field onto the panel vocabulary, or null if locked.
- *
- * @param object|array $field Pods field.
- * @return array|null { name, label, type, choices?, min?, max? }
- */
-/**
  * Does Pods let the current user see this field at all?
  *
  * A field (or its whole group) can be restricted to admins, to roles, to a
@@ -183,6 +160,12 @@ function minn_admin_pods_may_see( $field ) {
 	}
 }
 
+/**
+ * Map one Pods field onto the panel vocabulary, or null if locked.
+ *
+ * @param object|array $field Pods field.
+ * @return array|null A fields-tier field.
+ */
 function minn_admin_pods_map_field( $field ) {
 	$name = (string) minn_admin_pods_field_arg( $field, 'name', '' );
 	$type = (string) minn_admin_pods_field_arg( $field, 'type', '' );
@@ -241,6 +224,11 @@ function minn_admin_pods_map_field( $field ) {
 		'label' => (string) ( minn_admin_pods_field_arg( $field, 'label', $name ) ?: $name ),
 		'type'  => MINN_ADMIN_PODS_SIMPLE[ $type ],
 	);
+	if ( in_array( $mapped['type'], array( 'text', 'textarea', 'email' ), true ) ) {
+		// Pods cleans and validates each by the field's own options (allowed
+		// HTML, code kept as written) and names what it refuses.
+		$mapped['raw'] = true;
+	}
 	$min = minn_admin_pods_field_arg( $field, 'number_min', null );
 	if ( null === $min || '' === $min ) {
 		$min = minn_admin_pods_field_arg( $field, 'min', null );
@@ -249,10 +237,10 @@ function minn_admin_pods_map_field( $field ) {
 	if ( null === $max || '' === $max ) {
 		$max = minn_admin_pods_field_arg( $field, 'max', null );
 	}
-	if ( null !== $min && '' !== $min ) {
+	if ( is_numeric( $min ) ) {
 		$mapped['min'] = $min;
 	}
-	if ( null !== $max && '' !== $max ) {
+	if ( is_numeric( $max ) ) {
 		$mapped['max'] = $max;
 	}
 	return $mapped;
@@ -285,13 +273,13 @@ function minn_admin_pods_for_type( $post_type ) {
 }
 
 /**
- * Build the fieldsRoute response for a post.
+ * The panel's groups: one per pod extending the post's type.
  *
  * @param int    $post_id   Post ID (0 for new).
  * @param string $post_type Post type slug.
- * @return array{groups: array}
+ * @return array[]
  */
-function minn_admin_pods_fields_payload( $post_id, $post_type ) {
+function minn_admin_pods_groups( $post_id, $post_type ) {
 	$groups = array();
 	foreach ( minn_admin_pods_for_type( $post_type ) as $pod_name => $pod ) {
 		$fields = array();
@@ -331,7 +319,7 @@ function minn_admin_pods_fields_payload( $post_id, $post_type ) {
 			);
 		}
 	}
-	return array( 'groups' => $groups );
+	return $groups;
 }
 
 /**
@@ -404,7 +392,7 @@ function minn_admin_pods_read_values( $post_id ) {
 		} catch ( Throwable $e ) {
 			$val = get_post_meta( $post_id, $name, true );
 		}
-		if ( 'true_false' === $panel_type ) {
+		if ( 'checkbox' === $panel_type ) {
 			$out[ $name ] = ! empty( $val ) && '0' !== (string) $val && 'false' !== (string) $val;
 		} elseif ( is_array( $val ) ) {
 			// Multi-value shouldn't appear for simple fields; stringify edge cases.
@@ -506,131 +494,27 @@ function minn_admin_pods_refusal( $pod_obj, $name, $value, $post_id ) {
 }
 
 /**
- * The fields a save could not write, as one error, or null when there are
- * none. One field keeps its own message; several are named together, and a
- * save that wrote other fields says so. The error data lists each field
- * (key, label, message) for the post answer that reports them.
- *
- * @param object|null $pod_obj Pods object, for the labels.
- * @param array       $refused Field name => Pods' reason ('' for none).
- * @param int         $done    Fields the same save wrote.
- * @return WP_Error|null
- */
-function minn_admin_pods_write_errors( $pod_obj, $refused, $done ) {
-	if ( ! $refused ) {
-		return null;
-	}
-	$fields = array();
-	$names  = array();
-	foreach ( $refused as $name => $reason ) {
-		$label = '';
-		try {
-			$def   = ( $pod_obj && isset( $pod_obj->pod_data ) && is_object( $pod_obj->pod_data ) && method_exists( $pod_obj->pod_data, 'get_field' ) ) ? $pod_obj->pod_data->get_field( $name ) : null;
-			$label = $def ? (string) minn_admin_pods_field_arg( $def, 'label', '' ) : '';
-		} catch ( Throwable $e ) {
-			$label = '';
-		}
-		$label = '' !== $label ? $label : (string) $name;
-		if ( '' !== (string) $reason ) {
-			/* translators: 1: field label, 2: the reason Pods gave. */
-			$message = sprintf( __( '“%1$s” was not saved: %2$s', 'minn-admin' ), $label, $reason );
-		} else {
-			/* translators: %s: field label. */
-			$message = sprintf( __( '“%s” was not saved: Pods did not accept that value.', 'minn-admin' ), $label );
-		}
-		$fields[] = array(
-			'key'     => (string) $name,
-			'label'   => $label,
-			'message' => $message,
-		);
-		$names[]  = '“' . $label . '”';
-	}
-	if ( 1 === count( $fields ) ) {
-		$message = $fields[0]['message'];
-	} else {
-		/* translators: %s: comma-separated list of field labels, each in quotes. */
-		$message = sprintf( __( 'These fields were not saved: %s.', 'minn-admin' ), implode( ', ', $names ) );
-	}
-	if ( $done > 0 ) {
-		$message .= ' ' . __( 'Your other changes were saved.', 'minn-admin' );
-	}
-	return new WP_Error( 'minn_pods_refused', $message, array( 'status' => 400, 'fields' => $fields ) );
-}
-
-/**
- * Write simple field values through Pods' own saver.
- *
- * A value Pods refuses is never written another way: it is named in the
- * answer and the stored value stays.
+ * Store cleaned values through Pods' own saver. A value Pods refuses is never
+ * written another way: it is named, and the stored value stays.
  *
  * @param int   $post_id Post ID.
- * @param array $values  Field name => value.
- * @return WP_Error|null Every field that was not written, named in one
- *                       error; the others are written either way.
+ * @param array $changes Field name => cleaned value, null to clear.
+ * @param array $fields  The offered fields, by name.
+ * @return array Field name => why it was not saved.
  */
-function minn_admin_pods_write_values( $post_id, $values ) {
-	if ( ! is_array( $values ) || ! minn_admin_pods_active() ) {
-		return null;
-	}
+function minn_admin_pods_store( $post_id, $changes, $fields ) {
 	$post = get_post( $post_id );
-	if ( ! $post ) {
-		return null;
-	}
-	$allowed = minn_admin_pods_simple_map_for_post( $post_id );
-	// The panel sends every field back when any one of them changes. A value
-	// equal to what the read handed out is left as stored, so an untouched
-	// field never goes back through Pods' parser.
-	$held = minn_admin_pods_read_values( $post_id );
-	$data = array();
-	foreach ( $values as $key => $value ) {
-		if ( ! isset( $allowed[ $key ] ) ) {
-			continue;
+	$in   = array();
+	foreach ( $changes as $key => $value ) {
+		if ( 'checkbox' === $fields[ $key ]['type'] ) {
+			$value = $value ? 1 : 0;
+		} elseif ( null === $value ) {
+			$value = '';
+		} elseif ( 'number' === $fields[ $key ]['type'] ) {
+			// pods()->save parses numbers in each field's own format.
+			$value = minn_admin_pods_number_in( $post->post_type, $key, (string) $value );
 		}
-		$panel_type = $allowed[ $key ];
-		if ( 'true_false' === $panel_type ) {
-			$value = ( ! empty( $value ) && 'false' !== $value && '0' !== (string) $value ) ? 1 : 0;
-		}
-		if ( array_key_exists( $key, $held ) && ( is_scalar( $value ) || null === $value ) && ( is_scalar( $held[ $key ] ) || null === $held[ $key ] ) ) {
-			$was = $held[ $key ];
-			if ( 'true_false' === $panel_type ) {
-				$same = (bool) $value === (bool) $was;
-			} elseif ( 'number' === $panel_type && is_numeric( $value ) && is_numeric( $was ) ) {
-				$same = (float) $value === (float) $was;
-			} else {
-				// Or as served, a credential copy masked.
-				$same = (string) $value === (string) $was || Minn_Admin_Egress::served_as( (string) $value, (string) $was );
-			}
-			if ( $same ) {
-				continue;
-			}
-		}
-		// Empty select: clear meta.
-		if ( ( '' === $value || null === $value ) && 'true_false' !== $panel_type ) {
-			$data[ $key ] = '';
-			continue;
-		}
-		if ( 'url' === $panel_type ) {
-			// The house rule every other URL writer applies: an address that
-			// runs code instead of going somewhere is refused, and refusing
-			// it leaves the stored address alone.
-			$clean = minn_admin_url_clean( $value );
-			if ( null === $clean ) {
-				continue;
-			}
-			$value = $clean;
-		}
-		$data[ $key ] = $value;
-	}
-	if ( ! $data ) {
-		return null;
-	}
-	// pods()->save accepts a field map for an existing item, and parses
-	// numbers in each field's own format.
-	$in = $data;
-	foreach ( $in as $key => $value ) {
-		if ( 'number' === $allowed[ $key ] && is_scalar( $value ) && '' !== (string) $value ) {
-			$in[ $key ] = minn_admin_pods_number_in( $post->post_type, $key, (string) $value );
-		}
+		$in[ $key ] = $value;
 	}
 	$refused = array();
 	$pod_obj = null;
@@ -643,7 +527,7 @@ function minn_admin_pods_write_values( $post_id, $values ) {
 	}
 	if ( ! $pod_obj || ! method_exists( $pod_obj, 'save' ) || ( method_exists( $pod_obj, 'valid' ) && ! $pod_obj->valid() ) ) {
 		// No saver to hand them to: nothing is written behind Pods' back.
-		return minn_admin_pods_write_errors( null, array_fill_keys( array_keys( $in ), '' ), 0 );
+		return minn_admin_pods_said( $fields, array_fill_keys( array_keys( $in ), '' ), 0 );
 	}
 	foreach ( $in as $key => $value ) {
 		$reason = minn_admin_pods_quiet( function () use ( $pod_obj, $key, $value, $post_id ) {
@@ -655,6 +539,7 @@ function minn_admin_pods_write_values( $post_id, $values ) {
 		}
 	}
 	if ( $in ) {
+		$held = minn_admin_pods_read_values( $post_id );
 		try {
 			minn_admin_pods_quiet( function () use ( $pod_obj, $in ) {
 				return $pod_obj->save( $in );
@@ -676,112 +561,46 @@ function minn_admin_pods_write_values( $post_id, $values ) {
 			}
 		}
 	}
-	return minn_admin_pods_write_errors( $pod_obj, $refused, count( $in ) );
+	return minn_admin_pods_said( $fields, $refused, count( $in ) );
 }
 
-add_filter( 'minn_admin_editor_panels', function ( $panels ) {
-	if ( ! minn_admin_pods_active() ) {
-		return $panels;
+/**
+ * What Pods refused, each in its own words: field name => message, saying
+ * so when the same save wrote other fields.
+ *
+ * @param array $fields  The offered fields, by name (for the labels).
+ * @param array $refused Field name => Pods' reason ('' for none).
+ * @param int   $done    Fields the same save wrote.
+ * @return array
+ */
+function minn_admin_pods_said( $fields, $refused, $done ) {
+	$out = array();
+	foreach ( $refused as $name => $reason ) {
+		$label = isset( $fields[ $name ]['label'] ) ? (string) $fields[ $name ]['label'] : (string) $name;
+		if ( '' !== (string) $reason ) {
+			/* translators: 1: field label, 2: the reason Pods gave. */
+			$message = sprintf( __( '“%1$s” was not saved: %2$s', 'minn-admin' ), $label, $reason );
+		} else {
+			/* translators: %s: field label. */
+			$message = sprintf( __( '“%s” was not saved: Pods did not accept that value.', 'minn-admin' ), $label );
+		}
+		$out[ $name ] = $done > 0 ? $message . ' ' . __( 'Your other changes were saved.', 'minn-admin' ) : $message;
 	}
-	$panels['pods'] = array(
+	return $out;
+}
+
+minn_admin_fields( 'pods', function () {
+	return array(
+		'active'      => 'minn_admin_pods_active',
 		'label'       => __( 'Custom fields', 'minn-admin' ),
 		'sub'         => 'Pods',
-		'cap'         => 'edit_posts',
-		'fieldsRoute' => 'minn-admin/v1/pods/fields?post_id={id}&post_type={type}',
-		'valuesKey'   => 'minn_pods',
-		'writeKey'    => 'minn_pods',
+		'key'         => 'minn_pods',
+		'types'       => function () {
+			return get_post_types( array( 'show_in_rest' => true ), 'names' );
+		},
+		'groups'      => 'minn_admin_pods_groups',
+		'read'        => 'minn_admin_pods_read_values',
+		'write'       => 'minn_admin_pods_store',
+		'description' => __( 'Pods simple field values for Minn Admin.', 'minn-admin' ),
 	);
-	return $panels;
-} );
-
-add_action( 'rest_api_init', function () {
-	if ( ! minn_admin_pods_active() ) {
-		return;
-	}
-
-	minn_admin_endpoint( '/pods/fields', array(
-		'methods'             => 'GET',
-		'gate'                => function () {
-			return current_user_can( 'edit_posts' );
-		},
-		'args'                => array(
-			'post_id'   => array( 'type' => 'integer' ),
-			'post_type' => array( 'type' => 'string' ),
-		),
-		'run'                 => function ( WP_REST_Request $request ) {
-			$post_id   = (int) $request['post_id'];
-			$post_type = minn_admin_pods_resolve_type( (string) ( $request['post_type'] ?? 'posts' ) );
-			if ( $post_id ) {
-				$post = get_post( $post_id );
-				// A missing post used to fall THROUGH with the caller's own
-				// post_type intact, which is the same hole as post_id=0.
-				if ( ! $post ) {
-					return new WP_Error( 'not_found', __( 'Post not found.', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				if ( ! current_user_can( 'edit_post', $post_id ) ) {
-					return new WP_Error( 'rest_forbidden', __( 'You cannot edit this post.', 'minn-admin' ), array( 'status' => 403 ) );
-				}
-				$post_type = $post->post_type;
-			} else {
-				// No post to authorize against, so authorize against the TYPE.
-				// edit_posts alone let a Contributor enumerate field labels,
-				// names, types and choice lists for types they cannot edit —
-				// internal naming and credential field ids are common there.
-				$type_obj = get_post_type_object( $post_type );
-				if ( ! $type_obj || ! current_user_can( $type_obj->cap->edit_posts ) ) {
-					return new WP_Error( 'rest_forbidden', __( 'You cannot edit that post type.', 'minn-admin' ), array( 'status' => 403 ) );
-				}
-			}
-			return rest_ensure_response( minn_admin_pods_fields_payload( $post_id, $post_type ) );
-		},
-	) );
-
-	$types = get_post_types( array( 'show_in_rest' => true ), 'names' );
-	foreach ( $types as $type ) {
-		register_rest_field(
-			$type,
-			'minn_pods',
-			array(
-				'get_callback'    => function ( $obj ) {
-					$id = isset( $obj['id'] ) ? (int) $obj['id'] : 0;
-					if ( ! $id || ! current_user_can( 'edit_post', $id ) ) {
-						return new stdClass();
-					}
-					return (object) minn_admin_pods_read_values( $id );
-				},
-				'update_callback' => function ( $value, $post, $field_name = '', $request = null ) {
-					if ( ! $post instanceof WP_Post ) {
-						return;
-					}
-					if ( ! current_user_can( 'edit_post', $post->ID ) ) {
-						return;
-					}
-					if ( is_object( $value ) ) {
-						$value = (array) $value;
-					}
-					if ( ! is_array( $value ) ) {
-						return;
-					}
-					$error = minn_admin_pods_write_values( $post->ID, $value );
-					if ( ! is_wp_error( $error ) ) {
-						return;
-					}
-					// Never an error from here: the post is already saved, a
-					// new one included. The refusal rides on the post's own
-					// answer instead, beside any other panel's
-					// (minn_admin_panel_report_held(), the fields tier).
-					if ( $request instanceof WP_REST_Request && function_exists( 'minn_admin_panel_held' ) ) {
-						minn_admin_panel_held( $request, $error, 'minn_pods' );
-						return;
-					}
-					return $error;
-				},
-				'schema'          => array(
-					'description' => __( 'Pods simple field values for Minn Admin.', 'minn-admin' ),
-					'type'        => 'object',
-					'context'     => array( 'edit' ),
-				),
-			)
-		);
-	}
 } );

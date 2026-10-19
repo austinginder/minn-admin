@@ -139,6 +139,8 @@ $fx_fields = static function () use ( $page ) {
 		array( 'name' => 'm', 'label' => 'Picture', 'type' => 'media', 'image' => true ),
 		array( 'name' => 'nt', 'label' => 'Note', 'type' => 'note' ),
 		array( 'name' => 'mt', 'label' => 'Own meta', 'type' => 'text', 'meta' => '_minn_fx_mt' ),
+		array( 'name' => 'rw', 'label' => 'Raw', 'type' => 'textarea', 'raw' => true ),
+		array( 'name' => 'ru', 'label' => 'Raw link', 'type' => 'url', 'raw' => true ),
 		array( 'name' => 'rep', 'label' => 'Rows', 'type' => 'repeater' ),
 		array( 'name' => 'odd', 'label' => 'Odd', 'type' => 'text', 'unknown_key' => 1 ),
 	);
@@ -485,6 +487,12 @@ $run = static function ( $T ) use ( $check, $skip, $as, $fx_def, $fx_reset, &$fx
 	} );
 	$check( 'T sg: a post of the right type the caller may not read is refused', $refused( $rows, 'sg' ) && ! $fx['spy'], wp_json_encode( $rows ) );
 	$fx_reset();
+	$rows = $T::save( $def, $post, array( 'rw' => '<p>Kept <b>as</b> typed</p>' ) );
+	$check( 'T raw: text the plugin cleans itself goes to its write as typed', '<p>Kept <b>as</b> typed</p>' === ( $wrote()['rw'] ?? null ) && ! $rows, wp_json_encode( array( $wrote(), $rows ) ) );
+	$fx_reset();
+	$rows = $T::save( $def, $post, array( 'ru' => 'javascript:alert(1)', 'rw' => array( 'x' ) ) );
+	$check( 'T raw: no other type goes raw, and a raw field still refuses the wrong shape', ! $fx['spy'] && $refused( $rows, 'ru' ) && $refused( $rows, 'rw' ), wp_json_encode( array( $fx['spy'], $rows ) ) );
+	$fx_reset();
 	$rows = $T::save( $def, $post, array( 't' => '100%Accurate, %category% & more' ) );
 	$check( 'T t: text keeps what only looks like a percent-encoded octet', '100%Accurate, %category% & more' === ( $wrote()['t'] ?? null ), wp_json_encode( $wrote() ) );
 	$fx_reset();
@@ -764,6 +772,10 @@ $run = static function ( $T ) use ( $check, $skip, $as, $fx_def, $fx_reset, &$fx
 			}
 			if ( 'media' === $f['type'] ) {
 				$value = (string) $other;
+			}
+			if ( ! empty( $f['raw'] ) ) {
+				// Text the plugin cleans itself: the tier holds it to its shape.
+				$value = array( 'not', 'one', 'value' );
 			}
 			if ( null === $value ) {
 				continue;

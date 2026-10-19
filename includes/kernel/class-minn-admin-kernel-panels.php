@@ -57,6 +57,8 @@
  *     'options'     => array( array( value, label ), … ),  // an ordered list (one is required)
  *     'min', 'max', 'integer' => true,                     // number
  *     'html'        => true,       // textarea: post HTML (wp_kses_post), not plain text
+ *     'raw'         => true,       // text, textarea, email: the plugin's own save
+ *                                  // cleans and refuses it, so it goes as typed
  *     'required'    => true,       // an emptied box is refused, not a clear
  *     'post_type'   => 'tribe_venue',   // suggest (required): what a pick must be
  *     'image'       => true,       // media: the attachment must be an image
@@ -111,7 +113,7 @@ final class Minn_Admin_Kernel_Panels {
 	const KEYS = array( 'active', 'label', 'sub', 'key', 'params', 'types', 'can', 'refuse', 'groups', 'read', 'write', 'extra', 'description' );
 
 	/** The keys a field may hold: a field holding any other is locked. */
-	const FIELD_KEYS = array( 'name', 'label', 'type', 'input', 'choices', 'options', 'min', 'max', 'integer', 'html', 'required', 'post_type', 'image', 'route', 'placeholder', 'help', 'counter', 'cond', 'meta', 'store', 'check', 'sanitize', 'refuse' );
+	const FIELD_KEYS = array( 'name', 'label', 'type', 'input', 'choices', 'options', 'min', 'max', 'integer', 'html', 'required', 'post_type', 'image', 'route', 'placeholder', 'help', 'counter', 'cond', 'meta', 'store', 'raw', 'check', 'sanitize', 'refuse' );
 
 	/** What of a field the client is sent. */
 	const WIRE_KEYS = array( 'name', 'label', 'type', 'choices', 'options', 'min', 'max', 'placeholder', 'route', 'help', 'counter', 'cond' );
@@ -824,6 +826,12 @@ final class Minn_Admin_Kernel_Panels {
 			return ! empty( $f['required'] ) ? __( 'This field cannot be empty.', 'minn-admin' ) : array( null );
 		}
 		$s = (string) $sent;
+		// Text the plugin's own save cleans and refuses (Pods sanitizes by
+		// each field's own options) goes to it as typed: cleaning it here too
+		// would strip what the field allows.
+		if ( ! empty( $f['raw'] ) && in_array( $type, array( 'text', 'textarea', 'email' ), true ) ) {
+			return array( $s );
+		}
 		switch ( $type ) {
 			case 'text':
 				$v = self::text( $s, false );

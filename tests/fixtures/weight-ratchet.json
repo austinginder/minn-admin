@@ -1,9 +1,9 @@
 {
-	"code_lines": 61200,
-	"adapter_kernel_lines": 65504,
-	"vendor_guards": 1772,
-	"hand_errors": 777,
-	"cap_checks": 404,
+	"code_lines": 61051,
+	"adapter_kernel_lines": 65358,
+	"vendor_guards": 1769,
+	"hand_errors": 773,
+	"cap_checks": 399,
 	"detect_helpers": 195,
 	"adapters": {
 		"acf-field-groups": 1183,
@@ -95,7 +95,7 @@
 		"perfmatters": 193,
 		"performance-lab": 254,
 		"plausible-analytics": 215,
-		"pods": 557,
+		"pods": 408,
 		"post-smtp": 202,
 		"powerpress": 162,
 		"public-post-preview": 128,

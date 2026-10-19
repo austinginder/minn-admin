@@ -30,6 +30,16 @@
 
 // Ctrl-C, TERM and HUP end the suite through its cleanups (see the file).
 require_once __DIR__ . '/lib/signals.php';
+
+/**
+ * A Pods panel save as the REST field runs it (the fields tier), answered
+ * the way the adapter's own writer used to: an error naming what was
+ * refused, or null.
+ */
+function minn_v046_pods_save( $id, $values ) {
+	$rows = Minn_Admin_Kernel_Panels::save( Minn_Admin_Kernel_Panels::panel( 'pods' ), get_post( $id ), $values );
+	return $rows ? new WP_Error( 'minn_pods_refused', implode( ' ', array_unique( array_column( $rows, 'message' ) ) ) ) : null;
+}
 require_once ABSPATH . 'wp-admin/includes/user.php';
 
 $results = array();
@@ -158,7 +168,7 @@ $tag   = (string) wp_rand( 1000, 9999 );
  * password, as the editor does.
  */
 ( function () use ( $check, $skip, $call, $as, $once, $user, $drop_user, $field_err, $fmsg, $tag, $admin ) {
-	if ( ! function_exists( 'pods_api' ) || ! function_exists( 'minn_admin_pods_write_values' ) || ! minn_admin_pods_active() ) {
+	if ( ! function_exists( 'pods_api' ) || ! class_exists( 'Minn_Admin_Kernel_Panels' ) || ! minn_admin_pods_active() ) {
 		$skip( 'Pods: inactive' );
 		return;
 	}
@@ -307,7 +317,7 @@ $tag   = (string) wp_rand( 1000, 9999 );
 		};
 		add_filter( 'pods_error_die', $no_die, 10, 2 );
 		$as( $admin, function () use ( $check, $id, $email, $meta ) {
-			$err = minn_admin_pods_write_values( $id, array( $email => 'raw@' ) );
+			$err = minn_v046_pods_save( $id, array( $email => 'raw@' ) );
 			$check( 'Pods (in process): a value Pods refuses is answered as refused', is_wp_error( $err ) && false !== strpos( $err->get_error_message(), '“RC email”' ), is_wp_error( $err ) ? $err->get_error_message() : wp_json_encode( $err ) );
 			$check( 'Pods (in process): and is never written another way', 'jane@example.com' === $meta( $id, $email ), wp_json_encode( $meta( $id, $email ) ) );
 		} );
@@ -323,7 +333,7 @@ $tag   = (string) wp_rand( 1000, 9999 );
 		};
 		add_filter( 'pods_api_pre_save_pod_item', $hook, 10 );
 		try {
-			$err = minn_admin_pods_write_values( $id, array( $text => 'Hooked ' . $tag ) );
+			$err = minn_v046_pods_save( $id, array( $text => 'Hooked ' . $tag ) );
 		} catch ( \Throwable $e ) {
 			$err = $e;
 		} finally {
@@ -340,7 +350,7 @@ $tag   = (string) wp_rand( 1000, 9999 );
 		};
 		add_filter( 'pods_api_post_save_pod_item', $after, 10 );
 		try {
-			$err = minn_admin_pods_write_values( $id, array( $text => 'After ' . $tag ) );
+			$err = minn_v046_pods_save( $id, array( $text => 'After ' . $tag ) );
 		} catch ( \Throwable $e ) {
 			$err = $e;
 		} finally {
