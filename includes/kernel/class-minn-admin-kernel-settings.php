@@ -24,7 +24,10 @@
  *                   // $ctx['tab'] is the tab the URL names (null for a screen without
  *                   // tabs, or for the whole screen when PHP saves it); null for a tab
  *                   // that does not exist
- *     'read'     => callable( array $field, array $ctx ): mixed,   // the stored value as the page shows it
+ *     'option'   => 'option_name',   // optional: where a field with no storage of its own
+ *     'network'  => true,            // lives (a site option with 'network'); see Storage
+ *     'read'     => callable( array $field, array $ctx ): mixed,   // the stored value as the page
+ *                   // shows it, for a field the tier does not store
  *     'same'     => callable( array $field, mixed $sent, mixed $served, array $ctx ): bool,
  *                   // optional: the plugin's own reading of a value sent back as served
  *                   // (a stored shape its control cannot show), asked when the tier's
@@ -42,8 +45,23 @@
  *                   // goes back to its credential (see step 5); without it a store with no
  *                   // restore (form meta, a table) refuses any placeholder left in an edit
  *     'write'    => callable( array $changes, array $fields, array $ctx ): true|WP_Error,
+ *                   // for the fields the tier does not store
  *     'labels'   => array( 'may' => callable( string[] $labels ): string ),   // the gate's refusal
  *   ) );
+ *
+ * Storage. A field that says where it lives needs no read or write:
+ * '_option' => 'name' (a site option with '_network' => true) and '_path' =>
+ * 'section/id', the leaves inside an array option (none: the option is the
+ * value). A screen's 'option' is the default for every field it does not
+ * read itself, at the field's key. The tier serves the stored value in the
+ * form's shape (a switch as on or off, a list of lines as text) and writes
+ * every change in one update_option() per option, read fresh and changed
+ * only at the leaves sent, so the options API's restore, the write fences
+ * and the plugin's registered sanitizer all run, and nothing the layout does
+ * not offer is touched. '_store' => 'flag' stores a switch as '1' or no key
+ * at all, the shape a plugin reading !empty() keeps. Declared read and write
+ * cover the fields without their own '_option'; a field with neither is not
+ * offered.
  *
  * read() must serve each value from the place write() writes it: the
  * compare, the stale check and the restore all take the stored value from
@@ -67,7 +85,8 @@
  *      whose value as served (credentials masked, so a base can never test
  *      a guess at one) moved since answers 409, so the person reloads; a
  *      body without one (an app cached from before) is saved as before;
- *   5. a placeholder left in an edited value: on a 'restore' screen it
+ *   5. a placeholder left in an edited value: on a 'restore' screen, or in
+ *      a field the tier stores, it
  *      goes through the options API's own restore
  *      (Minn_Admin_Egress::restore_value(), what update_option() runs), so
  *      it goes back only where its credential was; one it cannot put back
@@ -95,10 +114,13 @@ class Minn_Admin_Kernel_Settings {
 	);
 
 	/** The keys a declaration may hold. */
-	const KEYS = array( 'route', 'active', 'gate', 'target', 'layout', 'read', 'same', 'view', 'sent', 'may', 'validate', 'restore', 'write', 'labels' );
+	const KEYS = array( 'route', 'active', 'gate', 'target', 'layout', 'option', 'network', 'read', 'same', 'view', 'sent', 'may', 'validate', 'restore', 'write', 'labels' );
+
+	/** Field types whose value is a list or rows, stored and served as an array. */
+	const LISTS = array( 'multicheck', 'tags', 'gallery', 'relation', 'rows', 'flex' );
 
 	/** The keys a declaration must hold. */
-	const REQUIRED = array( 'route', 'gate', 'layout', 'read', 'write' );
+	const REQUIRED = array( 'route', 'gate', 'layout' );
 
 	/** Declared screens, by id. */
 	private static $screens = array();
@@ -179,6 +201,12 @@ class Minn_Admin_Kernel_Settings {
 		}
 		if ( isset( $def['labels'] ) && ! is_array( $def['labels'] ) ) {
 			return 'its labels are not a list';
+		}
+		if ( isset( $def['option'] ) && ( ! is_string( $def['option'] ) || '' === $def['option'] ) ) {
+			return 'its option is not an option name';
+		}
+		if ( isset( $def['read'] ) !== isset( $def['write'] ) ) {
+			return 'it declares a read without a write, or a write without a read';
 		}
 		if ( isset( $def['restore'] ) && ! is_bool( $def['restore'] ) ) {
 			return 'its restore is not true or false';
@@ -322,6 +350,11 @@ class Minn_Admin_Kernel_Settings {
 				if ( ! in_array( $f['type'] ?? 'text', self::TYPES, true ) ) {
 					continue;
 				}
+				// Nor is one with nowhere to live: no storage of its own and
+				// no read and write declared.
+				if ( null === self::storage( $def, $f ) && ! isset( $def['read'] ) ) {
+					continue;
+				}
 				$fields[ (string) $fkey ] = $f;
 				$kept[]                   = $f;
 			}
@@ -354,7 +387,7 @@ class Minn_Admin_Kernel_Settings {
 		list( $layout, $fields ) = $built;
 		$values                  = array();
 		foreach ( $fields as $key => $f ) {
-			$values[ $key ] = call_user_func( $def['read'], $f, $ctx );
+			$values[ $key ] = self::fetch( $def, $f, $ctx );
 		}
 		foreach ( $layout['groups'] as $i => $g ) {
 			$layout['groups'][ $i ]['fields'] = array_map( array( __CLASS__, 'public_field' ), $g['fields'] );
@@ -391,7 +424,7 @@ class Minn_Admin_Kernel_Settings {
 		}
 		$values = array();
 		foreach ( $built[1] as $key => $f ) {
-			$values[ $key ] = call_user_func( $def['read'], $f, $ctx );
+			$values[ $key ] = self::fetch( $def, $f, $ctx );
 		}
 		return array(
 			'fields' => $built[1],
@@ -580,7 +613,7 @@ class Minn_Admin_Kernel_Settings {
 			if ( ! isset( $fields[ $key ] ) ) {
 				continue;
 			}
-			$served[ $key ] = call_user_func( $def['read'], $fields[ $key ], $ctx );
+			$served[ $key ] = self::fetch( $def, $fields[ $key ], $ctx );
 			// A value holding a credential in clear is a change even when it
 			// equals the stored one: a page never sends one (it was shown the
 			// placeholder), and as no change it would skip the gates a wrong
@@ -669,7 +702,9 @@ class Minn_Admin_Kernel_Settings {
 		$masked = array();
 		$error  = null;
 		foreach ( $changes as $key => $v ) {
-			if ( ! empty( $def['restore'] ) ) {
+			// A field the tier stores lives in the options API, so it takes a
+			// placeholder back the way update_option() does.
+			if ( ! empty( $def['restore'] ) || null !== self::storage( $def, $fields[ $key ] ) ) {
 				// The options API's own restore, the one update_option() runs.
 				$back = Minn_Admin_Egress::restore_value( $v, $served[ $key ] );
 				if ( null !== $back ) {
@@ -706,12 +741,130 @@ class Minn_Admin_Kernel_Settings {
 			return true;
 		}
 		self::$journal['steps'][] = 'write';
-		$wrote                    = call_user_func( $def['write'], $prepared, array_intersect_key( $fields, $changes ), $ctx );
 		self::$journal['wrote']   = true;
-		if ( is_wp_error( $wrote ) ) {
-			return self::named( $wrote, array_keys( $changes ), $fields );
+		// The fields the tier stores take their prepared value (a validator
+		// that leaves one out keeps it unwritten); the rest go to write().
+		$stored = array();
+		foreach ( array_keys( $changes ) as $key ) {
+			if ( null !== self::storage( $def, $fields[ $key ] ) && ( $prepared === $changes || array_key_exists( $key, $prepared ) ) ) {
+				$stored[ $key ] = $prepared[ $key ];
+			}
+		}
+		$own = array_diff_key( $changes, array_filter( $fields, function ( $f ) use ( $def ) {
+			return null !== self::storage( $def, $f );
+		} ) );
+		if ( $stored ) {
+			self::store( $stored, $fields, $def );
+		}
+		if ( $own && isset( $def['write'] ) ) {
+			$wrote = call_user_func( $def['write'], $stored ? array_diff_key( $prepared, $stored ) : $prepared, array_intersect_key( $fields, $own ), $ctx );
+			if ( is_wp_error( $wrote ) ) {
+				return self::named( $wrote, array_keys( $own ), $fields );
+			}
 		}
 		return true;
+	}
+
+	/**
+	 * Where a field lives when the tier stores it, or null when the screen's
+	 * own read and write do: its own '_option', else the screen's 'option'
+	 * for a screen that reads nothing itself.
+	 *
+	 * @return array|null { option, path (leaves, '/'-joined), network, flag }
+	 */
+	private static function storage( array $def, array $f ) {
+		if ( array_key_exists( '_option', $f ) ) {
+			$option = $f['_option'];
+			$path   = (string) ( $f['_path'] ?? '' );
+		} elseif ( ! isset( $def['read'] ) && isset( $def['option'] ) ) {
+			$option = $def['option'];
+			$path   = (string) ( $f['_path'] ?? ( $f['key'] ?? ( $f['name'] ?? '' ) ) );
+		} else {
+			return null;
+		}
+		if ( ! is_string( $option ) || '' === $option ) {
+			return null;
+		}
+		return array(
+			'option'  => $option,
+			'path'    => trim( $path, '/' ),
+			'network' => ! empty( $f['_network'] ) || ( ! array_key_exists( '_option', $f ) && ! empty( $def['network'] ) ),
+			'flag'    => 'flag' === ( $f['_store'] ?? '' ),
+		);
+	}
+
+	/** A field's value as the page is served it: the screen's read, or the tier's own. */
+	private static function fetch( array $def, array $f, array $ctx ) {
+		$s = self::storage( $def, $f );
+		if ( null === $s ) {
+			return call_user_func( $def['read'], $f, $ctx );
+		}
+		$v = $s['network'] ? get_site_option( $s['option'], null ) : get_option( $s['option'], null );
+		foreach ( '' === $s['path'] ? array() : explode( '/', $s['path'] ) as $step ) {
+			$v = is_array( $v ) && array_key_exists( $step, $v ) ? $v[ $step ] : null;
+		}
+		$t = $f['type'] ?? 'text';
+		if ( in_array( $t, array( 'toggle', 'true_false' ), true ) ) {
+			return self::on( $v );
+		}
+		if ( in_array( $t, self::LISTS, true ) ) {
+			return is_array( $v ) ? $v : array();
+		}
+		if ( is_array( $v ) ) {
+			// A list the plugin keeps as an array shows as one line each.
+			return implode( "\n", array_map( function ( $x ) {
+				return is_scalar( $x ) ? (string) $x : '';
+			}, $v ) );
+		}
+		return is_scalar( $v ) ? (string) $v : '';
+	}
+
+	/** Every stored change, one update per option: read fresh, changed only at the leaves sent. */
+	private static function store( array $values, array $fields, array $def ) {
+		$by = array();
+		foreach ( $values as $key => $v ) {
+			$f  = $fields[ $key ];
+			$s  = self::storage( $def, $f );
+			$at = ( $s['network'] ? 'site:' : '' ) . $s['option'];
+			if ( ! isset( $by[ $at ] ) ) {
+				$by[ $at ] = array( $s, $s['network'] ? get_site_option( $s['option'], array() ) : get_option( $s['option'], array() ) );
+			}
+			$t = $f['type'] ?? 'text';
+			if ( in_array( $t, array( 'toggle', 'true_false' ), true ) ) {
+				$v = self::on( $v ) ? '1' : ( $s['flag'] ? null : '' );
+			} elseif ( ! in_array( $t, self::LISTS, true ) ) {
+				$v = is_scalar( $v ) ? (string) $v : '';
+			}
+			if ( '' === $s['path'] ) {
+				$by[ $at ][1] = null === $v ? '' : $v;
+				continue;
+			}
+			if ( ! is_array( $by[ $at ][1] ) ) {
+				$by[ $at ][1] = array();
+			}
+			$ref   = &$by[ $at ][1];
+			$steps = explode( '/', $s['path'] );
+			$last  = array_pop( $steps );
+			foreach ( $steps as $step ) {
+				if ( ! isset( $ref[ $step ] ) || ! is_array( $ref[ $step ] ) ) {
+					$ref[ $step ] = array();
+				}
+				$ref = &$ref[ $step ];
+			}
+			if ( null === $v ) {
+				unset( $ref[ $last ] );
+			} else {
+				$ref[ $last ] = $v;
+			}
+			unset( $ref );
+		}
+		foreach ( $by as list( $s, $data ) ) {
+			if ( $s['network'] ) {
+				update_site_option( $s['option'], $data );
+			} else {
+				update_option( $s['option'], $data );
+			}
+		}
 	}
 }
 

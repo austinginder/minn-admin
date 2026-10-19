@@ -30,6 +30,9 @@
  *                      the field gates; a body without a base (an app cached
  *                      from before) saves as it did.
  *
+ * A third fixture screen keeps its values in options through the tier's own
+ * storage (no read or write), and runs the same rules plus its own checks.
+ *
  * Live screens run with the tier stopped where it would write
  * (Minn_Admin_Kernel_Settings::dry()), so nothing on the lab changes; the
  * fixture writes to memory. A screen the runner cannot address fails, so a
@@ -107,6 +110,8 @@ $clean = $once( static function () use ( $cred, $filter ) {
 	delete_option( $cred );
 	delete_option( $cred . 'hy' );
 	delete_option( $cred . 'sl' );
+	delete_option( 'minn_st_opt_' . $GLOBALS['minn_st_tag'] );
+	delete_option( 'minn_st_opt2_' . $GLOBALS['minn_st_tag'] );
 	Minn_Admin_Egress::reset();
 } );
 
@@ -226,6 +231,53 @@ $declared = minn_admin_settings( 'minn-st-fixture', $fixture );
 // The same screen over an options-API store, where a placeholder sent back
 // goes back to its credential.
 $declared = minn_admin_settings( 'minn-st-options', array_merge( $fixture, array( 'route' => 'minn-st-options/(?P<tab>[a-z]+)', 'restore' => true ) ) ) && $declared;
+
+// The same rules over the tier's own storage: no read or write, every field
+// in an option (a second option for one of them), one field with nowhere to
+// live, and a key in the option the layout never offers.
+$GLOBALS['minn_st_tag'] = $tag;
+$opt1                   = 'minn_st_opt_' . $tag;
+$opt2                   = 'minn_st_opt2_' . $tag;
+$opt_seed               = array(
+	'plain'  => 'One',
+	'flags'  => array( 'on' => '1' ),
+	'code'   => '<b>bold</b>',
+	'gated'  => 'Gate',
+	'secret' => 'Endpoint ' . $key,
+	'rows'   => array( array( 'svc' => 'a', 'key' => $key ), array( 'svc' => 'b', 'key' => 'x' ) ),
+	'lines'  => array( 'one', 'two' ),
+	'hidden' => 'never offered',
+);
+$reset_opts = static function () use ( $opt1, $opt2, $opt_seed ) {
+	update_option( $opt1, $opt_seed, false );
+	update_option( $opt2, array( 'note' => 'n' ), false );
+	wp_cache_delete( 'alloptions', 'options' );
+	$GLOBALS['minn_st']['log'] = array();
+};
+$reset_opts();
+$declared = minn_admin_settings( 'minn-st-stored', array(
+	'route'    => 'minn-st-stored/(?P<tab>[a-z]+)',
+	'gate'     => $fixture['gate'],
+	'option'   => $opt1,
+	'layout'   => function ( $ctx ) use ( $opt2 ) {
+		if ( null !== $ctx['tab'] && 'main' !== $ctx['tab'] ) {
+			return null;
+		}
+		return array( 'groups' => array( array( 'title' => 'Stored', 'fields' => array(
+			array( 'key' => 'plain', 'label' => 'Plain', 'type' => 'text' ),
+			array( 'key' => 'on', 'label' => 'Switch', 'type' => 'toggle', '_path' => 'flags/on', '_store' => 'flag' ),
+			array( 'key' => 'code', 'label' => 'Code', 'type' => 'textarea', '_raw' => true ),
+			array( 'key' => 'gated', 'label' => 'Gated', 'type' => 'text' ),
+			array( 'key' => 'secret', 'label' => 'Endpoint', 'type' => 'text' ),
+			array( 'key' => 'rows', 'label' => 'Integrations', 'type' => 'rows' ),
+			array( 'key' => 'lines', 'label' => 'Lines', 'type' => 'textarea' ),
+			array( 'key' => 'note', 'label' => 'Note', 'type' => 'text', '_option' => $opt2, '_path' => 'note' ),
+			array( 'key' => 'orphan', 'label' => 'Orphan', 'type' => 'text', '_option' => '' ),
+		) ) ) );
+	},
+	'may'      => $fixture['may'],
+	'validate' => $fixture['validate'],
+) ) && $declared;
 
 // What a browser receives: dispatch, the server's response filters, the
 // body as sent (the egress fence runs on rest_pre_echo_response).
@@ -455,6 +507,48 @@ try {
 	// place, so the encoded copy may come back raw; the raw one stays raw.
 	$check( 'R4 masks (restore): an edit to another row leaves the raw key byte for byte, and the encoded row still holds the key', 200 === $st && $sl === ( $got[0]['key'] ?? null ) && in_array( $got[1]['key'] ?? null, array( $sl, rawurlencode( $sl ) ), true ) && 'c2' === ( $got[2]['svc'] ?? null ), $st . ' ' . wp_json_encode( array( $d['code'] ?? null, $got ) ) );
 
+	// The tier's own storage.
+	$sx       = '/minn-admin/v1/minn-st-stored/main';
+	$raw_opt  = static function ( $name ) {
+		global $wpdb;
+		return $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", $name ) );
+	};
+	$writes   = array();
+	$count_up = static function ( $name ) use ( &$writes ) {
+		$writes[ $name ] = ( $writes[ $name ] ?? 0 ) + 1;
+	};
+	add_action( 'update_option', $count_up );
+	$reset_opts();
+	list( $st, $spage ) = $send( 'GET', $sx );
+	$sv                 = (array) ( $spage['values'] ?? array() );
+	$check( 'Storage: the tier serves each field from where it lives, a switch as on, a list as lines, a key as its placeholder', 200 === $st && 'One' === ( $sv['plain'] ?? null ) && true === ( $sv['on'] ?? null ) && "one\ntwo" === ( $sv['lines'] ?? null ) && 'n' === ( $sv['note'] ?? null ) && 'Endpoint ' . $fp( $key ) === ( $sv['secret'] ?? null ), $st . ' ' . wp_json_encode( $sv ) );
+	$check( 'Storage: a field with nowhere to live is not offered', ! array_key_exists( 'orphan', $sv ), wp_json_encode( array_keys( $sv ) ) );
+	$writes = array();
+	$before = maybe_unserialize( $raw_opt( $opt1 ) );
+	list( $st ) = $send( 'POST', $sx, array( 'values' => array( 'plain' => 'Two', 'gated' => 'Open', 'note' => 'm', 'orphan' => 'x', 'hidden' => 'x' ) ) );
+	$after = maybe_unserialize( $raw_opt( $opt1 ) );
+	$check( 'Storage: a save writes each option once', 200 === $st && 1 === ( $writes[ $opt1 ] ?? 0 ) && 1 === ( $writes[ $opt2 ] ?? 0 ) && 2 === count( $writes ), $st . ' ' . wp_json_encode( $writes ) );
+	$check( 'Storage: and changes only the leaves sent, never a key the layout does not offer', 'Two' === ( $after['plain'] ?? null ) && 'Open' === ( $after['gated'] ?? null ) && array_diff_key( $before, array( 'plain' => 1, 'gated' => 1 ) ) === array_diff_key( $after, array( 'plain' => 1, 'gated' => 1 ) ) && 'm' === ( maybe_unserialize( $raw_opt( $opt2 ) )['note'] ?? null ), wp_json_encode( $after ) );
+	$reset_opts();
+	list( $st ) = $send( 'POST', $sx, array( 'values' => array( 'on' => false ) ) );
+	$after      = maybe_unserialize( $raw_opt( $opt1 ) );
+	$check( "Storage: a flag switched off leaves no key, as a plugin reading !empty() keeps it", 200 === $st && is_array( $after['flags'] ?? null ) && ! array_key_exists( 'on', $after['flags'] ), wp_json_encode( $after['flags'] ?? null ) );
+	list( $st ) = $send( 'POST', $sx, array( 'values' => array( 'on' => true ) ) );
+	$after      = maybe_unserialize( $raw_opt( $opt1 ) );
+	$check( "Storage: and switched on stores '1'", 200 === $st && '1' === ( $after['flags']['on'] ?? null ), wp_json_encode( $after['flags'] ?? null ) );
+	$reset_opts();
+	list( $st, $d ) = $send( 'POST', $sx, array( 'values' => array( 'secret' => ( $sv['secret'] ?? '' ) . ' v2' ) ) );
+	$after          = maybe_unserialize( $raw_opt( $opt1 ) );
+	$check( 'Storage: text typed beside a placeholder stores the credential back in place (the options API restore)', 200 === $st && 'Endpoint ' . $key . ' v2' === ( $after['secret'] ?? null ), $st . ' ' . wp_json_encode( array( $d['code'] ?? null, $after['secret'] ?? null ) ) );
+	$reset_opts();
+	$GLOBALS['minn_st']['may'] = false;
+	list( $st, $d ) = $send( 'POST', $sx, array( 'values' => array( 'plain' => 'Three', 'gated' => 'Shut' ) ) );
+	$GLOBALS['minn_st']['may'] = true;
+	$after          = maybe_unserialize( $raw_opt( $opt1 ) );
+	$check( 'Storage: a refused save writes no option', 403 === $st && 'One' === ( $after['plain'] ?? null ) && 'Gate' === ( $after['gated'] ?? null ), $st . ' ' . wp_json_encode( $after ) );
+	remove_action( 'update_option', $count_up );
+	$reset_opts();
+
 	/* ---------- Every declared screen ---------- */
 
 	// Where each screen can be reached: every settings route the app is
@@ -482,6 +576,7 @@ try {
 	}
 	$candidates[] = $fx;
 	$candidates[] = $ox;
+	$candidates[] = $sx;
 	// A screen whose body is its own shape: how flat values go into it.
 	$bodies = array(
 		'fluent-forms-emails' => static function ( array $flat ) {
@@ -515,7 +610,7 @@ try {
 			$skip( "{$id}: its plugin is not active here" );
 			continue;
 		}
-		$check( "R1 declared whole: {$id} answers GET and POST and declares its layout, read and write", ! array_diff( array( 'GET', 'POST' ), $methods( $pattern ) ) && isset( $def['layout'], $def['read'], $def['write'], $def['gate'] ), wp_json_encode( $methods( $pattern ) ) );
+		$check( "R1 declared whole: {$id} answers GET and POST and declares its gate and layout, and a read and write unless the tier stores its fields", ! array_diff( array( 'GET', 'POST' ), $methods( $pattern ) ) && isset( $def['layout'], $def['gate'] ) && isset( $def['read'] ) === isset( $def['write'] ), wp_json_encode( $methods( $pattern ) ) );
 		$urls = array_values( array_unique( array_filter( $candidates, static function ( $u ) use ( $pattern ) {
 			return (bool) preg_match( '#^' . $pattern . '$#', $u );
 		} ) ) );
