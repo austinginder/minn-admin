@@ -124,6 +124,9 @@ $fx = array(
 	'answer' => null,      // what the write answers
 	'throw'  => false,
 	'boom'   => false,     // a capability filter throws
+	'gate'   => true,      // a meta field's own gate: true | false | 'throw' | 'once'
+	'gate_calls' => 0,
+	'extra'  => array(),
 );
 $fx_fields = static function () use ( $page ) {
 	return array(
@@ -213,6 +216,8 @@ $fx_reset = static function ( $store = array() ) use ( &$fx ) {
 	$fx['answer'] = null;
 	$fx['throw']  = false;
 	$fx['extra']  = array();
+	$fx['gate']   = true;
+	$fx['gate_calls'] = 0;
 };
 // What reached the write, merged; and whether a key was refused.
 $wrote   = static function () use ( &$fx ) {
@@ -418,6 +423,10 @@ $run = static function ( $T ) use ( $check, $skip, $as, $fx_def, $fx_reset, &$fx
 	$fx['answer'] = array( 't' => 'The vendor kept the old text.', 'unoffered' => 'ignored' );
 	$rows         = $T::save( $def, $post, array( 't' => 'changed', 'n' => '4' ) );
 	$check( 'R3 a value the plugin\'s write refuses is named with its message', 'The vendor kept the old text.' === ( $refused( $rows, 't' )['message'] ?? '' ) && ! $refused( $rows, 'n' ) && ! $refused( $rows, 'unoffered' ), wp_json_encode( $rows ) );
+	$fx_reset();
+	$fx['answer'] = array( 't' => new WP_Error( 'vendor_threw', 'The vendor threw on this one.', array( 'status' => 500 ) ) );
+	$rows         = $T::save( $def, $post, array( 't' => 'changed', 'n' => '4' ) );
+	$check( 'R3 a write may name a field with its own status (a throw is 500, as the kernel\'s own)', 500 === ( $refused( $rows, 't' )['status'] ?? 0 ) && 'The vendor threw on this one.' === $refused( $rows, 't' )['message'] && ! $refused( $rows, 'n' ), wp_json_encode( $rows ) );
 	$fx_reset();
 	$fx['answer'] = new WP_Error( 'vendor_no', 'The vendor refused the lot.', array( 'status' => 400 ) );
 	$rows         = $T::save( $def, $post, array( 't' => 'changed', 'n' => '4' ) );
@@ -627,7 +636,7 @@ $run = static function ( $T ) use ( $check, $skip, $as, $fx_def, $fx_reset, &$fx
 	$mdef['read']   = null;
 	$mdef['write']  = null;
 	$mdef['extra']  = null;
-	$mdef['groups'] = static function () {
+	$mdef['groups'] = static function () use ( &$fx ) {
 		return array(
 			array(
 				'group'  => 'Meta',
@@ -646,6 +655,13 @@ $run = static function ( $T ) use ( $check, $skip, $as, $fx_def, $fx_reset, &$fx
 					} ),
 					array( 'name' => 'rows', 'label' => 'Rows', 'type' => 'repeater', 'meta' => 'minn_fxm_rows' ),
 					array( 'name' => 'prot', 'label' => 'Protected', 'type' => 'text', 'meta' => '_minn_fxm_prot' ),
+					array( 'name' => 'gp', 'label' => 'Gated', 'type' => 'text', 'meta' => '_minn_fxm_gp', 'gate' => static function () use ( &$fx ) {
+						$fx['gate_calls']++;
+						if ( 'throw' === $fx['gate'] ) {
+							throw new RuntimeException( 'vendor gate threw' );
+						}
+						return 'once' === $fx['gate'] ? 1 === $fx['gate_calls'] : $fx['gate'];
+					} ),
 					array( 'name' => 'b', 'label' => 'Beside', 'type' => 'text', 'meta' => 'minn_fxm_b' ),
 				),
 			),
@@ -706,7 +722,24 @@ $run = static function ( $T ) use ( $check, $skip, $as, $fx_def, $fx_reset, &$fx
 	$rows = $T::save( $mdef, $mpost, array( 'rows' => 'x' ) );
 	$check( 'M R3 a locked field\'s meta is never written', $refused( $rows, 'rows' ) && 'locked rows' === $meta( 'minn_fxm_rows' ), wp_json_encode( $rows ) );
 	$rows = $T::save( $mdef, $mpost, array( 'prot' => 'Mine' ) );
-	$check( 'M I2 a meta key the caller may not edit (protected, no auth) is refused and not written', $refused( $rows, 'prot' ) && null === $meta( '_minn_fxm_prot' ), wp_json_encode( $rows ) );
+	$v    = (array) $T::values( $mdef, $m );
+	$check( 'M I2 a meta key the caller may not edit (protected, no auth) is not offered, and a save of it is refused 403', ! array_key_exists( 'prot', $v ) && 403 === ( $refused( $rows, 'prot' )['status'] ?? 0 ) && null === $meta( '_minn_fxm_prot' ), wp_json_encode( array( array_keys( $v ), $rows ) ) );
+	$fx_reset();
+	$rows = $T::save( $mdef, $mpost, array( 'gp' => 'Gated in' ) );
+	$check( 'M gate: the plugin\'s own gate stands in for edit_post_meta (a protected key it allows is stored)', ! $rows && 'Gated in' === $meta( '_minn_fxm_gp' ), wp_json_encode( array( $rows, $meta( '_minn_fxm_gp' ) ) ) );
+	$fx['gate'] = false;
+	$v          = (array) $T::values( $mdef, $m );
+	$rows       = $T::save( $mdef, $mpost, array( 'gp' => 'Not mine' ) );
+	$check( 'M gate: a field its gate refuses is not offered or written', ! array_key_exists( 'gp', $v ) && $refused( $rows, 'gp' ) && 'Gated in' === $meta( '_minn_fxm_gp' ), wp_json_encode( array( array_keys( $v ), $rows ) ) );
+	$fx['gate'] = 'throw';
+	$v          = (array) $T::values( $mdef, $m );
+	$rows       = $T::save( $mdef, $mpost, array( 'gp' => 'Thrown' ) );
+	$check( 'M gate: a gate that throws says no', ! array_key_exists( 'gp', $v ) && $refused( $rows, 'gp' ) && 'Gated in' === $meta( '_minn_fxm_gp' ), wp_json_encode( array( array_keys( $v ), $rows ) ) );
+	$fx_reset();
+	$fx['gate'] = 'once';
+	$rows       = $T::save( $mdef, $mpost, array( 'gp' => 'Changed meanwhile' ) );
+	$check( 'M gate: a key refused at the write itself is named 403, not 500', 403 === ( $refused( $rows, 'gp' )['status'] ?? 0 ) && 'Gated in' === $meta( '_minn_fxm_gp' ), wp_json_encode( $rows ) );
+	$fx_reset();
 	$meta_boom = static function ( $check, $object_id, $key ) {
 		if ( 'minn_fxm_a' === $key ) {
 			throw new RuntimeException( 'a meta filter threw' );

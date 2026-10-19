@@ -100,12 +100,31 @@ function minn_admin_wpjm_groups( $post_id = 0 ) {
 	$fields = array();
 	$locked = 0;
 	foreach ( minn_admin_wpjm_raw_fields() as $key => $f ) {
-		if ( ! minn_admin_wpjm_can_view_field( $f, $key, $post_id ) || ! minn_admin_wpjm_can_edit_field( $f, $key, $post_id ) ) {
+		// A field the site keeps out of the admin (show_in_admin: salary and
+		// remote position can be switched off) is left out, as their
+		// writepanel leaves it out.
+		$shown = isset( $f['show_in_admin'] ) ? $f['show_in_admin'] : true;
+		try {
+			$shown = is_callable( $shown ) ? (bool) call_user_func( $shown, true, $key, (int) $post_id, get_current_user_id() ) : (bool) $shown;
+		} catch ( \Throwable $e ) {
+			$shown = false;
+		}
+		if ( ! $shown || ! minn_admin_wpjm_can_view_field( $f, $key, $post_id ) || ! minn_admin_wpjm_can_edit_field( $f, $key, $post_id ) ) {
 			continue;
 		}
 		$type  = isset( $f['auth_edit_field_type'] ) ? (string) $f['auth_edit_field_type'] : ( isset( $f['type'] ) ? (string) $f['type'] : 'text' );
 		$label = isset( $f['label'] ) ? wp_strip_all_tags( (string) $f['label'] ) : $key;
-		$out   = array( 'name' => $key, 'label' => $label, 'meta' => $key );
+		$out   = array(
+			'name'  => $key,
+			'label' => $label,
+			'meta'  => $key,
+			// Their edit callback, already asked above, is the key's gate: a
+			// field an add-on registers after init has no core meta auth,
+			// and their writepanel saves it on this callback alone.
+			'gate'  => function ( $id ) use ( $f, $key ) {
+				return minn_admin_wpjm_can_edit_field( $f, $key, $id );
+			},
+		);
 		if ( ! empty( $f['placeholder'] ) && is_string( $f['placeholder'] ) ) {
 			$out['placeholder'] = $f['placeholder'];
 		}

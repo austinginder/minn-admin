@@ -2124,7 +2124,7 @@ minn_admin_fields( 'seo', function () {
 				try {
 					call_user_func( $plugin['write'], $post_id, $field, $value );
 				} catch ( \Throwable $e ) {
-					$failed[ $field ] = __( 'That did not work. Nothing was reported as done.', 'minn-admin' );
+					$failed[ $field ] = new WP_Error( 'minn_failed', __( 'That did not work. Nothing was reported as done.', 'minn-admin' ), array( 'status' => 500 ) );
 				}
 			}
 			return $failed;

@@ -1,8 +1,8 @@
 {
-	"code_lines": 60853,
-	"adapter_kernel_lines": 65156,
-	"vendor_guards": 1764,
-	"hand_errors": 771,
+	"code_lines": 60866,
+	"adapter_kernel_lines": 65185,
+	"vendor_guards": 1765,
+	"hand_errors": 772,
 	"cap_checks": 399,
 	"detect_helpers": 195,
 	"adapters": {
@@ -142,7 +142,7 @@
 		"wp-activity-log": 199,
 		"wp-crontrol": 476,
 		"wp-freighter": 913,
-		"wp-job-manager": 91,
+		"wp-job-manager": 104,
 		"wp-mail-logging": 208,
 		"wp-mail-smtp": 191,
 		"wp-migrate": 335,

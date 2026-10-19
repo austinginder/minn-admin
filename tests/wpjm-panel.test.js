@@ -5,7 +5,12 @@
  * sanitize_callback. Server truth is read back through the dedicated
  * minn_wpjm field after a real UI save.
  */
-const { launch, login, reporter, BASE, pickCombo } = require( './helpers' );
+const { execFileSync } = require( 'child_process' );
+const { launch, login, reporter, BASE, WP, pickCombo } = require( './helpers' );
+
+// WPJM keeps the salary fields out of its admin while salary is switched
+// off (show_in_admin), and the panel draws what its writepanel draws.
+const salaryOn = '1' === execFileSync( 'wp', [ 'option', 'get', 'job_manager_enable_salary', '--path=' + WP ], { encoding: 'utf8', stdio: [ 'ignore', 'pipe', 'ignore' ] } ).trim();
 
 ( async () => {
 	const t = reporter( 'wpjm-panel' );
@@ -39,13 +44,16 @@ const { launch, login, reporter, BASE, pickCombo } = require( './helpers' );
 
 		await page.click( '[data-side-door="panel:wpjm"]' );
 		await page.waitForSelector( '.minn-editor-side-modal [data-pf="wpjm:_job_location"]', { timeout: 30000 } );
-		t.check( 'schema fields render from WPJM\'s own schema',
-			!! ( await page.$( '[data-pf="wpjm:_company_name"]' ) ) && !! ( await page.$( '[data-pf="wpjm:_job_salary_unit"]' ) ) );
+		t.check( 'schema fields render from WPJM\'s own schema, salary only where WPJM shows it',
+			!! ( await page.$( '[data-pf="wpjm:_company_name"]' ) ) && salaryOn === !! ( await page.$( '[data-pf="wpjm:_job_salary_unit"]' ) ),
+			'salary ' + ( salaryOn ? 'on' : 'off' ) );
 
 		await page.fill( '[data-pf="wpjm:_job_location"]', 'Lancaster, PA' );
 		await page.fill( '[data-pf="wpjm:_company_name"]', 'Anchor Hosting' );
 		await page.fill( '[data-pf="wpjm:_application"]', 'jobs@example.com' );
-		await pickCombo( page, '[data-pf="wpjm:_job_salary_unit"] .minn-ac-input', 'YEAR' );
+		if ( salaryOn ) {
+			await pickCombo( page, '[data-pf="wpjm:_job_salary_unit"] .minn-ac-input', 'YEAR' );
+		}
 		await page.evaluate( () => {
 			const el = document.querySelector( '[data-pf="wpjm:_remote_position"]' );
 			if ( el ) el.click();
@@ -60,7 +68,7 @@ const { launch, login, reporter, BASE, pickCombo } = require( './helpers' );
 		}
 		t.check( 'listing details persisted through WPJM conventions',
 			!! job && job._job_location === 'Lancaster, PA' && job._company_name === 'Anchor Hosting'
-				&& job._application === 'jobs@example.com' && job._job_salary_unit === 'YEAR' && job._remote_position === true,
+				&& job._application === 'jobs@example.com' && ( salaryOn ? job._job_salary_unit === 'YEAR' : ! ( '_job_salary_unit' in job ) ) && job._remote_position === true,
 			JSON.stringify( job ) );
 
 		// Their own sanitizer rules the writes: a junk expiry date stores ''.

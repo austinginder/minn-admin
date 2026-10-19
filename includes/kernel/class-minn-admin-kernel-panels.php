@@ -37,7 +37,8 @@
  *       'read'   => callable( int $post_id ): array, // name => value, the panel's shape
  *       'write'  => callable( int $post_id, array $changes, array $fields ): array|WP_Error|null,
  *                   // $changes: name => cleaned value, null to clear. Answers
- *                   // name => message for each value the plugin refused, or a
+ *                   // name => message (or a WP_Error with its status) for each
+ *                   // value the plugin refused, or a
  *                   // WP_Error that refuses every one of them. Both are for
  *                   // stores the plugin keeps whole (a form saved at once, a
  *                   // blob); a field that names its post meta needs neither
@@ -66,6 +67,9 @@
  *                                  // get_post_meta(), written slashed where the caller
  *                                  // may edit that key (edit_post_meta), '' to clear
  *     'store'       => 'on' | 'int',   // checkbox in meta: 'on'/'' or 1/0 (default '1'/'')
+ *     'gate'        => callable( int $post_id ): bool,  // the plugin's own edit check
+ *                                  // for this meta key, asked in place of edit_post_meta
+ *                                  // (a key the plugin registers late has no auth there)
  *     'sanitize'    => callable( mixed $clean, string $name ): mixed,
  *                                  // the plugin's own cleaner, after the type's; a
  *                                  // value it empties, or a throw, is refused
@@ -114,7 +118,7 @@ final class Minn_Admin_Kernel_Panels {
 	const KEYS = array( 'active', 'label', 'sub', 'key', 'params', 'types', 'can', 'refuse', 'groups', 'read', 'write', 'extra', 'description' );
 
 	/** The keys a field may hold: a field holding any other is locked. */
-	const FIELD_KEYS = array( 'name', 'label', 'type', 'input', 'choices', 'options', 'min', 'max', 'integer', 'html', 'required', 'post_type', 'image', 'route', 'placeholder', 'help', 'counter', 'cond', 'meta', 'store', 'raw', 'check', 'sanitize', 'refuse' );
+	const FIELD_KEYS = array( 'name', 'label', 'type', 'input', 'choices', 'options', 'min', 'max', 'integer', 'html', 'required', 'post_type', 'image', 'route', 'placeholder', 'help', 'counter', 'cond', 'meta', 'store', 'gate', 'raw', 'check', 'sanitize', 'refuse' );
 
 	/** What of a field the client is sent. */
 	const WIRE_KEYS = array( 'name', 'label', 'type', 'choices', 'options', 'min', 'max', 'placeholder', 'route', 'help', 'counter', 'cond' );
@@ -351,6 +355,11 @@ final class Minn_Admin_Kernel_Panels {
 					$locked++;
 					continue;
 				}
+				// A meta field the caller may not write on this post is not
+				// offered at all (a save of it could only be refused).
+				if ( $post_id && isset( $f['meta'] ) && ! self::may_store( $f, (int) $post_id ) ) {
+					continue;
+				}
 				$seen[ $f['name'] ]     = true;
 				$fields[ $f['name'] ] = $f;
 			}
@@ -394,7 +403,7 @@ final class Minn_Admin_Kernel_Panels {
 		if ( 'suggest' === $f['type'] && ( empty( $f['post_type'] ) || ! is_string( $f['post_type'] ) ) ) {
 			return null;
 		}
-		foreach ( array( 'check', 'sanitize' ) as $k ) {
+		foreach ( array( 'check', 'sanitize', 'gate' ) as $k ) {
 			if ( isset( $f[ $k ] ) && ! is_callable( $f[ $k ] ) ) {
 				return null;
 			}
@@ -559,9 +568,20 @@ final class Minn_Admin_Kernel_Panels {
 	 * for an update (WP Job Manager geocodes a location on one), and a
 	 * deleted row is never updated again, only added.
 	 *
-	 * @return string[] The fields that were not stored (a key the caller may
-	 *                  not edit, or a write that threw); the rest are.
+	 * @return int[] Field => status, for each not stored: 403 for a key the
+	 *               caller may not edit, 500 for a write that threw; the rest are.
 	 */
+	private static function may_store( array $f, $post_id ) {
+		if ( isset( $f['gate'] ) ) {
+			return Minn_Admin_Kernel::yes( $f['gate'], (int) $post_id );
+		}
+		try {
+			return current_user_can( 'edit_post_meta', (int) $post_id, $f['meta'] );
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+	}
+
 	private static function store( $post_id, array $changes, array $fields ) {
 		$failed = array();
 		foreach ( $changes as $name => $value ) {
@@ -570,16 +590,16 @@ final class Minn_Admin_Kernel_Panels {
 			if ( 'checkbox' === $f['type'] ) {
 				$value = 'on' === $store ? ( $value ? 'on' : '' ) : ( 'int' === $store ? ( $value ? 1 : 0 ) : ( $value ? '1' : '' ) );
 			}
+			// Core's own question for this key (a protected key with no auth
+			// callback is no one's to write through here), or the plugin's.
+			if ( ! self::may_store( $f, $post_id ) ) {
+				$failed[ $name ] = 403;
+				continue;
+			}
 			try {
-				// Core's own question for this key (a protected key with no
-				// auth callback is no one's to write through here).
-				if ( ! current_user_can( 'edit_post_meta', $post_id, $f['meta'] ) ) {
-					$failed[] = $name;
-					continue;
-				}
 				update_post_meta( $post_id, $f['meta'], null === $value ? '' : wp_slash( $value ) );
 			} catch ( \Throwable $e ) {
-				$failed[] = $name;
+				$failed[ $name ] = 500;
 			}
 		}
 		return $failed;
@@ -688,8 +708,8 @@ final class Minn_Admin_Kernel_Panels {
 		} );
 		$mine    = array_intersect_key( $changes, $own );
 		$changes = array_diff_key( $changes, $own );
-		foreach ( $mine ? self::store( (int) $post->ID, $mine, $fields ) : array() as $key ) {
-			$refuse( $key, $fields[ $key ]['label'], __( 'That did not work. Nothing was reported as done.', 'minn-admin' ), 500 );
+		foreach ( $mine ? self::store( (int) $post->ID, $mine, $fields ) : array() as $key => $code ) {
+			$refuse( $key, $fields[ $key ]['label'], 403 === $code ? __( 'This field cannot be changed here.', 'minn-admin' ) : __( 'That did not work. Nothing was reported as done.', 'minn-admin' ), $code );
 		}
 		if ( ! $changes ) {
 			return array_values( $refused );
@@ -711,7 +731,11 @@ final class Minn_Admin_Kernel_Panels {
 		} elseif ( is_array( $out ) ) {
 			foreach ( $out as $key => $message ) {
 				$key = (string) $key;
-				if ( isset( $fields[ $key ] ) && is_string( $message ) && '' !== $message ) {
+				// A message, or a WP_Error carrying its own status.
+				if ( isset( $fields[ $key ] ) && is_wp_error( $message ) ) {
+					$data = $message->get_error_data();
+					$refuse( $key, $fields[ $key ]['label'], $message->get_error_message(), is_array( $data ) && isset( $data['status'] ) ? (int) $data['status'] : 400 );
+				} elseif ( isset( $fields[ $key ] ) && is_string( $message ) && '' !== $message ) {
 					$refuse( $key, $fields[ $key ]['label'], $message );
 				}
 			}
