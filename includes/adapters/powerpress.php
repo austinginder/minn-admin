@@ -149,9 +149,14 @@ function minn_admin_powerpress_write_values( $post_id, $values ) {
 	// would rewrite a stored one ('my ep.mp3' to 'my%20ep.mp3') and re-derive
 	// its content type.
 	if ( array_key_exists( 'url', $values ) && ! Minn_Admin::unchanged( $values['url'], $enc['url'] ) ) {
-		$typed = is_scalar( $values['url'] ) ? trim( (string) $values['url'] ) : '';
+		// A list or object is no address, and coerced it read as an emptied
+		// box: refused like an address the cleaner empties, never a clear.
+		$shape = null === $values['url'] || is_scalar( $values['url'] );
+		$typed = $shape ? trim( (string) $values['url'] ) : '';
 		$url   = '' === $typed ? '' : esc_url_raw( $typed );
-		if ( '' === $typed && '' !== $enc['url'] ) {
+		if ( ! $shape ) {
+			$refused[] = minn_admin_powerpress_refusal( 'minn_powerpress_bad_url', __( 'Enter a media file address that starts with http:// or https://.', 'minn-admin' ), 400, array( 'url' ) );
+		} elseif ( '' === $typed && '' !== $enc['url'] ) {
 			delete_post_meta( $post_id, 'enclosure' );
 			delete_post_meta( $post_id, 'itunes:duration' );
 			return $refused;
@@ -223,7 +228,14 @@ function minn_admin_powerpress_write_values( $post_id, $values ) {
 		if ( ! array_key_exists( $key, $values ) || Minn_Admin::unchanged( $values[ $key ], $current[ $key ] ) ) {
 			continue;
 		}
-		$val = sanitize_text_field( (string) $values[ $key ] );
+		$typed = is_scalar( $values[ $key ] ) ? (string) $values[ $key ] : '';
+		$val   = sanitize_text_field( $typed );
+		// Text the cleaner takes away whole (a lone tag, say) is not an
+		// emptied box: refused, so the stored text stays.
+		if ( '' === $val && '' !== trim( $typed ) ) {
+			$refused[] = minn_admin_powerpress_refusal( 'minn_powerpress_bad_text', __( 'That text could not be saved as typed.', 'minn-admin' ), 400, array( $key ) );
+			continue;
+		}
 		if ( $val !== $current[ $key ] ) {
 			if ( '' === $val ) {
 				unset( $enc['extras'][ $key ] );
@@ -237,7 +249,13 @@ function minn_admin_powerpress_write_values( $post_id, $values ) {
 		if ( ! array_key_exists( $key, $values ) || Minn_Admin::unchanged( $values[ $key ], $current[ $key ], 'number' ) ) {
 			continue;
 		}
-		$val = preg_replace( '/[^0-9]/', '', (string) $values[ $key ] );
+		// A whole number, or empty to clear. Stripping the rest turned 1.5
+		// into 15 and 'abc' into a clear of the stored number.
+		$val = is_scalar( $values[ $key ] ) ? trim( (string) $values[ $key ] ) : null;
+		if ( null === $val || ( '' !== $val && ! ctype_digit( $val ) ) ) {
+			$refused[] = minn_admin_powerpress_refusal( 'minn_powerpress_bad_number', __( 'Enter a whole number.', 'minn-admin' ), 400, array( $key ) );
+			continue;
+		}
 		if ( $val !== $current[ $key ] ) {
 			if ( '' === $val ) {
 				unset( $enc['extras'][ $key ] );

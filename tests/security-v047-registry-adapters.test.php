@@ -26,6 +26,10 @@
  *    refused media URL deleted the stored episode; PowerPress's own refusal
  *    came after the post was stored; details with no episode file, and an
  *    options-page value ACF refuses, were dropped under a success answer.
+ *  - R4 (round 2 review): a typed address the URL rule refuses was written
+ *    as a clear over the stored one (TEC website, SSP episode file, WP Job
+ *    Manager file fields, the SEO canonical), and PowerPress's text and
+ *    number fields stored what their cleaner made of a refused value.
  *
  * Each section calls what the route calls, as the role the finding named,
  * with a control where the fix could over-block. Fixtures (users, a listing,
@@ -748,6 +752,157 @@ $s2_post = static function ( $label ) use ( $admin, $tag ) {
 		$check( 'R3 ACF options: nothing is written, not even the text beside it', 'https://example.com/shop' === $raw( 'minn_v047_olink' ) && 'Old' === $raw( 'minn_v047_otext' ), wp_json_encode( array( $raw( 'minn_v047_olink' ), $raw( 'minn_v047_otext' ) ) ) );
 		list( $st ) = $call( 'POST', $route, array( 'values' => array( 'field_minn_v047_olink' => 'https://example.com/new', 'field_minn_v047_otext' => 'New ' . $tag ) ) );
 		$check( 'R3 ACF options control: a clean save stores both', 200 === $st && 'https://example.com/new' === $raw( 'minn_v047_olink' ) && 'New ' . $tag === $raw( 'minn_v047_otext' ), $st . ' ' . wp_json_encode( array( $raw( 'minn_v047_olink' ), $raw( 'minn_v047_otext' ) ) ) );
+	} finally {
+		$clean();
+	}
+} )();
+
+/*
+ * R4 (round 2 review). A typed address the house URL rule refuses was
+ * cleaned to '' and written as a clear over the stored one, with nothing
+ * said: TEC's event website, SSP's episode file, WP Job Manager's file
+ * fields and the SEO canonical. PowerPress's text and number fields had the
+ * same shape (a value the cleaner empties written as an unset, '1.5' stored
+ * as 15), and a non-scalar media URL deleted the episode. Each now keeps
+ * what is stored and is named; only a truly empty value clears.
+ */
+$r4_bad = 'javascript:alert(1)';
+( function () use ( $check, $skip, $call, $once, $field_err, $admin, $tag, $r4_bad ) {
+	if ( ! class_exists( 'Tribe__Events__API' ) || ! function_exists( 'minn_admin_tec_panel_values' ) ) {
+		$skip( 'R4 TEC: not active' );
+		return;
+	}
+	$ev    = 0;
+	$clean = $once( static function () use ( &$ev ) {
+		if ( $ev ) {
+			wp_delete_post( $ev, true );
+		}
+	} );
+	try {
+		$ev = (int) Tribe__Events__API::createEvent( array( 'post_title' => 'Minn v047 r4 tec ' . $tag, 'post_status' => 'draft', 'EventStartDate' => '2026-11-10', 'EventStartTime' => '19:00:00', 'EventEndDate' => '2026-11-10', 'EventEndTime' => '21:00:00', 'EventURL' => 'https://example.com/event' ) );
+		$check( 'R4 TEC: an event with a website exists', $ev > 0 && 'https://example.com/event' === get_post_meta( $ev, '_EventURL', true ), wp_json_encode( get_post_meta( $ev, '_EventURL', true ) ) );
+		list( $st, $d ) = $call( 'POST', '/wp/v2/tribe_events/' . $ev, array( 'minn_tec' => array( 'website' => $r4_bad ) ) );
+		$check( 'R4 TEC: a javascript: website is named on the 200 answer', 200 === $st && $field_err( $d, 'minn_tec', 'website' ), $st . ' ' . wp_json_encode( $d['minn_field_errors'] ?? null ) );
+		$check( 'R4 TEC: and the stored website stays', 'https://example.com/event' === get_post_meta( $ev, '_EventURL', true ), wp_json_encode( get_post_meta( $ev, '_EventURL', true ) ) );
+		list( $st, $d ) = $call( 'POST', '/wp/v2/tribe_events/' . $ev, array( 'minn_tec' => array( 'website' => '' ) ) );
+		$check( 'R4 TEC control: an emptied website clears it, with no refusal', 200 === $st && '' === (string) get_post_meta( $ev, '_EventURL', true ) && empty( $d['minn_field_errors'] ), $st . ' ' . wp_json_encode( get_post_meta( $ev, '_EventURL', true ) ) );
+	} finally {
+		$clean();
+	}
+} )();
+
+( function () use ( $check, $skip, $call, $once, $field_err, $admin, $tag, $r4_bad ) {
+	if ( ! function_exists( 'minn_admin_ssp_active' ) || ! minn_admin_ssp_active() || ! post_type_exists( 'podcast' ) ) {
+		$skip( 'R4 SSP: not active' );
+		return;
+	}
+	$pid   = 0;
+	$clean = $once( static function () use ( &$pid ) {
+		if ( $pid ) {
+			wp_delete_post( $pid, true );
+		}
+	} );
+	try {
+		$pid = (int) wp_insert_post( array( 'post_title' => 'Minn v047 r4 ssp ' . $tag, 'post_status' => 'draft', 'post_type' => 'podcast', 'post_author' => $admin ) );
+		update_post_meta( $pid, 'audio_file', 'https://example.com/episode.mp3' );
+		update_post_meta( $pid, 'itunes_episode_number', '7' );
+		list( $st, $d ) = $call( 'POST', '/wp/v2/podcast/' . $pid, array( 'minn_ssp' => array( 'audio_file' => $r4_bad, 'itunes_episode_number' => '1.5' ) ) );
+		$check( 'R4 SSP: a javascript: episode file and a 1.5 episode number are named', 200 === $st && $field_err( $d, 'minn_ssp', 'audio_file' ) && $field_err( $d, 'minn_ssp', 'itunes_episode_number' ), $st . ' ' . wp_json_encode( $d['minn_field_errors'] ?? null ) );
+		$check( 'R4 SSP: and both stay as stored', 'https://example.com/episode.mp3' === get_post_meta( $pid, 'audio_file', true ) && '7' === get_post_meta( $pid, 'itunes_episode_number', true ), wp_json_encode( array( get_post_meta( $pid, 'audio_file', true ), get_post_meta( $pid, 'itunes_episode_number', true ) ) ) );
+		list( $st, $d ) = $call( 'POST', '/wp/v2/podcast/' . $pid, array( 'minn_ssp' => array( 'audio_file' => '', 'itunes_episode_number' => '12' ) ) );
+		$check( 'R4 SSP control: an emptied file clears and a whole number saves', 200 === $st && '' === get_post_meta( $pid, 'audio_file', true ) && '12' === get_post_meta( $pid, 'itunes_episode_number', true ) && empty( $d['minn_field_errors'] ), $st . ' ' . wp_json_encode( $d['minn_field_errors'] ?? null ) );
+	} finally {
+		$clean();
+	}
+} )();
+
+( function () use ( $check, $skip, $call, $once, $field_err, $admin, $tag, $r4_bad ) {
+	if ( ! function_exists( 'minn_admin_wpjm_active' ) || ! minn_admin_wpjm_active() ) {
+		$skip( 'R4 WPJM: not active' );
+		return;
+	}
+	$pid   = 0;
+	$clean = $once( static function () use ( &$pid ) {
+		if ( $pid ) {
+			wp_delete_post( $pid, true );
+		}
+	} );
+	try {
+		$pid = (int) wp_insert_post( array( 'post_type' => 'job_listing', 'post_title' => 'Minn v047 r4 job ' . $tag, 'post_status' => 'publish', 'post_author' => $admin ) );
+		update_post_meta( $pid, '_company_video', 'https://example.com/video' );
+		list( $st, $d ) = $call( 'POST', '/wp/v2/job-listings/' . $pid, array( 'minn_wpjm' => array( '_company_video' => $r4_bad ) ) );
+		$check( 'R4 WPJM: a javascript: company video is named on the 200 answer', 200 === $st && $field_err( $d, 'minn_wpjm', '_company_video' ), $st . ' ' . wp_json_encode( $d['minn_field_errors'] ?? null ) );
+		$check( 'R4 WPJM: and the stored video stays', 'https://example.com/video' === get_post_meta( $pid, '_company_video', true ), wp_json_encode( get_post_meta( $pid, '_company_video', true ) ) );
+	} finally {
+		$clean();
+	}
+} )();
+
+( function () use ( $check, $skip, $call, $once, $field_err, $admin, $tag, $r4_bad ) {
+	$plugin = function_exists( 'minn_admin_seo_plugin' ) ? minn_admin_seo_plugin() : null;
+	$url    = '';
+	if ( is_array( $plugin ) ) {
+		foreach ( minn_admin_seo_field_map( $plugin, 0 ) as $k => $def ) {
+			if ( 'url' === ( $def['sanitize'] ?? '' ) ) {
+				$url = (string) $k;
+				break;
+			}
+		}
+	}
+	if ( '' === $url ) {
+		$skip( 'R4 SEO: no provider with an address field is active' );
+		return;
+	}
+	$pid   = 0;
+	$clean = $once( static function () use ( &$pid ) {
+		if ( $pid ) {
+			wp_delete_post( $pid, true );
+		}
+	} );
+	try {
+		$pid = (int) wp_insert_post( array( 'post_title' => 'Minn v047 r4 seo ' . $tag, 'post_status' => 'draft', 'post_type' => 'post', 'post_author' => $admin ) );
+		call_user_func( $plugin['write'], $pid, $url, 'https://example.com/canonical' );
+		$read = static function () use ( $plugin, $pid, $url ) {
+			$r = (array) call_user_func( $plugin['read'], $pid );
+			return (string) ( $r[ $url ] ?? '' );
+		};
+		$check( 'R4 SEO: a stored ' . $url . ' exists', 'https://example.com/canonical' === $read(), $read() );
+		list( $st, $d ) = $call( 'POST', '/wp/v2/posts/' . $pid, array( 'minn_seo' => array( $url => $r4_bad, 'title' => 'Kept r4 ' . $tag ) ) );
+		$check( 'R4 SEO: a javascript: ' . $url . ' is named on the 200 answer, the title is not', 200 === $st && $field_err( $d, 'minn_seo', $url ) && ! $field_err( $d, 'minn_seo', 'title' ), $st . ' ' . wp_json_encode( $d['minn_field_errors'] ?? null ) );
+		$check( 'R4 SEO: and the stored ' . $url . ' stays', 'https://example.com/canonical' === $read(), $read() );
+		list( $st, $d ) = $call( 'POST', '/wp/v2/posts/' . $pid, array( 'minn_seo' => array( $url => '' ) ) );
+		$check( 'R4 SEO control: an emptied ' . $url . ' clears, with no refusal', 200 === $st && '' === $read() && empty( $d['minn_field_errors'] ), $st . ' ' . $read() );
+	} finally {
+		$clean();
+	}
+} )();
+
+( function () use ( $check, $skip, $call, $once, $field_err, $admin, $tag ) {
+	if ( ! function_exists( 'minn_admin_powerpress_active' ) || ! minn_admin_powerpress_active() ) {
+		$skip( 'R4 PowerPress: not active (run with MINN_SWAP_ADD=powerpress/powerpress.php)' );
+		return;
+	}
+	$pid   = 0;
+	$clean = $once( static function () use ( &$pid ) {
+		if ( $pid ) {
+			wp_delete_post( $pid, true );
+		}
+	} );
+	try {
+		$pid = (int) wp_insert_post( array( 'post_title' => 'Minn v047 r4 pp ' . $tag, 'post_status' => 'draft', 'post_type' => 'post', 'post_author' => $admin ) );
+		update_post_meta( $pid, 'enclosure', wp_slash( "https://example.com/r4.mp3\n99\naudio/mpeg\n" . serialize( array( 'subtitle' => 'Kept sub', 'episode_no' => '7', 'season' => '2' ) ) ) ); // phpcs:ignore -- their storage format
+		$vals = static function () use ( $pid ) {
+			return minn_admin_powerpress_read_values( $pid );
+		};
+		list( $st, $d ) = $call( 'POST', '/wp/v2/posts/' . $pid, array( 'minn_powerpress' => array( 'subtitle' => '<b></b>', 'episode_no' => '1.5', 'season' => 'abc' ) ) );
+		$check( 'R4 PowerPress: text the cleaner empties and non-whole numbers are named', 200 === $st && $field_err( $d, 'minn_powerpress', 'subtitle' ) && $field_err( $d, 'minn_powerpress', 'episode_no' ) && $field_err( $d, 'minn_powerpress', 'season' ), $st . ' ' . wp_json_encode( $d['minn_field_errors'] ?? null ) );
+		$v = $vals();
+		$check( 'R4 PowerPress: and all three stay as stored', 'Kept sub' === $v['subtitle'] && '7' === $v['episode_no'] && '2' === $v['season'], wp_json_encode( $v ) );
+		list( $st, $d ) = $call( 'POST', '/wp/v2/posts/' . $pid, array( 'minn_powerpress' => array( 'url' => array( 'x' ) ) ) );
+		$check( 'R4 PowerPress: a media URL sent as a list is named and the episode kept', 200 === $st && $field_err( $d, 'minn_powerpress', 'url' ) && 'https://example.com/r4.mp3' === $vals()['url'], $st . ' ' . wp_json_encode( array( $d['minn_field_errors'] ?? null, $vals()['url'] ) ) );
+		list( $st, $d ) = $call( 'POST', '/wp/v2/posts/' . $pid, array( 'minn_powerpress' => array( 'episode_no' => '12', 'season' => '', 'subtitle' => '' ) ) );
+		$v = $vals();
+		$check( 'R4 PowerPress control: a whole number saves and emptied boxes clear', 200 === $st && empty( $d['minn_field_errors'] ) && '12' === $v['episode_no'] && '' === $v['season'] && '' === $v['subtitle'], $st . ' ' . wp_json_encode( $v ) );
 	} finally {
 		$clean();
 	}
