@@ -254,7 +254,9 @@ add_action( 'rest_api_init', function () {
 			$stored  = minn_admin_fluent_notifications( $form->id );
 
 			// Every notification and the confirmation is built and checked
-			// before the first write, so a refusal leaves nothing saved.
+			// before the first write, Fluent's own validator included (the
+			// call their store() and saveGeneral() make), so a refusal leaves
+			// nothing saved.
 			$writes  = array();
 			$general = null;
 
@@ -306,6 +308,11 @@ add_action( 'rest_api_init', function () {
 				$masked = Minn_Admin_Egress::refuse_masks( $n, $stored[ $id ] );
 				if ( $masked ) {
 					return $masked;
+				}
+				try {
+					\FluentForm\App\Services\Settings\Validator::validate( 'notifications', $n );
+				} catch ( \Throwable $e ) {
+					return minn_admin_fluent_validation_error( $e, 'n' . $id . '.' );
 				}
 				$writes[ $id ] = $n;
 			}
@@ -359,10 +366,31 @@ add_action( 'rest_api_init', function () {
 				if ( $masked ) {
 					return $masked;
 				}
+				try {
+					\FluentForm\App\Services\Settings\Validator::validate( 'confirmations', $c );
+				} catch ( \Throwable $e ) {
+					return minn_admin_fluent_validation_error( $e, 'confirmation.' );
+				}
 				$settings['confirmation'] = $c;
 				$general                  = $settings;
 			}
 
+			// The confirmation is written first: saveGeneral() validates it
+			// after its own cleaning (without unfiltered_html, a javascript:
+			// address comes out empty), which the check above cannot see, and
+			// it validates before it writes. Each notification was validated
+			// above exactly as store() validates it.
+			if ( null !== $general ) {
+				try {
+					$service->saveGeneral( array(
+						'form_id'                    => (int) $form->id,
+						'formSettings'               => wp_json_encode( $general ),
+						'advancedValidationSettings' => wp_json_encode( minn_admin_fluent_meta( $form->id, 'advancedValidationSettings' ) ),
+					) );
+				} catch ( \Throwable $e ) {
+					return minn_admin_fluent_validation_error( $e, 'confirmation.' );
+				}
+			}
 			foreach ( $writes as $id => $n ) {
 				try {
 					$service->store( array(
@@ -373,17 +401,6 @@ add_action( 'rest_api_init', function () {
 					) );
 				} catch ( \Throwable $e ) {
 					return minn_admin_fluent_validation_error( $e, 'n' . $id . '.' );
-				}
-			}
-			if ( null !== $general ) {
-				try {
-					$service->saveGeneral( array(
-						'form_id'                    => (int) $form->id,
-						'formSettings'               => wp_json_encode( $general ),
-						'advancedValidationSettings' => wp_json_encode( minn_admin_fluent_meta( $form->id, 'advancedValidationSettings' ) ),
-					) );
-				} catch ( \Throwable $e ) {
-					return minn_admin_fluent_validation_error( $e, 'confirmation.' );
 				}
 			}
 			return rest_ensure_response( minn_admin_fluent_emails_payload( minn_admin_fluent_form( $form->id ) ) );
