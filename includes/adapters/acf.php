@@ -3374,8 +3374,14 @@ function minn_admin_acf_options_tab_shape( $page, $tab_id ) {
  * base, edited subs overlay it, so unmapped subs survive untouched (the
  * repeater-merge discipline, at group scale).
  *
+ * Every value is parsed before anything is written. A value the parser
+ * refuses refuses the whole save with a 400 naming its fields: the settings
+ * view reports only an error answer, so skipping it stored the rest under
+ * "Settings saved" while the typed value was dropped.
+ *
  * @param array $page   Options page array.
  * @param array $values Field key => value.
+ * @return true|WP_Error
  */
 function minn_admin_acf_options_save( $page, $values ) {
 	$byKey = array();
@@ -3402,6 +3408,8 @@ function minn_admin_acf_options_save( $page, $values ) {
 		}
 		return is_array( $node ) && array_key_exists( $f['key'], $node ) ? $node[ $f['key'] ] : null;
 	};
+	$writes  = array();
+	$refused = array();
 	foreach ( (array) $values as $key => $v ) {
 		if ( ! isset( $byKey[ $key ] ) ) {
 			continue;
@@ -3411,9 +3419,11 @@ function minn_admin_acf_options_save( $page, $values ) {
 			$v = 'rows' === $f['type']
 				? minn_admin_acf_rows_in( $f, $v, $stored_at( $f ), 'options' )
 				: minn_admin_acf_flex_in( $f, $v, $stored_at( $f ), 'options' );
-			if ( null !== $v ) {
-				$v = minn_admin_acf_links_upgraded( minn_admin_acf_definition( $f ), $v );
+			if ( null === $v ) {
+				$refused[] = $f; // not a list of rows at all
+				continue;
 			}
+			$v = minn_admin_acf_links_upgraded( minn_admin_acf_definition( $f ), $v );
 		} else {
 			$stored = $stored_at( $f );
 			if ( minn_admin_acf_untouched( $f, $v, $stored ) ) {
@@ -3421,12 +3431,40 @@ function minn_admin_acf_options_save( $page, $values ) {
 			}
 			$sent = $v;
 			$v    = minn_admin_acf_value_in( $f, $v, 'options' );
-			$v    = minn_admin_acf_relation_preserve( $f, $v, $stored, $sent );
-			$v    = minn_admin_acf_choices_keep( $f, $v, $stored );
+			if ( null === $v ) {
+				// The parser's refusal, not the relational keep below (which
+				// answers null for a withheld id, and is no refusal).
+				$refused[] = $f;
+				continue;
+			}
+			$v = minn_admin_acf_relation_preserve( $f, $v, $stored, $sent );
+			$v = minn_admin_acf_choices_keep( $f, $v, $stored );
 		}
 		if ( null === $v ) {
 			continue; // invalid input never clobbers a stored value
 		}
+		$writes[] = array( $key, $f, $v );
+	}
+	if ( $refused ) {
+		$message = __( 'That value was not accepted, so the stored one was kept.', 'minn-admin' );
+		$fields  = array();
+		$names   = array();
+		foreach ( $refused as $f ) {
+			$label    = isset( $f['label'] ) && '' !== (string) $f['label'] ? (string) $f['label'] : (string) $f['key'];
+			$names[]  = $label;
+			$fields[] = array( 'key' => (string) $f['key'], 'label' => $label, 'message' => $message );
+		}
+		return new WP_Error(
+			'minn_acf_options_refused',
+			sprintf(
+				/* translators: %s: comma-separated field names. */
+				_n( 'Nothing was saved: %s has a value the field does not accept.', 'Nothing was saved: %s have values the fields do not accept.', count( $fields ), 'minn-admin' ),
+				implode( ', ', $names )
+			),
+			array( 'status' => 400, 'fields' => $fields )
+		);
+	}
+	foreach ( $writes as list( $key, $f, $v ) ) {
 		if ( ! empty( $f['_parent'] ) ) {
 			$parent_updates[ $f['_parent'] ][] = array(
 				'path'  => array_slice( (array) ( $f['_path'] ?? array( $f['_parent'] ) ), 1 ),
@@ -3459,6 +3497,7 @@ function minn_admin_acf_options_save( $page, $values ) {
 		// Through the one writer, which slashes for ACF's unslashing store.
 		minn_admin_acf_raw_update( array( 'key' => $gkey ), $base, $post_id );
 	}
+	return true;
 }
 
 /**
@@ -3771,7 +3810,10 @@ add_action( 'rest_api_init', function () {
 				$target = $resolve( $req );
 				$body   = $req->get_json_params();
 				$values = isset( $body['values'] ) && is_array( $body['values'] ) ? $body['values'] : array();
-				minn_admin_acf_options_save( $target['page'], $values );
+				$saved  = minn_admin_acf_options_save( $target['page'], $values );
+				if ( is_wp_error( $saved ) ) {
+					return $saved;
+				}
 				return rest_ensure_response( minn_admin_acf_options_tab_shape( $target['page'], $target['tab'] ) );
 			},
 		),
