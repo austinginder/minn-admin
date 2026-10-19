@@ -127,7 +127,7 @@ function minn_admin_fluent_smtp_health() {
 			return array(
 				'label' => __( 'Connection health', 'minn-admin' ),
 				'value' => number_format_i18n( count( $failing ) ) . ' failing',
-				'hint'  => trim( $who . ( $msg ? ': ' . ( strlen( $msg ) > 120 ? substr( $msg, 0, 117 ) . '…' : $msg ) : '' ) ),
+				'hint'  => trim( $who . ( $msg ? ': ' . ( strlen( $msg ) > 120 ? Minn_Admin_Egress::clip( $msg, 117 ) : $msg ) : '' ) ),
 			);
 		}
 		// checked_at is gmdate — UTC.

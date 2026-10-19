@@ -2564,9 +2564,7 @@ function minn_admin_license_default_providers() {
 				/* translators: %d: Akismet alert code number. */
 				$note = sprintf( __( 'Akismet reported a problem with this key (alert %d)', 'minn-admin' ), $alert );
 			}
-			if ( strlen( $note ) > 140 ) {
-				$note = substr( $note, 0, 140 ) . '…';
-			}
+			$note = Minn_Admin_Egress::clip( $note, 140 );
 			if ( $predefined ) {
 				$note .= '; key supplied in code (constant or filter)';
 			}

@@ -10101,7 +10101,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		// Additional CSS and the like: one line of it is enough to recognize.
 		$text = preg_replace( '/\s+/', ' ', trim( $text ) );
 		if ( function_exists( 'mb_strlen' ) ? mb_strlen( $text ) > 60 : strlen( $text ) > 60 ) {
-			$text = ( function_exists( 'mb_substr' ) ? mb_substr( $text, 0, 57 ) : substr( $text, 0, 57 ) ) . '…';
+			$text = Minn_Admin_Egress::clip( $text, 57 );
 		}
 		return $text;
 	}

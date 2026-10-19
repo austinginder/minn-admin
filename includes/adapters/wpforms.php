@@ -197,9 +197,7 @@ function minn_admin_wpforms_summary( $fields_json ) {
 		$parts = array_slice( $rest, 0, 2 );
 	}
 	$summary = implode( ' · ', $parts );
-	if ( strlen( $summary ) > 80 ) {
-		$summary = substr( $summary, 0, 80 ) . '…';
-	}
+	$summary = Minn_Admin_Egress::clip( $summary, 80 );
 	return $summary ?: __( '(empty entry)', 'minn-admin' );
 }
 

@@ -2573,7 +2573,7 @@ function minn_admin_acf_display_value( $f, $v ) {
 	if ( ! empty( $f['choices'][ $s ] ) ) {
 		$s = (string) $f['choices'][ $s ];
 	}
-	return mb_strlen( $s ) > 160 ? mb_substr( $s, 0, 160 ) . '…' : $s;
+	return Minn_Admin_Egress::clip( $s, 160 );
 }
 
 /**

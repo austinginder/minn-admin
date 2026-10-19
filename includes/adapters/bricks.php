@@ -1704,7 +1704,7 @@ function minn_admin_bricks_entry_item( $row ) {
 	}
 	$summary = implode( ' · ', $parts );
 	if ( function_exists( 'mb_substr' ) && mb_strlen( $summary ) > 110 ) {
-		$summary = mb_substr( $summary, 0, 109 ) . '…';
+		$summary = Minn_Admin_Egress::clip( $summary, 109 );
 	}
 	return array(
 		'id'      => (int) $row->id,

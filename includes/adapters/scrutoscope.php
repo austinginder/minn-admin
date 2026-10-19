@@ -317,9 +317,7 @@ function minn_admin_scrutoscope_profile_sections( $id ) {
 			continue;
 		}
 		$sql = (string) ( $q['sql'] ?? '' );
-		if ( strlen( $sql ) > 240 ) {
-			$sql = substr( $sql, 0, 240 ) . '…';
-		}
+		$sql = Minn_Admin_Egress::clip( $sql, 240 );
 		$ms = isset( $q['time_ms'] ) ? $q['time_ms'] . ' ms' : '—';
 		$src = (string) ( $q['source'] ?? '' );
 		$queries[] = array(

@@ -211,7 +211,7 @@ function minn_admin_aios_event_view( array $row ) {
 				$context[] = array( 'label' => $label, 'value' => $v ? __( 'Yes', 'minn-admin' ) : __( 'No', 'minn-admin' ) );
 			} elseif ( is_scalar( $v ) ) {
 				$val       = (string) $v;
-				$context[] = array( 'label' => $label, 'value' => strlen( $val ) > 200 ? substr( $val, 0, 200 ) . '…' : $val );
+				$context[] = array( 'label' => $label, 'value' => Minn_Admin_Egress::clip( $val, 200 ) );
 			}
 		}
 		$context = array_values( array_filter( $context, $filled ) );

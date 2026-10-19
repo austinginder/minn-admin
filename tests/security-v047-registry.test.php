@@ -206,6 +206,91 @@ $field_err = static function ( $data, $panel, $key ) {
 	}
 } )();
 
+/*
+ * The cut-before-the-fence class, swept. The egress fence knows a credential
+ * only whole, so text cut short before a response leaves Minn shows a key that
+ * runs across the cut up to the cut. Every site that shortens stored text now
+ * cuts through Minn_Admin_Egress::clip(), which masks first. Two adapters
+ * prove it with a key across their cut; the scan keeps the shape from coming
+ * back anywhere else.
+ */
+( function () use ( $check, $skip, $once ) {
+	if ( ! class_exists( 'Minn_Admin_Egress' ) || ! method_exists( 'Minn_Admin_Egress', 'clip' ) ) {
+		$check( 'clips: Minn_Admin_Egress::clip() exists', false );
+		return;
+	}
+	$tag     = strtolower( wp_generate_password( 6, false ) );
+	$row     = 'connectors_minn047c' . $tag . '_api_key';
+	$secret  = 'cLp' . $tag . 'Rw4N8' . strtolower( wp_generate_password( 12, false, false ) ) . '61Hq5Vd2';
+	$head    = substr( $secret, 0, 8 );
+	$forget  = static function () {
+		Minn_Admin_DB::forget_credentials();
+		Minn_Admin_Egress::reset();
+	};
+	$clean   = $once( static function () use ( $row, $forget ) {
+		delete_option( $row );
+		$forget();
+	} );
+	add_option( $row, $secret, '', 'no' );
+	$forget();
+	$shows = static function ( $text ) use ( $head ) {
+		return false !== strpos( (string) wp_json_encode( $text ), $head );
+	};
+	try {
+		$check( 'clips fixture: the fence counts the probe key as a credential', in_array( $secret, Minn_Admin_DB::egress_credentials(), true ) );
+
+		if ( function_exists( 'minn_admin_aios_event_view' ) ) {
+			$view = minn_admin_aios_event_view( array(
+				'username'     => '',
+				'event_type'   => 'minn_probe',
+				'created'      => time(),
+				'level'        => 'info',
+				'ip'           => '',
+				'country_code' => '',
+				'details'      => wp_json_encode( array( 'note' => str_repeat( 'a', 190 ) . ' ' . $secret . ' tail' ) ),
+			) );
+			$check( 'clips: an All-In-One Security context value with a key across the 200 cut shows none of it', ! $shows( $view ), wp_json_encode( $view['sections'][1] ?? null ) );
+		} else {
+			$skip( 'clips: All-In-One Security adapter not loaded' );
+		}
+		if ( function_exists( 'minn_admin_acf_display_value' ) ) {
+			$shown = minn_admin_acf_display_value( array( 'type' => 'text' ), str_repeat( 'b', 150 ) . ' ' . $secret );
+			$check( 'clips: an ACF text value with a key across the 160 cut shows none of it', ! $shows( $shown ) && '…' === mb_substr( $shown, -1 ), $shown );
+			$check( 'clips control: a short ACF value is shown as stored', 'plain' === minn_admin_acf_display_value( array( 'type' => 'text' ), 'plain' ) );
+		} else {
+			$skip( 'clips: ACF adapter not loaded' );
+		}
+
+		// Where text is still cut by hand. A cut that decides on the whole
+		// value first is listed with the reason.
+		$allowed = array(
+			'includes/class-minn-admin-egress.php'          => 'the rule itself',
+			'includes/class-minn-admin-preview.php'         => 'a merge tag as typed, not stored text',
+			'includes/adapters/transients-manager.php'      => 'withholds_cell() decides on the whole value first',
+		);
+		$root  = dirname( __DIR__ ) . '/';
+		$found = array();
+		$it    = new RecursiveIteratorIterator( new RecursiveDirectoryIterator( $root . 'includes', FilesystemIterator::SKIP_DOTS ) );
+		foreach ( $it as $file ) {
+			if ( 'php' !== $file->getExtension() ) {
+				continue;
+			}
+			$rel = substr( $file->getPathname(), strlen( $root ) );
+			if ( isset( $allowed[ $rel ] ) ) {
+				continue;
+			}
+			foreach ( file( $file->getPathname() ) as $i => $line ) {
+				if ( preg_match( "/substr\\([^;]*\\)\\s*\\.\\s*'(…|\\.\\.\\.)'/u", $line ) ) {
+					$found[] = $rel . ':' . ( $i + 1 );
+				}
+			}
+		}
+		$check( 'clips: no stored text is cut by hand outside Minn_Admin_Egress::clip()', ! $found, implode( ', ', $found ) );
+	} finally {
+		$clean();
+	}
+} )();
+
 $failed = count( array_filter( $results, static function ( $ok ) {
 	return ! $ok;
 } ) );
