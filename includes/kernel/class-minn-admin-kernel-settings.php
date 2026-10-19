@@ -25,6 +25,10 @@
  *                   // tabs, or for the whole screen when PHP saves it); null for a tab
  *                   // that does not exist
  *     'read'     => callable( array $field, array $ctx ): mixed,   // the stored value as the page shows it
+ *     'same'     => callable( array $field, mixed $sent, mixed $served, array $ctx ): bool,
+ *                   // optional: the plugin's own reading of a value sent back as served
+ *                   // (a stored shape its control cannot show), asked when the tier's
+ *                   // compare finds a difference
  *     'view'     => callable( array $ctx ): array,     // optional: a body of the screen's own;
  *                   // without it the body is the layout with 'values' (read) after its groups
  *     'sent'     => callable( array $body, array $ctx ): array|WP_Error,
@@ -38,14 +42,15 @@
  *     'labels'   => array( 'may' => callable( string[] $labels ): string ),   // the gate's refusal
  *   ) );
  *
- * A field is the shared settings form's: 'key', 'label', a 'type' from TYPES
- * and its presentation keys. A key that starts with "_" is the adapter's own
+ * A field is the shared settings form's: 'key' (or 'name', which the form
+ * also reads), 'label', a 'type' from TYPES and its presentation keys. A key that starts with "_" is the adapter's own
  * (where the value lives) and never leaves. '_raw' => true marks a value the
  * plugin prints into its pages unescaped: changing one takes unfiltered_html
  * and code edits left on, the rule every code-authoring surface keeps. A
  * field of another type is not offered at all.
  *
- * A save, before anything is written:
+ * A save takes a JSON body only (400 invalid_body otherwise) and, before
+ * anything is written:
  *   1. only the fields the layout offers are read from the body;
  *   2. a value equal to what read() serves for it is dropped: an untouched
  *      value, and a credential sent back as its [redacted:…] placeholder
@@ -77,7 +82,7 @@ class Minn_Admin_Kernel_Settings {
 	);
 
 	/** The keys a declaration may hold. */
-	const KEYS = array( 'route', 'active', 'gate', 'target', 'layout', 'read', 'view', 'sent', 'may', 'validate', 'write', 'labels' );
+	const KEYS = array( 'route', 'active', 'gate', 'target', 'layout', 'read', 'same', 'view', 'sent', 'may', 'validate', 'write', 'labels' );
 
 	/** The keys a declaration must hold. */
 	const REQUIRED = array( 'route', 'gate', 'layout', 'read', 'write' );
@@ -154,7 +159,7 @@ class Minn_Admin_Kernel_Settings {
 		if ( ! is_string( $def['route'] ) || '' === trim( $def['route'], '/' ) ) {
 			return 'its route is not a path';
 		}
-		foreach ( array( 'gate', 'target', 'layout', 'read', 'view', 'sent', 'may', 'validate', 'write' ) as $k ) {
+		foreach ( array( 'gate', 'target', 'layout', 'read', 'same', 'view', 'sent', 'may', 'validate', 'write' ) as $k ) {
 			if ( isset( $def[ $k ] ) && ! is_callable( $def[ $k ] ) ) {
 				return "its {$k} cannot be called";
 			}
@@ -238,7 +243,11 @@ class Minn_Admin_Kernel_Settings {
 			}
 			$kept = array();
 			foreach ( (array) ( $g['fields'] ?? array() ) as $f ) {
-				if ( ! is_array( $f ) || ! isset( $f['key'] ) || ! is_scalar( $f['key'] ) || '' === (string) $f['key'] ) {
+				if ( ! is_array( $f ) ) {
+					continue;
+				}
+				$fkey = $f['key'] ?? ( $f['name'] ?? null );
+				if ( ! is_scalar( $fkey ) || '' === (string) $fkey ) {
 					continue;
 				}
 				// A type the form cannot draw is a field nobody can edit here,
@@ -246,9 +255,8 @@ class Minn_Admin_Kernel_Settings {
 				if ( ! in_array( $f['type'] ?? 'text', self::TYPES, true ) ) {
 					continue;
 				}
-				$f['key']            = (string) $f['key'];
-				$fields[ $f['key'] ] = $f;
-				$kept[]              = $f;
+				$fields[ (string) $fkey ] = $f;
+				$kept[]                   = $f;
 			}
 			$g['fields'] = $kept;
 			$groups[]    = $g;
@@ -289,6 +297,41 @@ class Minn_Admin_Kernel_Settings {
 		return $out + $layout;
 	}
 
+	/**
+	 * What a screen offers at a route and what read() serves for each field,
+	 * before the egress fence: for the conformance runner.
+	 *
+	 * @param string          $id Screen id.
+	 * @param WP_REST_Request $r  A request for the screen's route.
+	 * @return array|WP_Error { fields: by key, values: by key }
+	 */
+	public static function served( $id, WP_REST_Request $r ) {
+		if ( ! isset( self::$screens[ $id ] ) ) {
+			return Minn_Admin_Kernel::fail( 'not_found', __( 'Not found.', 'minn-admin' ), 404 );
+		}
+		$def = self::$screens[ $id ];
+		// A request built by hand has not been matched to its route yet.
+		if ( ! $r->get_url_params() && preg_match( '#^/minn-admin/v1/' . $def['route'] . '$#', $r->get_route(), $m ) ) {
+			$r->set_url_params( array_filter( $m, 'is_string', ARRAY_FILTER_USE_KEY ) );
+		}
+		$ctx = self::context( $def, $r, array( 'screen' => $id ) );
+		if ( is_wp_error( $ctx ) ) {
+			return $ctx;
+		}
+		$built = self::layout( $def, $ctx );
+		if ( is_wp_error( $built ) ) {
+			return $built;
+		}
+		$values = array();
+		foreach ( $built[1] as $key => $f ) {
+			$values[ $key ] = call_user_func( $def['read'], $f, $ctx );
+		}
+		return array(
+			'fields' => $built[1],
+			'values' => $values,
+		);
+	}
+
 	/** GET: the screen as stored. */
 	public static function get( $id, WP_REST_Request $r ) {
 		$def = self::$screens[ $id ];
@@ -303,7 +346,13 @@ class Minn_Admin_Kernel_Settings {
 		if ( is_wp_error( $ctx ) ) {
 			return $ctx;
 		}
-		$saved = self::save_in( $id, $def, (array) $r->get_json_params(), $ctx );
+		// The body only, as JSON: a form-encoded save would read as no change
+		// and answer as saved.
+		$body = $r->get_json_params();
+		if ( ! is_array( $body ) ) {
+			return Minn_Admin_Kernel::fail( 'invalid_body', __( 'Send the values as JSON.', 'minn-admin' ), 400 );
+		}
+		$saved = self::save_in( $id, $def, $body, $ctx );
 		if ( is_wp_error( $saved ) ) {
 			return $saved;
 		}
@@ -330,6 +379,21 @@ class Minn_Admin_Kernel_Settings {
 		return self::save_in( $id, $def, $body, $ctx );
 	}
 
+	/**
+	 * A screen's body from PHP, as its GET answers it.
+	 *
+	 * @param string $id  Screen id.
+	 * @param array  $ctx What the screen's target answers, and 'tab'.
+	 * @return array|WP_Error
+	 */
+	public static function page( $id, array $ctx = array() ) {
+		if ( ! isset( self::$screens[ $id ] ) ) {
+			return Minn_Admin_Kernel::fail( 'not_found', __( 'Not found.', 'minn-admin' ), 404 );
+		}
+		$def = self::$screens[ $id ];
+		return self::body( $def, self::context( $def, null, $ctx + array( 'screen' => $id ) ) );
+	}
+
 	/** How a field's sent value is compared with what was served. */
 	private static function kind( array $f ) {
 		$t = $f['type'] ?? 'text';
@@ -343,6 +407,23 @@ class Minn_Admin_Kernel_Settings {
 			return 'list';
 		}
 		return 'text';
+	}
+
+	/**
+	 * Whether a value sent is the one served: Minn_Admin::unchanged() for the
+	 * field's kind (a credential as its placeholder included), then the
+	 * plugin's own reading when it declares one.
+	 */
+	private static function same( array $def, array $field, $sent, $served, array $ctx ) {
+		// Compared as the page received it: JSON keeps no difference between
+		// an empty object and an empty list, so neither may the compare.
+		if ( is_array( $served ) || is_object( $served ) ) {
+			$served = json_decode( (string) wp_json_encode( $served ), true );
+		}
+		if ( Minn_Admin::unchanged( $sent, $served, self::kind( $field ) ) ) {
+			return true;
+		}
+		return isset( $def['same'] ) && Minn_Admin_Kernel::yes( $def['same'], $field, $sent, $served, $ctx );
 	}
 
 	/** The body's values by field key, through the screen's own reader when it has one. */
@@ -432,7 +513,7 @@ class Minn_Admin_Kernel_Settings {
 				continue;
 			}
 			$was = call_user_func( $def['read'], $fields[ $key ], $ctx );
-			if ( Minn_Admin::unchanged( $v, $was, self::kind( $fields[ $key ] ) ) ) {
+			if ( self::same( $def, $fields[ $key ], $v, $was, $ctx ) ) {
 				continue;
 			}
 			$changes[ $key ] = $v;
@@ -452,7 +533,7 @@ class Minn_Admin_Kernel_Settings {
 			}
 			$moved = array();
 			foreach ( $changes as $key => $v ) {
-				if ( array_key_exists( $key, $base ) && ! Minn_Admin::unchanged( $base[ $key ], $served[ $key ], self::kind( $fields[ $key ] ) ) ) {
+				if ( array_key_exists( $key, $base ) && ! self::same( $def, $fields[ $key ], $base[ $key ], $served[ $key ], $ctx ) ) {
 					$moved[] = $key;
 				}
 			}

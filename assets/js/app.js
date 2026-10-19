@@ -21132,7 +21132,12 @@
 		<div class="minn-card minn-surface-settings">${ form.html }</div>`;
 		bindChrome();
 		bindSettingsForm( view, data, form.fields, async ( payload ) => {
-			const r = await api( routeFor( tab ), { method: 'POST', body: JSON.stringify( { values: payload } ) } );
+			// Beside the changes, what the page loaded for each: the server
+			// answers 409 when one of them changed since, instead of writing
+			// over it.
+			const base = {};
+			Object.keys( payload ).forEach( ( k ) => { base[ k ] = ( data.values || {} )[ k ] ?? null; } );
+			const r = await api( routeFor( tab ), { method: 'POST', body: JSON.stringify( { values: payload, base } ) } );
 			ss.settingsCache[ cacheKey ] = r || { groups: [] };
 			toast( __( 'Settings saved' ) );
 			renderSurface( s );
@@ -58129,6 +58134,24 @@
 	let ffePreviewTimer = null;
 	let ffePreviewSeq = 0;
 
+	// Only what changed: an untouched notification is not re-validated, and a
+	// changed one sends only its changed keys (see changedKeys). Beside them,
+	// what the page loaded for each key it sends: the server answers 409 when
+	// one changed since, instead of writing over it.
+	function ffeSaveBody( d, n ) {
+		const loaded = ( sent, was ) => Object.fromEntries( Object.keys( sent ).map( ( k ) => [ k, was[ k ] ?? null ] ) );
+		const notes = d.notifications.map( ( o ) => [ o, changedKeys( n[ 'n' + o.metaId ], o, [ 'metaId' ] ) ] )
+			.filter( ( [ o ] ) => JSON.stringify( n[ 'n' + o.metaId ] ) !== JSON.stringify( o ) );
+		const conf = JSON.stringify( n.confirmation ) !== JSON.stringify( d.confirmation ) ? changedKeys( n.confirmation, d.confirmation ) : null;
+		const body = { notifications: notes.map( ( [ , x ] ) => x ) };
+		if ( conf ) body.confirmation = conf;
+		if ( notes.length || conf ) {
+			body.base = { notifications: notes.map( ( [ o, x ] ) => loaded( x, o ) ) };
+			if ( conf ) body.base.confirmation = loaded( conf, d.confirmation );
+		}
+		return body;
+	}
+
 	function ffeAdopt( r ) {
 		const keep = state.ffe && state.ffe.id === r.id ? state.ffe.which : null;
 		const n = { confirmation: JSON.parse( JSON.stringify( r.confirmation ) ) };
@@ -58408,15 +58431,7 @@
 				try {
 					const r = await api( `minn-admin/v1/fluent-forms/forms/${ c.id }/emails`, {
 						method: 'POST',
-						// Only what changed: an untouched notification is not
-						// re-validated, and a changed one sends only its changed
-						// keys (see changedKeys).
-						body: JSON.stringify( {
-							notifications: d.notifications.map( ( o ) => [ o, n[ 'n' + o.metaId ] ] )
-								.filter( ( [ o, x ] ) => JSON.stringify( x ) !== JSON.stringify( o ) )
-								.map( ( [ o, x ] ) => changedKeys( x, o, [ 'metaId' ] ) ),
-							...( JSON.stringify( n.confirmation ) !== JSON.stringify( d.confirmation ) ? { confirmation: changedKeys( n.confirmation, d.confirmation ) } : {} ),
-						} ),
+						body: JSON.stringify( ffeSaveBody( d, n ) ),
 					} );
 					ffeAdopt( r );
 					toast( __( 'Form saved' ) );
