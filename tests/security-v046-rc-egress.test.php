@@ -808,11 +808,13 @@ try {
 	// run in one.
 	register_rest_route( 'minn-admin/v1', '/minn-rc-egress-test/write', array( 'methods' => 'POST', 'permission_callback' => '__return_true', 'callback' => function () use ( $held, $plain, $row4, $key3, $t1, $key ) {
 		Minn_Admin::unchanged( 'x ' . $t1, 'x ' . $key );
-		wp_cache_set( 'egress_credentials', array( 'stale' ), 'minn_admin', 60 );
+		// The fence names its cache by the adapters' declarations.
+		$ck = 'egress_credentials' . ( class_exists( 'Minn_Admin_Kernel_Secrets' ) ? '_' . Minn_Admin_Kernel_Secrets::hash() : '' );
+		wp_cache_set( $ck, array( 'stale' ), 'minn_admin', 60 );
 		add_option( $plain, 'plain value', '', 'no' );
 		$kept = $held();
 		add_option( $row4, $key3 . 'Late7', '', 'no' );
-		return array( 'kept' => $kept, 'dropped' => ! $held(), 'cache' => false === wp_cache_get( 'egress_credentials', 'minn_admin' ) );
+		return array( 'kept' => $kept, 'dropped' => ! $held(), 'cache' => false === wp_cache_get( $ck, 'minn_admin' ) );
 	} ) );
 	list( , $w ) = $send( 'POST', '/minn-admin/v1/minn-rc-egress-test/write' );
 	$check( '04-3 control: an ordinary option changing keeps the list', true === ( $w['kept'] ?? null ), wp_json_encode( $w ) );

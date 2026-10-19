@@ -31,6 +31,14 @@ function minn_admin_disembark_active() {
 	return class_exists( '\\Disembark\\Token' );
 }
 
+/*
+ * Disembark's connect token pulls the whole database and every file; the
+ * connect command hands it to the person connecting on purpose
+ * (minn_admin_disembark_command()). Declared whether or not Disembark is
+ * active (its row outlives it).
+ */
+minn_admin_secrets( 'disembark', array( 'options' => array( 'disembark_token' ) ) );
+
 function minn_admin_disembark_dir() {
 	return trailingslashit( wp_upload_dir()['basedir'] ) . 'disembark/';
 }

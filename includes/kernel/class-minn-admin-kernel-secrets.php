@@ -21,10 +21,12 @@
  *   network-activated plugin keeps in sitemeta what it keeps in options on a
  *   single site). Each row is redacted whole in the browser, left out of a
  *   value search, and its credential-named leaves become the fence's needles.
- *   A row may name leaves inside it ('a/b', '*' for any one key) that hold a
- *   credential under a name that does not say so (a secret keyed by its
- *   public site key); those become needles too. Leaves are for a named row,
- *   not a '*' shape.
+ *   A row may name leaves inside it ('a/b', '*' for any key or run of
+ *   keys) that hold a credential under a name that does not say so (a
+ *   secret keyed by its public site key); every value at or below a named
+ *   leaf (names compared without case) that is 16 or more token characters
+ *   shaped like a key (Minn_Admin_DB::key_shaped()) becomes a needle too.
+ *   Leaves are for a named row, not a '*' shape.
  * - usermeta: user meta keys holding a credential that a copy could carry
  *   (a licence key, a connection key): redacted and searched for.
  * - user_tokens: per-user tokens, one or two for each user of a feature:
@@ -32,12 +34,16 @@
  *   bounded on a site with many users.
  * - columns: a table (no prefix) => its credential columns, redacted in the
  *   table and in copies of it, and searched for.
+ * - column_tokens: the same, redacted by name only: a column with a row per
+ *   user or per account (an employee's calendar token), which on a large
+ *   site would fill the fence's list.
  *
  * A declaration is made when the adapter file loads, whether or not its
  * plugin is active: a deactivated plugin leaves its keys in the database.
- * One the kernel cannot read in full still registers every store it can
- * read (a missed store would print a key) and is reported in problems(),
- * which the conformance suite fails on.
+ * One the kernel cannot read in full still registers the readable form of
+ * each store (a missed store would print a key: a lone name for a list, the
+ * widest shape for a name with several '*') and reports every item it
+ * dropped or widened in problems(), which the conformance suite fails on.
  *
  * @package minn-admin
  */
@@ -46,9 +52,9 @@ defined( 'ABSPATH' ) || exit;
 
 class Minn_Admin_Kernel_Secrets {
 
-	const KEYS = array( 'options', 'usermeta', 'user_tokens', 'columns' );
+	const KEYS = array( 'options', 'usermeta', 'user_tokens', 'columns', 'column_tokens' );
 
-	/** Plugin => [ 'files' => [], 'options' => name => leaves, 'usermeta' => [], 'user_tokens' => [], 'columns' => table => cols ]. */
+	/** Plugin => [ 'files' => [], 'options' => name => leaves, 'usermeta' => [], 'user_tokens' => [], 'columns' => table => cols, 'column_tokens' => table => cols ]. */
 	private static $declared = array();
 
 	/** What could not be read, in order. */
@@ -56,6 +62,9 @@ class Minn_Admin_Kernel_Secrets {
 
 	/** The flattened lists, built on first use after a declaration. */
 	private static $flat = null;
+
+	/** hash(), built on first use after a declaration. */
+	private static $hash = null;
 
 	/**
 	 * Record a plugin's credential stores.
@@ -78,7 +87,7 @@ class Minn_Admin_Kernel_Secrets {
 			$plugin = 'unnamed';
 		}
 		if ( ! isset( self::$declared[ $plugin ] ) ) {
-			self::$declared[ $plugin ] = array( 'files' => array(), 'options' => array(), 'usermeta' => array(), 'user_tokens' => array(), 'columns' => array() );
+			self::$declared[ $plugin ] = array( 'files' => array(), 'options' => array(), 'usermeta' => array(), 'user_tokens' => array(), 'columns' => array(), 'column_tokens' => array() );
 		}
 		$d = &self::$declared[ $plugin ];
 		if ( '' !== $file && ! in_array( $file, $d['files'], true ) ) {
@@ -86,55 +95,118 @@ class Minn_Admin_Kernel_Secrets {
 		}
 		if ( ! is_array( $stores ) ) {
 			self::problem( "{$plugin}: the stores are not an array" );
-			return;
+			$stores = array();
 		}
 		foreach ( $stores as $key => $list ) {
 			if ( ! in_array( $key, self::KEYS, true ) ) {
 				self::problem( "{$plugin}: unknown key '{$key}'" );
 				continue;
 			}
+			// A lone name is read as a list of one.
+			if ( is_string( $list ) ) {
+				self::problem( "{$plugin}: {$key} is a string, read as a list of one" );
+				$list = array( $list );
+			}
 			if ( ! is_array( $list ) ) {
-				self::problem( "{$plugin}: {$key} is not an array" );
+				self::problem( "{$plugin}: {$key} is not a list" );
 				continue;
 			}
 			foreach ( $list as $k => $v ) {
-				if ( 'columns' === $key ) {
-					if ( ! is_string( $k ) || '' === $k || ! is_array( $v ) ) {
-						self::problem( "{$plugin}: columns takes table => array( columns )" );
-						continue;
-					}
-					foreach ( $v as $col ) {
-						if ( is_string( $col ) && '' !== $col ) {
-							$d['columns'][ strtolower( $k ) ][] = $col;
-						} else {
-							self::problem( "{$plugin}: a column of {$k} is not a name" );
-						}
-					}
+				if ( 'columns' === $key || 'column_tokens' === $key ) {
+					self::add_columns( $plugin, $key, $k, $v, $d );
 					continue;
 				}
 				// A plain entry, or (options only) a name => its leaves.
 				$name   = is_int( $k ) ? $v : $k;
 				$leaves = is_int( $k ) ? array() : $v;
-				if ( ! is_string( $name ) || '' === $name || substr_count( $name, '*' ) > 1 ) {
-					self::problem( "{$plugin}: {$key} entry " . wp_json_encode( $name ) . ' is not a name with at most one *' );
+				$name   = self::name( $plugin, $key, $name );
+				if ( null === $name ) {
 					continue;
 				}
 				if ( 'options' !== $key ) {
 					if ( ! is_int( $k ) ) {
-						self::problem( "{$plugin}: {$key} takes names only, not leaves" );
+						self::problem( "{$plugin}: {$key} takes names only; the leaves of {$name} are ignored" );
+					}
+					if ( 'usermeta' === $key && 0 === strpos( $name, '*' ) ) {
+						self::problem( "{$plugin}: usermeta {$name} has no prefix to search by: it is redacted but not searched for" );
 					}
 					$d[ $key ][] = $name;
 					continue;
 				}
-				if ( ! is_array( $leaves ) || ( $leaves && false !== strpos( $name, '*' ) ) ) {
-					self::problem( "{$plugin}: the leaves of {$name} are not a list, or name a * shape" );
+				if ( is_string( $leaves ) ) {
+					$leaves = array( $leaves );
+				}
+				if ( ! is_array( $leaves ) ) {
+					self::problem( "{$plugin}: the leaves of {$name} are not a list" );
 					$leaves = array();
 				}
-				$d['options'][ $name ] = array_values( array_unique( array_merge( $d['options'][ $name ] ?? array(), array_filter( $leaves, 'is_string' ) ) ) );
+				$kept = array();
+				foreach ( $leaves as $leaf ) {
+					if ( is_string( $leaf ) && '' !== trim( $leaf, '/' ) ) {
+						$kept[] = $leaf;
+					} else {
+						self::problem( "{$plugin}: a leaf of {$name} is not a path: " . wp_json_encode( $leaf ) );
+					}
+				}
+				if ( $kept && false !== strpos( $name, '*' ) ) {
+					self::problem( "{$plugin}: leaves name a row, not the shape {$name}; the shape is redacted whole" );
+					$kept = array();
+				}
+				$d['options'][ $name ] = array_values( array_unique( array_merge( $d['options'][ $name ] ?? array(), $kept ) ) );
 			}
 		}
 		unset( $d );
 		self::$flat = null;
+		self::$hash = null;
+		// A list read before this declaration (the browser's, the fence's,
+		// the fence's minute in the object cache) is stale now.
+		if ( class_exists( 'Minn_Admin_DB', false ) ) {
+			Minn_Admin_DB::forget_credentials();
+		}
+		if ( class_exists( 'Minn_Admin_Egress', false ) ) {
+			Minn_Admin_Egress::declarations_changed();
+		}
+	}
+
+	/** One name, or null when nothing readable is left. More than one '*' widens to the first prefix and last suffix; a name that is only '*' is refused. */
+	private static function name( $plugin, $key, $name ) {
+		if ( ! is_string( $name ) || '' === $name ) {
+			self::problem( "{$plugin}: {$key} entry " . wp_json_encode( $name ) . ' is not a name' );
+			return null;
+		}
+		if ( substr_count( $name, '*' ) > 1 ) {
+			$wide = substr( $name, 0, strpos( $name, '*' ) ) . '*' . substr( $name, strrpos( $name, '*' ) + 1 );
+			self::problem( "{$plugin}: {$key} {$name} has more than one *, read as {$wide}" );
+			$name = $wide;
+		}
+		if ( '*' === $name ) {
+			self::problem( "{$plugin}: {$key} '*' would name every row; refused" );
+			return null;
+		}
+		return $name;
+	}
+
+	/** One columns entry: table => list of columns, or table => one column. */
+	private static function add_columns( $plugin, $key, $table, $cols, array &$d ) {
+		if ( ! is_string( $table ) || '' === $table ) {
+			self::problem( "{$plugin}: {$key} takes table => columns; " . wp_json_encode( $cols ) . ' has no table' );
+			return;
+		}
+		if ( is_string( $cols ) ) {
+			self::problem( "{$plugin}: {$key} of {$table} is a string, read as a list of one" );
+			$cols = array( $cols );
+		}
+		if ( ! is_array( $cols ) ) {
+			self::problem( "{$plugin}: {$key} of {$table} is not a list" );
+			return;
+		}
+		foreach ( $cols as $col ) {
+			if ( is_string( $col ) && '' !== $col ) {
+				$d[ $key ][ strtolower( $table ) ][] = $col;
+			} else {
+				self::problem( "{$plugin}: a column of {$table} is not a name: " . wp_json_encode( $col ) );
+			}
+		}
 	}
 
 	/** Every declaration, by plugin, as recorded. */
@@ -145,6 +217,14 @@ class Minn_Admin_Kernel_Secrets {
 	/** What the declarations could not say, in order. */
 	public static function problems() {
 		return self::$problems;
+	}
+
+	/** A short hash of every declaration, for a cache that outlives the request. */
+	public static function hash() {
+		if ( null === self::$hash ) {
+			self::$hash = substr( md5( (string) wp_json_encode( self::$declared ) ), 0, 12 );
+		}
+		return self::$hash;
 	}
 
 	/** Option names declared whole, every plugin's. */
@@ -159,8 +239,9 @@ class Minn_Admin_Kernel_Secrets {
 
 	/**
 	 * The leaves named inside option rows: option name => path patterns,
-	 * each matched against a leaf path as Minn_Admin_DB::credential_leaves()
-	 * spells it ("/recaptcha/<site key>").
+	 * each matched (without case) against a leaf path as
+	 * Minn_Admin_DB::credential_leaves() spells it ("/recaptcha/<site key>"),
+	 * the named leaf or anything below it.
 	 *
 	 * @return array Name => regex[].
 	 */
@@ -179,9 +260,14 @@ class Minn_Admin_Kernel_Secrets {
 		return $searched ? $f['usermeta_searched'] : $f['usermeta_all'];
 	}
 
-	/** Declared credential columns: table without prefix (lower case) => columns. */
-	public static function columns() {
-		return self::flat()['columns'];
+	/**
+	 * Declared credential columns: table without prefix (lower case) => columns.
+	 *
+	 * @param bool $searched Only the columns the fence searches for (not column_tokens).
+	 */
+	public static function columns( $searched = false ) {
+		$f = self::flat();
+		return $searched ? $f['columns_searched'] : $f['columns_all'];
 	}
 
 	private static function problem( $message ) {
@@ -206,6 +292,12 @@ class Minn_Admin_Kernel_Secrets {
 		}
 	}
 
+	private static function merge_columns( array &$into, array $cols ) {
+		foreach ( $cols as $table => $list ) {
+			$into[ $table ] = array_values( array_unique( array_merge( $into[ $table ] ?? array(), $list ) ) );
+		}
+	}
+
 	private static function flat() {
 		if ( null !== self::$flat ) {
 			return self::$flat;
@@ -216,26 +308,29 @@ class Minn_Admin_Kernel_Secrets {
 			'option_leaves'     => array(),
 			'usermeta_all'      => array( array(), array() ),
 			'usermeta_searched' => array( array(), array() ),
-			'columns'           => array(),
+			'columns_all'       => array(),
+			'columns_searched'  => array(),
 		);
 		foreach ( self::$declared as $d ) {
 			self::split( array_keys( $d['options'] ), $f['option_names'], $f['option_shapes'] );
 			foreach ( $d['options'] as $name => $leaves ) {
 				foreach ( $leaves as $leaf ) {
+					// '*' stands for any key or run of keys (a site key may
+					// hold a "/"); the leaf and everything below it count.
 					$parts = array_map(
 						static function ( $seg ) {
-							return '*' === $seg ? '[^/]+' : preg_quote( $seg, '#' );
+							return '*' === $seg ? '.+' : preg_quote( $seg, '#' );
 						},
 						explode( '/', trim( $leaf, '/' ) )
 					);
-					$f['option_leaves'][ $name ][] = '#^/' . implode( '/', $parts ) . '$#';
+					$f['option_leaves'][ $name ][] = '#^/' . implode( '/', $parts ) . '(/.*)?$#is';
 				}
 			}
 			self::split( $d['usermeta'], $f['usermeta_searched'][0], $f['usermeta_searched'][1] );
 			self::split( array_merge( $d['usermeta'], $d['user_tokens'] ), $f['usermeta_all'][0], $f['usermeta_all'][1] );
-			foreach ( $d['columns'] as $table => $cols ) {
-				$f['columns'][ $table ] = array_values( array_unique( array_merge( $f['columns'][ $table ] ?? array(), $cols ) ) );
-			}
+			self::merge_columns( $f['columns_searched'], $d['columns'] );
+			self::merge_columns( $f['columns_all'], $d['columns'] );
+			self::merge_columns( $f['columns_all'], $d['column_tokens'] );
 		}
 		$f['option_names'] = array_values( array_unique( $f['option_names'] ) );
 		self::$flat        = $f;
@@ -247,7 +342,7 @@ class Minn_Admin_Kernel_Secrets {
  * Declare where a plugin keeps its credentials (see the class header).
  *
  * @param string $plugin Plugin slug.
- * @param array  $stores options, usermeta, user_tokens, columns.
+ * @param array  $stores options, usermeta, user_tokens, columns, column_tokens.
  */
 function minn_admin_secrets( $plugin, $stores ) {
 	Minn_Admin_Kernel_Secrets::add( $plugin, $stores );

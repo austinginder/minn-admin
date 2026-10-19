@@ -32,14 +32,15 @@ function minn_admin_amelia_active() {
  * Amelia keeps its calendar, mail, WhatsApp, Zoom and payment secrets in one
  * settings row, beside the secrets its customer and employee panel sign-in
  * links are signed with and its cron key, which no screen of its own shows;
- * and each employee's Google and Outlook calendar OAuth tokens in a column.
- * Declared whether or not Amelia is active (its rows outlive it).
+ * and each employee's Google and Outlook calendar OAuth tokens in a column
+ * (one row per employee calendar, so they are hidden by name, not searched
+ * for). Declared whether or not Amelia is active (its rows outlive it).
  */
 minn_admin_secrets(
 	'ameliabooking',
 	array(
-		'options' => array( 'amelia_settings' ),
-		'columns' => array(
+		'options'       => array( 'amelia_settings' ),
+		'column_tokens' => array(
 			'amelia_providers_to_google_calendar'  => array( 'token' ),
 			'amelia_providers_to_outlook_calendar' => array( 'token' ),
 		),

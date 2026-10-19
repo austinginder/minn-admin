@@ -7,25 +7,35 @@
  * 0. Declarations. Each reads in full (no problems reported), and each sits
  *    at the top level of its adapter file, outside any function or
  *    condition, so it is made whether or not its plugin is active: a
- *    deactivated plugin's keys stay in the database.
+ *    deactivated plugin's keys stay in the database. A frozen manifest
+ *    lists every store moved off the central lists; each must stay
+ *    declared, as the same kind.
  * 1. Every declared store is hidden. A fake key is seeded into each store
- *    (a declared option row, a row of a declared name shape, each declared
- *    leaf, a declared user meta key, a declared column), then read through
+ *    declared or in the manifest (so a deleted declaration is still tested)
+ *    (an option row, a row of a name shape, each declared leaf, a user meta
+ *    key, a column), then read through
  *    the database browser's row route, its value search, and a minn-admin/v1
  *    route that hands the stored value back as an adapter that slips would
  *    (registered by this suite for the run): the key never appears whole,
- *    and the egress fence lists it. Per-user tokens (user_tokens) are
- *    checked hidden in the browser and, by design, left out of the fence's
- *    list, which stays bounded on a site with many users.
+ *    and the egress fence lists it. Tokens kept per user or per account
+ *    (user_tokens, column_tokens) are checked hidden in the browser and, by
+ *    design, left out of the fence's list, which stays bounded on a large
+ *    site. A declared leaf's harder values are found too: a site key holding
+ *    a "/", JSON below the leaf, the leaf's name in another case, a value
+ *    nine levels down, one over 512 characters, a secret with one digit.
  *    A row that exists already is borrowed: its stored bytes are kept, the
  *    fixture is written with SQL (no option hooks: the vendor sees nothing),
- *    and the bytes are put back with SQL however the run ends.
+ *    and the bytes are put back with SQL however the run ends. Each change
+ *    is written to a restore file (0600, in the temp directory) before it
+ *    is made, and a run that finds one replays it first, so a run killed
+ *    outright leaves no fake key behind.
  * 2. The check that catches the next gap. Every option an adapter reads or
  *    writes (a literal name in get_option, update_option, add_option and
  *    their site and network forms, a literal prefix joined to a variable,
  *    and the names its declarations give) is read live, and the vendor
  *    shapes below are seeded for the adapters that own them. A value holding
- *    a credential-named leaf (key, secret, token, password, passphrase,
+ *    a credential-named leaf (a value stored bare is named by its row; key,
+ *    secret, token, password, passphrase,
  *    api, licence or license, auth, jwt, private, salt, seed, nonce,
  *    credential) whose value looks like a secret fails unless the database
  *    browser redacts its row: a declaration or a central list.
@@ -151,6 +161,107 @@ foreach ( $declared as $plugin => $d ) {
 $missing = array_diff( array_keys( $top_level ), array_keys( $files ) );
 $check( 'every adapter that declares is loaded and its declaration recorded (' . count( $top_level ) . ' files)', ! $missing, implode( ', ', $missing ) );
 
+// Every store moved off the central lists (or found by the gap check
+// below), frozen: a declaration deleted
+// from its adapter (a row, a leaf, a user meta key, a column) fails here and
+// in part 1, which seeds these whether or not they are still declared. An
+// entry leaves this list only with a reason in its commit.
+$manifest = array(
+	'contact-form-7'         => array( 'options' => array( 'wpcf7' => array( 'recaptcha/*', 'turnstile/*' ) ) ),
+	'wordpress-seo'          => array(
+		'options'     => array( 'wpseo' => array() ),
+		'user_tokens' => array( '_yoast_wpseo_ai_generator_access_jwt', '_yoast_wpseo_ai_generator_refresh_jwt' ),
+	),
+	'ameliabooking'          => array(
+		'options'       => array( 'amelia_settings' => array() ),
+		'column_tokens' => array(
+			'amelia_providers_to_google_calendar'  => array( 'token' ),
+			'amelia_providers_to_outlook_calendar' => array( 'token' ),
+		),
+	),
+	'updraftplus'            => array(
+		'options'  => array_fill_keys(
+			array(
+				'updraft_updraftvault', 'updraft_dropbox', 'updraft_s3', 'updraft_cloudfiles', 'updraft_googledrive', 'updraft_onedrive',
+				'updraft_ftp', 'updraft_azure', 'updraft_sftp', 'updraft_googlecloud', 'updraft_backblaze', 'updraft_webdav', 'updraft_s3generic',
+				'updraft_pcloud', 'updraft_openstack', 'updraft_dreamobjects',
+				'updraft_central_localkeys', 'updraft_migrator_localkeys', 'updraft_remotesites', 'updraft_encryptionphrase',
+				'updraft_adminlocking', 'updraft_extradbs', 'updraftplus-addons_options',
+				'updraft_googledrive_secret', 'updraft_googledrive_token', 'updraft_dropboxtk_access_token', 'updraft_dropboxtk_request_token',
+				'updraft_s3_pass', 'updraft_s3generic_pass', 'updraft_dreamobjects_pass', 'updraft_cloudfiles_apikey', 'updraft_ftp_pass',
+				'updraft_sftp_settings', 'updraft_webdav_settings', 'updraft_jobdata_*',
+			),
+			array()
+		),
+		'usermeta' => array( 'updraftcentral_login_key' ),
+	),
+	'suretriggers'           => array( 'options' => array( 'suretrigger_options' => array() ) ),
+	'wp-statistics'          => array( 'options' => array_fill_keys( array( 'wp_statistics', 'wp_statistics_licenses', 'wp_statistics_cipher_key' ), array() ) ),
+	'better-wp-security'     => array( 'options' => array( 'itsec-storage' => array() ) ),
+	'cleantalk-spam-protect' => array( 'options' => array( 'cleantalk_sfw_worker_self_tokens' => array() ) ),
+	'jetpack'                => array( 'options' => array_fill_keys( array( 'jetpack_private_options', 'jetpack_secrets' ), array() ) ),
+	'wp-migrate-db-pro'      => array( 'usermeta' => array( 'wpmdb_licence_key' ) ),
+	'disembark'              => array( 'options' => array( 'disembark_token' => array() ) ),
+);
+$undeclared = array();
+$entries    = 0;
+foreach ( $manifest as $plugin => $m ) {
+	$d = $declared[ $plugin ] ?? array();
+	foreach ( $m as $kind => $list ) {
+		foreach ( $list as $k => $v ) {
+			++$entries;
+			if ( 'options' === $kind ) {
+				$have = $d['options'][ $k ] ?? null;
+				if ( null === $have || array_diff( $v, $have ) ) {
+					$undeclared[] = "{$plugin} {$kind} {$k}" . ( $v ? ' (' . implode( ', ', null === $have ? $v : array_diff( $v, $have ) ) . ')' : '' );
+				}
+			} elseif ( 'columns' === $kind || 'column_tokens' === $kind ) {
+				$miss = array_diff( $v, $d[ $kind ][ $k ] ?? array() );
+				if ( $miss ) {
+					$undeclared[] = "{$plugin} {$kind} {$k}." . implode( ',', $miss );
+				}
+			} elseif ( ! in_array( $v, $d[ $kind ] ?? array(), true ) ) {
+				$undeclared[] = "{$plugin} {$kind} {$v}";
+			}
+		}
+	}
+}
+$check( "every store moved off the central lists is still declared, as the same kind ({$entries} entries)", ! $undeclared, implode( '; ', $undeclared ) );
+
+// A malformed declaration registers its readable form and reports every
+// item it drops or widens; a new declaration makes every list read before
+// it stale. Probe declarations live only in this process.
+$rp_db     = new ReflectionProperty( 'Minn_Admin_DB', 'credentials' );
+$rp_egress = new ReflectionProperty( 'Minn_Admin_Egress', 'credentials' );
+$rp_db->setAccessible( true );
+$rp_egress->setAccessible( true );
+Minn_Admin_DB::egress_credentials();
+$rp_egress->setValue( null, array( 'stale' => 'abcdef' ) );
+$before = count( Minn_Admin_Kernel_Secrets::problems() );
+$pt     = 'minnprobe' . $tag;
+add_filter( 'doing_it_wrong_trigger_error', '__return_false' );
+minn_admin_secrets(
+	$pt,
+	array(
+		'options'       => $pt . '_lone',
+		'columns'       => array( 'token' ),
+		'column_tokens' => array( $pt . '_t' => 'cal' ),
+		'usermeta'      => array( '*' . $pt . '_um' ),
+	)
+);
+minn_admin_secrets( $pt . '2', array( 'options' => array( $pt . '_a_*_b_*', '*', $pt . '_leafy' => array( 'ok', 7 ) ) ) );
+remove_filter( 'doing_it_wrong_trigger_error', '__return_false' );
+$grew = count( Minn_Admin_Kernel_Secrets::problems() ) - $before;
+$check( "a malformed declaration reports every item it drops or widens ({$grew} of 7)", 7 === $grew, implode( '; ', array_slice( Minn_Admin_Kernel_Secrets::problems(), $before ) ) );
+$check(
+	'a malformed declaration still registers its readable form: a lone name, the widest shape, a lone column, a suffix-only user meta shape, a named row beside a bad leaf',
+	Minn_Admin_DB::is_credential_option( $pt . '_lone' ) && Minn_Admin_DB::is_credential_option( $pt . '_a_x_b_y' ) && Minn_Admin_DB::is_credential_option( $pt . '_leafy' )
+		&& Minn_Admin_DB::redacts_cell( $wpdb->prefix . $pt . '_t', 'cal', array( 'cal' => 'x' ) )
+		&& Minn_Admin_DB::redacts_cell( $wpdb->usermeta, 'meta_value', array( 'meta_key' => 'x' . $pt . '_um', 'meta_value' => 'x' ) )
+);
+$check( "a declaration of '*' alone is refused, not an every-row shape", ! Minn_Admin_DB::is_credential_option( 'blogname' ) );
+$check( "a new declaration drops the browser's and the fence's lists read before it", null === $rp_db->getValue() && null === $rp_egress->getValue() );
+
 /*
  * 1. Every declared store is hidden in the browser and found by the fence.
  */
@@ -203,7 +314,7 @@ $through = static function ( $what, $table, $pk, $col, $key_col, $key, $stored, 
 			$miss[] = '#' . $i;
 		}
 	}
-	$check( $searched ? "{$what}: the egress fence lists every fake key in it" : "{$what}: a per-user token stays out of the fence's list (hidden by name only)", ! $miss, implode( ', ', $miss ) );
+	$check( $searched ? "{$what}: the egress fence lists every fake key in it" : "{$what}: a token kept per user or account stays out of the fence's list (hidden by name only)", ! $miss, implode( ', ', $miss ) );
 	if ( $searched ) {
 		$echo           = $stored;
 		list( $st, $b ) = $send( 'GET', $probe );
@@ -246,24 +357,62 @@ $fixture = static function ( $name, array $leaves ) use ( $fake ) {
 	return array( $value, $fakes );
 };
 
-// Borrowed and seeded option rows, put back with SQL however the run ends.
-$borrowed = array();
-$put_back = $once( static function () use ( &$borrowed, $wpdb, $forget ) {
-	foreach ( $borrowed as $name => $was ) {
+// Every fixture is written to a restore file before it is made, and the file
+// is replayed when the next run starts: a run killed outright (SIGKILL, a
+// crashed process) leaves no fake key in a vendor's live row. The file holds
+// the borrowed rows' stored bytes, so it is the owner's alone (0600) and is
+// removed once replayed.
+$restore_file = get_temp_dir() . 'minn-secrets-tier-restore-' . md5( ABSPATH . '|' . get_current_blog_id() ) . '.json';
+$journal      = array( 'options' => array(), 'rows' => array(), 'users' => array() );
+$save_journal = static function () use ( &$journal, $restore_file ) {
+	file_put_contents( $restore_file, (string) wp_json_encode( $journal ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+	chmod( $restore_file, 0600 );
+};
+$replay = static function ( array $j ) use ( $wpdb ) {
+	foreach ( (array) ( $j['options'] ?? array() ) as $name => $was ) {
 		if ( null === $was ) {
 			$wpdb->delete( $wpdb->options, array( 'option_name' => $name ) );
 		} else {
-			$wpdb->update( $wpdb->options, array( 'option_value' => $was['option_value'], 'autoload' => $was['autoload'] ), array( 'option_name' => $name ) );
+			$wpdb->update( $wpdb->options, array( 'option_value' => base64_decode( $was['v'] ), 'autoload' => $was['a'] ), array( 'option_name' => $name ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions
 		}
 		wp_cache_delete( $name, 'options' );
 	}
+	foreach ( (array) ( $j['rows'] ?? array() ) as $r ) {
+		$wpdb->delete( $r[0], array( $r[1] => $r[2] ) );
+	}
+	foreach ( (array) ( $j['users'] ?? array() ) as $login ) {
+		$u = get_user_by( 'login', $login );
+		if ( $u ) {
+			if ( is_multisite() ) {
+				require_once ABSPATH . 'wp-admin/includes/ms.php';
+				wpmu_delete_user( $u->ID );
+			} else {
+				wp_delete_user( $u->ID );
+			}
+		}
+	}
+	wp_cache_delete( 'alloptions', 'options' );
+	wp_cache_delete( 'notoptions', 'options' );
+};
+if ( file_exists( $restore_file ) ) {
+	$left = json_decode( (string) file_get_contents( $restore_file ), true );
+	$replay( is_array( $left ) ? $left : array() );
+	unlink( $restore_file );
+	$check( 'an earlier run that ended without its cleanup is put back from its restore file', true );
+}
+$put_back = $once( static function () use ( &$journal, $replay, $restore_file, $forget ) {
+	$replay( $journal );
+	if ( file_exists( $restore_file ) ) {
+		unlink( $restore_file );
+	}
 	$forget();
 } );
-$seed_option = static function ( $name, $value ) use ( &$borrowed, $wpdb ) {
+$seed_option = static function ( $name, $value ) use ( &$journal, $save_journal, $wpdb ) {
 	$raw = maybe_serialize( $value );
 	$was = $wpdb->get_row( $wpdb->prepare( "SELECT option_value, autoload FROM {$wpdb->options} WHERE option_name = %s", $name ), ARRAY_A );
-	if ( ! array_key_exists( $name, $borrowed ) ) {
-		$borrowed[ $name ] = $was ? $was : null;
+	if ( ! array_key_exists( $name, $journal['options'] ) ) {
+		$journal['options'][ $name ] = $was ? array( 'v' => base64_encode( $was['option_value'] ), 'a' => $was['autoload'] ) : null; // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions
+		$save_journal();
 	}
 	if ( $was ) {
 		$wpdb->update( $wpdb->options, array( 'option_value' => $raw ), array( 'option_name' => $name ) );
@@ -274,80 +423,122 @@ $seed_option = static function ( $name, $value ) use ( &$borrowed, $wpdb ) {
 	return (int) $wpdb->get_var( $wpdb->prepare( "SELECT option_id FROM {$wpdb->options} WHERE option_name = %s", $name ) );
 };
 
-$fixture_user = 0;
-$col_rows     = array();
-$drop_user    = $once( static function () use ( &$fixture_user, &$col_rows, $wpdb ) {
-	if ( $fixture_user ) {
-		wp_delete_user( $fixture_user );
+// The cases: every declaration, and every entry of the manifest whether or
+// not it is still declared, so a declaration deleted from its adapter is
+// still seeded here and fails.
+$cases = $manifest;
+foreach ( $declared as $plugin => $d ) {
+	foreach ( array( 'options', 'usermeta', 'user_tokens', 'columns', 'column_tokens' ) as $kind ) {
+		foreach ( $d[ $kind ] as $k => $v ) {
+			if ( 'options' === $kind ) {
+				$cases[ $plugin ]['options'][ $k ] = array_values( array_unique( array_merge( $cases[ $plugin ]['options'][ $k ] ?? array(), $v ) ) );
+			} elseif ( 'columns' === $kind || 'column_tokens' === $kind ) {
+				$cases[ $plugin ][ $kind ][ $k ] = array_values( array_unique( array_merge( $cases[ $plugin ][ $kind ][ $k ] ?? array(), $v ) ) );
+			} else {
+				$cases[ $plugin ][ $kind ][] = $v;
+			}
+		}
 	}
-	foreach ( $col_rows as $r ) {
-		$wpdb->delete( $r[0], array( $r[1] => $r[2] ) );
-	}
-} );
+}
 
 try {
-	// Seed every declared option row and shape first, then read them all:
-	// the fence's list is built once, as a request builds it.
+	// Seed every option row and shape first, then read them all: the
+	// fence's list is built once, as a request builds it.
 	$opt_cases = array();
-	foreach ( $declared as $plugin => $d ) {
-		foreach ( $d['options'] as $name => $leaves ) {
-			$at = strpos( $name, '*' );
+	foreach ( $cases as $plugin => $d ) {
+		foreach ( $d['options'] ?? array() as $name => $leaves ) {
+			$at       = strpos( $name, '*' );
 			$row_name = false === $at ? $name : substr( $name, 0, $at ) . 'minn' . $tag . substr( $name, $at + 1 );
 			list( $value, $fakes ) = $fixture( $row_name, $leaves );
-			$id = $seed_option( $row_name, $value );
+			$id          = $seed_option( $row_name, $value );
 			$opt_cases[] = array( "{$plugin} option {$name}" . ( $leaves ? ' (leaves ' . implode( ', ', $leaves ) . ')' : '' ), $id, $row_name, $value, $fakes, $leaves );
+		}
+	}
+	// The values a declared leaf must still find: a site key holding a "/",
+	// a JSON string below the leaf, the leaf's name in another case, a value
+	// nine levels down, a value longer than 512 characters, and a captcha
+	// secret with a single digit.
+	$hard = null;
+	foreach ( $cases['contact-form-7']['options'] ?? array() as $name => $leaves ) {
+		if ( in_array( 'recaptcha/*', $leaves, true ) && in_array( 'turnstile/*', $leaves, true ) ) {
+			$hf       = array(
+				'slash' => $fake( 'slash' ),
+				'json'  => $fake( 'json' ),
+				'case'  => $fake( 'case' ),
+				'deep'  => $fake( 'deep' ),
+				'long'  => str_repeat( $fake( 'long' ), 20 ),
+				'digit' => 'Lo' . ucfirst( $tag ) . 'XyZwAbCdEfGh-1',
+			);
+			$hard     = array( $hf, array(
+				'recaptcha' => array(
+					'6Lc/site+key/' . $tag              => $hf['slash'],
+					'deep'                              => array( 'a' => array( 'b' => array( 'c' => array( 'd' => array( 'e' => array( 'f' => array( 'g' => $hf['deep'] ) ) ) ) ) ) ),
+					'6LcLong' . $tag                    => $hf['long'],
+				),
+				'turnstile' => array(
+					'0x4AAAA' . $tag => wp_json_encode( array( 'k1' => $hf['json'] ) ),
+					'0x4BBBB' . $tag => $hf['digit'],
+				),
+				'RECAPTCHA' => array( '6LcUpper' . $tag => $hf['case'] ),
+			) );
 		}
 	}
 	// Declared columns, on a row added to the live table when it exists.
 	$col_cases = array();
-	foreach ( $declared as $plugin => $d ) {
-		foreach ( $d['columns'] as $table => $cols ) {
-			$t = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $wpdb->prefix . $table ) ) );
-			if ( ! $t ) {
-				$skip( "{$plugin} columns of {$table}: no such table here" );
-				continue;
-			}
-			$pk = $wpdb->get_results( "SHOW KEYS FROM `{$t}` WHERE Key_name = 'PRIMARY'", ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the name SHOW TABLES gave.
-			if ( 1 !== count( $pk ) ) {
-				$skip( "{$plugin} columns of {$table}: no single-column primary key to clean up by" );
-				continue;
-			}
-			$pkc  = $pk[0]['Column_name'];
-			$row  = array();
-			$cols_meta = $wpdb->get_results( "SHOW COLUMNS FROM `{$t}`", ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- as above.
-			foreach ( $cols_meta as $c ) {
-				if ( 'NO' === $c['Null'] && null === $c['Default'] && false === strpos( (string) $c['Extra'], 'auto_increment' ) ) {
-					$row[ $c['Field'] ] = preg_match( '/int|decimal|float|double/i', $c['Type'] ) ? 0 : '';
+	foreach ( $cases as $plugin => $d ) {
+		foreach ( array( 'columns' => true, 'column_tokens' => false ) as $kind => $searched ) {
+			foreach ( $d[ $kind ] ?? array() as $table => $cols ) {
+				$t = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $wpdb->prefix . $table ) ) );
+				if ( ! $t ) {
+					$skip( "{$plugin} {$kind} of {$table}: no such table here" );
+					continue;
 				}
+				$pk = $wpdb->get_results( "SHOW KEYS FROM `{$t}` WHERE Key_name = 'PRIMARY'", ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the name SHOW TABLES gave.
+				if ( 1 !== count( $pk ) ) {
+					$skip( "{$plugin} {$kind} of {$table}: no single-column primary key to clean up by" );
+					continue;
+				}
+				$pkc       = $pk[0]['Column_name'];
+				$row       = array();
+				$cols_meta = $wpdb->get_results( "SHOW COLUMNS FROM `{$t}`", ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- as above.
+				foreach ( $cols_meta as $c ) {
+					if ( 'NO' === $c['Null'] && null === $c['Default'] && false === strpos( (string) $c['Extra'], 'auto_increment' ) ) {
+						$row[ $c['Field'] ] = preg_match( '/int|decimal|float|double/i', $c['Type'] ) ? 0 : '';
+					}
+				}
+				$fakes = array();
+				foreach ( $cols as $col ) {
+					$k             = $fake( $table . $col );
+					$row[ $col ]   = wp_json_encode( array( 'access_token' => $k, 'token_type' => 'Bearer' ) );
+					$fakes[ $col ] = $k;
+				}
+				$first                = array_key_first( $fakes );
+				$journal['rows'][]    = array( $t, $first, $row[ $first ] );
+				$save_journal();
+				if ( ! $wpdb->insert( $t, $row ) ) {
+					$skip( "{$plugin} {$kind} of {$table}: the fixture row was refused" );
+					continue;
+				}
+				$col_cases[] = array( "{$plugin} {$kind}", $t, $pkc, (int) $wpdb->insert_id, $fakes, $row, $searched );
 			}
-			$fakes = array();
-			foreach ( $cols as $col ) {
-				$k            = $fake( $table . $col );
-				$row[ $col ]  = wp_json_encode( array( 'access_token' => $k, 'token_type' => 'Bearer' ) );
-				$fakes[ $col ] = $k;
-			}
-			if ( ! $wpdb->insert( $t, $row ) ) {
-				$skip( "{$plugin} columns of {$table}: the fixture row was refused ({$wpdb->last_error})" );
-				continue;
-			}
-			$col_rows[]  = array( $t, $pkc, (int) $wpdb->insert_id );
-			$col_cases[] = array( $plugin, $t, $pkc, (int) $wpdb->insert_id, $fakes, $row );
 		}
 	}
 	// Declared user meta, on a fixture user.
 	$um_cases = array();
 	$um_all   = array();
-	foreach ( $declared as $plugin => $d ) {
+	foreach ( $cases as $plugin => $d ) {
 		foreach ( array( 'usermeta' => true, 'user_tokens' => false ) as $kind => $searched ) {
-			foreach ( $d[ $kind ] as $key ) {
+			foreach ( array_unique( $d[ $kind ] ?? array() ) as $key ) {
 				$um_all[] = array( $plugin, $kind, $key, $searched );
 			}
 		}
 	}
 	if ( $um_all ) {
-		$fixture_user = wp_insert_user( array( 'user_login' => 'minnsecrets_' . $tag, 'user_pass' => wp_generate_password( 24 ), 'user_email' => 'minnsecrets_' . $tag . '@example.test', 'role' => 'subscriber' ) );
+		$login               = 'minnsecrets_' . $tag;
+		$journal['users'][] = $login;
+		$save_journal();
+		$fixture_user = wp_insert_user( array( 'user_login' => $login, 'user_pass' => wp_generate_password( 24 ), 'user_email' => $login . '@example.test', 'role' => 'subscriber' ) );
 		if ( is_wp_error( $fixture_user ) ) {
-			$fixture_user = 0;
 			$skip( 'declared user meta: fixture user not made' );
 		} else {
 			foreach ( $um_all as $u ) {
@@ -373,10 +564,24 @@ try {
 			$check( "{$what}: its leaves are found only because they are declared", ! array_intersect( $fakes, $by_name ) );
 		}
 	}
+	if ( $hard ) {
+		list( $hf, $hv ) = $hard;
+		// The hard values go into the declared row itself, borrowed as above.
+		$seed_option( 'wpcf7', $hv );
+		$forget();
+		$list = Minn_Admin_DB::egress_credentials();
+		foreach ( $hf as $what => $k ) {
+			$check( "contact-form-7 leaves: a {$what} value under a declared leaf is one of the fence's needles", in_array( $k, $list, true ) );
+		}
+		$echo           = array( 'note' => 'secret ' . $hf['digit'] );
+		list( $st, $b ) = $send( 'GET', $probe );
+		$echo           = '';
+		$check( "contact-form-7 leaves: a response holding only the single-digit secret is scanned and masked ({$st})", 200 === $st && false === strpos( $b, $hf['digit'] ) && false !== strpos( $b, '[redacted:' ) );
+	}
 	foreach ( $col_cases as $c ) {
-		list( $plugin, $t, $pkc, $id, $fakes, $row ) = $c;
+		list( $what, $t, $pkc, $id, $fakes, $row, $searched ) = $c;
 		foreach ( $fakes as $col => $k ) {
-			$through( "{$plugin} column {$t}.{$col}", $t, array( $pkc => $id ), $col, '', '', $row[ $col ], array( $k ) );
+			$through( "{$what} {$t}.{$col}", $t, array( $pkc => $id ), $col, '', '', $row[ $col ], array( $k ), $searched );
 		}
 	}
 	foreach ( $um_cases as $c ) {
@@ -387,7 +592,6 @@ try {
 	$check( "the fence's list stays bounded with every store seeded ({$n} credentials)", $n > 0 && $n < 500 );
 } finally {
 	$put_back();
-	$drop_user();
 	$echo = '';
 }
 
@@ -535,7 +739,8 @@ $leaves_of = static function ( $v, $path = '', $depth = 0 ) use ( &$leaves_of ) 
 	return array();
 };
 // A credential-named leaf whose value looks like a secret (see the header).
-$credential_leaf = static function ( $path, $value ) {
+// A value stored bare has no leaf name, so the row's own name stands in.
+$credential_leaf = static function ( $path, $value, $row ) {
 	$segs = array_values(
 		array_filter(
 			explode( '/', trim( $path, '/' ) ),
@@ -544,7 +749,7 @@ $credential_leaf = static function ( $path, $value ) {
 			}
 		)
 	);
-	$leaf = strtolower( preg_replace( '/([a-z0-9])([A-Z])/', '$1_$2', (string) end( $segs ) ) );
+	$leaf = strtolower( preg_replace( '/([a-z0-9])([A-Z])/', '$1_$2', $segs ? (string) end( $segs ) : (string) $row ) );
 	$leaf = str_replace( '-', '_', $leaf );
 	if ( '' === $leaf || ! preg_match( '/secret|token|passw|passphrase|apikey|api_key|licen[cs]e|jwt|credential|(^|_)(key|keys|pass|pwd|api|auth|private|salt|seed|nonce|accesskey|secretkey)(_|$)/', $leaf ) ) {
 		return false;
@@ -601,7 +806,7 @@ foreach ( $touched as $name => $by ) {
 		++$scanned;
 		$hits = array();
 		foreach ( $leaves_of( (string) $raw ) as $leaf ) {
-			if ( $credential_leaf( $leaf[0], $leaf[1] ) ) {
+			if ( $credential_leaf( $leaf[0], $leaf[1], $row ) ) {
 				$hits[] = '' === $leaf[0] ? '(whole value)' : $leaf[0];
 			}
 		}

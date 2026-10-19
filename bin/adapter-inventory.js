@@ -161,11 +161,11 @@ function declaredStores( src ) {
 	let m;
 	while ( ( m = re.exec( src ) ) ) {
 		const body = parens( src, m.index + m[ 0 ].indexOf( '(' ) );
-		for ( const key of [ 'options', 'usermeta', 'user_tokens', 'columns' ] ) {
+		for ( const key of [ 'options', 'usermeta', 'user_tokens', 'columns', 'column_tokens' ] ) {
 			const at = body.search( new RegExp( "'" + key + "'\\s*=>\\s*array\\s*\\(" ) );
 			if ( at < 0 ) continue;
 			const list = quoted( parens( body, body.indexOf( '(', at ) ) );
-			if ( 'columns' === key ) {
+			if ( 'columns' === key || 'column_tokens' === key ) {
 				let table = '';
 				list.forEach( ( q ) => {
 					if ( 0 === q.depth ) table = q.value;

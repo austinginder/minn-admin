@@ -21,6 +21,10 @@
  * Raising a ceiling is a decision, not a fix: the commit says why the rule
  * could not go through the kernel. No browser and no site: it reads the
  * source tree.
+ *
+ * declared_rows (credential stores adapters declare with minn_admin_secrets())
+ * runs the other way: it may only rise, and a rise is written into the
+ * fixture the same way, so a declaration deleted later fails here.
  */
 'use strict';
 
@@ -36,13 +40,17 @@ const MEASURES = {
 	hand_clips: 'cut stored text with Minn_Admin_Egress::clip()',
 };
 
+const RISING = {
+	declared_rows: 'a credential store moved off the central lists stays declared in its adapter',
+};
+
 const root = path.resolve( __dirname, '..' );
 const file = path.join( __dirname, 'fixtures', 'surface-ratchet.json' );
 const now = JSON.parse( execFileSync( process.execPath, [ path.join( root, 'bin', 'adapter-inventory.js' ) ], { cwd: root, encoding: 'utf8' } ) );
 
 if ( 'write' === process.env.MINN_RATCHET ) {
 	const out = {};
-	Object.keys( MEASURES ).forEach( ( k ) => ( out[ k ] = now[ k ] ) );
+	Object.keys( MEASURES ).concat( Object.keys( RISING ) ).forEach( ( k ) => ( out[ k ] = now[ k ] ) );
 	fs.writeFileSync( file, JSON.stringify( out, null, '\t' ) + '\n' );
 	console.log( 'WROTE surface-ratchet.json: ' + JSON.stringify( out ) );
 	process.exit( 0 );
@@ -60,6 +68,12 @@ Object.keys( MEASURES ).forEach( ( k ) => {
 	const ceiling = ceilings[ k ];
 	check( k + ' does not rise (' + count + ', ceiling ' + ceiling + ')', count <= ceiling, MEASURES[ k ] );
 	check( k + ' ceiling matches the tree', count >= ceiling, k + ' fell to ' + count + ': lower the ceiling with MINN_RATCHET=write and commit it with the change' );
+} );
+Object.keys( RISING ).forEach( ( k ) => {
+	const count = now[ k ];
+	const floor = ceilings[ k ] || 0;
+	check( k + ' does not fall (' + count + ', floor ' + floor + ')', count >= floor, RISING[ k ] );
+	check( k + ' floor matches the tree', count <= floor, k + ' rose to ' + count + ': raise the floor with MINN_RATCHET=write and commit it with the change' );
 } );
 console.log( '\nsurface-ratchet: ' + ( total - failed ) + '/' + total + ' passed (credential rows only the central lists know: ' + now.credential_rows + ')' );
 process.exit( failed ? 1 : 0 );

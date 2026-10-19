@@ -155,10 +155,25 @@ class Minn_Admin_Egress {
 		self::$named    = array();
 	}
 
+	/**
+	 * The object cache key for the list: named by the adapters'
+	 * declarations, so a process whose adapters declare other stores (a
+	 * newer copy of the plugin, a declaration added at run time) never
+	 * reads a list built without them.
+	 */
+	private static function cache_key() {
+		return 'egress_credentials' . ( class_exists( 'Minn_Admin_Kernel_Secrets', false ) ? '_' . Minn_Admin_Kernel_Secrets::hash() : '' );
+	}
+
+	/** An adapter declared credential stores: read the list again when next needed. */
+	public static function declarations_changed() {
+		self::$credentials = null;
+	}
+
 	/** Read the credentials again when next needed. */
 	private static function forget() {
 		self::$credentials = null;
-		wp_cache_delete( 'egress_credentials', 'minn_admin' );
+		wp_cache_delete( self::cache_key(), 'minn_admin' );
 		if ( method_exists( 'Minn_Admin_DB', 'forget_credentials' ) ) {
 			Minn_Admin_DB::forget_credentials();
 		}
@@ -178,7 +193,7 @@ class Minn_Admin_Egress {
 	 * @param string $option Option name.
 	 */
 	public static function changed( $option ) {
-		if ( null === self::$credentials && ( ! wp_using_ext_object_cache() || false === wp_cache_get( 'egress_credentials', 'minn_admin' ) ) ) {
+		if ( null === self::$credentials && ( ! wp_using_ext_object_cache() || false === wp_cache_get( self::cache_key(), 'minn_admin' ) ) ) {
 			return;
 		}
 		if ( ! did_action( 'init' ) || self::$depth < 1 ) {
@@ -215,11 +230,11 @@ class Minn_Admin_Egress {
 	private static function credentials() {
 		if ( null === self::$credentials ) {
 			self::$credentials = array();
-			$list              = wp_using_ext_object_cache() ? wp_cache_get( 'egress_credentials', 'minn_admin' ) : false;
+			$list              = wp_using_ext_object_cache() ? wp_cache_get( self::cache_key(), 'minn_admin' ) : false;
 			if ( ! is_array( $list ) ) {
 				$list = method_exists( 'Minn_Admin_DB', 'egress_credentials' ) ? Minn_Admin_DB::egress_credentials() : array();
 				if ( wp_using_ext_object_cache() ) {
-					wp_cache_set( 'egress_credentials', $list, 'minn_admin', MINUTE_IN_SECONDS );
+					wp_cache_set( self::cache_key(), $list, 'minn_admin', MINUTE_IN_SECONDS );
 				}
 			}
 			if ( $list ) {
@@ -294,7 +309,9 @@ class Minn_Admin_Egress {
 
 	/**
 	 * Whether JSON text holds anything shaped like a key: a run of 16 or more
-	 * token characters with at least three digits and three letters, read
+	 * token characters that Minn_Admin_DB::key_shaped() calls a key (the
+	 * same rule a declared leaf's value is held to, so no needle is one the
+	 * scan skips), read
 	 * with escaped slashes (at any depth) and URL-encoded slashes, pluses
 	 * and equals decoded, and broken at query separators so
 	 * "_wpnonce=<nonce>" is two short runs.
@@ -305,7 +322,7 @@ class Minn_Admin_Egress {
 			return false;
 		}
 		foreach ( $m[0] as $run ) {
-			if ( preg_match_all( '/\d/', $run ) >= 3 && preg_match_all( '/[A-Za-z]/', $run ) >= 3 ) {
+			if ( method_exists( 'Minn_Admin_DB', 'key_shaped' ) ? Minn_Admin_DB::key_shaped( $run ) : ( preg_match_all( '/\d/', $run ) >= 3 && preg_match_all( '/[A-Za-z]/', $run ) >= 3 ) ) {
 				return true;
 			}
 		}

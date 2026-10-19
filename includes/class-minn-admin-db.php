@@ -1436,7 +1436,7 @@ class Minn_Admin_DB {
 		// The credential columns of the tables is_secret_cell() names, and the
 		// ones adapters declare.
 		$columns = self::SECRET_COLUMN_SOURCES;
-		foreach ( Minn_Admin_Kernel_Secrets::columns() as $base => $cols ) {
+		foreach ( Minn_Admin_Kernel_Secrets::columns( true ) as $base => $cols ) {
 			$columns[ $base ] = array_values( array_unique( array_merge( $columns[ $base ] ?? array(), $cols ) ) );
 		}
 		foreach ( $columns as $base => $cols ) {
@@ -1451,11 +1451,12 @@ class Minn_Admin_DB {
 			$credentials += self::credential_strings( (string) $raw );
 		}
 		// Leaves an adapter names inside a row, whatever they are called (a
-		// secret keyed by its public site key): each counts when it is
-		// shaped like a key.
-		$leafy = Minn_Admin_Kernel_Secrets::option_leaves();
+		// secret keyed by its public site key), and anything below them, to
+		// any depth: each counts when it is shaped like a key (key_shaped(),
+		// the egress fence's own gate), whatever its length.
+		$leafy = array_change_key_case( Minn_Admin_Kernel_Secrets::option_leaves(), CASE_LOWER );
 		if ( $leafy ) {
-			$in = implode( ',', array_fill( 0, count( $leafy ), '%s' ) );
+			$in   = implode( ',', array_fill( 0, count( $leafy ), '%s' ) );
 			$rows = array();
 			foreach ( $stores as $store ) {
 				list( $table, $kcol, $vcol ) = $store;
@@ -1466,11 +1467,12 @@ class Minn_Admin_DB {
 				$rows = array_merge( $rows, (array) $wpdb->get_results( $wpdb->prepare( "SELECT `{$kcol}` AS k, `{$vcol}` AS v FROM `{$table}` WHERE `{$kcol}` IN ({$in})", array_keys( $leafy ) ), ARRAY_A ) );
 			}
 			foreach ( $rows as $row ) {
-				foreach ( self::credential_leaves( (string) $row['v'] ) as $leaf ) {
-					foreach ( $leafy[ $row['k'] ] ?? array() as $re ) {
+				foreach ( self::credential_leaves( (string) $row['v'], '', 0, 32 ) as $leaf ) {
+					foreach ( $leafy[ strtolower( (string) $row['k'] ) ] ?? array() as $re ) {
 						$v = rtrim( $leaf[1], '=' );
-						if ( preg_match( $re, $leaf[0] ) && self::is_credential_leaf( '', $v ) ) {
+						if ( preg_match( $re, $leaf[0] ) && preg_match( '#^[A-Za-z0-9_\-+/]{16,}$#', $v ) && self::key_shaped( $v ) ) {
 							$credentials[ $v ] = $leaf[0];
+							break;
 						}
 					}
 				}
@@ -1591,8 +1593,8 @@ class Minn_Admin_DB {
 	 *
 	 * @return array[] [ path, value ] pairs.
 	 */
-	private static function credential_leaves( $v, $path = '', $depth = 0 ) {
-		if ( $depth > 6 ) {
+	private static function credential_leaves( $v, $path = '', $depth = 0, $max = 6 ) {
+		if ( $depth > $max ) {
 			return array();
 		}
 		if ( is_string( $v ) ) {
@@ -1600,19 +1602,19 @@ class Minn_Admin_DB {
 			if ( is_serialized( $t ) ) {
 				$u = @unserialize( $t, array( 'allowed_classes' => false ) ); // phpcs:ignore WordPress.PHP.NoSilencedErrors,WordPress.PHP.DiscouragedPHPFunctions -- no classes: nothing is woken.
 				if ( false !== $u || 'b:0;' === $t ) {
-					return self::credential_leaves( $u, $path, $depth + 1 );
+					return self::credential_leaves( $u, $path, $depth + 1, $max );
 				}
 			}
 			if ( '' !== $t && ( '{' === $t[0] || '[' === $t[0] ) ) {
 				$j = json_decode( $t, true );
 				if ( is_array( $j ) ) {
-					return self::credential_leaves( $j, $path, $depth + 1 );
+					return self::credential_leaves( $j, $path, $depth + 1, $max );
 				}
 			}
 			if ( strlen( $t ) >= 24 && preg_match( '#^[A-Za-z0-9+/]+={0,2}$#', $t ) ) {
 				$b = base64_decode( $t, true );
 				if ( false !== $b && ( is_serialized( $b ) || ( '' !== $b && '{' === $b[0] ) ) ) {
-					return self::credential_leaves( $b, $path, $depth + 1 );
+					return self::credential_leaves( $b, $path, $depth + 1, $max );
 				}
 			}
 			return array( array( $path, $t ) );
@@ -1620,11 +1622,30 @@ class Minn_Admin_DB {
 		if ( is_array( $v ) || is_object( $v ) ) {
 			$out = array();
 			foreach ( (array) $v as $k => $x ) {
-				$out = array_merge( $out, self::credential_leaves( $x, $path . '/' . preg_replace( '/^\0[^\0]*\0/', '', (string) $k ), $depth + 1 ) );
+				$out = array_merge( $out, self::credential_leaves( $x, $path . '/' . preg_replace( '/^\0[^\0]*\0/', '', (string) $k ), $depth + 1, $max ) );
 			}
 			return $out;
 		}
 		return array();
+	}
+
+	/**
+	 * Whether a run of token characters is shaped like a key: three digits
+	 * and three letters, or both cases of letters with a digit or a symbol
+	 * among them (a captcha secret can have fewer than three digits; a slug
+	 * or a word is one case). The egress fence scans a response only when a
+	 * run passes this, and a declared leaf's value counts only when it does,
+	 * so every needle from a declared leaf is one the scan looks for.
+	 *
+	 * @param string $run Token characters.
+	 * @return bool
+	 */
+	public static function key_shaped( $run ) {
+		$run = (string) $run;
+		if ( preg_match_all( '/\d/', $run ) >= 3 && preg_match_all( '/[A-Za-z]/', $run ) >= 3 ) {
+			return true;
+		}
+		return (bool) ( preg_match( '/[a-z]/', $run ) && preg_match( '/[A-Z]/', $run ) && preg_match( '/[\d_\-+\/]/', $run ) );
 	}
 
 	/**
