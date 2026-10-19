@@ -33,6 +33,14 @@ function minn_admin_cleantalk_active() {
 	return defined( 'APBCT_VERSION' );
 }
 
+/*
+ * CleanTalk's self-call tokens let a request skip its remote-call rate limit
+ * for two minutes. Its access key and dashboard token are the licences
+ * screen's (minn_admin_license_secret_options()). Declared whether or not
+ * CleanTalk is active (its rows outlive it).
+ */
+minn_admin_secrets( 'cleantalk-spam-protect', array( 'options' => array( 'cleantalk_sfw_worker_self_tokens' ) ) );
+
 /** True when CLEANTALK_ACCESS_KEY supplies the key (read-only). */
 function minn_admin_cleantalk_key_predefined() {
 	return defined( 'CLEANTALK_ACCESS_KEY' ) && CLEANTALK_ACCESS_KEY;

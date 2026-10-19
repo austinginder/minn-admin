@@ -33,6 +33,13 @@ function minn_admin_wps_ready() {
 	return current_user_can( $cap );
 }
 
+/*
+ * WP Statistics keeps its MaxMind and DB-IP licence keys in its settings
+ * row, its add-on licences apart and, on a site without salts, its
+ * encryption key. Declared whether or not it is active (its rows outlive it).
+ */
+minn_admin_secrets( 'wp-statistics', array( 'options' => array( 'wp_statistics', 'wp_statistics_licenses', 'wp_statistics_cipher_key' ) ) );
+
 add_filter( 'minn_admin_traffic', function ( $traffic, $days ) {
 	if ( null !== $traffic || ! defined( 'WP_STATISTICS_VERSION' ) ) {
 		return $traffic;

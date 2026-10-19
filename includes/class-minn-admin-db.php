@@ -1187,32 +1187,24 @@ class Minn_Admin_DB {
 		array( '', 'elementor_connect_common_data' ),
 	);
 
-	const SECRET_USERMETA_KEYS = array( 'session_tokens', '_application_passwords', '_two_factor_totp_key', '_two_factor_backup_codes', 'one_time_login_token', 'captaincore_login_token', 'sucuriscan_topt_secret_key', 'sucuriscan_topt_backup_codes', '_two_factor_email_token', 'tfa_priv_key_64', 'simba_tfa_emergency_codes_64', 'tfa_trusted_devices', 'wpmdb_licence_key' );
+	const SECRET_USERMETA_KEYS = array( 'session_tokens', '_application_passwords', '_two_factor_totp_key', '_two_factor_backup_codes', 'one_time_login_token', 'captaincore_login_token', 'sucuriscan_topt_secret_key', 'sucuriscan_topt_backup_codes', '_two_factor_email_token', 'tfa_priv_key_64', 'simba_tfa_emergency_codes_64', 'tfa_trusted_devices' );
 
 	/**
 	 * Option and network option rows redacted whole: core's keys and salts,
 	 * plus rows that hold another vendor's live credentials, which their own
-	 * screens mask and Minn's adapters read for presence only. Jetpack's blog
-	 * and per-user tokens (a user token signs REST requests as that user and
-	 * outlives a password change), the WooCommerce.com account link, WP Mail
-	 * SMTP's provider keys, the key that seals its SMTP password and the
-	 * one-hour token its logged-out Connect endpoint is checked against, All In
-	 * One Security's captcha secrets (the peer of Wordfence's redacted one),
-	 * Post SMTP's settings and its plaintext OAuth access and refresh tokens,
-	 * Freemius accounts (user, install and licence secret keys), the WPMU DEV
-	 * key (the HMAC secret its Hub's remote commands are verified with) and
-	 * Smush's validation cache, which is keyed by that same key. Formidable
-	 * Lite's usage uuid is the password it signs Connect requests with when
-	 * no licence is active; Solid Security keeps its Network Brute Force API
-	 * key and secret in itsec-storage; OttoKit's settings row holds the
-	 * secret its SaaS signs every call to the site with; WP Statistics keeps
-	 * its MaxMind and DB-IP licence keys in its settings row, its add-on
-	 * licences apart and, on a site without salts, its encryption key;
+	 * screens mask and Minn's adapters read for presence only. The
+	 * WooCommerce.com account link, WP Mail SMTP's provider keys, the key that
+	 * seals its SMTP password and the one-hour token its logged-out Connect
+	 * endpoint is checked against, All In One Security's captcha secrets (the
+	 * peer of Wordfence's redacted one), Post SMTP's settings and its
+	 * plaintext OAuth access and refresh tokens, Freemius accounts (user,
+	 * install and licence secret keys), the WPMU DEV key (the HMAC secret its
+	 * Hub's remote commands are verified with) and Smush's validation cache,
+	 * which is keyed by that same key. Formidable Lite's usage uuid is the
+	 * password it signs Connect requests with when no licence is active;
 	 * Independent Analytics signs tracking payloads with one salt and hashes
-	 * visitors with another; SureCart keeps its reCAPTCHA secret and its
-	 * webhook signing secret (sealed with a key that may not exist); and
-	 * CleanTalk's self-call tokens let a request skip its remote-call rate
-	 * limit for two minutes. Core's plugin
+	 * visitors with another; and SureCart keeps its reCAPTCHA secret and its
+	 * webhook signing secret (sealed with a key that may not exist). Core's plugin
 	 * and theme update caches hold every premium vendor's download link, and
 	 * some links carry the licence key; Gravity Forms' telemetry snapshot
 	 * copies its key. Freemius' API cache keeps its licence answers, secret keys
@@ -1233,7 +1225,7 @@ class Minn_Admin_DB {
 	 * instead (minn_admin_secrets(), includes/kernel/class-minn-admin-kernel-secrets.php);
 	 * this list is for the plugins no adapter covers.
 	 */
-	const SECRET_OPTION_KEYS = array( 'auth_key', 'secure_auth_key', 'logged_in_key', 'nonce_key', 'auth_salt', 'secure_auth_salt', 'logged_in_salt', 'nonce_salt', 'secret_key', 'jetpack_private_options', 'woocommerce_helper_data', 'wp_mail_smtp', 'wp_mail_smtp_mail_key', '_transient_wp_mail_smtp_connect_token', 'aio_wp_security_configs', 'postman_options', 'postman_auth_token', 'fs_accounts', 'wpmudev_apikey', 'wp_smush_api_auth', 'jetpack_secrets', '_site_transient_update_plugins', '_site_transient_update_themes', 'gf_telemetry_data', '_site_transient_wp_rocket_update_data', 'fs_api_cache', 'fs_dbg_api_cache', 'wpforms_settings', 'wpforms_crypto_secret_key', 'wpforms_square_connections', 'frm-usage-uuid', 'itsec-storage', 'suretrigger_options', 'wp_statistics', 'wp_statistics_licenses', 'wp_statistics_cipher_key', 'iawp_salt', 'iawp_request_payload_salt', 'surecart_recaptcha_secret_key', 'surecart_registered_webhook', 'surecart_previous_webhook', 'cleantalk_sfw_worker_self_tokens', 'fluentmail-settings', '_fluent_smtp_notify_settings', 'postman_office365_oauth', 'post_smtp_mobile_app_connection', 'suremails_connections', 'gosmtp_options', 'swpsmtp_options', 'swpsmtp_enc_key', 'site_mailer_client_secret', 'site_mailer_access_token', 'site_mailer_refresh_token', 'site_mailer_user_access_token', 'site_mailer_unsubscribe_encryption_data' );
+	const SECRET_OPTION_KEYS = array( 'auth_key', 'secure_auth_key', 'logged_in_key', 'nonce_key', 'auth_salt', 'secure_auth_salt', 'logged_in_salt', 'nonce_salt', 'secret_key', 'woocommerce_helper_data', 'wp_mail_smtp', 'wp_mail_smtp_mail_key', '_transient_wp_mail_smtp_connect_token', 'aio_wp_security_configs', 'postman_options', 'postman_auth_token', 'fs_accounts', 'wpmudev_apikey', 'wp_smush_api_auth', '_site_transient_update_plugins', '_site_transient_update_themes', 'gf_telemetry_data', '_site_transient_wp_rocket_update_data', 'fs_api_cache', 'fs_dbg_api_cache', 'wpforms_settings', 'wpforms_crypto_secret_key', 'wpforms_square_connections', 'frm-usage-uuid', 'iawp_salt', 'iawp_request_payload_salt', 'surecart_recaptcha_secret_key', 'surecart_registered_webhook', 'surecart_previous_webhook', 'fluentmail-settings', '_fluent_smtp_notify_settings', 'postman_office365_oauth', 'post_smtp_mobile_app_connection', 'suremails_connections', 'gosmtp_options', 'swpsmtp_options', 'swpsmtp_enc_key', 'site_mailer_client_secret', 'site_mailer_access_token', 'site_mailer_refresh_token', 'site_mailer_user_access_token', 'site_mailer_unsubscribe_encryption_data' );
 
 	/**
 	 * Whether a whole COLUMN can hold a credential on some row, so it must
@@ -1391,7 +1383,7 @@ class Minn_Admin_DB {
 		// into the cron option's arguments. An adapter's declared user meta
 		// counts, a shape only when it has a prefix to search by.
 		list( $um_keys, $um_shapes ) = Minn_Admin_Kernel_Secrets::usermeta( true );
-		$um_keys = array_merge( $um_keys, array( 'wpmdb_licence_key', 'one_time_login_token' ) );
+		$um_keys = array_merge( $um_keys, array( 'one_time_login_token' ) );
 		foreach ( array_unique( array( $wpdb->get_blog_prefix(), $wpdb->base_prefix ) ) as $prefix ) {
 			$um_keys[] = $prefix . 'elementor_connect_common_data';
 		}

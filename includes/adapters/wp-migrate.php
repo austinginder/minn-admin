@@ -31,6 +31,13 @@ function minn_admin_wp_migrate_active() {
 	return defined( 'WPMDB_PRO' ) && WPMDB_PRO && class_exists( '\DeliciousBrains\WPMDB\WPMDBDI' );
 }
 
+/*
+ * WP Migrate keeps a licence key per user, beside the site's own in its
+ * settings row (the licences screen's). Declared whether or not WP Migrate
+ * is active (its rows outlive it).
+ */
+minn_admin_secrets( 'wp-migrate-db-pro', array( 'usermeta' => array( 'wpmdb_licence_key' ) ) );
+
 /**
  * Their own capability answer, filter included.
  */

@@ -26,6 +26,12 @@ function minn_admin_solid_security_active() {
 	return class_exists( 'ITSEC_Core' ) && Minn_Admin_Kernel_SQL::exists( array( 'table' => 'itsec_lockouts', 'network' => true ) );
 }
 
+/*
+ * Solid Security keeps its Network Brute Force API key and secret in
+ * itsec-storage. Declared whether or not it is active (its row outlives it).
+ */
+minn_admin_secrets( 'better-wp-security', array( 'options' => array( 'itsec-storage' ) ) );
+
 function minn_admin_solid_security_can() {
 	// {base_prefix}itsec_lockouts is ONE network-shared table with no site
 	// column (schema.php) — rows can't be attributed to a site, so on

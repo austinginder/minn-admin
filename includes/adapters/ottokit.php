@@ -35,6 +35,12 @@ function minn_admin_ottokit_active() {
 		&& class_exists( '\SureTriggers\Controllers\WebhookRequestsController' );
 }
 
+/*
+ * OttoKit's settings row holds the secret its SaaS signs every call to the
+ * site with. Declared whether or not OttoKit is active (its row outlives it).
+ */
+minn_admin_secrets( 'suretriggers', array( 'options' => array( 'suretrigger_options' ) ) );
+
 /** Their table name, straight from their controller. */
 function minn_admin_ottokit_table() {
 	global $wpdb;

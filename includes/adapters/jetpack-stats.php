@@ -41,6 +41,14 @@ function minn_admin_jetpack_stats_ready() {
 	}
 }
 
+/*
+ * Jetpack's connection: the blog token and each user's token (a user token
+ * signs REST requests as that user and outlives a password change), and the
+ * secrets of a connection being made. Declared whether or not Jetpack is
+ * active or connected (its rows outlive it).
+ */
+minn_admin_secrets( 'jetpack', array( 'options' => array( 'jetpack_private_options', 'jetpack_secrets' ) ) );
+
 add_filter( 'minn_admin_traffic', function ( $traffic, $days ) {
 	if ( null !== $traffic || ! minn_admin_jetpack_stats_ready() ) {
 		return $traffic;
