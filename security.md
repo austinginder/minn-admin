@@ -68,8 +68,9 @@ A few properties worth knowing before auditing (details in
   bytes, not which release they are, so the floor rises whenever a release
   fixes something an older one would bring back. Builds signed with a
   release key that hold the same version are interchangeable to whoever
-  controls the service's answer, so pre-releases are never signed as a
-  release. A wp-config switch is offered
+  controls the service's answer; telling them apart needs pre-releases
+  stamped with their own version or signed with a key that is not a
+  release key. A wp-config switch is offered
   only when nothing PHP ran before the define may define the same
   constant (what wp-config.php loads, a PHP `auto_prepend_file`, every file
   PHP lists ahead of wp-config.php). A file with no `define(` call and no
