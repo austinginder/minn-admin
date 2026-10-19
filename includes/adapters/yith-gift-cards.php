@@ -506,13 +506,14 @@ minn_admin_resource( 'ywgc/gift-cards', function () {
 			'balance' => array(
 				'gate'   => 'manage',
 				'run'    => function ( $id, $row, WP_REST_Request $r ) {
-					$balance = minn_admin_gift_amount( $r['balance'], true, 'minn_ywgc_amount' );
-					if ( is_wp_error( $balance ) ) {
-						return $balance;
+					$gc     = minn_admin_ywgc_load( $id );
+					$now    = (float) $gc->get_balance();
+					$target = minn_admin_gift_balance_target( $r, $now, 'minn_ywgc_amount', minn_admin_gift_money( $now, (string) $gc->currency ) );
+					if ( is_wp_error( $target ) ) {
+						return $target;
 					}
-					$gc = minn_admin_ywgc_load( $id );
-					$gc->update_balance( $balance );
-					return array( 'balance' => $balance, 'code' => (string) $gc->gift_card_number, 'currency' => (string) $gc->currency );
+					$gc->update_balance( $target['balance'] );
+					return array( 'balance' => $target['balance'], 'code' => (string) $gc->gift_card_number, 'currency' => (string) $gc->currency );
 				},
 				'expect' => function ( $id, $fresh, $ran ) {
 					return minn_admin_gift_same( get_post_meta( $id, '_ywgc_balance_total', true ), $ran['balance'] );

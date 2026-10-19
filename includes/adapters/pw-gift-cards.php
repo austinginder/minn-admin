@@ -416,13 +416,22 @@ minn_admin_resource( 'pwgc/gift-cards', function () {
 				'code'   => 'minn_pwgc_inactive',
 				'refuse' => __( 'Enable this gift card before changing its balance.', 'minn-admin' ),
 				'run'    => function ( $id, $row, WP_REST_Request $r ) {
-					$balance = minn_admin_gift_amount( $r['balance'], true, 'minn_pwgc_amount' );
-					$card    = is_wp_error( $balance ) ? $balance : minn_admin_pwgc_load( $id );
+					$card = minn_admin_pwgc_load( $id );
 					if ( is_wp_error( $card ) ) {
 						return $card;
 					}
-					$card->adjust_balance( $balance - (float) $card->get_balance(), __( 'Balance set from Minn Admin.', 'minn-admin' ) );
-					return array( 'balance' => $balance, 'code' => (string) $card->get_number() );
+					$now    = (float) $card->get_balance( true );
+					$target = minn_admin_gift_balance_target( $r, $now, 'minn_pwgc_amount', minn_admin_gift_money( $now ) );
+					if ( is_wp_error( $target ) ) {
+						return $target;
+					}
+					// PW's balance is the sum of its ledger, so the change goes
+					// in as one more entry, as its own screen adds one: a
+					// redemption written meanwhile stays spent.
+					if ( ! minn_admin_gift_same( $target['delta'], 0 ) ) {
+						$card->adjust_balance( $target['delta'], __( 'Balance adjusted from Minn Admin.', 'minn-admin' ) );
+					}
+					return array( 'balance' => $target['balance'], 'code' => (string) $card->get_number() );
 				},
 				'expect' => function ( $id, $fresh, $ran ) {
 					$card = minn_admin_pwgc_load( $id );

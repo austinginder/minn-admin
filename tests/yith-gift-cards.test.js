@@ -310,7 +310,8 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 				.find( ( b ) => /Adjust balance/i.test( b.textContent ) ) );
 		await balanceBtn.asElement().click();
 		await page.waitForSelector( '.minn-modal [data-actfield]', { timeout: 10000 } );
-		await page.fill( '.minn-modal [data-actfield]', '12.5' );
+		// An amount to add or take off: the card holds $40.00.
+		await page.fill( '.minn-modal [data-actfield="adjust"]', '-27.5' );
 		await page.click( '.minn-modal [data-actgo]' );
 		// Wait for the toast that carries this message, not whichever toast is
 		// up: an earlier one can still be on screen.

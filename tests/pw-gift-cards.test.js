@@ -92,10 +92,12 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		} );
 		t.check( 'enable goes through', 200 === on.status, JSON.stringify( on.body ) );
 
+		// Adjust balance takes an amount to add or take off, as PW's own
+		// screen does: the card holds 20, so taking 13 off leaves 7.
 		const bal = await api( `minn-admin/v1/pwgc/gift-cards/${ id }/balance`, {
-			method: 'POST', body: JSON.stringify( { balance: 7 } ),
+			method: 'POST', body: JSON.stringify( { adjust: -13 } ),
 		} );
-		t.check( 'balance can be set', 200 === bal.status, JSON.stringify( bal.body ) );
+		t.check( 'balance can be adjusted by an amount', 200 === bal.status && /7/.test( String( ( bal.body || {} ).message ) ), JSON.stringify( bal.body ) );
 
 		const resend = await api( `minn-admin/v1/pwgc/gift-cards/${ id }/resend`, { method: 'POST' } );
 		t.check( 'resend answers 200 when a recipient is stored',

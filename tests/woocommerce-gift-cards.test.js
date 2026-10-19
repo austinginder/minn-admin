@@ -74,10 +74,12 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		} );
 		t.check( 'enable goes through', 200 === on.status, JSON.stringify( on.body ) );
 
+		// Adjust balance takes an amount to add or take off: the card holds
+		// 25, so taking 12.50 off leaves 12.50.
 		const bal = await api( `minn-admin/v1/wcgc/gift-cards/${ id }/balance`, {
-			method: 'POST', body: JSON.stringify( { balance: 12.5 } ),
+			method: 'POST', body: JSON.stringify( { adjust: -12.5 } ),
 		} );
-		t.check( 'balance can be set', 200 === bal.status, JSON.stringify( bal.body ) );
+		t.check( 'balance can be adjusted by an amount', 200 === bal.status && /12\.50/.test( String( ( bal.body || {} ).message ) ), JSON.stringify( bal.body ) );
 
 		const resend = await api( `minn-admin/v1/wcgc/gift-cards/${ id }/resend`, { method: 'POST' } );
 		t.check( 'resend answers 200', 200 === resend.status, JSON.stringify( resend.body ) );

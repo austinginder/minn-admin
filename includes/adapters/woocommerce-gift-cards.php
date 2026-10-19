@@ -492,14 +492,21 @@ minn_admin_resource( 'wcgc/gift-cards', function () {
 			'balance' => array(
 				'gate'   => 'manage',
 				'run'    => function ( $id, $row, WP_REST_Request $r ) {
-					$balance = minn_admin_gift_amount( $r['balance'], true, 'minn_wcgc_amount' );
-					$card    = is_wp_error( $balance ) ? $balance : minn_admin_wcgc_load( $id );
+					$card = minn_admin_wcgc_load( $id );
 					if ( is_wp_error( $card ) ) {
 						return $card;
 					}
 					// Remaining is schema-readonly on their REST. set_balance writes
-					// the remaining column; issued amount is left alone.
-					$old = (float) $card->get_balance();
+					// the remaining column; issued amount is left alone. The new
+					// balance is the one read here plus the amount asked for, as
+					// their own credit() computes it, never a balance typed
+					// against an older read.
+					$old    = (float) $card->get_balance();
+					$target = minn_admin_gift_balance_target( $r, $old, 'minn_wcgc_amount', minn_admin_gift_money( $old, minn_admin_wcgc_currency( $card ) ) );
+					if ( is_wp_error( $target ) ) {
+						return $target;
+					}
+					$balance = $target['balance'];
 					$card->set_balance( $balance );
 					$card->save();
 					// The vendor only moves a balance through credit()/debit(), which

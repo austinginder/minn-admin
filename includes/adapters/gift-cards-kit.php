@@ -203,8 +203,19 @@ function minn_admin_gift_surface( $res, array $o ) {
 				'when'  => false,
 				'key'   => 'enabled',
 			) ),
+			// An amount to add or take off, as PW Gift Cards' own screen asks:
+			// a new balance typed over the one the list showed hands back
+			// whatever a checkout spent while the dialog was open
+			// (minn_admin_gift_balance_target()).
 			Minn_Admin_Kernel::ui( $res, 'balance', array( 'label' => __( 'Adjust balance', 'minn-admin' ) ) ) + array(
-				'fields' => array( array( 'key' => 'balance', 'label' => __( 'New balance', 'minn-admin' ), 'type' => 'number' ) ),
+				'fields' => array(
+					array(
+						'key'         => 'adjust',
+						'label'       => __( 'Add or take off', 'minn-admin' ),
+						'type'        => 'number',
+						'placeholder' => __( '25 adds, -10 takes off', 'minn-admin' ),
+					),
+				),
 			),
 			$resend,
 			array(
@@ -370,6 +381,77 @@ function minn_admin_gift_created( $code, $sent_to, $money ) {
 			$money
 		),
 	);
+}
+
+/**
+ * The balance an Adjust balance request asks for, from the one the card
+ * holds now, or a WP_Error.
+ *
+ * The dialog sends `adjust`, a signed amount to add or take off, so a
+ * redemption made while it was open stays spent: a new balance typed over
+ * the one the list showed was set against whatever the card held when the
+ * request ran, and handed the difference back to the customer. An absolute
+ * `balance` is taken only beside `balance_seen`, the balance the person
+ * read, and answers 409 when the card no longer holds it.
+ *
+ * @param WP_REST_Request $r       The request.
+ * @param float           $current The balance stored now.
+ * @param string          $code    The vendor's error code ("minn_pwgc_amount").
+ * @param string          $money   The stored balance as the store prints money.
+ * @return array{balance: float, delta: float}|WP_Error
+ */
+function minn_admin_gift_balance_target( WP_REST_Request $r, $current, $code, $money ) {
+	$current = round( (float) $current, minn_admin_gift_decimals() );
+	$adjust  = $r->get_param( 'adjust' );
+	// An empty number field arrives as null, and is an empty adjustment.
+	if ( null !== $adjust || array_key_exists( 'adjust', (array) $r->get_params() ) ) {
+		// A number as typed, sign and decimals only: is_numeric() also
+		// passes 1e20, which would read as a sum no store card holds.
+		if ( ! is_scalar( $adjust ) || is_bool( $adjust ) || ! preg_match( '/^\s*[-+]?(\d+\.?\d*|\.\d+)\s*$/', (string) $adjust ) ) {
+			return new WP_Error( $code, __( 'Enter the amount as a number, with a minus sign to take it off.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		$delta = round( (float) $adjust, minn_admin_gift_decimals() );
+		if ( minn_admin_gift_same( $delta, 0 ) ) {
+			return new WP_Error( $code, __( 'Enter an amount to add, or a minus amount to take off.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		$target = round( $current + $delta, minn_admin_gift_decimals() );
+		if ( $target < 0 ) {
+			return new WP_Error(
+				$code,
+				sprintf(
+					/* translators: %s: the card's balance as the store prints money. */
+					__( 'This gift card holds %s, so no more than that can be taken off.', 'minn-admin' ),
+					$money
+				),
+				array( 'status' => 400 )
+			);
+		}
+		$checked = minn_admin_gift_amount( $target, true, $code );
+		if ( is_wp_error( $checked ) ) {
+			return $checked;
+		}
+		return array( 'balance' => $target, 'delta' => $delta );
+	}
+	$seen = $r->get_param( 'balance_seen' );
+	if ( null === $seen || ! is_scalar( $seen ) || ! is_numeric( $seen ) ) {
+		return new WP_Error( $code, __( 'Enter the amount to add or take off. If this page asked for a new balance, reload it first.', 'minn-admin' ), array( 'status' => 400 ) );
+	}
+	if ( ! minn_admin_gift_same( $seen, $current ) ) {
+		return new WP_Error(
+			'minn_gift_balance_changed',
+			sprintf(
+				/* translators: %s: the card's balance as the store prints money. */
+				__( 'This gift card\'s balance changed while you were looking at it: it now holds %s. Nothing was changed.', 'minn-admin' ),
+				$money
+			),
+			array( 'status' => 409 )
+		);
+	}
+	$balance = minn_admin_gift_amount( $r->get_param( 'balance' ), true, $code );
+	if ( is_wp_error( $balance ) ) {
+		return $balance;
+	}
+	return array( 'balance' => $balance, 'delta' => round( $balance - $current, minn_admin_gift_decimals() ) );
 }
 
 /** Whether two amounts are the same money at the store's decimals. */
