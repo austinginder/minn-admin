@@ -4,7 +4,8 @@
  *
  * The page-level CSS/JS unload manager is a canvas (DOM fetch of every asset
  * on a URL); Minn links out for that. Daily global toggles live in the JSON
- * option `wpassetcleanup_settings`.
+ * option `wpassetcleanup_settings`. The screen is declared to the settings
+ * tier, which owns its routes and the order of a save.
  *
  * HARD-WON: Asset CleanUp Lite deliberately no-loads on REST API requests
  * (`assetCleanUpIsRestCall` in early-triggers.php) so its Settings class is
@@ -158,22 +159,45 @@ function minn_admin_asset_cleanup_schema() {
 }
 
 /**
- * @return array key => field
+ * One tab as offered, every tab (null) for a save from PHP, or null for a tab
+ * that does not exist.
+ *
+ * @param string|null $tab_id Tab id.
+ * @return array|null { groups, adminUrl, closed }
  */
-function minn_admin_asset_cleanup_fields_by_key() {
-	static $map = null;
-	if ( null !== $map ) {
-		return $map;
+function minn_admin_asset_cleanup_layout( $tab_id ) {
+	$schema = minn_admin_asset_cleanup_schema();
+	if ( null !== $tab_id && ! isset( $schema[ $tab_id ] ) ) {
+		return null;
 	}
-	$map = array();
-	foreach ( minn_admin_asset_cleanup_schema() as $tab ) {
-		foreach ( $tab['groups'] as $group ) {
-			foreach ( $group['fields'] as $f ) {
-				$map[ $f['key'] ] = $f;
-			}
+	$groups = array();
+	// While Asset CleanUp has no stored settings (never saved, or saved with
+	// every value at its default, which deletes the row) a save could only
+	// start from nothing and switch every default-on setting off. Until one
+	// differs every field is locked, with the reason and the way to its
+	// Settings page, and a save answers that reason.
+	$unknown = null === minn_admin_asset_cleanup_stored_settings();
+	$why     = __( 'Asset CleanUp stores no settings while every one is at its default, and Minn cannot tell its defaults from your choices. Change one on its Settings page, then edit them here.', 'minn-admin' );
+	foreach ( null === $tab_id ? array_merge( ...array_values( wp_list_pluck( $schema, 'groups' ) ) ) : $schema[ $tab_id ]['groups'] as $group ) {
+		if ( $unknown ) {
+			$groups[] = array(
+				'title'  => $group['title'],
+				'desc'   => $groups ? '' : $why,
+				'fields' => array(),
+				'locked' => count( $group['fields'] ),
+			);
+			continue;
 		}
+		foreach ( $group['fields'] as $i => $f ) {
+			$group['fields'][ $i ] = $f + ( 'textarea' === $f['type'] ? array( 'rows' => 4, 'mono' => true ) : array() );
+		}
+		$groups[] = $group + array( 'locked' => 0 );
 	}
-	return $map;
+	return array(
+		'groups'   => $groups,
+		'adminUrl' => admin_url( 'admin.php?page=wpassetcleanup_settings' ),
+		'closed'   => $unknown ? new WP_Error( 'minn_acu_unknown', $why, array( 'status' => 409 ) ) : null,
+	);
 }
 
 /**
@@ -209,158 +233,14 @@ function minn_admin_asset_cleanup_stored_settings() {
 }
 
 /**
- * Live settings from the JSON option (works when their classes no-load on REST).
+ * Save edited keys from PHP, over every tab, through the settings tier's
+ * checks (the same path the tab's POST takes).
  *
- * @return array
- */
-function minn_admin_asset_cleanup_settings() {
-	// Prefer their class when available (admin pageload).
-	if ( class_exists( '\\WpAssetCleanUp\\Settings', false ) ) {
-		try {
-			$s     = new \WpAssetCleanUp\Settings();
-			$force = isset( $GLOBALS['wp_object_cache'] ) && is_object( $GLOBALS['wp_object_cache'] )
-				&& method_exists( $GLOBALS['wp_object_cache'], 'delete' );
-			return (array) $s->getAll( $force );
-		} catch ( \Throwable $e ) {
-			// fall through to option read
-		}
-	}
-	$raw = get_option( minn_admin_asset_cleanup_option_key(), '' );
-	if ( is_string( $raw ) && $raw !== '' ) {
-		$decoded = json_decode( $raw, true );
-		if ( is_array( $decoded ) ) {
-			return $decoded;
-		}
-	}
-	if ( is_array( $raw ) ) {
-		return $raw;
-	}
-	return array();
-}
-
-/**
- * @param array $field    Field def.
- * @param array $settings Live settings.
- * @return mixed
- */
-function minn_admin_asset_cleanup_value( $field, $settings ) {
-	$v = isset( $settings[ $field['key'] ] ) ? $settings[ $field['key'] ] : '';
-	if ( 'toggle' === $field['type'] ) {
-		return ! empty( $v ) && '0' !== (string) $v && 'false' !== (string) $v;
-	}
-	if ( is_array( $v ) ) {
-		return implode( "\n", array_map( 'strval', $v ) );
-	}
-	return is_scalar( $v ) ? (string) $v : '';
-}
-
-/**
- * @param string $tab_id Tab.
- * @return array|WP_Error
- */
-function minn_admin_asset_cleanup_tab_shape( $tab_id ) {
-	$schema = minn_admin_asset_cleanup_schema();
-	if ( ! isset( $schema[ $tab_id ] ) ) {
-		return new WP_Error( 'minn_no_tab', __( 'Unknown settings tab.', 'minn-admin' ), array( 'status' => 404 ) );
-	}
-	$settings = minn_admin_asset_cleanup_settings();
-	$tab      = $schema[ $tab_id ];
-	$groups   = array();
-	$values   = array();
-	// A save is refused while Asset CleanUp has no stored settings
-	// (minn_admin_asset_cleanup_save()): never saved, or saved with every
-	// value at its default, which deletes the row. Until one differs every
-	// field is locked, with the reason and the way to its Settings page.
-	$unknown = null === minn_admin_asset_cleanup_stored_settings();
-	foreach ( $tab['groups'] as $group ) {
-		if ( $unknown ) {
-			$groups[] = array(
-				'title'  => $group['title'],
-				'desc'   => $groups ? '' : __( 'Asset CleanUp stores no settings while every one is at its default, and Minn cannot tell its defaults from your choices. Change one on its Settings page, then edit them here.', 'minn-admin' ),
-				'fields' => array(),
-				'locked' => count( $group['fields'] ),
-			);
-			continue;
-		}
-		$fields = array();
-		foreach ( $group['fields'] as $f ) {
-			$out = array(
-				'key'   => $f['key'],
-				'label' => $f['label'],
-				'type'  => $f['type'],
-			);
-			if ( ! empty( $f['help'] ) ) {
-				$out['help'] = $f['help'];
-			}
-			if ( 'textarea' === $f['type'] ) {
-				$out['rows'] = 4;
-				$out['mono'] = true;
-			}
-			$fields[]            = $out;
-			$values[ $f['key'] ] = minn_admin_asset_cleanup_value( $f, $settings );
-		}
-		$groups[] = array(
-			'title'  => $group['title'],
-			'fields' => $fields,
-			'locked' => 0,
-		);
-	}
-	return array(
-		'groups'   => $groups,
-		'values'   => $values,
-		'adminUrl' => admin_url( 'admin.php?page=wpassetcleanup_settings' ),
-	);
-}
-
-/**
- * Merge edited keys and write the JSON option.
- *
- * @param array $values Client values.
+ * @param array $values Sent values, by field key.
  * @return true|WP_Error
  */
 function minn_admin_asset_cleanup_save( $values ) {
-	$by_key = minn_admin_asset_cleanup_fields_by_key();
-	// Start from what is STORED, never from getAll(): that is the stored
-	// array run through filterSettings(), which nulls the Google Fonts
-	// delivery keys while removal is on, blanks combine_loaded_js under WP
-	// Rocket's delay-JS and applies ?wpacu_test_mode overrides for this one
-	// request. Their own Settings class warns that any complete-array writer
-	// must start from the stored copy, and their updateOption() does.
-	$settings = minn_admin_asset_cleanup_stored_settings();
-	if ( null === $settings ) {
-		return new WP_Error( 'minn_acu_unknown', __( 'Asset CleanUp stores no settings while every one is at its default, and Minn cannot tell its defaults from your choices. Change one on its Settings page, then edit them here.', 'minn-admin' ), array( 'status' => 409 ) );
-	}
-	$changed  = false;
-	foreach ( (array) $values as $key => $v ) {
-		if ( ! isset( $by_key[ $key ] ) ) {
-			continue;
-		}
-		$type = $by_key[ $key ]['type'];
-		if ( 'toggle' === $type ) {
-			$on               = ! empty( $v ) && 'false' !== $v && '0' !== (string) $v;
-			$settings[ $key ] = $on ? '1' : '';
-		} else {
-			$settings[ $key ] = is_scalar( $v ) ? (string) $v : '';
-		}
-		$changed = true;
-	}
-	if ( ! $changed ) {
-		return true;
-	}
-	// Mirror SettingsAdmin::update: drop empty strings from the blob so
-	// defaults apply for never-set keys, but keep our explicit offs as ''.
-	// Their form stores off as absent; we keep the key as '' for predictable
-	// round-trips of the fields we map (getAll fills missing keys as '').
-	$json = wp_json_encode( $settings );
-	if ( false === $json ) {
-		return new WP_Error( 'minn_acu_encode', __( 'Could not encode settings.', 'minn-admin' ), array( 'status' => 500 ) );
-	}
-	if ( class_exists( '\\WpAssetCleanUp\\Misc', false ) && method_exists( '\\WpAssetCleanUp\\Misc', 'addUpdateOption' ) ) {
-		\WpAssetCleanUp\Misc::addUpdateOption( minn_admin_asset_cleanup_option_key(), $json );
-	} else {
-		update_option( minn_admin_asset_cleanup_option_key(), $json, false );
-	}
-	return true;
+	return minn_admin_settings_save( 'asset-cleanup', array( 'values' => (array) $values ), array( 'tab' => null ) );
 }
 
 /**
@@ -410,32 +290,48 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	return $surfaces;
 } );
 
-add_action( 'rest_api_init', function () {
-	if ( ! minn_admin_asset_cleanup_active() ) {
-		return;
-	}
-	minn_admin_endpoint( '/asset-cleanup/settings/(?P<tab>[a-z]+)', array(
-		'methods'             => 'GET',
-		'gate'                => function () {
-			return minn_admin_asset_cleanup_can();
-		},
-		'run'                 => function ( $req ) {
-			return rest_ensure_response( minn_admin_asset_cleanup_tab_shape( Minn_Admin::path_param( $req, 'tab' ) ) );
-		},
-	) );
-	minn_admin_endpoint( '/asset-cleanup/settings/(?P<tab>[a-z]+)', array(
-		'methods'             => 'POST',
-		'gate'                => function () {
-			return minn_admin_asset_cleanup_can();
-		},
-		'run'                 => function ( $req ) {
-			$body   = $req->get_json_params();
-			$values = isset( $body['values'] ) && is_array( $body['values'] ) ? $body['values'] : array();
-			$saved  = minn_admin_asset_cleanup_save( $values );
-			if ( is_wp_error( $saved ) ) {
-				return $saved;
-			}
-			return rest_ensure_response( minn_admin_asset_cleanup_tab_shape( Minn_Admin::path_param( $req, 'tab' ) ) );
-		},
-	) );
-} );
+
+// The settings are one JSON row, so the screen reads and writes it itself:
+// served from the stored copy a write starts from, and written whole.
+minn_admin_settings( 'asset-cleanup', array(
+	'route'  => 'asset-cleanup/settings/(?P<tab>[a-z]+)',
+	'active' => 'minn_admin_asset_cleanup_active',
+	'gate'   => 'minn_admin_asset_cleanup_can',
+	'layout' => function ( $ctx ) {
+		return minn_admin_asset_cleanup_layout( $ctx['tab'] );
+	},
+	'read'   => function ( $f, $ctx ) {
+		if ( ! isset( $ctx['memo']['stored'] ) ) {
+			$ctx['memo']['stored'] = (array) minn_admin_asset_cleanup_stored_settings();
+		}
+		$v = $ctx['memo']['stored'][ $f['key'] ] ?? '';
+		if ( 'toggle' === $f['type'] ) {
+			return Minn_Admin_Kernel_Settings::on( $v );
+		}
+		return is_array( $v ) ? implode( "\n", array_map( 'strval', $v ) ) : ( is_scalar( $v ) ? (string) $v : '' );
+	},
+	// Start from what is STORED, never from getAll(): that is the stored
+	// array run through filterSettings(), which nulls the Google Fonts
+	// delivery keys while removal is on, blanks combine_loaded_js under WP
+	// Rocket's delay-JS and applies ?wpacu_test_mode overrides for this one
+	// request. Their own Settings class warns that any complete-array writer
+	// must start from the stored copy, and their updateOption() does. An
+	// off is kept as '' for predictable round trips (getAll fills a missing
+	// key as '' too).
+	'write'  => function ( $changes, $fields ) {
+		$settings = (array) minn_admin_asset_cleanup_stored_settings();
+		foreach ( $changes as $key => $v ) {
+			$settings[ $key ] = 'toggle' === $fields[ $key ]['type'] ? ( Minn_Admin_Kernel_Settings::on( $v ) ? '1' : '' ) : ( is_scalar( $v ) ? (string) $v : '' );
+		}
+		$json = wp_json_encode( $settings );
+		if ( false === $json ) {
+			return new WP_Error( 'minn_acu_encode', __( 'Could not encode settings.', 'minn-admin' ), array( 'status' => 500 ) );
+		}
+		if ( class_exists( '\\WpAssetCleanUp\\Misc', false ) && method_exists( '\\WpAssetCleanUp\\Misc', 'addUpdateOption' ) ) {
+			\WpAssetCleanUp\Misc::addUpdateOption( minn_admin_asset_cleanup_option_key(), $json );
+		} else {
+			update_option( minn_admin_asset_cleanup_option_key(), $json, false );
+		}
+		return true;
+	},
+) );
