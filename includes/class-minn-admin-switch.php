@@ -44,9 +44,22 @@ class Minn_Admin_Switch {
 	 * day stays signed after a newer one replaces it; the engine's own
 	 * updater refuses one not newer than the running engine, and a site
 	 * switching has none, so this stands in for it. Raised to a release
-	 * that fixes what an older one would bring back.
+	 * that fixes what an older one would bring back. Each site also keeps
+	 * its own floor above it (FLOOR_OPTION).
 	 */
 	const ENGINE_FLOOR = '0.1.0';
+
+	/**
+	 * The highest release this site has staged: fetched, matched to its
+	 * checksum, signed by a trusted key and holding the version its release
+	 * names. Nothing older is staged again. It rises only on an archive
+	 * that passed those checks, never on what the service names before
+	 * them: a service that is not to be trusted could name a version no
+	 * release carries and so refuse every real release after it, while a
+	 * staged version is one Minn really signed. Not autoloaded: only the
+	 * switch reads it.
+	 */
+	const FLOOR_OPTION = 'minn_admin_switch_floor';
 
 	/** The PHP Minn Engine needs; its code does not parse on older. */
 	const PHP_MIN = 80200;
@@ -228,6 +241,7 @@ class Minn_Admin_Switch {
 			return new WP_Error( 'minn_switch_zip', __( "Minn's release is not a Minn Engine: its minn/ folder is incomplete.", 'minn-admin' ) );
 		}
 		$version = self::version_of( (string) file_get_contents( $engine . '/bootstrap.php' ) );
+		self::remember( $version );
 		$core    = (string) @file_get_contents( $engine . '/src/Minn/Engine.php' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 		$speaks  = preg_match( "/const WP_VERSION = '([^']+)'/", $core, $m ) ? $m[1] : '';
 		return array(
@@ -242,8 +256,9 @@ class Minn_Admin_Switch {
 	/**
 	 * Why an archive holding this version is not installed, or null: it
 	 * must hold the version its release names (a zip in hand names none),
-	 * and not be older than ENGINE_FLOOR. The engine's updater applies the
-	 * same two rules to the same signed archives.
+	 * and not be older than the floor (floor()). The engine's updater
+	 * applies the same two rules to the same signed archives, its floor
+	 * being the engine it runs.
 	 *
 	 * @param string $holds The version the archive's bootstrap.php names (version_of()).
 	 * @param string $named The version its release names, or '' for a zip in hand.
@@ -255,11 +270,26 @@ class Minn_Admin_Switch {
 			/* translators: 1: the Minn version a release archive holds, 2: the version its release names. */
 			return new WP_Error( 'minn_switch_version', sprintf( __( 'The archive holds Minn %1$s, not the %2$s its release names, so it is not used.', 'minn-admin' ), $holds, $named ) );
 		}
-		if ( version_compare( $holds, self::ENGINE_FLOOR, '<' ) ) {
+		$floor = self::floor();
+		if ( version_compare( $holds, $floor, '<' ) ) {
 			/* translators: 1: a Minn version, 2: the oldest Minn version Minn Admin installs. */
-			return new WP_Error( 'minn_switch_old', sprintf( __( 'Minn %1$s is older than Minn %2$s, the oldest release Minn Admin installs, so it is not used.', 'minn-admin' ), $holds, self::ENGINE_FLOOR ) );
+			return new WP_Error( 'minn_switch_old', sprintf( __( 'Minn %1$s is older than Minn %2$s, the oldest release Minn Admin installs, so it is not used.', 'minn-admin' ), $holds, $floor ) );
 		}
 		return null;
+	}
+
+	/** The oldest release this site installs: ENGINE_FLOOR, or the highest it has staged when that is newer. */
+	private static function floor() {
+		$seen = (string) get_option( self::FLOOR_OPTION, '' );
+		return preg_match( '/^\d+\.\d+\.\d+$/', $seen ) && version_compare( $seen, self::ENGINE_FLOOR, '>' ) ? $seen : self::ENGINE_FLOOR;
+	}
+
+	/** Raises this site's floor to a release it has staged; it never falls. */
+	private static function remember( $version ) {
+		$seen = (string) get_option( self::FLOOR_OPTION, '' );
+		if ( preg_match( '/^\d+\.\d+\.\d+$/', (string) $version ) && ( ! preg_match( '/^\d+\.\d+\.\d+$/', $seen ) || version_compare( $version, $seen, '>' ) ) ) {
+			update_option( self::FLOOR_OPTION, (string) $version, false );
+		}
 	}
 
 	/** The version a Minn bootstrap.php names, read as the engine reads it; '' when it names none. */
