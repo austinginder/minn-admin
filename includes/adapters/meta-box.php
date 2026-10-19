@@ -238,11 +238,14 @@ function minn_admin_meta_box_read_values( $post_id ) {
  *
  * @param int   $post_id Post ID.
  * @param array $values  Field id => value.
+ * @return WP_Error|null The fields whose value was refused (each kept as
+ *                       stored), or null.
  */
 function minn_admin_meta_box_write_values( $post_id, $values ) {
 	if ( ! is_array( $values ) ) {
-		return;
+		return null;
 	}
+	$refused = array();
 	$allowed = array_flip( minn_admin_meta_box_simple_ids_for_post( $post_id ) );
 	// The panel sends every field back when any one of them changes. A value
 	// equal to what the read handed out is left as stored, so an untouched
@@ -270,6 +273,11 @@ function minn_admin_meta_box_write_values( $post_id, $values ) {
 			// it leaves the stored address alone.
 			$clean = minn_admin_url_clean( $value );
 			if ( null === $clean ) {
+				$refused[] = array(
+					'key'     => (string) $key,
+					'label'   => is_array( $field ) && isset( $field['name'] ) && '' !== (string) $field['name'] ? wp_strip_all_tags( (string) $field['name'] ) : (string) $key,
+					'message' => __( 'Enter a web address that starts with http:// or https://.', 'minn-admin' ),
+				);
 				continue;
 			}
 			$value = $clean;
@@ -284,6 +292,14 @@ function minn_admin_meta_box_write_values( $post_id, $values ) {
 		// value lost a level of backslashes (^\d+$ saved as ^d+$).
 		rwmb_set_meta( $post_id, $key, wp_slash( $value ) );
 	}
+	if ( ! $refused ) {
+		return null;
+	}
+	return new WP_Error(
+		'minn_meta_box_refused',
+		_n( 'One custom field was not saved.', 'Some custom fields were not saved.', count( $refused ), 'minn-admin' ),
+		array( 'status' => 400, 'fields' => $refused )
+	);
 }
 
 add_filter( 'minn_admin_editor_panels', function ( $panels ) {
@@ -357,7 +373,7 @@ add_action( 'rest_api_init', function () {
 					}
 					return (object) minn_admin_meta_box_read_values( $id );
 				},
-				'update_callback' => function ( $value, $post ) {
+				'update_callback' => function ( $value, $post, $field_name = '', $request = null ) {
 					if ( ! $post instanceof WP_Post ) {
 						return;
 					}
@@ -371,7 +387,14 @@ add_action( 'rest_api_init', function () {
 					if ( ! is_array( $value ) ) {
 						return;
 					}
-					minn_admin_meta_box_write_values( $post->ID, $value );
+					$error = minn_admin_meta_box_write_values( $post->ID, $value );
+					// Never an error from here: the post is already saved, a
+					// new one included. The refusal rides on the post's own
+					// answer instead (minn_admin_panel_report_held(),
+					// adapters/acpt.php).
+					if ( is_wp_error( $error ) && $request instanceof WP_REST_Request && function_exists( 'minn_admin_panel_held' ) ) {
+						minn_admin_panel_held( $request, $error, 'minn_meta_box' );
+					}
 				},
 				'schema'          => array(
 					'description' => __( 'Meta Box simple field values for Minn Admin.', 'minn-admin' ),

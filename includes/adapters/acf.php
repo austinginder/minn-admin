@@ -2252,12 +2252,15 @@ function minn_admin_acf_relation_preserve( $field, $value, $stored, $sent = null
  *
  * @param int   $post_id Post ID.
  * @param array $values  Field name => value.
+ * @return WP_Error|null The fields whose value was refused (each kept as
+ *                       stored), or null.
  */
 function minn_admin_acf_write_values( $post_id, $values ) {
 	if ( ! is_array( $values ) ) {
-		return;
+		return null;
 	}
 	$allowed = minn_admin_acf_simple_fields_for_post( $post_id );
+	$refused = array();
 	foreach ( $values as $name => $value ) {
 		if ( ! isset( $allowed[ $name ] ) ) {
 			continue;
@@ -2277,14 +2280,43 @@ function minn_admin_acf_write_values( $post_id, $values ) {
 			}
 			$sent  = $value;
 			$value = minn_admin_acf_value_in( $field, $value );
+			if ( null === $value ) {
+				// The parser's refusal, not the relational keep below (which
+				// answers null for a withheld id the caller never chose to
+				// clear, and is no refusal).
+				$refused[] = $name;
+				continue;
+			}
 			$value = minn_admin_acf_relation_preserve( $field, $value, $stored, $sent );
 			$value = minn_admin_acf_choices_keep( $field, $value, $stored );
 		}
 		if ( null === $value ) {
+			if ( 'rows' === $field['type'] || 'flex' === $field['type'] ) {
+				$refused[] = $name; // not a list of rows at all
+			}
 			continue; // invalid input never clobbers a stored value
 		}
 		minn_admin_acf_raw_update( $field, $value, $post_id );
 	}
+	if ( ! $refused ) {
+		return null;
+	}
+	// Each refusal is named on the post's own answer: kept as stored, it read
+	// as saved while the editor showed what was typed.
+	$message = __( 'That value was not accepted, so the stored one was kept.', 'minn-admin' );
+	$fields  = array();
+	foreach ( $refused as $name ) {
+		$fields[] = array(
+			'key'     => (string) $name,
+			'label'   => isset( $allowed[ $name ]['label'] ) ? (string) $allowed[ $name ]['label'] : (string) $name,
+			'message' => $message,
+		);
+	}
+	return new WP_Error(
+		'minn_acf_refused',
+		_n( 'One custom field was not saved.', 'Some custom fields were not saved.', count( $fields ), 'minn-admin' ),
+		array( 'status' => 400, 'fields' => $fields )
+	);
 }
 
 /**
@@ -2914,7 +2946,7 @@ add_action( 'rest_api_init', function () {
 					}
 					return (object) minn_admin_acf_read_values( $id );
 				},
-				'update_callback' => function ( $value, $post ) {
+				'update_callback' => function ( $value, $post, $field_name = '', $request = null ) {
 					if ( ! $post instanceof WP_Post ) {
 						return;
 					}
@@ -2927,7 +2959,14 @@ add_action( 'rest_api_init', function () {
 					if ( ! is_array( $value ) ) {
 						return;
 					}
-					minn_admin_acf_write_values( $post->ID, $value );
+					$error = minn_admin_acf_write_values( $post->ID, $value );
+					// Never an error from here: the post is already saved, a
+					// new one included. The refusal rides on the post's own
+					// answer instead (minn_admin_panel_report_held(),
+					// adapters/acpt.php).
+					if ( is_wp_error( $error ) && $request instanceof WP_REST_Request && function_exists( 'minn_admin_panel_held' ) ) {
+						minn_admin_panel_held( $request, $error, 'minn_acf' );
+					}
 				},
 				'schema'          => array(
 					'description' => __( 'ACF simple field values for Minn Admin.', 'minn-admin' ),

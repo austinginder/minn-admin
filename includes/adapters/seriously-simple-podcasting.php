@@ -106,11 +106,19 @@ function minn_admin_ssp_read_values( $post_id ) {
 	return $out;
 }
 
-/** Write panel values with SSP's own storage conventions. */
+/**
+ * Write panel values with SSP's own storage conventions.
+ *
+ * @param int   $post_id Episode id.
+ * @param array $values  Sent values, by meta key.
+ * @return WP_Error|null The fields whose value was refused (each kept as
+ *                       stored), or null.
+ */
 function minn_admin_ssp_write_values( $post_id, $values ) {
 	if ( ! is_array( $values ) ) {
-		return;
+		return null;
 	}
+	$refused = array();
 	$schema = minn_admin_ssp_raw_fields();
 	// The panel sends every field when any one changes; an untouched one is
 	// left as SSP's own form stored it (sanitize_text_field would delete a
@@ -142,7 +150,14 @@ function minn_admin_ssp_write_values( $post_id, $values ) {
 			case 'select':
 				$options = isset( $schema[ $key ]['options'] ) && is_array( $schema[ $key ]['options'] ) ? $schema[ $key ]['options'] : array();
 				if ( ! array_key_exists( (string) $value, $options ) ) {
-					continue 2; // unknown choice — refuse silently, keep stored value
+					// Not one of the field's choices: the stored value stays,
+					// and the answer says so.
+					$refused[] = array(
+						'key'     => (string) $key,
+						'label'   => isset( $schema[ $key ]['name'] ) ? rtrim( wp_strip_all_tags( (string) $schema[ $key ]['name'] ), ': ' ) : (string) $key,
+						'message' => __( 'That is not one of this field\'s choices.', 'minn-admin' ),
+					);
+					continue 2;
 				}
 				$value = (string) $value;
 				break;
@@ -151,6 +166,14 @@ function minn_admin_ssp_write_values( $post_id, $values ) {
 		}
 		update_post_meta( $post_id, $key, wp_slash( $value ) ); // update_post_meta() unslashes
 	}
+	if ( ! $refused ) {
+		return null;
+	}
+	return new WP_Error(
+		'minn_ssp_refused',
+		_n( 'One episode field was not saved.', 'Some episode fields were not saved.', count( $refused ), 'minn-admin' ),
+		array( 'status' => 400, 'fields' => $refused )
+	);
 }
 
 add_filter( 'minn_admin_editor_panels', function ( $panels ) {
@@ -250,14 +273,21 @@ add_action( 'rest_api_init', function () {
 					}
 					return (object) minn_admin_ssp_read_values( $id );
 				},
-				'update_callback' => function ( $value, $post ) {
+				'update_callback' => function ( $value, $post, $field_name = '', $request = null ) {
 					if ( ! $post instanceof WP_Post || ! current_user_can( 'edit_post', $post->ID ) ) {
 						return;
 					}
 					if ( is_object( $value ) ) {
 						$value = (array) $value;
 					}
-					minn_admin_ssp_write_values( $post->ID, $value );
+					$error = minn_admin_ssp_write_values( $post->ID, $value );
+					// Never an error from here: the post is already saved, a
+					// new one included. The refusal rides on the post's own
+					// answer instead (minn_admin_panel_report_held(),
+					// adapters/acpt.php).
+					if ( is_wp_error( $error ) && $request instanceof WP_REST_Request && function_exists( 'minn_admin_panel_held' ) ) {
+						minn_admin_panel_held( $request, $error, 'minn_ssp' );
+					}
 				},
 				'schema'          => array(
 					'description' => __( 'Seriously Simple Podcasting episode fields for Minn Admin.', 'minn-admin' ),

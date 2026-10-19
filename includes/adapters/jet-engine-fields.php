@@ -735,11 +735,20 @@ function minn_admin_jet_read_values( $post_id ) {
 	return $out;
 }
 
+/**
+ * Write panel values to post meta, the way JetEngine's own form stores them.
+ *
+ * @param int   $post_id Post id.
+ * @param array $values  Sent values, by field name.
+ * @return WP_Error|null The fields whose value was refused (each kept as
+ *                       stored), or null.
+ */
 function minn_admin_jet_write_values( $post_id, $values ) {
 	if ( ! is_array( $values ) ) {
-		return;
+		return null;
 	}
-	$map = minn_admin_jet_field_map( $post_id );
+	$map     = minn_admin_jet_field_map( $post_id );
+	$refused = array();
 	foreach ( $values as $name => $value ) {
 		if ( ! isset( $map[ $name ] ) ) {
 			continue; // only the post's own mapped fields
@@ -749,7 +758,13 @@ function minn_admin_jet_write_values( $post_id, $values ) {
 		}
 		$stored = minn_admin_jet_value_in( $map[ $name ], $value, get_post_meta( $post_id, $name, true ) );
 		if ( null === $stored ) {
-			continue; // refused: leave whatever is stored alone
+			// Refused: whatever is stored stays, and the answer names it.
+			$refused[] = array(
+				'key'     => (string) $name,
+				'label'   => isset( $map[ $name ]['label'] ) ? (string) $map[ $name ]['label'] : (string) $name,
+				'message' => __( 'That value was not accepted, so the stored one was kept.', 'minn-admin' ),
+			);
+			continue;
 		}
 		if ( false === $stored ) {
 			// Their empty-control write: update_post_meta( id, key, false ).
@@ -760,6 +775,14 @@ function minn_admin_jet_write_values( $post_id, $values ) {
 		// writes the slashed $_POST, so a backslash in a value survives.
 		update_post_meta( $post_id, $name, wp_slash( $stored ) );
 	}
+	if ( ! $refused ) {
+		return null;
+	}
+	return new WP_Error(
+		'minn_jet_refused',
+		_n( 'One custom field was not saved.', 'Some custom fields were not saved.', count( $refused ), 'minn-admin' ),
+		array( 'status' => 400, 'fields' => $refused )
+	);
 }
 
 /** The fieldsRoute payload: groups with the internal _jet hints stripped. */
@@ -838,15 +861,19 @@ add_action( 'rest_api_init', function () {
 				}
 				return (object) minn_admin_jet_read_values( $id );
 			},
-			'update_callback' => function ( $value, $post ) {
+			'update_callback' => function ( $value, $post, $field_name = '', $request = null ) {
 				if ( ! $post instanceof WP_Post || ! current_user_can( 'edit_post', $post->ID ) ) {
 					return;
 				}
 				if ( is_object( $value ) ) {
 					$value = (array) $value;
 				}
-				if ( is_array( $value ) ) {
-					minn_admin_jet_write_values( $post->ID, $value );
+				$error = is_array( $value ) ? minn_admin_jet_write_values( $post->ID, $value ) : null;
+				// Never an error from here: the post is already saved, a new
+				// one included. The refusal rides on the post's own answer
+				// instead (minn_admin_panel_report_held(), adapters/acpt.php).
+				if ( is_wp_error( $error ) && $request instanceof WP_REST_Request && function_exists( 'minn_admin_panel_held' ) ) {
+					minn_admin_panel_held( $request, $error, 'minn_jet' );
 				}
 			},
 			'schema'          => array(
