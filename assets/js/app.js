@@ -294,18 +294,25 @@
 		.replace( /&lt;b&gt;/gi, '<b>' )
 		.replace( /&lt;\/b&gt;/gi, '</b>' );
 
-	// Escape for a CSS url() STRING, which is one nesting level below HTML.
-	// esc() is the HTML escaper: it turns ' into &#39;, but the HTML parser
-	// decodes entity references in an attribute value BEFORE the CSS parser
-	// sees it, so the apostrophe comes back and closes the url() string. That
-	// let an attacker-shaped media URL append declarations to the element
-	// (a beacon background-image, or a full-viewport fixed overlay). encodeURI
-	// covers <>"' already; the extra class catches ( ) and backslash.
+	// A URL for a CSS url('…') STRING. esc() alone is not enough there: it
+	// turns ' into &#39;, but the HTML parser decodes entity references in
+	// an attribute value BEFORE the CSS parser sees it, so the apostrophe
+	// comes back and closes the url() string. That let an attacker-shaped
+	// media URL append declarations to the element (a beacon
+	// background-image, or a full-viewport fixed overlay). encodeURI covers
+	// <>" already; the extra class catches ' ( ) and backslash.
 	// NOTE: the map is explicit because encodeURIComponent leaves ' ( ) alone
 	// (they are unreserved), so using it as the replacer would be a no-op for
 	// exactly the characters that break out of url('…').
+	// This is the form for a DOM assignment (el.style.backgroundImage).
 	const CSS_URL_ESC = { "'": '%27', '"': '%22', '(': '%28', ')': '%29', '\\': '%5C' };
-	const escCssUrl = ( u ) => encodeURI( String( u == null ? '' : u ) ).replace( /['"()\\]/g, ( c ) => CSS_URL_ESC[ c ] );
+	const cssUrl = ( u ) => encodeURI( String( u == null ? '' : u ) ).replace( /['"()\\]/g, ( c ) => CSS_URL_ESC[ c ] );
+	// The same URL for a style ATTRIBUTE in markup: the attribute is decoded
+	// first, and encodeURI keeps & # ;, so a stored URL holding the TEXT
+	// &#39; or &#41; would decode to the very quote and paren cssUrl
+	// encoded. HTML-escaping on top makes the decode hand back exactly the
+	// cssUrl text, a query string's & included.
+	const escCssUrl = ( u ) => esc( cssUrl( u ) );
 
 	// Same hazard one property over: a COLOR interpolated into a style
 	// attribute. esc() stops the attribute breaking out, but not a ';' that
@@ -4646,7 +4653,7 @@
 		if ( B.site.icon ) {
 			mark.classList.add( 'minn-logo-mark-icon' );
 			mark.textContent = '';
-			mark.style.backgroundImage = `url('${ escCssUrl( B.site.icon ) }')`;
+			mark.style.backgroundImage = `url('${ cssUrl( B.site.icon ) }')`;
 		} else {
 			mark.classList.remove( 'minn-logo-mark-icon' );
 			mark.style.backgroundImage = '';
