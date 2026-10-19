@@ -9,7 +9,9 @@
  * people without unfiltered HTML) and the confirmation through
  * SettingsService::saveGeneral() with the form's whole formSettings and
  * advancedValidationSettings (their save writes both whole), so only the
- * confirmation changes. A validation failure comes back on its field.
+ * confirmation changes. A validation failure comes back on its field. The
+ * page is a settings-tier screen: the tier owns its routes and the order of
+ * a save, so every refusal comes before the first write.
  *
  * Only what Fluent offers in the edition installed: their free editor locks
  * adding notifications, recipient routing, notification conditions and the
@@ -171,6 +173,18 @@ function minn_admin_fluent_preview_tags( $form ) {
 	return $tags;
 }
 
+/** The confirmation as the page edits it. */
+function minn_admin_fluent_confirmation_out( $c ) {
+	$c    = (array) $c;
+	$page = ! empty( $c['customPage'] ) ? get_post( (int) $c['customPage'] ) : null;
+	return array(
+		'redirectTo'           => (string) ( $c['redirectTo'] ?? 'samePage' ),
+		'messageToShow'        => (string) ( $c['messageToShow'] ?? '' ),
+		'samePageFormBehavior' => 'reset_form' === ( $c['samePageFormBehavior'] ?? '' ) ? 'reset_form' : 'hide_form',
+		'customPage'           => $page ? (string) $page->ID : '',
+		'customUrl'            => (string) ( $c['customUrl'] ?? '' ),
+	);
+}
 /** The page's read. */
 function minn_admin_fluent_emails_payload( $form ) {
 	$settings = minn_admin_fluent_meta( $form->id, 'formSettings' );
@@ -195,13 +209,7 @@ function minn_admin_fluent_emails_payload( $form ) {
 		'hasPro'        => minn_admin_fluent_has_pro(),
 		'notifications' => $notifications,
 		'emailFields'   => minn_admin_fluent_email_fields( $form ),
-		'confirmation'  => array(
-			'redirectTo'           => (string) ( $c['redirectTo'] ?? 'samePage' ),
-			'messageToShow'        => (string) ( $c['messageToShow'] ?? '' ),
-			'samePageFormBehavior' => 'reset_form' === ( $c['samePageFormBehavior'] ?? '' ) ? 'reset_form' : 'hide_form',
-			'customPage'           => $page ? (string) $page->ID : '',
-			'customUrl'            => (string) ( $c['customUrl'] ?? '' ),
-		),
+		'confirmation'  => minn_admin_fluent_confirmation_out( $c ),
 		'pages'         => $pages,
 		'mergeTags'     => minn_admin_fluent_tags( $form ),
 		'latest'        => $latest ? (int) $latest->id : 0,
@@ -221,6 +229,285 @@ function minn_admin_fluent_validation_error( $e, $prefix ) {
 	return new WP_Error( 'minn_ffe_invalid', wp_strip_all_tags( $e->getMessage() ), array( 'status' => 400 ) );
 }
 
+/**
+ * The page's fields for the settings tier: each notification's and the
+ * confirmation's, keyed as the page names them ("n12.subject",
+ * "confirmation.customUrl"), each knowing where it reads from.
+ *
+ * @param object $form The form row.
+ * @return array { groups }
+ */
+function minn_admin_fluent_emails_layout( $form ) {
+	$labels = array(
+		'name'      => array( __( 'Name', 'minn-admin' ), 'text' ),
+		'enabled'   => array( __( 'Enabled', 'minn-admin' ), 'toggle' ),
+		'toType'    => array( __( 'Send to', 'minn-admin' ), 'select' ),
+		'toEmail'   => array( __( 'Send to', 'minn-admin' ), 'text' ),
+		'toField'   => array( __( 'Send to', 'minn-admin' ), 'select' ),
+		'fromName'  => array( __( 'From name', 'minn-admin' ), 'text' ),
+		'fromEmail' => array( __( 'From email', 'minn-admin' ), 'text' ),
+		'replyTo'   => array( __( 'Reply to', 'minn-admin' ), 'text' ),
+		'bcc'       => array( __( 'Bcc', 'minn-admin' ), 'text' ),
+		'subject'   => array( __( 'Subject', 'minn-admin' ), 'text' ),
+		'message'   => array( __( 'Message', 'minn-admin' ), 'wysiwyg' ),
+	);
+	$groups = array();
+	foreach ( minn_admin_fluent_notifications( $form->id ) as $id => $n ) {
+		$title  = (string) ( $n['name'] ?? '' );
+		$fields = array();
+		foreach ( $labels as $k => $l ) {
+			$fields[] = array(
+				'key'   => 'n' . $id . '.' . $k,
+				'label' => ( '' !== $title ? $title . ' · ' : '' ) . $l[0],
+				'type'  => $l[1],
+				'_n'    => (int) $id,
+				'_k'    => $k,
+			);
+		}
+		$groups[] = array( 'title' => $title, 'fields' => $fields );
+	}
+	$fields = array();
+	foreach ( array(
+		'redirectTo'           => array( __( 'After submit', 'minn-admin' ), 'select' ),
+		'messageToShow'        => array( __( 'Message', 'minn-admin' ), 'wysiwyg' ),
+		'samePageFormBehavior' => array( __( 'After submit', 'minn-admin' ), 'select' ),
+		'customPage'           => array( __( 'Page', 'minn-admin' ), 'select' ),
+		'customUrl'            => array( __( 'Address', 'minn-admin' ), 'url' ),
+	) as $k => $l ) {
+		$fields[] = array(
+			'key'   => 'confirmation.' . $k,
+			'label' => __( 'Confirmation', 'minn-admin' ) . ' · ' . $l[0],
+			'type'  => $l[1],
+			'_k'    => $k,
+		);
+	}
+	$groups[] = array( 'title' => __( 'Confirmation', 'minn-admin' ), 'fields' => $fields );
+	return array( 'groups' => $groups );
+}
+
+/**
+ * The body's values by field key. The page sends each changed notification
+ * as its changed keys beside its metaId, and the confirmation's changed
+ * keys; one not on this form refuses the save.
+ *
+ * @param array $body Body (or the base the page loaded, in the same shape).
+ * @param array $ctx  Context: the form.
+ * @return array|WP_Error
+ */
+function minn_admin_fluent_emails_sent( $body, $ctx ) {
+	$stored = minn_admin_fluent_notifications( $ctx['form']->id );
+	$out    = array();
+	foreach ( (array) ( $body['notifications'] ?? array() ) as $in ) {
+		$id = is_array( $in ) ? (int) ( $in['metaId'] ?? 0 ) : 0;
+		if ( ! isset( $stored[ $id ] ) ) {
+			return new WP_Error( 'minn_ffe_unknown', __( 'That notification is not on this form.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		foreach ( $in as $k => $v ) {
+			if ( 'metaId' !== $k ) {
+				$out[ 'n' . $id . '.' . $k ] = $v;
+			}
+		}
+	}
+	if ( isset( $body['confirmation'] ) && is_array( $body['confirmation'] ) ) {
+		foreach ( $body['confirmation'] as $k => $v ) {
+			$out[ 'confirmation.' . $k ] = $v;
+		}
+	}
+	return $out;
+}
+
+/**
+ * Each changed notification and the confirmation, built whole and put
+ * through Fluent's own validator (the call their store() and saveGeneral()
+ * make), before the first write.
+ *
+ * @param array $changes Changed values, by field key.
+ * @param array $fields  Their fields, by the same key.
+ * @param array $ctx     Context: the form.
+ * @return array|WP_Error { writes: notifications by meta id, general: formSettings or null }
+ */
+function minn_admin_fluent_emails_validate( $changes, $fields, $ctx ) {
+	$form   = $ctx['form'];
+	$stored = minn_admin_fluent_notifications( $form->id );
+	$per    = array();
+	$conf   = array();
+	foreach ( $changes as $key => $v ) {
+		if ( isset( $fields[ $key ]['_n'] ) ) {
+			$per[ $fields[ $key ]['_n'] ][ $fields[ $key ]['_k'] ] = $v;
+		} else {
+			$conf[ $fields[ $key ]['_k'] ] = $v;
+		}
+	}
+	$text = function ( $in, $k ) {
+		return isset( $in[ $k ] ) && is_scalar( $in[ $k ] ) ? (string) $in[ $k ] : '';
+	};
+
+	// Notifications: each changed one, as their store() will take it.
+	$writes = array();
+	foreach ( $per as $id => $in ) {
+		$n = $stored[ $id ];
+		// A routing list is Pro's and is edited in Fluent Forms, with or
+		// without Pro here: the page offers no routing editor, so a stored
+		// list is kept as it is on any save.
+		$type = array_key_exists( 'toType', $in ) ? $text( $in, 'toType' ) : (string) ( $n['sendTo']['type'] ?? 'email' );
+		if ( 'routing' === ( $n['sendTo']['type'] ?? '' ) ) {
+			$type = 'routing';
+		} elseif ( ! in_array( $type, array( 'email', 'field' ), true ) ) {
+			$type = 'email';
+		}
+		if ( array_key_exists( 'name', $in ) ) {
+			$n['name'] = sanitize_text_field( $text( $in, 'name' ) );
+		}
+		// The switch only when it changed, so one turned off elsewhere stays off.
+		if ( array_key_exists( 'enabled', $in ) ) {
+			$n['enabled'] = ! empty( $in['enabled'] );
+		}
+		$n['sendTo']['type'] = $type;
+		if ( 'email' === $type && array_key_exists( 'toEmail', $in ) ) {
+			$n['sendTo']['email'] = trim( $text( $in, 'toEmail' ) );
+		} elseif ( 'field' === $type && array_key_exists( 'toField', $in ) ) {
+			$n['sendTo']['field'] = $text( $in, 'toField' );
+		}
+		foreach ( array( 'fromName', 'fromEmail', 'replyTo', 'bcc', 'subject', 'message' ) as $k ) {
+			if ( array_key_exists( $k, $in ) ) {
+				$n[ $k ] = $text( $in, $k );
+			}
+		}
+		try {
+			\FluentForm\App\Services\Settings\Validator::validate( 'notifications', $n );
+		} catch ( \Throwable $e ) {
+			return minn_admin_fluent_validation_error( $e, 'n' . $id . '.' );
+		}
+		$writes[ $id ] = $n;
+	}
+
+	// The confirmation: their saveGeneral() with both settings whole. Only
+	// the keys that changed are written, so a key left as stored keeps its
+	// bytes: normalizing all five on every save trimmed a stored address,
+	// turned an empty one into null and a page id 42 into '42', and reset a
+	// behaviour the page reads as "hide the form".
+	$general = null;
+	if ( $conf ) {
+		$settings = minn_admin_fluent_meta( $form->id, 'formSettings' );
+		$c        = (array) ( $settings['confirmation'] ?? array() );
+		if ( array_key_exists( 'redirectTo', $conf ) ) {
+			$c['redirectTo'] = in_array( $text( $conf, 'redirectTo' ), array( 'samePage', 'customPage', 'customUrl' ), true ) ? $text( $conf, 'redirectTo' ) : 'samePage';
+		}
+		if ( array_key_exists( 'messageToShow', $conf ) ) {
+			$c['messageToShow'] = $text( $conf, 'messageToShow' );
+		}
+		if ( array_key_exists( 'samePageFormBehavior', $conf ) ) {
+			$c['samePageFormBehavior'] = 'reset_form' === $text( $conf, 'samePageFormBehavior' ) ? 'reset_form' : 'hide_form';
+		}
+		if ( array_key_exists( 'customPage', $conf ) ) {
+			$c['customPage'] = absint( $text( $conf, 'customPage' ) ) ? (string) absint( $text( $conf, 'customPage' ) ) : null;
+		}
+		if ( array_key_exists( 'customUrl', $conf ) ) {
+			$c['customUrl'] = '' !== trim( $text( $conf, 'customUrl' ) ) ? trim( $text( $conf, 'customUrl' ) ) : null;
+		}
+		// Their validator requires a type; one never stored reads as the
+		// same page.
+		if ( ! isset( $c['redirectTo'] ) ) {
+			$c['redirectTo'] = 'samePage';
+		}
+		if ( ( array_key_exists( 'redirectTo', $conf ) || array_key_exists( 'customPage', $conf ) ) && 'customPage' === $c['redirectTo'] && ! empty( $c['customPage'] ) && ( ! get_post( (int) $c['customPage'] ) || ! current_user_can( 'read_post', (int) $c['customPage'] ) ) ) {
+			return new WP_Error( 'minn_ffe_invalid', __( 'Choose a published page.', 'minn-admin' ), array( 'status' => 400, 'field' => 'confirmation.customPage' ) );
+		}
+		try {
+			\FluentForm\App\Services\Settings\Validator::validate( 'confirmations', $c );
+		} catch ( \Throwable $e ) {
+			return minn_admin_fluent_validation_error( $e, 'confirmation.' );
+		}
+		$settings['confirmation'] = $c;
+		$general                  = $settings;
+	}
+	return array(
+		'writes'  => $writes,
+		'general' => $general,
+	);
+}
+
+/**
+ * Write what the validator built. The confirmation goes first: saveGeneral()
+ * validates it after its own cleaning (without unfiltered_html, a
+ * javascript: address comes out empty), which the check before cannot see,
+ * and it validates before it writes. Each notification was validated exactly
+ * as store() validates it.
+ *
+ * @param array $plan From minn_admin_fluent_emails_validate().
+ * @param array $fields Changed fields.
+ * @param array $ctx  Context: the form.
+ * @return true|WP_Error
+ */
+function minn_admin_fluent_emails_write( $plan, $fields, $ctx ) {
+	$form    = $ctx['form'];
+	$service = new \FluentForm\App\Services\Settings\SettingsService();
+	if ( null !== $plan['general'] ) {
+		try {
+			$service->saveGeneral( array(
+				'form_id'                    => (int) $form->id,
+				'formSettings'               => wp_json_encode( $plan['general'] ),
+				'advancedValidationSettings' => wp_json_encode( minn_admin_fluent_meta( $form->id, 'advancedValidationSettings' ) ),
+			) );
+		} catch ( \Throwable $e ) {
+			return minn_admin_fluent_validation_error( $e, 'confirmation.' );
+		}
+	}
+	foreach ( $plan['writes'] as $id => $n ) {
+		try {
+			$service->store( array(
+				'form_id'  => (int) $form->id,
+				'meta_key' => 'notifications',
+				'meta_id'  => $id,
+				'value'    => wp_json_encode( $n ),
+			) );
+		} catch ( \Throwable $e ) {
+			return minn_admin_fluent_validation_error( $e, 'n' . $id . '.' );
+		}
+	}
+	return true;
+}
+
+// The page's save: the settings tier compares each sent key with what the
+// page was served, refuses a hidden key's placeholder left in an edited
+// value, and asks Fluent's own validator for every changed notification and
+// the confirmation before the first write.
+minn_admin_settings( 'fluent-forms-emails', array(
+	'route'    => 'fluent-forms/forms/(?P<id>\d+)/emails',
+	'active'   => function () {
+		return function_exists( 'minn_admin_fluent_forms_ready' ) && minn_admin_fluent_forms_ready() && minn_admin_fluent_emails_ready();
+	},
+	'gate'     => function ( WP_REST_Request $request ) {
+		return minn_admin_fluent_forms_can_form( (int) Minn_Admin::path_param( $request ), 'fluentform_forms_manager' );
+	},
+	'target'   => function ( WP_REST_Request $request ) {
+		$form = minn_admin_fluent_form( (int) Minn_Admin::path_param( $request ) );
+		return $form ? array( 'form' => $form ) : new WP_Error( 'not_found', __( 'Form not found.', 'minn-admin' ), array( 'status' => 404 ) );
+	},
+	'layout'   => function ( $ctx ) {
+		return minn_admin_fluent_emails_layout( $ctx['form'] );
+	},
+	'read'     => function ( $field, $ctx ) {
+		$memo = $ctx['memo'];
+		if ( isset( $field['_n'] ) ) {
+			if ( ! isset( $memo['n'] ) ) {
+				$memo['n'] = minn_admin_fluent_notifications( $ctx['form']->id );
+			}
+			return minn_admin_fluent_notification_out( $field['_n'], $memo['n'][ $field['_n'] ] ?? array() )[ $field['_k'] ] ?? '';
+		}
+		if ( ! isset( $memo['c'] ) ) {
+			$memo['c'] = minn_admin_fluent_confirmation_out( minn_admin_fluent_meta( $ctx['form']->id, 'formSettings' )['confirmation'] ?? array() );
+		}
+		return $memo['c'][ $field['_k'] ] ?? '';
+	},
+	'view'     => function ( $ctx ) {
+		return minn_admin_fluent_emails_payload( minn_admin_fluent_form( $ctx['form']->id ) );
+	},
+	'sent'     => 'minn_admin_fluent_emails_sent',
+	'validate' => 'minn_admin_fluent_emails_validate',
+	'write'    => 'minn_admin_fluent_emails_write',
+) );
+
 add_action( 'rest_api_init', function () {
 	if ( ! function_exists( 'minn_admin_fluent_forms_ready' ) || ! minn_admin_fluent_forms_ready() || ! minn_admin_fluent_emails_ready() ) {
 		return;
@@ -232,180 +519,6 @@ add_action( 'rest_api_init', function () {
 		$form = minn_admin_fluent_form( (int) Minn_Admin::path_param( $request ) );
 		return $form ? $form : new WP_Error( 'not_found', __( 'Form not found.', 'minn-admin' ), array( 'status' => 404 ) );
 	};
-
-	minn_admin_endpoint( '/fluent-forms/forms/(?P<id>\d+)/emails', array(
-		'methods'             => 'GET',
-		'gate'                => $perm,
-		'run'                 => function ( WP_REST_Request $request ) use ( $load ) {
-			$form = $load( $request );
-			return is_wp_error( $form ) ? $form : rest_ensure_response( minn_admin_fluent_emails_payload( $form ) );
-		},
-	) );
-	minn_admin_endpoint( '/fluent-forms/forms/(?P<id>\d+)/emails', array(
-		'methods'             => 'POST',
-		'gate'                => $perm,
-		'run'                 => function ( WP_REST_Request $request ) use ( $load ) {
-			$form = $load( $request );
-			if ( is_wp_error( $form ) ) {
-				return $form;
-			}
-			$body    = (array) $request->get_json_params();
-			$service = new \FluentForm\App\Services\Settings\SettingsService();
-			$stored  = minn_admin_fluent_notifications( $form->id );
-
-			// Every notification and the confirmation is built and checked
-			// before the first write, Fluent's own validator included (the
-			// call their store() and saveGeneral() make), so a refusal leaves
-			// nothing saved.
-			$writes  = array();
-			$general = null;
-
-			// Notifications: each existing one through their store().
-			foreach ( (array) ( $body['notifications'] ?? array() ) as $in ) {
-				$id = (int) ( $in['metaId'] ?? 0 );
-				if ( ! isset( $stored[ $id ] ) ) {
-					return new WP_Error( 'minn_ffe_unknown', __( 'That notification is not on this form.', 'minn-admin' ), array( 'status' => 400 ) );
-				}
-				$n    = $stored[ $id ];
-				$text = function ( $k ) use ( $in ) {
-					return isset( $in[ $k ] ) && is_scalar( $in[ $k ] ) ? (string) $in[ $k ] : '';
-				};
-				// The page sends the keys it changed; one it leaves out
-				// keeps its stored value.
-				$has = function ( $k ) use ( $in ) {
-					return array_key_exists( $k, $in );
-				};
-				// A routing list is Pro's and is edited in Fluent Forms, with
-				// or without Pro here: the page offers no routing editor, so
-				// a stored list is kept as it is on any save.
-				$type = $has( 'toType' ) ? $text( 'toType' ) : (string) ( $n['sendTo']['type'] ?? 'email' );
-				if ( 'routing' === ( $n['sendTo']['type'] ?? '' ) ) {
-					$type = 'routing';
-				} elseif ( ! in_array( $type, array( 'email', 'field' ), true ) ) {
-					$type = 'email';
-				}
-				if ( $has( 'name' ) ) {
-					$n['name'] = sanitize_text_field( $text( 'name' ) );
-				}
-				// The switch only when sent: the page sends it only when it
-				// was flipped there, so one turned off elsewhere stays off.
-				if ( array_key_exists( 'enabled', $in ) ) {
-					$n['enabled'] = ! empty( $in['enabled'] );
-				}
-				$n['sendTo']['type']   = $type;
-				if ( 'email' === $type && $has( 'toEmail' ) ) {
-					$n['sendTo']['email'] = trim( $text( 'toEmail' ) );
-				} elseif ( 'field' === $type && $has( 'toField' ) ) {
-					$n['sendTo']['field'] = $text( 'toField' );
-				}
-				foreach ( array( 'fromName', 'fromEmail', 'replyTo', 'bcc', 'subject', 'message' ) as $k ) {
-					if ( $has( $k ) ) {
-						$n[ $k ] = $text( $k );
-					}
-				}
-				// Form meta has no restore: a value edited with a credential
-				// copy still masked in it would be stored where it was.
-				$masked = Minn_Admin_Egress::refuse_masks( $n, $stored[ $id ] );
-				if ( $masked ) {
-					return $masked;
-				}
-				try {
-					\FluentForm\App\Services\Settings\Validator::validate( 'notifications', $n );
-				} catch ( \Throwable $e ) {
-					return minn_admin_fluent_validation_error( $e, 'n' . $id . '.' );
-				}
-				$writes[ $id ] = $n;
-			}
-
-			// The confirmation: their saveGeneral() with both settings whole.
-			if ( isset( $body['confirmation'] ) && is_array( $body['confirmation'] ) ) {
-				$settings = minn_admin_fluent_meta( $form->id, 'formSettings' );
-				$c        = (array) ( $settings['confirmation'] ?? array() );
-				// The page sends the keys it changed. Each is written only when
-				// it differs from the stored one, so a key left out or sent back
-				// as stored keeps its bytes: normalizing all five on every save
-				// trimmed a stored address, turned an empty one into null and a
-				// page id 42 into '42', and reset a behaviour the page reads as
-				// "hide the form".
-				$in   = (array) $body['confirmation'];
-				$sent = function ( $key ) use ( $in, $c ) {
-					if ( ! array_key_exists( $key, $in ) ) {
-						return false;
-					}
-					$a = $in[ $key ];
-					$b = $c[ $key ] ?? null;
-					return ! ( ( null === $a || is_scalar( $a ) ) && ( null === $b || is_scalar( $b ) ) && (string) $a === (string) $b );
-				};
-				$scalar = function ( $key ) use ( $in ) {
-					return is_scalar( $in[ $key ] ) ? (string) $in[ $key ] : '';
-				};
-				if ( $sent( 'redirectTo' ) ) {
-					$c['redirectTo'] = in_array( $scalar( 'redirectTo' ), array( 'samePage', 'customPage', 'customUrl' ), true ) ? $scalar( 'redirectTo' ) : 'samePage';
-				}
-				if ( $sent( 'messageToShow' ) ) {
-					$c['messageToShow'] = $scalar( 'messageToShow' );
-				}
-				if ( $sent( 'samePageFormBehavior' ) ) {
-					$c['samePageFormBehavior'] = 'reset_form' === $scalar( 'samePageFormBehavior' ) ? 'reset_form' : 'hide_form';
-				}
-				if ( $sent( 'customPage' ) ) {
-					$c['customPage'] = absint( $scalar( 'customPage' ) ) ? (string) absint( $scalar( 'customPage' ) ) : null;
-				}
-				if ( $sent( 'customUrl' ) ) {
-					$c['customUrl'] = '' !== trim( $scalar( 'customUrl' ) ) ? trim( $scalar( 'customUrl' ) ) : null;
-				}
-				// Their validator requires a type; one never stored reads as
-				// the same page.
-				if ( ! isset( $c['redirectTo'] ) ) {
-					$c['redirectTo'] = 'samePage';
-				}
-				if ( ( $sent( 'redirectTo' ) || $sent( 'customPage' ) ) && 'customPage' === $c['redirectTo'] && ! empty( $c['customPage'] ) && ( ! get_post( (int) $c['customPage'] ) || ! current_user_can( 'read_post', (int) $c['customPage'] ) ) ) {
-					return new WP_Error( 'minn_ffe_invalid', __( 'Choose a published page.', 'minn-admin' ), array( 'status' => 400, 'field' => 'confirmation.customPage' ) );
-				}
-				$masked = Minn_Admin_Egress::refuse_masks( $c, (array) ( $settings['confirmation'] ?? array() ) );
-				if ( $masked ) {
-					return $masked;
-				}
-				try {
-					\FluentForm\App\Services\Settings\Validator::validate( 'confirmations', $c );
-				} catch ( \Throwable $e ) {
-					return minn_admin_fluent_validation_error( $e, 'confirmation.' );
-				}
-				$settings['confirmation'] = $c;
-				$general                  = $settings;
-			}
-
-			// The confirmation is written first: saveGeneral() validates it
-			// after its own cleaning (without unfiltered_html, a javascript:
-			// address comes out empty), which the check above cannot see, and
-			// it validates before it writes. Each notification was validated
-			// above exactly as store() validates it.
-			if ( null !== $general ) {
-				try {
-					$service->saveGeneral( array(
-						'form_id'                    => (int) $form->id,
-						'formSettings'               => wp_json_encode( $general ),
-						'advancedValidationSettings' => wp_json_encode( minn_admin_fluent_meta( $form->id, 'advancedValidationSettings' ) ),
-					) );
-				} catch ( \Throwable $e ) {
-					return minn_admin_fluent_validation_error( $e, 'confirmation.' );
-				}
-			}
-			foreach ( $writes as $id => $n ) {
-				try {
-					$service->store( array(
-						'form_id'  => (int) $form->id,
-						'meta_key' => 'notifications',
-						'meta_id'  => $id,
-						'value'    => wp_json_encode( $n ),
-					) );
-				} catch ( \Throwable $e ) {
-					return minn_admin_fluent_validation_error( $e, 'n' . $id . '.' );
-				}
-			}
-			return rest_ensure_response( minn_admin_fluent_emails_payload( minn_admin_fluent_form( $form->id ) ) );
-		},
-	) );
 
 	minn_admin_endpoint( '/fluent-forms/forms/(?P<id>\d+)/emails/preview', array(
 		'methods'             => 'POST',
