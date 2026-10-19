@@ -6,7 +6,9 @@
  * command line, and an experimental card on the System screen that stays
  * hidden until it is unlocked. Both take Minn's latest release from the Minn
  * update service and nowhere else, check it against the sha256 its release
- * records and an Ed25519 signature from a key Minn Engine trusts, unpack it
+ * records and an Ed25519 signature from a key Minn Engine trusts, refuse it
+ * unless it holds the version its release names and is no older than
+ * ENGINE_FLOOR (the signature does not say which release it is), unpack it
  * into wp-content/upgrade, and hand the site to the engine's own installer
  * (Minn\Cli\Installer, inside the release): the install logic lives in the
  * engine, never here. WordPress's own files move to a folder beside the site
@@ -35,6 +37,16 @@ class Minn_Admin_Switch {
 		'+Usjnr1ZTudBbWToqYLkZ1Oy2yKN07d9+u62AIJ2FG8=',
 		'QpNzSZpXf3TPiHs9mqur30xFrOXs/yFG4uNqBkVajQk=',
 	);
+
+	/**
+	 * The oldest Minn release Minn Admin installs. A signature covers a
+	 * release's bytes, not which release it is, so a release signed in its
+	 * day stays signed after a newer one replaces it; the engine's own
+	 * updater refuses one not newer than the running engine, and a site
+	 * switching has none, so this stands in for it. Raised to a release
+	 * that fixes what an older one would bring back.
+	 */
+	const ENGINE_FLOOR = '0.1.0';
 
 	/** The PHP Minn Engine needs; its code does not parse on older. */
 	const PHP_MIN = 80200;
@@ -110,12 +122,15 @@ class Minn_Admin_Switch {
 		}
 		$release = json_decode( (string) wp_remote_retrieve_body( $response ), true );
 		$package = is_array( $release ) ? (string) ( $release['package'] ?? '' ) : '';
-		if ( 200 !== $code || ! is_array( $release ) || 0 !== strpos( $package, self::SERVICE . 'minn/download/' ) || ! preg_match( '/^[0-9a-f]{64}$/', (string) ( $release['sha256'] ?? '' ) ) || '' === (string) ( $release['signature'] ?? '' ) ) {
+		$version = is_array( $release ) ? (string) ( $release['version'] ?? '' ) : '';
+		// What the engine's own updater takes as a release (Ops\Release): a
+		// major.minor.patch version, downloaded from that version's path.
+		if ( 200 !== $code || ! is_array( $release ) || ! preg_match( '/^\d+\.\d+\.\d+$/', $version ) || self::SERVICE . 'minn/download/' . $version . '/minn.zip' !== $package || ! preg_match( '/^[0-9a-f]{64}$/', (string) ( $release['sha256'] ?? '' ) ) || '' === (string) ( $release['signature'] ?? '' ) ) {
 			/* translators: %d: an HTTP status code. */
 			return new WP_Error( 'minn_switch_service', sprintf( __( 'The Minn update service answered %d without a release Minn Admin can install.', 'minn-admin' ), $code ) );
 		}
 		return array(
-			'version'   => (string) ( $release['version'] ?? '' ),
+			'version'   => $version,
 			'package'   => $package,
 			'sha256'    => (string) $release['sha256'],
 			'signature' => (string) $release['signature'],
@@ -198,6 +213,12 @@ class Minn_Admin_Switch {
 				return new WP_Error( 'minn_switch_zip', sprintf( __( "Minn's release holds %s, outside its minn/ folder, so it is not used.", 'minn-admin' ), $name ) );
 			}
 		}
+		$refused = self::version_error( self::version_of( (string) $archive->getFromName( 'minn/bootstrap.php' ) ), (string) $release['version'] );
+		if ( $refused ) {
+			$archive->close();
+			self::remove( $dir );
+			return $refused;
+		}
 		$opened = $archive->extractTo( $dir );
 		$archive->close();
 		unlink( $zip );
@@ -206,8 +227,7 @@ class Minn_Admin_Switch {
 			self::remove( $dir );
 			return new WP_Error( 'minn_switch_zip', __( "Minn's release is not a Minn Engine: its minn/ folder is incomplete.", 'minn-admin' ) );
 		}
-		$boot    = (string) file_get_contents( $engine . '/bootstrap.php' );
-		$version = preg_match( "/define\\('MINN_ENGINE_VERSION',\\s*'([^']+)'\\)/", $boot, $m ) ? $m[1] : $release['version'];
+		$version = self::version_of( (string) file_get_contents( $engine . '/bootstrap.php' ) );
 		$core    = (string) @file_get_contents( $engine . '/src/Minn/Engine.php' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 		$speaks  = preg_match( "/const WP_VERSION = '([^']+)'/", $core, $m ) ? $m[1] : '';
 		return array(
@@ -217,6 +237,34 @@ class Minn_Admin_Switch {
 			'version' => $version,
 			'speaks'  => $speaks,
 		);
+	}
+
+	/**
+	 * Why an archive holding this version is not installed, or null: it
+	 * must hold the version its release names (a zip in hand names none),
+	 * and not be older than ENGINE_FLOOR. The engine's updater applies the
+	 * same two rules to the same signed archives.
+	 *
+	 * @param string $holds The version the archive's bootstrap.php names (version_of()).
+	 * @param string $named The version its release names, or '' for a zip in hand.
+	 * @return WP_Error|null
+	 */
+	public static function version_error( $holds, $named ) {
+		$holds = '' === (string) $holds ? '0.0.0' : (string) $holds;
+		if ( '' !== (string) $named && $holds !== (string) $named ) {
+			/* translators: 1: the Minn version a release archive holds, 2: the version its release names. */
+			return new WP_Error( 'minn_switch_version', sprintf( __( 'The archive holds Minn %1$s, not the %2$s its release names, so it is not used.', 'minn-admin' ), $holds, $named ) );
+		}
+		if ( version_compare( $holds, self::ENGINE_FLOOR, '<' ) ) {
+			/* translators: 1: a Minn version, 2: the oldest Minn version Minn Admin installs. */
+			return new WP_Error( 'minn_switch_old', sprintf( __( 'Minn %1$s is older than Minn %2$s, the oldest release Minn Admin installs, so it is not used.', 'minn-admin' ), $holds, self::ENGINE_FLOOR ) );
+		}
+		return null;
+	}
+
+	/** The version a Minn bootstrap.php names, read as the engine reads it; '' when it names none. */
+	private static function version_of( $bootstrap ) {
+		return preg_match( "/MINN_ENGINE_VERSION', '([^']+)'/", (string) $bootstrap, $m ) ? $m[1] : '';
 	}
 
 	/**
