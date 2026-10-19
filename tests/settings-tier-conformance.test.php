@@ -31,7 +31,8 @@
  *                      from before) saves as it did.
  *
  * A third fixture screen keeps its values in options through the tier's own
- * storage (no read or write), and runs the same rules plus its own checks.
+ * storage (no read or write), and runs the same rules plus its own checks,
+ * among them a switch with its own word for on and a screen shown closed.
  *
  * Live screens run with the tier stopped where it would write
  * (Minn_Admin_Kernel_Settings::dry()), so nothing on the lab changes; the
@@ -263,9 +264,13 @@ $declared = minn_admin_settings( 'minn-st-stored', array(
 		if ( null !== $ctx['tab'] && 'main' !== $ctx['tab'] ) {
 			return null;
 		}
+		if ( ! empty( $GLOBALS['minn_st']['closed'] ) ) {
+			return array( 'groups' => array( array( 'title' => 'Stored', 'fields' => array(), 'locked' => 2 ) ), 'closed' => new WP_Error( 'minn_st_closed', 'Shut here.', array( 'status' => 409 ) ) );
+		}
 		return array( 'groups' => array( array( 'title' => 'Stored', 'fields' => array(
 			array( 'key' => 'plain', 'label' => 'Plain', 'type' => 'text' ),
 			array( 'key' => 'on', 'label' => 'Switch', 'type' => 'toggle', '_path' => 'flags/on', '_store' => 'flag' ),
+			array( 'key' => 'word', 'label' => 'Worded', 'type' => 'toggle', '_path' => 'flags/word', '_on' => 'on' ),
 			array( 'key' => 'code', 'label' => 'Code', 'type' => 'textarea', '_raw' => true ),
 			array( 'key' => 'gated', 'label' => 'Gated', 'type' => 'text' ),
 			array( 'key' => 'secret', 'label' => 'Endpoint', 'type' => 'text' ),
@@ -536,6 +541,20 @@ try {
 	list( $st ) = $send( 'POST', $sx, array( 'values' => array( 'on' => true ) ) );
 	$after      = maybe_unserialize( $raw_opt( $opt1 ) );
 	$check( "Storage: and switched on stores '1'", 200 === $st && '1' === ( $after['flags']['on'] ?? null ), wp_json_encode( $after['flags'] ?? null ) );
+	list( $st )  = $send( 'POST', $sx, array( 'values' => array( 'word' => true ) ) );
+	$on_word     = maybe_unserialize( $raw_opt( $opt1 ) )['flags']['word'] ?? null;
+	list( $st2 ) = $send( 'POST', $sx, array( 'values' => array( 'word' => false ) ) );
+	$off_word    = maybe_unserialize( $raw_opt( $opt1 ) )['flags'] ?? array();
+	$check( "Storage: a switch with its own word for on stores that word, and '' when off", 200 === $st && 200 === $st2 && 'on' === $on_word && '' === ( $off_word['word'] ?? null ), wp_json_encode( array( $on_word, $off_word ) ) );
+	$reset_opts();
+	$GLOBALS['minn_st']['closed'] = true;
+	$writes          = array();
+	list( $st, $d )  = $send( 'POST', $sx, array( 'values' => array( 'plain' => 'Shut' ) ) );
+	list( $gst, $g ) = $send( 'GET', $sx );
+	$saved_closed    = minn_admin_settings_save( 'minn-st-stored', array( 'values' => array( 'plain' => 'Shut' ) ), array( 'tab' => 'main' ) );
+	$GLOBALS['minn_st']['closed'] = false;
+	$check( 'Closed: a screen shown closed answers every save with its own reason and writes nothing, from a POST and from PHP', 409 === $st && 'minn_st_closed' === ( $d['code'] ?? '' ) && is_wp_error( $saved_closed ) && 'minn_st_closed' === $saved_closed->get_error_code() && ! $writes && 'One' === ( maybe_unserialize( $raw_opt( $opt1 ) )['plain'] ?? null ), $st . ' ' . wp_json_encode( array( $d['code'] ?? null, $writes ) ) );
+	$check( 'Closed: and its page is still shown, locked, with no trace of the reason object', 200 === $gst && ! array_key_exists( 'closed', (array) $g ) && 2 === ( $g['groups'][0]['locked'] ?? null ), $gst . ' ' . wp_json_encode( $g ) );
 	$reset_opts();
 	list( $st, $d ) = $send( 'POST', $sx, array( 'values' => array( 'secret' => ( $sv['secret'] ?? '' ) . ' v2' ) ) );
 	$after          = maybe_unserialize( $raw_opt( $opt1 ) );

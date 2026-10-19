@@ -1,8 +1,8 @@
 {
-	"code_lines": 61051,
-	"adapter_kernel_lines": 65358,
-	"vendor_guards": 1769,
-	"hand_errors": 773,
+	"code_lines": 60961,
+	"adapter_kernel_lines": 65271,
+	"vendor_guards": 1767,
+	"hand_errors": 772,
 	"cap_checks": 399,
 	"detect_helpers": 195,
 	"adapters": {
@@ -16,7 +16,7 @@
 		"analyticswp": 40,
 		"aryo-activity-log": 295,
 		"asset-cleanup": 331,
-		"autoptimize": 262,
+		"autoptimize": 172,
 		"backwpup": 451,
 		"bookings-kit": 207,
 		"bookly": 225,

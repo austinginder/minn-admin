@@ -23,7 +23,8 @@
  *                   // 'fields' => array( field, … ), 'locked' => … ) ), 'adminUrl' => … ).
  *                   // $ctx['tab'] is the tab the URL names (null for a screen without
  *                   // tabs, or for the whole screen when PHP saves it); null for a tab
- *                   // that does not exist
+ *                   // that does not exist; 'closed' => WP_Error: the screen is shown but
+ *                   // takes no save (its fields locked), and every save answers it
  *     'option'   => 'option_name',   // optional: where a field with no storage of its own
  *     'network'  => true,            // lives (a site option with 'network'); see Storage
  *     'read'     => callable( array $field, array $ctx ): mixed,   // the stored value as the page
@@ -58,10 +59,10 @@
  * every change in one update_option() per option, read fresh and changed
  * only at the leaves sent, so the options API's restore, the write fences
  * and the plugin's registered sanitizer all run, and nothing the layout does
- * not offer is touched. '_store' => 'flag' stores a switch as '1' or no key
- * at all, the shape a plugin reading !empty() keeps. Declared read and write
- * cover the fields without their own '_option'; a field with neither is not
- * offered.
+ * not offer is touched. A switch stores '1' (or '_on', the plugin's own word
+ * for on) and '' when off; '_store' => 'flag' stores no key when off, the
+ * shape a plugin reading !empty() keeps. Declared read and write cover the
+ * fields without their own '_option'; a field with neither is not offered.
  *
  * read() must serve each value from the place write() writes it: the
  * compare, the stale check and the restore all take the stored value from
@@ -393,7 +394,7 @@ class Minn_Admin_Kernel_Settings {
 			$layout['groups'][ $i ]['fields'] = array_map( array( __CLASS__, 'public_field' ), $g['fields'] );
 		}
 		$out = array( 'groups' => $layout['groups'], 'values' => $values );
-		unset( $layout['groups'], $layout['values'] );
+		unset( $layout['groups'], $layout['values'], $layout['closed'] );
 		return $out + $layout;
 	}
 
@@ -597,6 +598,10 @@ class Minn_Admin_Kernel_Settings {
 		$built = self::layout( $def, $ctx );
 		if ( is_wp_error( $built ) ) {
 			return $built;
+		}
+		// A screen shown closed is never answered as saved.
+		if ( is_wp_error( $built[0]['closed'] ?? null ) ) {
+			return $built[0]['closed'];
 		}
 		$fields = $built[1];
 		$values = self::sent( $def, $body, $ctx );
@@ -831,7 +836,7 @@ class Minn_Admin_Kernel_Settings {
 			}
 			$t = $f['type'] ?? 'text';
 			if ( in_array( $t, array( 'toggle', 'true_false' ), true ) ) {
-				$v = self::on( $v ) ? '1' : ( $s['flag'] ? null : '' );
+				$v = self::on( $v ) ? (string) ( $f['_on'] ?? '1' ) : ( $s['flag'] ? null : '' );
 			} elseif ( ! in_array( $t, self::LISTS, true ) ) {
 				$v = is_scalar( $v ) ? (string) $v : '';
 			}

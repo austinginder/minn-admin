@@ -8,7 +8,8 @@
  * missing POST keys in a registered settings group). The form is hand-built,
  * not a Settings-API field registry, so the schema here is a curated map of
  * the daily options on the main "JS, CSS & HTML" screen. Critical CSS, Extra
- * and Image tabs stay one click away in wp-admin.
+ * and Image tabs stay one click away in wp-admin. The screen is declared to
+ * the settings tier, which reads and writes each option itself.
  *
  * Family: `performance` (shared nav item with Perfmatters, Asset CleanUp,
  * Performance Lab). Cache purge already ships via cache-purge.php.
@@ -111,155 +112,48 @@ function minn_admin_autoptimize_schema() {
 }
 
 /**
- * Flat map of key => field def (with type) across all tabs.
- *
- * @return array
- */
-function minn_admin_autoptimize_fields_by_key() {
-	static $map = null;
-	if ( null !== $map ) {
-		return $map;
-	}
-	$map = array();
-	foreach ( minn_admin_autoptimize_schema() as $tab ) {
-		foreach ( $tab['groups'] as $group ) {
-			foreach ( $group['fields'] as $f ) {
-				$map[ $f['key'] ] = $f;
-			}
-		}
-	}
-	return $map;
-}
-
-/**
- * Read one option through Autoptimize's wrapper when available.
- *
- * @param string $key Option name.
- * @return mixed
- */
-function minn_admin_autoptimize_get( $key ) {
-	if ( class_exists( 'autoptimizeOptionWrapper', false ) ) {
-		return autoptimizeOptionWrapper::get_option( $key, false );
-	}
-	return get_option( $key, false );
-}
-
-/**
- * Write one option through Autoptimize's wrapper when available.
- *
- * @param string $key   Option name.
- * @param mixed  $value Value.
- */
-function minn_admin_autoptimize_set( $key, $value ) {
-	if ( class_exists( 'autoptimizeOptionWrapper', false ) ) {
-		autoptimizeOptionWrapper::update_option( $key, $value );
-		return;
-	}
-	update_option( $key, $value );
-}
-
-/**
- * Current display value for a field.
- *
- * @param array $field Field def.
- * @return mixed
- */
-function minn_admin_autoptimize_value( $field ) {
-	$raw = minn_admin_autoptimize_get( $field['key'] );
-	if ( 'toggle' === $field['type'] ) {
-		// Stored as 'on', 1, true when on; false/''/0/missing when off.
-		return ! empty( $raw ) && '0' !== (string) $raw && 'off' !== (string) $raw && 'false' !== (string) $raw;
-	}
-	if ( false === $raw || null === $raw ) {
-		return '';
-	}
-	return is_scalar( $raw ) ? (string) $raw : '';
-}
-
-/**
- * GET/POST shape for one tab.
+ * One tab as offered, or null for a tab that does not exist. Each setting is
+ * its own option, a switch stored as 'on' or '' as Autoptimize's form posts it.
  *
  * @param string $tab_id Tab id.
- * @return array|WP_Error
+ * @return array|null { groups, adminUrl }
  */
-function minn_admin_autoptimize_tab_shape( $tab_id ) {
+function minn_admin_autoptimize_layout( $tab_id ) {
 	$schema = minn_admin_autoptimize_schema();
 	if ( ! isset( $schema[ $tab_id ] ) ) {
-		return new WP_Error( 'minn_no_tab', __( 'Unknown settings tab.', 'minn-admin' ), array( 'status' => 404 ) );
+		return null;
 	}
-	$tab    = $schema[ $tab_id ];
 	$groups = array();
-	$values = array();
 	// Network-wide, these are the network's settings and only Network Admin
-	// writes them (a save here answers 409), so every field is locked with
-	// the way there.
+	// writes them: a save here would land in a per-site option Autoptimize
+	// never reads, so every field is locked with the way there, and a save
+	// is refused rather than answered as saved.
 	$network = minn_admin_autoptimize_network_wide();
-	foreach ( $tab['groups'] as $group ) {
+	$why     = __( 'Autoptimize runs on the network’s settings here, so change them in Network Admin.', 'minn-admin' );
+	foreach ( $schema[ $tab_id ]['groups'] as $group ) {
 		if ( $network ) {
 			$groups[] = array(
 				'title'  => $group['title'],
-				'desc'   => $groups ? '' : __( 'Autoptimize runs on the network’s settings here, so change them in Network Admin.', 'minn-admin' ),
+				'desc'   => $groups ? '' : $why,
 				'fields' => array(),
 				'locked' => count( $group['fields'] ),
 			);
 			continue;
 		}
-		$fields = array();
-		foreach ( $group['fields'] as $f ) {
-			$out = array(
-				'key'   => $f['key'],
-				'label' => $f['label'],
-				'type'  => $f['type'],
-			);
-			if ( ! empty( $f['help'] ) ) {
-				$out['help'] = $f['help'];
-			}
-			if ( 'textarea' === $f['type'] ) {
-				$out['rows'] = 6;
-				$out['mono'] = true;
-			}
-			$fields[]            = $out;
-			$values[ $f['key'] ] = minn_admin_autoptimize_value( $f );
+		foreach ( $group['fields'] as $i => $f ) {
+			$f += 'textarea' === $f['type'] ? array( 'rows' => 6, 'mono' => true ) : array();
+			// Read and written by plain option calls: Autoptimize's wrapper
+			// reads and writes the site's own options whenever it is not
+			// network-wide.
+			$group['fields'][ $i ] = $f + array( '_option' => $f['key'], '_on' => 'on' );
 		}
-		$groups[] = array(
-			'title'  => $group['title'],
-			'fields' => $fields,
-			'locked' => 0,
-		);
+		$groups[] = $group + array( 'locked' => 0 );
 	}
 	return array(
 		'groups'   => $groups,
-		'values'   => $values,
 		'adminUrl' => $network ? network_admin_url( 'settings.php?page=autoptimize' ) : admin_url( 'options-general.php?page=autoptimize' ),
+		'closed'   => $network ? new WP_Error( 'minn_autoptimize_network', $why, array( 'status' => 409 ) ) : null,
 	);
-}
-
-/**
- * Save edited keys. Unknown keys are ignored. Toggles store 'on' / ''.
- *
- * @param array $values Key => value map from the client.
- * @return true
- */
-function minn_admin_autoptimize_save( $values ) {
-	$by_key = minn_admin_autoptimize_fields_by_key();
-	foreach ( (array) $values as $key => $v ) {
-		if ( ! isset( $by_key[ $key ] ) ) {
-			continue;
-		}
-		$type = $by_key[ $key ]['type'];
-		if ( 'toggle' === $type ) {
-			$on = ! empty( $v ) && 'false' !== $v && '0' !== (string) $v && 'off' !== (string) $v;
-			minn_admin_autoptimize_set( $key, $on ? 'on' : '' );
-		} else {
-			$minn_val = is_scalar( $v ) ? (string) $v : '';
-			// Critical CSS paste: strip tags like AO's own sanitizer path.
-			if ( 'autoptimize_css_defer_inline' === $key && class_exists( 'autoptimizeStyles', false ) && method_exists( 'autoptimizeStyles', 'sanitize_css' ) ) {
-				$minn_val = autoptimizeStyles::sanitize_css( $minn_val );
-			}
-			minn_admin_autoptimize_set( $key, $minn_val );
-		}
-	}
-	return true;
 }
 
 /**
@@ -333,32 +227,20 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	return $surfaces;
 } );
 
-add_action( 'rest_api_init', function () {
-	if ( ! minn_admin_autoptimize_active() ) {
-		return;
-	}
-	minn_admin_endpoint( '/autoptimize/settings/(?P<tab>[a-z]+)', array(
-		'methods'             => 'GET',
-		'gate'                => function () {
-			return minn_admin_autoptimize_can();
-		},
-		'run'                 => function ( $req ) {
-			return rest_ensure_response( minn_admin_autoptimize_tab_shape( Minn_Admin::path_param( $req, 'tab' ) ) );
-		},
-	) );
-	minn_admin_endpoint( '/autoptimize/settings/(?P<tab>[a-z]+)', array(
-		'methods'             => 'POST',
-		'gate'                => function () {
-			return minn_admin_autoptimize_can();
-		},
-		'run'                 => function ( $req ) {
-			if ( minn_admin_autoptimize_network_wide() ) {
-				return new WP_Error( 'minn_autoptimize_network', __( 'Autoptimize runs on the network’s settings here, so change them in Network Admin.', 'minn-admin' ), array( 'status' => 409 ) );
-			}
-			$body   = $req->get_json_params();
-			$values = isset( $body['values'] ) && is_array( $body['values'] ) ? $body['values'] : array();
-			minn_admin_autoptimize_save( $values );
-			return rest_ensure_response( minn_admin_autoptimize_tab_shape( Minn_Admin::path_param( $req, 'tab' ) ) );
-		},
-	) );
-} );
+minn_admin_settings( 'autoptimize', array(
+	'route'    => 'autoptimize/settings/(?P<tab>[a-z]+)',
+	'active'   => 'minn_admin_autoptimize_active',
+	'gate'     => 'minn_admin_autoptimize_can',
+	'layout'   => function ( $ctx ) {
+		return minn_admin_autoptimize_layout( $ctx['tab'] );
+	},
+	// Critical CSS goes into a style tag on every page: tags stripped, as
+	// Autoptimize's own sanitizer strips them.
+	'validate' => function ( $changes ) {
+		if ( isset( $changes['autoptimize_css_defer_inline'] ) && class_exists( 'autoptimizeStyles' ) && method_exists( 'autoptimizeStyles', 'sanitize_css' ) ) {
+			$v = $changes['autoptimize_css_defer_inline'];
+			$changes['autoptimize_css_defer_inline'] = autoptimizeStyles::sanitize_css( is_scalar( $v ) ? (string) $v : '' );
+		}
+		return $changes;
+	},
+) );
