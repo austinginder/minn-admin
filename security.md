@@ -225,7 +225,8 @@ A few properties worth knowing before auditing (details in
   never by ending the request. A panel the plugin would refuse altogether
   (the SEO plugin's own edit rule, or its box switched off for the type of
   post being made) is not offered, and a field its own edit check refuses
-  (WP Job Manager's Featured and Expiry) is left out. A preview made from a real entry fills the
+  (WP Job Manager's Featured and Expiry) is left out. Every refused value
+  is named in `minn_field_errors` and never overwrites the stored one. A preview made from a real entry fills the
   submitter's account fields only as far as the vendor's own entry screen
   shows them, and their profile only for someone who may list users.
 - On a network, Minn's network routes read network capabilities on the
