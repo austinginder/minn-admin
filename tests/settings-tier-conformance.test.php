@@ -130,6 +130,7 @@ $fixture_store = array(
 	'num'     => '1234567890123456789',
 	'far'     => 'away',
 	'pair'    => $hy . '-' . $key,
+	'snippet' => "<script>k='" . $key . "'</script>",
 	'links'   => array( array( 'svc' => 'a', 'key' => $sl ), array( 'svc' => 'b', 'key' => rawurlencode( $sl ) ), array( 'svc' => 'c', 'key' => 'x' ) ),
 );
 $reset_fixture = static function () use ( $fixture_store ) {
@@ -168,6 +169,7 @@ $fixture = array(
 						$f( 'rows', 'Integrations', 'rows' ),
 						$f( 'num', 'Account id', 'number' ),
 						$f( 'pair', 'Key pair', 'text' ),
+						$f( 'snippet', 'Snippet', 'textarea', array( '_raw' => true ) ),
 						$f( 'links', 'Links', 'rows' ),
 					),
 					'locked' => 0,
@@ -288,7 +290,7 @@ try {
 			}
 		}
 	}
-	$check( 'R2 shared types: a field of a type the form cannot draw is not offered, nor its value served', 200 === $st && ! in_array( 'odd', $offered, true ) && ! array_key_exists( 'odd', (array) ( $page['values'] ?? array() ) ) && 10 === count( $offered ), $st . ' ' . wp_json_encode( $offered ) );
+	$check( 'R2 shared types: a field of a type the form cannot draw is not offered, nor its value served', 200 === $st && ! in_array( 'odd', $offered, true ) && ! array_key_exists( 'odd', (array) ( $page['values'] ?? array() ) ) && 11 === count( $offered ), $st . ' ' . wp_json_encode( $offered ) );
 	$check( 'R2 shared types: none of the adapter\'s own keys leaves', ! $leaked, wp_json_encode( $leaked ) );
 	$reset_fixture();
 	list( $st ) = $send( 'POST', $fx, array( 'values' => array( 'odd' => 'changed' ) ) );
@@ -419,6 +421,19 @@ try {
 	$right = $probe( 'Endpoint ' . $key );
 	$wrong = $probe( 'Endpoint not-the-key' );
 	$check( 'R8 stale copy: a guess sent as the value beside a base answers alike, right or wrong (409)', 409 === $right && $right === $wrong && $wrote_nothing(), $right . ' / ' . $wrong );
+
+	// A guess at a key inside a raw-output field, from a caller the gate
+	// refuses: the stored key and any other answer alike (403).
+	$raw_probe = static function ( $k ) use ( $send, $ox, $reset_fixture, &$strip ) {
+		$reset_fixture();
+		$strip      = true;
+		list( $st ) = $send( 'POST', $ox, array( 'values' => array( 'snippet' => "<script>k='" . $k . "'</script>" ) ) );
+		$strip      = false;
+		return $st;
+	};
+	$right = $raw_probe( $key );
+	$wrong = $raw_probe( 'MinnSettingsTierNOTTHEKEY00007731qz' );
+	$check( 'R5 field gates: a guess at a key in a raw-output field answers alike, right or wrong (403)', 403 === $right && $right === $wrong && $wrote_nothing(), $right . ' / ' . $wrong );
 
 	// Two placeholders with text typed between them, the first credential
 	// holding the same character typed: each goes back whole.

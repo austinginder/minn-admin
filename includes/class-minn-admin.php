@@ -1186,8 +1186,10 @@ class Minn_Admin {
 	 */
 	public static function unchanged( $sent, $served, $kind = 'text' ) {
 		if ( 'bool' === $kind ) {
+			// One reading of on/off with the settings tier: "OFF" and " false "
+			// are off too.
 			$on = function ( $v ) {
-				return ! empty( $v ) && 'false' !== $v && '0' !== (string) $v && 'off' !== $v;
+				return class_exists( 'Minn_Admin_Kernel_Settings' ) ? Minn_Admin_Kernel_Settings::on( $v ) : ( ! empty( $v ) && 'false' !== $v && '0' !== (string) $v && 'off' !== $v );
 			};
 			return $on( $sent ) === $on( $served );
 		}

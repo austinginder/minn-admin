@@ -45,6 +45,10 @@
  *     'labels'   => array( 'may' => callable( string[] $labels ): string ),   // the gate's refusal
  *   ) );
  *
+ * read() must serve each value from the place write() writes it: the
+ * compare, the stale check and the restore all take the stored value from
+ * what read() serves, and the restore puts a credential back from there.
+ *
  * A field is the shared settings form's: 'key' (or 'name', which the form
  * also reads), 'label', a 'type' from TYPES and its presentation keys. A key that starts with "_" is the adapter's own
  * (where the value lives) and never leaves. '_raw' => true marks a value the
@@ -577,7 +581,11 @@ class Minn_Admin_Kernel_Settings {
 				continue;
 			}
 			$served[ $key ] = call_user_func( $def['read'], $fields[ $key ], $ctx );
-			if ( ! self::same( $def, $fields[ $key ], $v, $served[ $key ], $ctx ) ) {
+			// A value holding a credential in clear is a change even when it
+			// equals the stored one: a page never sends one (it was shown the
+			// placeholder), and as no change it would skip the gates a wrong
+			// guess meets, so the answer would tell the stored key.
+			if ( ! self::same( $def, $fields[ $key ], $v, $served[ $key ], $ctx ) || Minn_Admin_Egress::masked( $v ) !== $v ) {
 				$changes[ $key ] = $v;
 			}
 		}
