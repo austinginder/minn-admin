@@ -14502,30 +14502,47 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	 * Whether any of these files may define the constant: a define of it,
 	 * a define this cannot name (a loop over a list of settings), or a
 	 * const of that name. A file that cannot be read, or is too large to
-	 * read (8 MB), counts as one that may. A file with no define call and
-	 * no mention of the name cannot, however large: a firewall's compiled
+	 * read (8 MB), counts as one that may. A file with no define and no
+	 * mention of the name cannot, however large: a firewall's compiled
 	 * rules, loaded before wp-config.php on every request, run to about a
-	 * megabyte of defined() checks. With no list (WP-CLI) the running
-	 * value is all there is to judge by.
+	 * megabyte of defined() checks. A file over $whole is judged by
+	 * pattern instead of tokens (a few megabytes of source is hundreds of
+	 * megabytes of tokens): any define whose name is not a plain string,
+	 * or a define of this name, counts, even inside a comment. With no
+	 * list (WP-CLI) the running value is all there is to judge by.
 	 *
 	 * @param string        $name  Constant name.
 	 * @param string[]|null $files Files to read.
+	 * @param int           $whole The largest file read token by token, in bytes.
 	 * @return bool
 	 */
-	private static function config_defined_by_loaded( $name, $files ) {
+	private static function config_defined_by_loaded( $name, $files, $whole = 524288 ) {
 		if ( ! is_array( $files ) ) {
 			return false;
 		}
+		// Whitespace and comments PHP allows between a define and its name.
+		$gap = '(?:\s|\/\*.*?\*\/|(?:\/\/|#)[^\n]*\n)*';
 		foreach ( $files as $file ) {
 			$size = is_readable( (string) $file ) ? filesize( (string) $file ) : false;
 			$src  = false !== $size && $size <= 8388608 ? file_get_contents( (string) $file ) : false;
 			if ( false === $src ) {
 				return true;
 			}
-			if ( ! preg_match( '/\bdefine\s*\(/i', $src ) && false === strpos( $src, $name ) ) {
+			if ( ! preg_match( '/\bdefine\b/i', $src ) && false === strpos( $src, $name ) ) {
 				continue;
 			}
-			if ( 'absent' !== self::config_define_scan( $name, $src )['kind'] || preg_match( '/\bconst\s+' . preg_quote( $name, '/' ) . '\b/i', $src ) ) {
+			if ( preg_match( '/\bconst\s+' . preg_quote( $name, '/' ) . '\b/i', $src ) ) {
+				return true;
+			}
+			if ( $size > $whole ) {
+				// A pattern that fails to run (false) counts as a match.
+				$found = preg_match( '/\bdefine' . $gap . '\(' . $gap . '(?:[^\'"\s]|([\'"])' . preg_quote( $name, '/' ) . '\1)/is', $src );
+				if ( 0 !== $found ) {
+					return true;
+				}
+				continue;
+			}
+			if ( 'absent' !== self::config_define_scan( $name, $src )['kind'] ) {
 				return true;
 			}
 		}

@@ -183,6 +183,35 @@ $private = static function ( $class, $method ) {
 			'N1 a large file that does define it is still read, and locks (control)' => array( $plain, array(), array( $big_def ), false ),
 			'N1 a file too large to read at all (over 8 MB) still locks' => array( $plain, array(), array( $huge ), false ),
 		);
+		// I1: past a size bound a file is judged by pattern and never
+		// tokenized (a few MB of source is hundreds of MB of tokens). The
+		// bound is the reader's third parameter, so small fixtures stand in
+		// for large files here. I2: the pass-over needs no define word at
+		// all, so a comment between define and its parenthesis still counts.
+		$by = $private( 'Minn_Admin_REST', 'config_defined_by_loaded' );
+		$fx = static function ( $file, $code ) use ( $put ) {
+			return $put( $file, "<?php\n" . $code );
+		};
+		$pattern = array(
+			// label => [ file, may define past the bound? ]
+			'a define of it inside a comment locks (no tokens, so it fails closed)' => array( $fx( 'p-comment.php', "// define( '{$name}', true );\n" ), true ),
+			'a define with a name it cannot read locks' => array( $looped, true ),
+			'a define of it with a comment before the parenthesis locks' => array( $fx( 'p-gap.php', "define /* x */ ( \"{$name}\", true );\n" ), true ),
+			'a const of that name locks' => array( $fx( 'p-const.php', "const {$name} = true;\n" ), true ),
+			'defined() checks of it alone do not (control)' => array( $fx( 'p-defined.php', "if ( defined( '{$name}' ) ) {\n\t\$x = 1;\n}\n" ), false ),
+			'a define of another constant does not (control)' => array( $fx( 'p-other.php', "define( 'MINN_V047_CORE_OTHER', true );\n" ), false ),
+			'a firewall rule matching define text in a string does not (control)' => array( $fx( 'p-rule.php', "\$r = '#^define\\\\(\\\\s*\\'DONOTCACHEDB\\',\\\\s*true';\n" ), false ),
+		);
+		foreach ( $pattern as $label => $c ) {
+			$got = $by ? (bool) $by->invoke( null, $name, array( $c[0] ), 16 ) : null;
+			$check( 'I1 past the size bound, ' . $label, $c[1] === $got, var_export( $got, true ) );
+		}
+		$got = $by ? (bool) $by->invoke( null, $name, array( $pattern['a define of it inside a comment locks (no tokens, so it fails closed)'][0] ) ) : null;
+		$check( 'I1 under the bound the same comment is tokenized and does not lock (control)', false === $got, var_export( $got, true ) );
+		$gap  = $fx( 'p-gap-dynamic.php', "foreach ( array( 'MINN_V047_CORE_A' => 1 ) as \$k => \$v ) {\n\tdefine /* x */ ( \$k, \$v );\n}\n" );
+		$hash = $fx( 'p-hash-dynamic.php', "foreach ( array( 'MINN_V047_CORE_A' => 1 ) as \$k => \$v ) {\n\tdefine # c\n\t( \$k, \$v );\n}\n" );
+		$check( 'I2 a define with a comment before its parenthesis is read, not passed over (/* */)', true === ( $by ? (bool) $by->invoke( null, $name, array( $gap ) ) : null ) );
+		$check( 'I2 and with a # comment and a line break', true === ( $by ? (bool) $by->invoke( null, $name, array( $hash ) ) : null ) );
 		$check( 'N1 the fixture rules file is over 512 KB and the huge one over 8 MB', filesize( $rules ) > 524288 && filesize( $big_def ) > 524288 && filesize( $huge ) > 8388608, filesize( $rules ) . ' / ' . filesize( $huge ) );
 		foreach ( $cases as $label => $c ) {
 			$got = $is_live( $c[0], $c[1], $c[2] );
@@ -432,9 +461,9 @@ $private = static function ( $class, $method ) {
 			$check( '10-1 rule: ' . $label, $c[2] === $got, $got );
 		}
 
-		// N2: the floor rises on its own with what this site has staged.
+		// N2: the floor rises on its own with what this site has switched to.
 		$remember = method_exists( 'Minn_Admin_Switch', 'remember' ) ? new ReflectionMethod( 'Minn_Admin_Switch', 'remember' ) : null;
-		$check( 'N2 Minn Admin keeps the highest release this site has staged (FLOOR_OPTION, remember)', defined( 'Minn_Admin_Switch::FLOOR_OPTION' ) && null !== $remember );
+		$check( 'N2 Minn Admin keeps the highest release this site has switched to (FLOOR_OPTION, remember)', defined( 'Minn_Admin_Switch::FLOOR_OPTION' ) && null !== $remember );
 		if ( null === $remember ) {
 			return;
 		}
@@ -442,9 +471,9 @@ $private = static function ( $class, $method ) {
 		global $wpdb;
 		$remember->invoke( null, $newer );
 		$autoload = (string) $wpdb->get_var( $wpdb->prepare( "SELECT autoload FROM {$wpdb->options} WHERE option_name = %s", $floor_option ) );
-		$check( 'N2 a staged release is remembered, and not autoloaded', $newer === get_option( $floor_option ) && in_array( $autoload, array( 'no', 'off', 'auto-off' ), true ), wp_json_encode( array( get_option( $floor_option ), $autoload ) ) );
+		$check( 'N2 a release switched to is remembered, and not autoloaded', $newer === get_option( $floor_option ) && in_array( $autoload, array( 'no', 'off', 'auto-off' ), true ), wp_json_encode( array( get_option( $floor_option ), $autoload ) ) );
 		$got = $code( Minn_Admin_Switch::version_error( $floor, $floor ) );
-		$check( "N2 once this site has staged {$newer}, the signed {$floor} is refused", 'minn_switch_old' === $got, $got );
+		$check( "N2 once this site has switched to {$newer}, the signed {$floor} is refused", 'minn_switch_old' === $got, $got );
 		$got = $code( Minn_Admin_Switch::version_error( $floor, '' ) );
 		$check( "N2 and so is {$floor} as a zip in hand", 'minn_switch_old' === $got, $got );
 		$got = $code( Minn_Admin_Switch::version_error( $newer, $newer ) );
@@ -526,7 +555,7 @@ $private = static function ( $class, $method ) {
 		$r                  = Minn_Admin_Switch::stage( $release );
 		$ok                 = is_array( $r ) && $holds === $r['version'];
 		$check( "10-1 stage: the same archive is staged when its release names {$holds} (control)", $ok, is_wp_error( $r ) ? $r->get_error_code() : wp_json_encode( $r['version'] ?? null ) );
-		$check( "N2 stage: and this site now remembers {$holds}", $holds === get_option( $floor_option ), wp_json_encode( get_option( $floor_option ) ) );
+		$check( 'I4 stage: a check alone (staged, nothing switched) leaves the floor where it was', false === get_option( $floor_option ), wp_json_encode( get_option( $floor_option ) ) );
 		if ( is_array( $r ) ) {
 			Minn_Admin_Switch::remove( $r['dir'] );
 		}
@@ -537,13 +566,13 @@ $private = static function ( $class, $method ) {
 		if ( is_array( $r ) ) {
 			Minn_Admin_Switch::remove( $r['dir'] );
 		}
-		// A site that has staged a newer release: the same signed archive,
+		// A site that has switched to a newer release: the same signed archive,
 		// named as itself, is a replay of a superseded release.
 		update_option( $floor_option, $other, false );
 		$release['version'] = $holds;
 		$release['sha256']  = hash( 'sha256', $bytes );
 		$r                  = Minn_Admin_Switch::stage( $release );
-		$check( "N2 stage: once this site has staged {$other}, the signed {$holds} is refused", is_wp_error( $r ) && 'minn_switch_old' === $r->get_error_code(), is_wp_error( $r ) ? $r->get_error_code() : 'staged as ' . $r['version'] );
+		$check( "N2 stage: once this site has switched to {$other}, the signed {$holds} is refused", is_wp_error( $r ) && 'minn_switch_old' === $r->get_error_code(), is_wp_error( $r ) ? $r->get_error_code() : 'staged as ' . $r['version'] );
 		clearstatcache();
 		$check( 'N2 stage: and leaves no folder behind', array() === array_diff( $listed(), $was ), wp_json_encode( array_values( array_diff( $listed(), $was ) ) ) );
 		if ( is_array( $r ) ) {
@@ -551,6 +580,51 @@ $private = static function ( $class, $method ) {
 		}
 	} finally {
 		$restore();
+		$clean();
+	}
+} )();
+
+/*
+ * I4: the floor rises when a switch completes, never at Check. switch_now()
+ * runs the staged engine's installer; here the staged engine is a stub whose
+ * Installer answers the code the case sets, so nothing moves.
+ */
+( static function () use ( $check, $skip, $once, $keep_floor, $floor_option ) {
+	if ( ! class_exists( 'Minn_Admin_Switch' ) || Minn_Admin::is_engine() || class_exists( 'Minn\\Autoloader', false ) || class_exists( 'Minn\\Cli\\Installer', false ) ) {
+		$skip( 'I4 switch: Run on Minn is not loaded here, or an engine is loaded in this process' );
+		return;
+	}
+	$base = trailingslashit( get_temp_dir() ) . 'minn-v047-core-switch-' . wp_generate_password( 8, false );
+	$stub = $base . '/engine';
+	wp_mkdir_p( $stub . '/src/Minn/Cli' );
+	file_put_contents( $stub . '/src/Minn/Autoloader.php', "<?php\nnamespace Minn;\nclass Autoloader {\n\tpublic static function register() {\n\t\tspl_autoload_register( static function ( \$c ) {\n\t\t\tif ( 'Minn\\\\Cli\\\\Installer' === \$c ) {\n\t\t\t\trequire __DIR__ . '/Cli/Installer.php';\n\t\t\t}\n\t\t} );\n\t}\n}\n" );
+	file_put_contents( $stub . '/src/Minn/Cli/Installer.php', "<?php\nnamespace Minn\\Cli;\nclass Installer {\n\tpublic static function run( array \$argv, \$engine ) {\n\t\t\$GLOBALS['minn_v047_installer_calls'][] = \$argv;\n\t\treturn array( 'code' => (int) ( \$GLOBALS['minn_v047_installer_code'] ?? 1 ), 'lines' => array( 'minn-v047 stub' ) );\n\t}\n}\n" );
+	$restore = $keep_floor();
+	$clean   = $once( static function () use ( $base, $restore ) {
+		$restore();
+		Minn_Admin_Switch::remove( $base );
+	} );
+	try {
+		$held = static function ( $name, $version ) use ( $base, $stub ) {
+			wp_mkdir_p( "{$base}/{$name}" );
+			return array( 'dir' => "{$base}/{$name}", 'engine' => $stub, 'version' => $version, 'user' => get_current_user_id(), 'light' => 'GREEN', 'state' => 'switching' );
+		};
+		$version = '9.8.7';
+		$GLOBALS['minn_v047_installer_code'] = 1;
+		$failed  = $held( 'failed', $version );
+		Minn_Admin_Switch::switch_now( str_repeat( 'a', 32 ), $failed );
+		$ran = (array) ( $GLOBALS['minn_v047_installer_calls'] ?? array() );
+		$check( 'I4 switch: the stub installer is what ran, asked to install', 1 === count( $ran ) && 'install' === ( $ran[0][0] ?? '' ), wp_json_encode( $ran ) );
+		$check( 'I4 switch: a switch that failed leaves the floor where it was', false === get_option( $floor_option ) && is_file( $failed['dir'] . '/result.json' ), wp_json_encode( get_option( $floor_option ) ) );
+		$GLOBALS['minn_v047_installer_code'] = 0;
+		$done = $held( 'done', $version );
+		Minn_Admin_Switch::switch_now( str_repeat( 'b', 32 ), $done );
+		clearstatcache();
+		$check( "I4 switch: a completed switch raises the floor to its release ({$version})", $version === get_option( $floor_option ) && ! is_dir( $done['dir'] ), wp_json_encode( get_option( $floor_option ) ) );
+		$got = Minn_Admin_Switch::version_error( '9.8.6', '9.8.6' );
+		$check( 'I4 switch: and an older release is refused after it', is_wp_error( $got ) && 'minn_switch_old' === $got->get_error_code(), is_wp_error( $got ) ? $got->get_error_code() : 'none' );
+	} finally {
+		unset( $GLOBALS['minn_v047_installer_code'], $GLOBALS['minn_v047_installer_calls'] );
 		$clean();
 	}
 } )();
