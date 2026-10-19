@@ -1164,7 +1164,9 @@ class Minn_Admin_DB {
 	 * Sucuri, All In One Security), the hash of the code an email second
 	 * factor sent (core Two Factor and Solid Security), and the plaintext
 	 * one-time sign-in tokens the One Time Login and WP Freighter routes
-	 * mint (each signs in as that user).
+	 * mint (each signs in as that user), and the access and refresh tokens
+	 * Yoast SEO's AI features keep for each user who consented to them
+	 * (they spend that user's AI subscription, and no screen shows them).
 	 */
 	/**
 	 * usermeta rows redacted by name shape. Elementor Connect keeps each
@@ -1176,7 +1178,7 @@ class Minn_Admin_DB {
 		array( '', 'elementor_connect_common_data' ),
 	);
 
-	const SECRET_USERMETA_KEYS = array( 'session_tokens', '_application_passwords', '_two_factor_totp_key', '_two_factor_backup_codes', 'one_time_login_token', 'captaincore_login_token', 'sucuriscan_topt_secret_key', 'sucuriscan_topt_backup_codes', '_two_factor_email_token', 'tfa_priv_key_64', 'simba_tfa_emergency_codes_64', 'tfa_trusted_devices', 'updraftcentral_login_key', 'wpmdb_licence_key' );
+	const SECRET_USERMETA_KEYS = array( 'session_tokens', '_application_passwords', '_two_factor_totp_key', '_two_factor_backup_codes', 'one_time_login_token', 'captaincore_login_token', 'sucuriscan_topt_secret_key', 'sucuriscan_topt_backup_codes', '_two_factor_email_token', 'tfa_priv_key_64', 'simba_tfa_emergency_codes_64', 'tfa_trusted_devices', 'updraftcentral_login_key', 'wpmdb_licence_key', '_yoast_wpseo_ai_generator_access_jwt', '_yoast_wpseo_ai_generator_refresh_jwt' );
 
 	/**
 	 * Option and network option rows redacted whole: core's keys and salts,
@@ -1216,9 +1218,15 @@ class Minn_Admin_DB {
 	 * log with; SureMails' connections, kept base64-encoded only; GoSMTP's
 	 * mailer keys and passwords; Easy WP SMTP's settings and the key that
 	 * seals its password beside them; and Site Mailer's Connect client secret
-	 * and tokens and the key it seals unsubscribe links with.
+	 * and tokens and the key it seals unsubscribe links with. Contact Form 7
+	 * keeps every integration's secret in its one settings row (the Stripe
+	 * secret key, the reCAPTCHA and Turnstile secrets, the Brevo key, the
+	 * Constant Contact client secret and OAuth tokens), which its Integration
+	 * screen prints only masked; Yoast SEO keeps its SEMrush, Wincher and
+	 * MyYoast OAuth tokens in its main settings row, which its own settings
+	 * screen withholds.
 	 */
-	const SECRET_OPTION_KEYS = array( 'auth_key', 'secure_auth_key', 'logged_in_key', 'nonce_key', 'auth_salt', 'secure_auth_salt', 'logged_in_salt', 'nonce_salt', 'secret_key', 'jetpack_private_options', 'woocommerce_helper_data', 'wp_mail_smtp', 'wp_mail_smtp_mail_key', '_transient_wp_mail_smtp_connect_token', 'aio_wp_security_configs', 'postman_options', 'postman_auth_token', 'fs_accounts', 'wpmudev_apikey', 'wp_smush_api_auth', 'jetpack_secrets', '_site_transient_update_plugins', '_site_transient_update_themes', 'gf_telemetry_data', '_site_transient_wp_rocket_update_data', 'fs_api_cache', 'fs_dbg_api_cache', 'wpforms_settings', 'wpforms_crypto_secret_key', 'wpforms_square_connections', 'frm-usage-uuid', 'itsec-storage', 'suretrigger_options', 'wp_statistics', 'wp_statistics_licenses', 'wp_statistics_cipher_key', 'iawp_salt', 'iawp_request_payload_salt', 'surecart_recaptcha_secret_key', 'surecart_registered_webhook', 'surecart_previous_webhook', 'cleantalk_sfw_worker_self_tokens', 'fluentmail-settings', '_fluent_smtp_notify_settings', 'postman_office365_oauth', 'post_smtp_mobile_app_connection', 'suremails_connections', 'gosmtp_options', 'swpsmtp_options', 'swpsmtp_enc_key', 'site_mailer_client_secret', 'site_mailer_access_token', 'site_mailer_refresh_token', 'site_mailer_user_access_token', 'site_mailer_unsubscribe_encryption_data' );
+	const SECRET_OPTION_KEYS = array( 'auth_key', 'secure_auth_key', 'logged_in_key', 'nonce_key', 'auth_salt', 'secure_auth_salt', 'logged_in_salt', 'nonce_salt', 'secret_key', 'jetpack_private_options', 'woocommerce_helper_data', 'wp_mail_smtp', 'wp_mail_smtp_mail_key', '_transient_wp_mail_smtp_connect_token', 'aio_wp_security_configs', 'postman_options', 'postman_auth_token', 'fs_accounts', 'wpmudev_apikey', 'wp_smush_api_auth', 'jetpack_secrets', '_site_transient_update_plugins', '_site_transient_update_themes', 'gf_telemetry_data', '_site_transient_wp_rocket_update_data', 'fs_api_cache', 'fs_dbg_api_cache', 'wpforms_settings', 'wpforms_crypto_secret_key', 'wpforms_square_connections', 'frm-usage-uuid', 'itsec-storage', 'suretrigger_options', 'wp_statistics', 'wp_statistics_licenses', 'wp_statistics_cipher_key', 'iawp_salt', 'iawp_request_payload_salt', 'surecart_recaptcha_secret_key', 'surecart_registered_webhook', 'surecart_previous_webhook', 'cleantalk_sfw_worker_self_tokens', 'fluentmail-settings', '_fluent_smtp_notify_settings', 'postman_office365_oauth', 'post_smtp_mobile_app_connection', 'suremails_connections', 'gosmtp_options', 'swpsmtp_options', 'swpsmtp_enc_key', 'site_mailer_client_secret', 'site_mailer_access_token', 'site_mailer_refresh_token', 'site_mailer_user_access_token', 'site_mailer_unsubscribe_encryption_data', 'wpcf7', 'wpseo' );
 
 	/**
 	 * Whether a whole COLUMN can hold a credential on some row, so it must
@@ -1370,7 +1378,9 @@ class Minn_Admin_DB {
 		// Sessions and application passwords never yield one (token hashes are
 		// array keys, the password a $-hash) and every user who ever signed in
 		// has a session row, so they stay out; so do TOTP seeds, one per user
-		// with two-factor, which would exhaust the needle cap on a large site.
+		// with two-factor, which would exhaust the needle cap on a large site,
+		// and Yoast's AI tokens, a pair per user of its AI features, which
+		// nothing copies (WP Activity Log skips underscored user meta).
 		// One Time Login keeps its sign-in token raw, and a delayed delete
 		// copies it into the cron option's arguments.
 		$um_keys = array( 'wpmdb_licence_key', 'updraftcentral_login_key', 'one_time_login_token' );

@@ -12,6 +12,10 @@
  *    served later), the notification list (159) and WP Mail SMTP's debug
  *    event list (119). One rule now serves them all: the whole text is
  *    masked first, then cut (Minn_Admin_Egress::clip()).
+ *  - 05-1 Database browser: Contact Form 7's settings row (Stripe secret
+ *    key, captcha secrets, Brevo key, Constant Contact tokens), Yoast SEO's
+ *    (SEMrush, Wincher and MyYoast OAuth tokens) and Yoast's per-user AI
+ *    tokens printed in full.
  *
  * Every response is read as a browser receives it: dispatched, then through
  * the server's response filters, where the egress fence runs. The credential
@@ -327,6 +331,82 @@ try {
 	}
 } finally {
 	$clean_key();
+}
+
+/*
+ * 05-1 Database browser: Contact Form 7's and Yoast SEO's settings rows, and
+ * Yoast's per-user AI tokens, are credential rows. The shapes are the
+ * vendors' own (CF7 6.2 WPCF7::update_option; Yoast 28 WPSEO_Option_Wpseo
+ * and OAuth_Token::to_array()).
+ */
+$cf7 = array(
+	'version'          => '6.2.2',
+	'stripe'           => array( 'api_keys' => array( 'publishable' => 'pk_test_' . $tag . '51Pub9Key8x', 'secret' => 'sk_live_' . $tag . '51Sec9Key8xYz' ) ),
+	'recaptcha'        => array( '6Lc' . $tag . 'SiteKey000AAAAA111' => '6Lc' . $tag . 'SecretKey99BBBB222' ),
+	'sendinblue'       => array( 'api_key' => 'xkeysib-' . $tag . '0123456789abcdef0123456789abcdef-Ab12Cd34Ef56Gh78' ),
+	'constant_contact' => array( 'client_id' => 'cid-' . $tag, 'client_secret' => 'ccSec' . $tag . '4455Zz99', 'access_token' => 'ccAcc' . $tag . '7788Yy11', 'refresh_token' => 'ccRef' . $tag . '3322Xx66' ),
+);
+$tok  = array( 'access_token' => 'yAcc' . $tag . '1234Qq5678', 'refresh_token' => 'yRef' . $tag . '8765Ww4321', 'expires' => time() + 3600, 'has_expired' => false, 'created_at' => time(), 'error_count' => 0 );
+$seo  = array( 'version' => '28.7', 'googleverify' => 'gv' . $tag . '123abc456', 'semrush_tokens' => $tok, 'wincher_tokens' => $tok, 'myyoast-oauth' => array( 'config' => array( 'clientId' => 'yoast-client', 'secret' => 'ySec' . $tag . '2468Ee1357' ), 'access_tokens' => array() ) );
+$opt  = static function ( $name, $value ) use ( $wpdb ) {
+	return Minn_Admin_DB::redacts_cell( $wpdb->options, 'option_value', array( 'option_name' => $name, 'option_value' => maybe_serialize( $value ) ) );
+};
+$check( "05-1 Contact Form 7's settings row (wpcf7) is redacted whole in the browser and named a credential row", $opt( 'wpcf7', $cf7 ) && Minn_Admin_DB::is_credential_option( 'wpcf7' ) );
+$check( "05-1 Yoast SEO's settings row (wpseo) is redacted whole in the browser and named a credential row", $opt( 'wpseo', $seo ) && Minn_Admin_DB::is_credential_option( 'wpseo' ) );
+$found = Minn_Admin_DB::credential_strings( maybe_serialize( $cf7 ) );
+$want  = array( $cf7['stripe']['api_keys']['secret'], $cf7['sendinblue']['api_key'], $cf7['constant_contact']['client_secret'], $cf7['constant_contact']['access_token'], $cf7['constant_contact']['refresh_token'] );
+$check( "05-1 CF7: the row's Stripe secret, Brevo key and Constant Contact secret and tokens become the fence's needles", ! array_diff( $want, array_map( 'strval', array_keys( $found ) ) ), wp_json_encode( array_keys( $found ) ) );
+$found = Minn_Admin_DB::credential_strings( maybe_serialize( $seo ) );
+$want  = array( $tok['access_token'], $tok['refresh_token'], $seo['myyoast-oauth']['config']['secret'] );
+$check( "05-1 Yoast: the row's SEMrush, Wincher and MyYoast OAuth secrets become the fence's needles", ! array_diff( $want, array_map( 'strval', array_keys( $found ) ) ) && ! isset( $found[ $seo['googleverify'] ] ), wp_json_encode( array_keys( $found ) ) );
+$check( '05-1 control: a row of neither plugin stays readable', ! $opt( 'wpcf7_probe_' . $tag, $cf7 ) && ! $opt( 'wpseo_titles', array( 'title-post' => '%%title%%' ) ) );
+
+// The lab's own rows, through the browser's routes.
+foreach ( array( 'wpcf7', 'wpseo' ) as $o ) {
+	$oid = (int) $wpdb->get_var( $wpdb->prepare( "SELECT option_id FROM {$wpdb->options} WHERE option_name = %s", $o ) );
+	if ( ! $oid ) {
+		$skip( "05-1 {$o}: no such row here" );
+		continue;
+	}
+	list( $st, $d ) = $send( 'GET', '/minn-admin/v1/db/row', array( 'table' => $wpdb->options, 'pk' => wp_json_encode( array( 'option_id' => $oid ) ) ) );
+	$cell           = null;
+	foreach ( (array) ( $d['columns'] ?? array() ) as $i => $c ) {
+		if ( 'option_value' === ( $c['name'] ?? '' ) ) {
+			$cell = $d['cells'][ $i ] ?? null;
+		}
+	}
+	$check( "05-1 {$o}: the site's row opens redacted in the browser ({$st})", 200 === $st && is_array( $cell ) && ! empty( $cell['redacted'] ), wp_json_encode( $cell ) );
+}
+
+// Yoast's per-user AI tokens, on a fixture user.
+$jwt   = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtaW5uIn0.' . 'Sig' . $tag . '0aB1cD2eF3gH4iJ5kL6mN7oP8';
+$juid  = wp_insert_user( array( 'user_login' => 'minn047jwt_' . $tag, 'user_pass' => wp_generate_password( 24 ), 'user_email' => 'minn047jwt_' . $tag . '@example.test', 'role' => 'subscriber' ) );
+$clean = $once( static function () use ( &$juid ) {
+	if ( $juid && ! is_wp_error( $juid ) ) {
+		wp_delete_user( $juid );
+	}
+} );
+try {
+	if ( is_wp_error( $juid ) ) {
+		$skip( '05-1 Yoast AI tokens: fixture user not made' );
+	} else {
+		foreach ( array( '_yoast_wpseo_ai_generator_access_jwt', '_yoast_wpseo_ai_generator_refresh_jwt' ) as $mk ) {
+			update_user_meta( $juid, $mk, $jwt );
+			$check( "05-1 Yoast {$mk} is redacted in the browser", Minn_Admin_DB::redacts_cell( $wpdb->usermeta, 'meta_value', array( 'meta_key' => $mk, 'meta_value' => $jwt ) ) );
+			$umid           = (int) $wpdb->get_var( $wpdb->prepare( "SELECT umeta_id FROM {$wpdb->usermeta} WHERE user_id = %d AND meta_key = %s", $juid, $mk ) );
+			list( $st, $d ) = $send( 'GET', '/minn-admin/v1/db/row', array( 'table' => $wpdb->usermeta, 'pk' => wp_json_encode( array( 'umeta_id' => $umid ) ) ) );
+			$cell           = null;
+			foreach ( (array) ( $d['columns'] ?? array() ) as $i => $c ) {
+				if ( 'meta_value' === ( $c['name'] ?? '' ) ) {
+					$cell = $d['cells'][ $i ] ?? null;
+				}
+			}
+			$check( "05-1 Yoast {$mk}: the row opens redacted ({$st})", 200 === $st && is_array( $cell ) && ! empty( $cell['redacted'] ) && ! $has( $d, 'Sig' . $tag ), wp_json_encode( $cell ) );
+		}
+		$check( '05-1 control: a user meta row of no listed key stays readable', ! Minn_Admin_DB::redacts_cell( $wpdb->usermeta, 'meta_value', array( 'meta_key' => '_yoast_wpseo_profile_updated', 'meta_value' => '1700000000' ) ) );
+	}
+} finally {
+	$clean();
 }
 
 $pass = count( array_filter( $results ) );
