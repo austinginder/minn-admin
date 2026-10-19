@@ -62,12 +62,19 @@ A few properties worth knowing before auditing (details in
   carries a signature from a key pinned in code, and it holds exactly the
   version the update service named, downloaded from that version's own
   path. It never installs a release older than the floor Minn Admin
-  carries (`Minn_Admin_Switch::ENGINE_FLOOR`): a signature covers bytes,
-  not which release they are, so the floor rises whenever a release fixes
-  something an older one would bring back. A wp-config switch is offered
+  carries (`Minn_Admin_Switch::ENGINE_FLOOR`), nor one older than the
+  highest release that site has staged (it rises only on an archive that
+  passed every check, never on what the service names): a signature covers
+  bytes, not which release they are, so the floor rises whenever a release
+  fixes something an older one would bring back. Builds signed with a
+  release key that hold the same version are interchangeable to whoever
+  controls the service's answer, so pre-releases are never signed as a
+  release. A wp-config switch is offered
   only when nothing PHP ran before the define may define the same
   constant (what wp-config.php loads, a PHP `auto_prepend_file`, every file
-  PHP lists ahead of wp-config.php); a file that cannot be read locks it.
+  PHP lists ahead of wp-config.php). A file with no `define(` call and no
+  mention of the constant cannot define it, whatever its size; a file that
+  cannot be read, or is over 8 MB, locks the switch.
 - Maintenance mode holds back the front end (including form posts that
   plugins process once the request is routed, from `parse_request`
   priority 15 on, such as Contact Form 7 and Gravity Forms; a plugin that
