@@ -67,7 +67,7 @@
  *                 // or array( 'list' => callable( array $q ): array( rows, total ), 'get' => callable( int $id ): ?array,
  *                 //           'exists' => callable( int $id ): bool )  // asked straight from the store, for 'gone'
  *     'list'      => array(
- *       'per_page' => 25, 'max' => 100,
+ *       'per_page' => 25,   // a page is never longer than 100 rows
  *       'filter'   => array( 'param' => 'status', 'column' => 'status', 'values' => [ … ], 'default' => … ),
  *                  // values may map each value to conditions instead: array( 'unread' => array( 'viewed' => 0 ) ),
  *                  // or to a callable answering them when the request runs (an upcoming view's "now");
@@ -93,7 +93,7 @@
  *                  // and/or 'also' => callable( string $term ): ?conditions; a row matches any of them
  *       'range'    => array( 'column' => 'date_created', 'clock' => 'utc' ),
  *       'order'    => array( 'column' => 'entry_id', 'dir' => 'DESC' ),
- *       'sort'     => array( 'columns' => array( 'name', 'weight' ), 'param' => 'orderby', 'dir' => 'order' ),
+ *       'sort'     => array( 'columns' => array( 'name', 'weight' ) ),
  *                  // the columns a person may sort by (a column header): 'columns' lists
  *                  // them, or maps a public name to a column ('hits' => 'e.count');
  *                  // ?orderby=<name>&order=asc|desc picks one (descending unless asc),
@@ -102,9 +102,7 @@
  *                  // (or a joined alias's); an array source sorts in PHP, numbers before
  *                  // text, ties in the order the rows came; a callable source that
  *                  // declares a sort applies the pick it reads in $q['sort'] ( by, column,
- *                  // dir ). 'param' and 'dir' rename the two request keys. collection()
- *                  // hands the client the matching sortQuery
- *       'keys'     => array( 'items' => 'items', 'total' => 'total' ),
+ *                  // dir ). collection() hands the client the matching sortQuery
  *       'batch'    => callable( array $rows ): mixed,   // once per page, before 'row' (a batched
  *                                                     // lookup); its answer rides in $q['batch']
  *       'row'      => callable( array $row, array $q ): array,   // optional: the row as it is
@@ -117,7 +115,7 @@
  *                 // the item, only its declared fields leaving
  *     'create'    => array( 'gate' => 'manage', 'run' => callable( WP_REST_Request $r ): int|array|WP_Error,
  *                   'expect' => 'exists' | callable( int $id, ?array $fresh, mixed $ran ): bool,
- *                   'reply' => callable( int $id, ?array $fresh, mixed $ran ): array, 'done' => … ),
+ *                   'reply' => callable( int $id, ?array $fresh, mixed $ran ): array, 'fail' => … ),
  *                 // POST /<id> beside the list: the vendor's own create answers the new id (a
  *                 // positive int or digits, or array( 'id' => … )), and it is done only once that
  *                 // row reads back for the caller (a table source's above every key before it ran);
@@ -179,8 +177,8 @@ class Minn_Admin_Kernel {
 	const KEYS = array(
 		'resource' => array( 'active', 'gates', 'item_gate', 'labels', 'source', 'list', 'item', 'reads', 'create', 'actions', 'id', 'file' ),
 		'source'   => array( 'table', 'key', 'columns', 'detail', 'network', 'joins', 'where', 'viewer', 'tables', 'rows', 'list', 'get', 'exists' ),
-		'join'     => array( 'table', 'network', 'core', 'on', 'first' ),
-		'list'     => array( 'per_page', 'max', 'filter', 'tab', 'scope', 'facets', 'search', 'range', 'order', 'sort', 'keys', 'batch', 'row', 'fields' ),
+		'join'     => array( 'table', 'core', 'on', 'first' ),
+		'list'     => array( 'per_page', 'filter', 'tab', 'scope', 'facets', 'search', 'range', 'order', 'sort', 'batch', 'row', 'fields' ),
 		'filter'   => array( 'param', 'column', 'values', 'default', 'order', 'many' ),
 		'tab'      => array( 'param', 'column', 'gate', 'refuse' ),
 		'scope'    => array( 'column', 'allowed', 'refuse' ),
@@ -189,11 +187,10 @@ class Minn_Admin_Kernel {
 		'meta'     => array( 'table', 'key', 'name', 'value', 'skip', 'only', 'network' ),
 		'range'    => array( 'column', 'clock' ),
 		'order'    => array( 'column', 'dir' ),
-		'sort'     => array( 'columns', 'param', 'dir' ),
-		'keys'     => array( 'items', 'total' ),
+		'sort'     => array( 'columns' ),
 		'item'     => array( 'view', 'fields', 'gate' ),
 		'read'     => array( 'gate', 'view', 'fields' ),
-		'create'   => array( 'gate', 'run', 'expect', 'reply', 'done', 'fields', 'fail', 'fail_code' ),
+		'create'   => array( 'gate', 'run', 'expect', 'reply', 'fail', 'fail_code' ),
 		'action'   => array( 'method', 'item', 'gate', 'when', 'code', 'refuse', 'run', 'expect', 'args', 'fail', 'fail_code', 'reply', 'done' ),
 		'endpoint' => array( 'methods', 'gate', 'run', 'active', 'args', 'labels', 'path', 'file' ),
 		'field'    => array( 'type', 'decode', 'values', 'stored', 'wire', 'nullable' ),
@@ -681,7 +678,7 @@ class Minn_Admin_Kernel {
 			array( 'item', $def['item'] ?? null, 'item' ),
 			array( 'create', $def['create'] ?? null, 'create' ),
 		);
-		foreach ( array( 'filter', 'tab', 'scope', 'search', 'range', 'order', 'sort', 'keys' ) as $k ) {
+		foreach ( array( 'filter', 'tab', 'scope', 'search', 'range', 'order', 'sort' ) as $k ) {
 			$checks[] = array( "list.{$k}", $l[ $k ] ?? null, $k );
 		}
 		$src      = is_array( $def['source'] ?? null ) ? $def['source'] : array();
@@ -711,7 +708,6 @@ class Minn_Admin_Kernel {
 		}
 		$why = $fields( 'list.fields', $l['fields'] ?? null );
 		$why = '' !== $why ? $why : $fields( 'item.fields', $def['item']['fields'] ?? null );
-		$why = '' !== $why ? $why : $fields( 'create.fields', $def['create']['fields'] ?? null );
 		foreach ( (array) ( $def['reads'] ?? array() ) as $slug => $read ) {
 			$why = '' !== $why ? $why : $fields( "reads.{$slug}.fields", $read['fields'] ?? null );
 		}
@@ -1333,14 +1329,11 @@ class Minn_Admin_Kernel {
 	private static function list_query( array $res, WP_REST_Request $r ) {
 		$l        = $res['list'];
 		$size     = (int) ( $l['per_page'] ?? 25 );
-		$max      = (int) ( $l['max'] ?? 100 );
 		$q        = array(
-			'per_page' => min( $max, max( 1, (int) ( $r['per_page'] ?: $size ) ) ),
+			'per_page' => min( 100, max( 1, (int) ( $r['per_page'] ?: $size ) ) ),
 			// Capped so the offset can never overflow into a negative LIMIT.
 			'page'     => min( 100000, max( 1, (int) ( $r['page'] ?: 1 ) ) ),
 			'where'    => array(),
-			'sql'      => array(),
-			'args'     => array(),
 			'filter'   => null,
 			'tab'      => 0,
 			'search'   => '',
@@ -1398,12 +1391,12 @@ class Minn_Admin_Kernel {
 		// A sort a person picked, among the declared columns only.
 		if ( ! empty( $l['sort'] ) ) {
 			$map = '' === self::sort_problem( $l['sort'], $res ) ? self::sort_map( $l['sort'] ) : null;
-			$by  = self::param( $r, (string) ( $l['sort']['param'] ?? 'orderby' ) );
+			$by  = self::param( $r, 'orderby' );
 			if ( $map && '' !== $by && isset( $map[ $by ] ) ) {
 				$q['sort'] = array(
 					'by'     => $by,
 					'column' => $map[ $by ],
-					'dir'    => 'asc' === strtolower( self::param( $r, (string) ( $l['sort']['dir'] ?? 'order' ) ) ) ? 'ASC' : 'DESC',
+					'dir'    => 'asc' === strtolower( self::param( $r, 'order' ) ) ? 'ASC' : 'DESC',
 				);
 			}
 		}
@@ -1511,25 +1504,19 @@ class Minn_Admin_Kernel {
 	 * @return array
 	 */
 	public static function list_where( array $q, $alias = 'e' ) {
-		return self::where_sql( (array) ( $q['where'] ?? array() ), $alias );
-	}
-
-	/** Conditions keyed "column\0why" (so a scope and a tab on one column both apply). */
-	private static function where_sql( array $where, $alias ) {
-		return Minn_Admin_Kernel_SQL::where( $where, $alias );
+		return Minn_Admin_Kernel_SQL::where( (array) ( $q['where'] ?? array() ), $alias );
 	}
 
 	public static function handle_list( array $res, WP_REST_Request $r ) {
-		$l    = $res['list'];
-		$keys = array_merge( array( 'items' => 'items', 'total' => 'total' ), (array) ( $l['keys'] ?? array() ) );
-		$q    = self::list_query( $res, $r );
+		$l = $res['list'];
+		$q = self::list_query( $res, $r );
 		if ( is_wp_error( $q ) ) {
 			return $q;
 		}
 		$src = $res['source'];
 		if ( ( isset( $q['allowed'] ) && ! $q['allowed'] ) || ! empty( $q['none'] )
 			|| ( ! empty( $src['table'] ) && ! Minn_Admin_Kernel_SQL::exists( self::table_of( $src ) ) ) ) {
-			return array( $keys['items'] => array(), $keys['total'] => 0 );
+			return array( 'items' => array(), 'total' => 0 );
 		}
 		if ( ! empty( $src['rows'] ) ) {
 			list( $rows, $total ) = self::array_page( $l, $q, (array) call_user_func( $src['rows'] ) );
@@ -1573,7 +1560,7 @@ class Minn_Admin_Kernel {
 				$rows = $kept;
 			}
 		} else {
-			list( $sql, $args ) = self::where_sql( $q['where'], 'e' );
+			list( $sql, $args ) = Minn_Admin_Kernel_SQL::where( $q['where'], 'e' );
 			if ( '' !== $q['search'] ) {
 				list( $s, $a ) = self::search_sql( $l['search'], $src, $q['search'] );
 				$sql[]         = $s;
@@ -1624,7 +1611,7 @@ class Minn_Admin_Kernel {
 		foreach ( $built as $b ) {
 			$items[] = empty( $l['fields'] ) ? $b : Minn_Admin_Kernel_Fields::out( $l['fields'], $b );
 		}
-		return array( $keys['items'] => $items, $keys['total'] => (int) $total );
+		return array( 'items' => $items, 'total' => (int) $total );
 	}
 
 	/**
@@ -1734,9 +1721,9 @@ class Minn_Admin_Kernel {
 
 	/**
 	 * Why a declared sort cannot be applied, or '' when it can: its request
-	 * keys must be keys no other list parameter uses, every column an
-	 * identifier, and on a table each column the source's own (a declared
-	 * column, the key, or a joined alias's).
+	 * keys (orderby, order) must be keys no other list parameter uses, every
+	 * column an identifier, and on a table each column the source's own (a
+	 * declared column, the key, or a joined alias's).
 	 *
 	 * @param mixed $sort The list's 'sort'.
 	 * @param array $res  The resource.
@@ -1748,22 +1735,12 @@ class Minn_Admin_Kernel {
 			return 'no columns, or one that is not an identifier';
 		}
 		$l     = $res['list'];
-		$param = $sort['param'] ?? 'orderby';
-		$dir   = $sort['dir'] ?? 'order';
-		$taken = array( 'page', 'per_page', $l['search']['param'] ?? 'search', $l['filter']['param'] ?? 'status', 'after', 'before' );
+		$taken = array( $l['search']['param'] ?? 'search', $l['filter']['param'] ?? 'status', (string) ( $l['tab']['param'] ?? '' ) );
 		foreach ( (array) ( $l['facets'] ?? array() ) as $f ) {
 			$taken[] = (string) ( $f['param'] ?? '' );
 		}
-		if ( ! empty( $l['tab']['param'] ) ) {
-			$taken[] = (string) $l['tab']['param'];
-		}
-		foreach ( array( $param, $dir ) as $key ) {
-			if ( ! is_string( $key ) || '' === $key || sanitize_key( $key ) !== $key || in_array( $key, $taken, true ) ) {
-				return 'a request key that is not a free key';
-			}
-		}
-		if ( $param === $dir ) {
-			return 'one request key for both';
+		if ( array_intersect( array( 'orderby', 'order' ), $taken ) ) {
+			return 'another list parameter takes its request key';
 		}
 		$src = $res['source'];
 		if ( ! empty( $src['table'] ) && is_array( $src['columns'] ?? null ) ) {
@@ -1888,14 +1865,7 @@ class Minn_Admin_Kernel {
 			return self::fail( (string) ( $c['fail_code'] ?? 'not_applied' ), $c['fail'] ?? __( 'The plugin reported success, but the change is not there.', 'minn-admin' ), 500 );
 		}
 		$reply = empty( $c['reply'] ) ? array() : (array) call_user_func( $c['reply'], $id, $fresh, $ran );
-		if ( ! empty( $c['fields'] ) ) {
-			$reply = Minn_Admin_Kernel_Fields::out( $c['fields'], $reply );
-		}
-		$reply = array_merge( $reply, array( 'ok' => true, 'id' => $id ) );
-		if ( isset( $c['done'] ) ) {
-			$reply['message'] = $c['done'];
-		}
-		return $reply;
+		return array_merge( $reply, array( 'ok' => true, 'id' => $id ) );
 	}
 
 	public static function handle_action( array $res, $slug, WP_REST_Request $r ) {
@@ -1997,9 +1967,8 @@ class Minn_Admin_Kernel {
 		if ( ! $res || empty( $res['list'] ) ) {
 			return $extra;
 		}
-		$l    = $res['list'];
-		$keys = array_merge( array( 'items' => 'items', 'total' => 'total' ), (array) ( $l['keys'] ?? array() ) );
-		$out  = array( 'route' => self::NS . '/' . $id );
+		$l   = $res['list'];
+		$out = array( 'route' => self::NS . '/' . $id );
 		if ( ! empty( $l['range'] ) ) {
 			$out['dateQuery'] = 'after={from}&before={to}';
 		}
@@ -2008,10 +1977,10 @@ class Minn_Admin_Kernel {
 			$out['search'] = ( $l['search']['param'] ?? 'search' ) . '={q}';
 		}
 		if ( ! empty( $l['sort'] ) && '' === self::sort_problem( $l['sort'], $res ) ) {
-			$out['sortQuery'] = ( $l['sort']['param'] ?? 'orderby' ) . '={by}&' . ( $l['sort']['dir'] ?? 'order' ) . '={dir}';
+			$out['sortQuery'] = 'orderby={by}&order={dir}';
 		}
-		$out['itemsKey'] = $keys['items'];
-		$out['totalKey'] = $keys['total'];
+		$out['itemsKey'] = 'items';
+		$out['totalKey'] = 'total';
 		if ( ! empty( $l['filter'] ) && isset( $extra['filter'] ) && is_array( $extra['filter'] ) ) {
 			$extra['filter']['query'] = ( $l['filter']['param'] ?? 'status' ) . '={v}';
 		}

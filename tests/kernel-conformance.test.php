@@ -9,7 +9,7 @@
  *    in their order (404, then 403, then the wrong-state 400); ids, page
  *    sizes and filters from a fixed set; an empty scope that can never widen;
  *    search and filter values that never reach SQL unprepared; only declared
- *    fields leaving, a secret never; each field type on awkward stored
+ *    fields leaving, a seeded secret in an undeclared column never; each field type on awkward stored
  *    values; a write whose effect is not there never reporting success; a
  *    throw answering in one shape with nothing of the exception in it; the
  *    handler tier's gate and ids. Then the log shapes, on a network table
@@ -110,7 +110,6 @@ $def      = array(
 	'source'    => array( 'table' => 'minn_conf_things', 'key' => 'id', 'columns' => array( 'id', 'owner', 'status', 'title', 'created', 'token' ) ),
 	'list'      => array(
 		'per_page' => 2,
-		'max'      => 3,
 		'filter'   => array( 'param' => 'status', 'column' => 'status', 'values' => array( 'open', 'spam', 'trash' ), 'default' => 'open' ),
 		'tab'      => array( 'param' => 'owner', 'column' => 'owner' ),
 		'scope'    => array( 'column' => 'owner', 'allowed' => function () use ( &$scope ) {
@@ -126,14 +125,13 @@ $def      = array(
 			'id'    => 'int',
 			'title' => array( 'type' => 'text', 'decode' => true ),
 			'when'  => array( 'type' => 'datetime', 'stored' => 'site', 'wire' => 'iso' ),
-			'token' => 'secret',
 		),
 	),
 	'item'      => array(
 		'view'   => function ( $row ) {
 			return array( 'id' => (int) $row['id'], 'status' => $row['status'], 'token' => $row['token'] );
 		},
-		'fields' => array( 'id' => 'int', 'status' => 'text', 'token' => 'secret' ),
+		'fields' => array( 'id' => 'int', 'status' => 'text' ),
 	),
 	'actions'   => array(
 		'close'  => array(
@@ -301,12 +299,10 @@ list( $st, $d ) = $call( 'GET', $base );
 $check( 'the list answers items and total for the default filter', 200 === $st && 3 === $d['total'] && 2 === count( $d['items'] ), wp_json_encode( $d ) );
 $check( 'the list sorts by its column and breaks ties by the key', array( 2, 1 ) === array_column( $d['items'], 'id' ), wp_json_encode( array_column( $d['items'], 'id' ) ) );
 $check( 'undeclared fields never leave', ! array_key_exists( 'extra', $d['items'][0] ) );
-$check( 'a secret field never leaves', false === strpos( wp_json_encode( $d ), $secret ) );
+$check( 'a secret the row builder hands over in an undeclared field never leaves', false === strpos( wp_json_encode( $d ), $secret ) );
 $check( 'an int field is an int', is_int( $d['items'][0]['id'] ) );
 list( , $d2 ) = $call( 'GET', $base, array( 'page' => 2 ) );
 $check( 'page two continues where page one stopped', array( 5 ) === array_column( $d2['items'], 'id' ), wp_json_encode( $d2 ) );
-list( , $d ) = $call( 'GET', $base, array( 'per_page' => 1000 ) );
-$check( 'a page size above the cap is capped', 3 === count( $d['items'] ) );
 list( , $d ) = $call( 'GET', $base, array( 'per_page' => -5 ) );
 $check( 'a negative page size is one', 1 === count( $d['items'] ) );
 list( , $d ) = $call( 'GET', $base, array( 'status' => "open' OR '1'='1" ) );
@@ -1594,7 +1590,7 @@ Minn_Admin_Kernel::resource( 'minn-conformance/cards-sorted-call', array(
 			return null;
 		},
 	),
-	'list'   => array( 'sort' => array( 'columns' => array( 'amount', 'label' => 'note' ), 'param' => 'sortby', 'dir' => 'sortdir' ), 'fields' => array( 'id' => 'int' ) ),
+	'list'   => array( 'sort' => array( 'columns' => array( 'amount', 'label' => 'note' ) ), 'facets' => array( array( 'param' => 'sortby', 'column' => 'kind', 'type' => 'key' ) ), 'fields' => array( 'id' => 'int' ) ),
 ) );
 $so_bad_base = array(
 	'gates'  => array( 'view' => '__return_true' ),
@@ -1604,9 +1600,11 @@ foreach ( array(
 	'cards-badsort'   => array( 'columns' => array( 'label' => 'note; DROP TABLE x' ) ),
 	'cards-notmine'   => array( 'columns' => array( 'label' => 'note' ) ),
 	'cards-noalias'   => array( 'columns' => array( 'other' => 'x.amount' ) ),
-	'cards-takenkey'  => array( 'columns' => array( 'amount' ), 'param' => 'page' ),
+	'cards-takenkey'  => array( 'columns' => array( 'amount' ) ),
 ) as $so_id => $so_sort ) {
-	Minn_Admin_Kernel::resource( 'minn-conformance/' . $so_id, $so_bad_base + array( 'list' => array( 'order' => array( 'column' => 'id', 'dir' => 'ASC' ), 'sort' => $so_sort, 'fields' => array( 'id' => 'int' ) ) ) );
+	// A facet that asks for the sort's own request key.
+	$so_facets = 'cards-takenkey' === $so_id ? array( array( 'param' => 'order', 'values' => array( 'oldest' => array( 'kind' => 'x' ) ) ) ) : array();
+	Minn_Admin_Kernel::resource( 'minn-conformance/' . $so_id, $so_bad_base + array( 'list' => array( 'order' => array( 'column' => 'id', 'dir' => 'ASC' ), 'sort' => $so_sort, 'facets' => $so_facets, 'fields' => array( 'id' => 'int' ) ) ) );
 }
 $so_cases = array(
 	array( array(), array( 1, 2, 3, 4, 6 ), array( 1, 2, 3, 4, 6 ) ),
@@ -1639,11 +1637,11 @@ $so_rev_by = $gc_ids( 'cards-sorted', array( 'view' => 'rev', 'orderby' => 'kind
 $check( "a filter value's own order applies when no sort is picked, and a pick overrides it", array( 6, 4, 3, 2, 1 ) === $so_rev && array( 1, 3, 6, 2, 4 ) === $so_rev_by, wp_json_encode( array( $so_rev, $so_rev_by ) ) );
 list( $st, $d ) = $call( 'GET', '/minn-admin/v1/minn-conformance/cards-sorted', array( 'orderby' => 'amount', 'order' => 'asc', 'per_page' => 2, 'page' => 2 ) );
 $check( 'a sorted list pages and counts as one list', 200 === $st && 5 === ( $d['total'] ?? 0 ) && array( 3, 2 ) === array_column( (array) ( $d['items'] ?? array() ), 'id' ), $st . ' ' . wp_json_encode( $d ) );
-$gc_ids( 'cards-sorted-call', array( 'sortby' => 'label', 'sortdir' => 'asc' ) );
+$gc_ids( 'cards-sorted-call', array( 'orderby' => 'label', 'order' => 'asc' ) );
 $so_call = $so_seen;
-$gc_ids( 'cards-sorted-call', array( 'orderby' => 'amount', 'order' => 'asc' ) );
+$gc_ids( 'cards-sorted-call', array( 'sortby' => 'amount', 'order' => 'asc' ) );
 $so_none = $so_seen;
-$check( "a callable source reads the pick in \$q['sort'] (by, its column, dir) under the declaration's own request keys, and none under any other", array( 'by' => 'label', 'column' => 'note', 'dir' => 'ASC' ) === $so_call && null === $so_none, wp_json_encode( array( $so_call, $so_none ) ) );
+$check( "a callable source reads the pick in \$q['sort'] (by, its column, dir) under orderby and order, and none under any other key", array( 'by' => 'label', 'column' => 'note', 'dir' => 'ASC' ) === $so_call && null === $so_none, wp_json_encode( array( $so_call, $so_none ) ) );
 $so_bad_ids = array();
 foreach ( array( 'cards-badsort', 'cards-notmine', 'cards-noalias', 'cards-takenkey' ) as $so_id ) {
 	$so_bad_ids[ $so_id ] = array( $gc_ids( $so_id, array( 'orderby' => 'label', 'order' => 'asc' ) ), Minn_Admin_Kernel::collection( 'minn-conformance/' . $so_id )['sortQuery'] ?? null );
@@ -1655,7 +1653,7 @@ $check( "a sort whose column is no identifier, not the table's own, behind an al
 $so_coll    = Minn_Admin_Kernel::collection( 'minn-conformance/cards-sorted' );
 $so_coll_c  = Minn_Admin_Kernel::collection( 'minn-conformance/cards-sorted-call' );
 $so_no_coll = Minn_Admin_Kernel::collection( 'minn-conformance/cards' );
-$check( 'collection() hands the client the sortQuery for its own request keys, and none for a list with no sort', 'orderby={by}&order={dir}' === ( $so_coll['sortQuery'] ?? '' ) && 'sortby={by}&sortdir={dir}' === ( $so_coll_c['sortQuery'] ?? '' ) && ! isset( $so_no_coll['sortQuery'] ), wp_json_encode( array( $so_coll['sortQuery'] ?? null, $so_coll_c['sortQuery'] ?? null ) ) );
+$check( 'collection() hands the client the sortQuery, and none for a list with no sort', 'orderby={by}&order={dir}' === ( $so_coll['sortQuery'] ?? '' ) && 'orderby={by}&order={dir}' === ( $so_coll_c['sortQuery'] ?? '' ) && ! isset( $so_no_coll['sortQuery'] ), wp_json_encode( array( $so_coll['sortQuery'] ?? null, $so_coll_c['sortQuery'] ?? null ) ) );
 $so_mixed = array( array( 'id' => 1, 'v' => '1.10' ), array( 'id' => 2, 'v' => '1.5' ), array( 'id' => 3, 'v' => '1.7a' ), array( 'id' => 4, 'v' => '200' ), array( 'id' => 5, 'v' => '1e3' ), array( 'id' => 6, 'v' => '1f' ) );
 Minn_Admin_Kernel::resource( 'minn-conformance/cards-mixed', array(
 	'gates'  => array( 'view' => '__return_true' ),
@@ -1809,7 +1807,6 @@ $rv_def = array(
 	'source' => array( 'table' => 'minn_conf_review', 'key' => 'id', 'columns' => array( 'id', 'owner', 'status', 'created' ) ),
 	'list'   => array(
 		'per_page' => 2,
-		'max'      => 3,
 		'range'    => array( 'column' => 'created', 'clock' => 'local' ),
 		'order'    => array( 'column' => 'id', 'dir' => 'ASC' ),
 		'fields'   => array( 'id' => 'int' ),
@@ -1833,8 +1830,18 @@ $rv_drew = function ( $needle ) {
 };
 
 // Two earlier checks held without their primitive; these have the rows to tell.
-list( , $d ) = $call( 'GET', $rv, array( 'per_page' => 1000 ) );
-$check( 'a page size above the cap is capped, over more rows than the cap', 3 === count( $d['items'] ) && 8 === $d['total'], wp_json_encode( $d ) );
+Minn_Admin_Kernel::resource( 'minn-conformance/review-many', array(
+	'gates'  => array( 'view' => '__return_true' ),
+	'source' => array( 'rows' => function () {
+		return array_map( function ( $i ) {
+			return array( 'id' => $i );
+		}, range( 1, 150 ) );
+	} ),
+	'list'   => array( 'per_page' => 500, 'fields' => array( 'id' => 'int' ) ),
+) );
+list( , $d )  = $call( 'GET', $rv . '-many', array( 'per_page' => 1000 ) );
+list( , $d2 ) = $call( 'GET', $rv . '-many' );
+$check( 'a page is never longer than 100 rows, asked for or declared, over more rows than that', 100 === count( $d['items'] ) && 150 === $d['total'] && 100 === count( $d2['items'] ), wp_json_encode( array( count( $d['items'] ), $d['total'], count( $d2['items'] ) ) ) );
 list( , $d ) = $call( 'GET', $rv, array( 'after' => '2026-01-04', 'before' => '2026-01-06 10:30:00' ) );
 $check( 'a chart day range keeps only the rows inside it', 2 === $d['total'] && array( 4, 5 ) === array_column( $d['items'], 'id' ), wp_json_encode( $d ) );
 
@@ -2029,6 +2036,21 @@ Minn_Admin_Kernel::resource( 'minn-conformance/review-whentypo', array_merge( $r
 Minn_Admin_Kernel::resource( 'minn-conformance/review-fieldtype', array_merge( $rv_def, array( 'list' => array_merge( $rv_def['list'], array( 'fields' => array( 'id' => 'innt' ) ) ) ) ) );
 Minn_Admin_Kernel::resource( 'minn-conformance/review-noallowed', array_merge( $rv_def, array( 'list' => array_merge( $rv_def['list'], array( 'scope' => array( 'column' => 'owner' ) ) ) ) ) );
 Minn_Admin_Kernel::endpoint( 'minn-conformance/review-method', array( 'gate' => '__return_true', 'method' => 'POST', 'run' => '__return_true' ) );
+// Keys the kernel no longer reads: a page cap, renamed response keys, renamed
+// sort keys, a create's message and reply fields, the types float and secret.
+$rv_gone = array(
+	'max'    => array( 'list' => array_merge( $rv_def['list'], array( 'max' => 3 ) ) ),
+	'keys'   => array( 'list' => array_merge( $rv_def['list'], array( 'keys' => array( 'items' => 'rows' ) ) ) ),
+	'sortby' => array( 'list' => array_merge( $rv_def['list'], array( 'sort' => array( 'columns' => array( 'id' ), 'param' => 'by' ) ) ) ),
+	'done'   => array( 'create' => array( 'gate' => 'manage', 'run' => '__return_zero', 'done' => 'Made.' ) ),
+	'cfield' => array( 'create' => array( 'gate' => 'manage', 'run' => '__return_zero', 'fields' => array( 'id' => 'int' ) ) ),
+	'float'  => array( 'list' => array_merge( $rv_def['list'], array( 'fields' => array( 'id' => 'float' ) ) ) ),
+	'secret' => array( 'item' => array_merge( $rv_def['item'], array( 'fields' => array( 'id' => 'int', 'x' => 'secret' ) ) ) ),
+	'jnet'   => array( 'source' => array_merge( $rv_def['source'], array( 'joins' => array( 'o' => array( 'table' => 'minn_conf_review', 'network' => true, 'on' => array( 'id' => 'e.id' ) ) ) ) ) ),
+);
+foreach ( $rv_gone as $slug => $over ) {
+	Minn_Admin_Kernel::resource( 'minn-conformance/review-gone-' . $slug, array_merge( $rv_def, $over ) );
+}
 list( $a ) = $call( 'GET', $rv . '-topscope/1' );
 list( $b ) = $call( 'POST', $rv . '-whentypo/1/close' );
 list( $c ) = $call( 'GET', $rv . '-fieldtype' );
@@ -2036,6 +2058,11 @@ list( $e ) = $call( 'GET', $rv . '-noallowed/1' );
 list( $f ) = $call( 'GET', '/minn-admin/v1/minn-conformance/review-method' );
 $check( 'a declaration holding a key the kernel does not read, a field type it cannot encode, or a scope it cannot ask registers nothing', 404 === $a && 404 === $b && 404 === $c && 404 === $e && 404 === $f, "{$a} {$b} {$c} {$e} {$f}" );
 $check( 'each one says why', $rv_drew( 'minn-conformance/review-topscope: the resource holds "scope"' ) && $rv_drew( 'minn-conformance/review-whentypo: actions.close holds "whne"' ) && $rv_drew( 'minn-conformance/review-fieldtype: list.fields.id has no type' ) && $rv_drew( 'minn-conformance/review-noallowed: list.scope needs' ) && $rv_drew( 'minn-conformance/review-method: the endpoint holds "method"' ), implode( ' | ', array_slice( method_exists( 'Minn_Admin_Kernel', 'refused' ) ? Minn_Admin_Kernel::refused() : array(), -8 ) ) );
+$rv_gone_st = array();
+foreach ( array_keys( $rv_gone ) as $slug ) {
+	list( $rv_gone_st[ $slug ] ) = $call( 'GET', $rv . '-gone-' . $slug . '/1' );
+}
+$check( 'a declaration naming a key or field type the kernel no longer reads (list.max, list.keys, the sort\'s param, create.done and create.fields, float, secret, a join\'s network) registers nothing', array_fill_keys( array_keys( $rv_gone ), 404 ) === $rv_gone_st, wp_json_encode( $rv_gone_st ) );
 $check( 'a field type the kernel does not know never leaves', array( 'a' => 1 ) === Minn_Admin_Kernel_Fields::out( array( 'a' => 'int', 'b' => 'innt' ), array( 'a' => '1', 'b' => 'raw value' ) ) );
 
 // Identifiers, keys and whole numbers in writes.

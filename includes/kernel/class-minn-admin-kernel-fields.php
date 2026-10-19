@@ -5,7 +5,7 @@
  * A resource declares the fields its rows carry; only those leave, each
  * turned into one shape for the client, whatever the vendor stored:
  *
- *   'int', 'float', 'bool'   cast
+ *   'int', 'bool'            cast
  *   'text'                   a string; 'decode' => true for a vendor that
  *                            stores entities ("Smith &amp; Sons"), so the
  *                            client, which escapes what it prints, gets text
@@ -21,7 +21,9 @@
  *                            "+00:00") or z (UTC with a trailing Z,
  *                            "Y-m-d\TH:i:s\Z"; '' for a zero date)
  *   'raw'                    as built (nested sections, an edit block)
- *   'secret'                 never sent
+ *
+ * A value the client must never see is simply not declared: only declared
+ * fields leave.
  *
  * @package minn-admin
  */
@@ -31,7 +33,7 @@ defined( 'ABSPATH' ) || exit;
 class Minn_Admin_Kernel_Fields {
 
 	/** The types a field may be: a field of any other type never leaves. */
-	const TYPES = array( 'int', 'float', 'bool', 'text', 'enum', 'datetime', 'raw', 'secret' );
+	const TYPES = array( 'int', 'bool', 'text', 'enum', 'datetime', 'raw' );
 
 	/**
 	 * A declaration's field spec as an array with a type.
@@ -59,7 +61,7 @@ class Minn_Admin_Kernel_Fields {
 		$out = array();
 		foreach ( $fields as $name => $spec ) {
 			$spec = self::spec( $spec );
-			if ( 'secret' === $spec['type'] || ! in_array( $spec['type'], self::TYPES, true ) || ! array_key_exists( $name, $row ) ) {
+			if ( ! in_array( $spec['type'], self::TYPES, true ) || ! array_key_exists( $name, $row ) ) {
 				continue;
 			}
 			$out[ $name ] = self::encode( $spec, $row[ $name ] );
@@ -89,8 +91,6 @@ class Minn_Admin_Kernel_Fields {
 		switch ( $spec['type'] ) {
 			case 'int':
 				return (int) $v;
-			case 'float':
-				return (float) $v;
 			case 'bool':
 				return (bool) $v;
 			case 'text':
