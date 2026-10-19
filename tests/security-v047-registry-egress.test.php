@@ -18,12 +18,16 @@
  *    tokens printed in full.
  *  - S3 (review round, the same class): Amelia's settings row, UpdraftPlus'
  *    remote storage rows and its UpdraftCentral and Migrator key rows.
+ *  - S4 (review round): the licences screen cut Slider Revolution's and
+ *    Avada's refusal messages, which can quote the purchase code, at 120
+ *    characters before the fence saw them.
  *
  * Every response is read as a browser receives it: dispatched, then through
  * the server's response filters, where the egress fence runs. The credential
  * is a core Connector key row made for the run. Fixtures (that row, a cron
  * event, an activity log event, a mail debug event, a user, a notice store)
- * are removed at the end however the run ends.
+ * are removed at the end however the run ends; the licence rows S4 borrows
+ * (Slider Revolution's and Avada's) are put back byte for byte.
  *
  * Run: wp eval-file <ABSOLUTE path>/tests/security-v047-registry-egress.test.php --user=admin --path=<site>
  *      WP Mail SMTP is kept inactive on the lab; its section loads it for the run:
@@ -467,6 +471,57 @@ if ( strlen( $jwt ) < 16 || preg_match_all( '/\d/', $jwt ) < 3 || preg_match_all
 }
 $n = count( Minn_Admin_DB::egress_credentials() );
 $check( "S3 the fence's credential list stays bounded on this site ({$n} credentials)", $n > 0 && $n < 500 );
+
+/*
+ * S4 (review round): the licences screen quoted Slider Revolution's and
+ * Avada's refusal messages cut at 120 characters; a message can quote the
+ * purchase code, so it is masked before the cut.
+ */
+$providers = function_exists( 'minn_admin_license_default_providers' ) ? minn_admin_license_default_providers() : array();
+if ( empty( $providers['revslider']['read'] ) || empty( $providers['avada']['read'] ) ) {
+	$skip( 'S4 the licences screen has no Slider Revolution or Avada provider' );
+} else {
+	$code   = strtolower( wp_generate_password( 8, false, false ) ) . '-4a7b-9c2d-8e1f-' . $tag . '123456';
+	$rows   = array( 'revslider-code', 'revslider-valid', 'revslider-deregister-message', 'fusion_registration_data' );
+	$before = array();
+	foreach ( $rows as $o ) {
+		$before[ $o ] = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", $o ) );
+	}
+	$clean = $once( static function () use ( $rows, $before, $forget ) {
+		global $wpdb;
+		foreach ( $rows as $o ) {
+			if ( null === $before[ $o ] ) {
+				delete_option( $o );
+			} else {
+				$wpdb->update( $wpdb->options, array( 'option_value' => $before[ $o ] ), array( 'option_name' => $o ) );
+				wp_cache_delete( $o, 'options' );
+			}
+		}
+		wp_cache_delete( 'alloptions', 'options' );
+		$forget();
+	} );
+	try {
+		$msg = 'This purchase code is already registered on another site. ' . str_repeat( 'r', 50 ) . ' Code: ' . $code . ' Please deregister it first.';
+		update_option( 'revslider-code', $code );
+		update_option( 'revslider-valid', 'false' );
+		update_option( 'revslider-deregister-message', $msg );
+		update_option( 'fusion_registration_data', array( 'avada' => array( 'purchase_code' => $code, 'is_valid' => false, 'errors' => $msg ) ) );
+		$forget();
+		$head = substr( $code, 0, 8 );
+		$check( 'S4 fixture: the probe purchase code is one of the fence\'s credentials', in_array( $code, Minn_Admin_DB::egress_credentials(), true ) );
+		$rs = (array) call_user_func( $providers['revslider']['read'] );
+		$av = (array) call_user_func( $providers['avada']['read'] );
+		$rn = (string) ( $rs[0]['note'] ?? '' );
+		$an = (string) ( $av[0]['note'] ?? '' );
+		$check( 'S4 Slider Revolution: a refusal quoting the purchase code across the 120-character cut shows no part of it', '' !== $rn && ! $has( $rn, $head ) && $has( $rn, $fp( $code ) ), $rn );
+		$check( 'S4 Avada: a refusal quoting the purchase code across the 120-character cut shows no part of it', '' !== $an && ! $has( $an, $head ) && $has( $an, $fp( $code ) ), $an );
+		update_option( 'revslider-deregister-message', str_repeat( 's', 200 ) );
+		$rs = (array) call_user_func( $providers['revslider']['read'] );
+		$check( 'S4 control: a long refusal with no code is cut at 120 as before', 0 === strpos( (string) ( $rs[0]['note'] ?? '' ), str_repeat( 's', 120 ) ) && 125 > mb_strlen( (string) ( $rs[0]['note'] ?? '' ) ), (string) ( $rs[0]['note'] ?? '' ) );
+	} finally {
+		$clean();
+	}
+}
 
 $pass = count( array_filter( $results ) );
 printf( "\n%d/%d passed\n", $pass, count( $results ) );

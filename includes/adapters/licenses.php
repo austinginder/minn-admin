@@ -3072,7 +3072,7 @@ function minn_admin_license_default_providers() {
 				return array( $item( array( 'name' => 'Slider Revolution', 'state' => 'valid', 'key' => true ) ) );
 			}
 			$why = wp_strip_all_tags( (string) get_option( 'revslider-deregister-message', '' ) );
-			return array( $item( array( 'name' => 'Slider Revolution', 'state' => 'invalid', 'key' => true, 'note' => $why ? substr( $why, 0, 120 ) : __( 'code stored but not registered', 'minn-admin' ) ) ) );
+			return array( $item( array( 'name' => 'Slider Revolution', 'state' => 'invalid', 'key' => true, 'note' => $why ? Minn_Admin_Egress::clip( $why, 120 ) : __( 'code stored but not registered', 'minn-admin' ) ) ) );
 		},
 	);
 
@@ -3163,7 +3163,7 @@ function minn_admin_license_default_providers() {
 				return array( $item( array( 'name' => 'Avada', 'kind' => 'theme', 'state' => 'valid', 'key' => true, 'note' => __( 'covers the bundled Avada plugins', 'minn-admin' ) ) ) );
 			}
 			$err = ! empty( $a['errors'] ) ? wp_strip_all_tags( (string) $a['errors'] ) : '';
-			return array( $item( array( 'name' => 'Avada', 'kind' => 'theme', 'state' => 'invalid', 'key' => true, 'note' => $err ? substr( $err, 0, 120 ) : '' ) ) );
+			return array( $item( array( 'name' => 'Avada', 'kind' => 'theme', 'state' => 'invalid', 'key' => true, 'note' => $err ? Minn_Admin_Egress::clip( $err, 120 ) : '' ) ) );
 		},
 	);
 
