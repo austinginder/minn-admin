@@ -16,6 +16,8 @@
  *    key, captcha secrets, Brevo key, Constant Contact tokens), Yoast SEO's
  *    (SEMrush, Wincher and MyYoast OAuth tokens) and Yoast's per-user AI
  *    tokens printed in full.
+ *  - S3 (review round, the same class): Amelia's settings row, UpdraftPlus'
+ *    remote storage rows and its UpdraftCentral and Migrator key rows.
  *
  * Every response is read as a browser receives it: dispatched, then through
  * the server's response filters, where the egress fence runs. The credential
@@ -408,6 +410,63 @@ try {
 } finally {
 	$clean();
 }
+
+/*
+ * S3 (review round, sibling of 05-1): Amelia's settings row, UpdraftPlus'
+ * remote storage rows and its UpdraftCentral / Migrator key rows are
+ * credential rows. Ninja Forms' settings row stays readable: its own
+ * settings screen prints its reCAPTCHA secret in a plain field to the same
+ * administrator.
+ */
+$up_rows = array( 'updraft_updraftvault', 'updraft_dropbox', 'updraft_s3', 'updraft_cloudfiles', 'updraft_googledrive', 'updraft_onedrive', 'updraft_ftp', 'updraft_azure', 'updraft_sftp', 'updraft_googlecloud', 'updraft_backblaze', 'updraft_webdav', 'updraft_s3generic', 'updraft_pcloud', 'updraft_openstack', 'updraft_dreamobjects', 'updraft_central_localkeys', 'updraft_migrator_localkeys', 'updraft_remotesites', 'updraft_encryptionphrase' );
+$miss    = array();
+foreach ( array_merge( array( 'amelia_settings' ), $up_rows ) as $o ) {
+	if ( ! Minn_Admin_DB::is_credential_option( $o ) || ! Minn_Admin_DB::redacts_cell( $wpdb->options, 'option_value', array( 'option_name' => $o, 'option_value' => 'x' ) ) ) {
+		$miss[] = $o;
+	}
+}
+$check( 'S3 Amelia settings and every UpdraftPlus storage and key row are redacted whole in the browser and named credential rows', ! $miss, implode( ', ', $miss ) );
+$check( 'S3 control: UpdraftPlus rows holding no secret (history, last backup, email destination) and Ninja Forms settings stay readable', ! Minn_Admin_DB::is_credential_option( 'updraft_backup_history' ) && ! Minn_Admin_DB::is_credential_option( 'updraft_last_backup' ) && ! Minn_Admin_DB::is_credential_option( 'updraft_email' ) && ! Minn_Admin_DB::is_credential_option( 'ninja_forms_settings' ) );
+// The vendors' own shapes (Amelia's JSON settings; UpdraftPlus' per-instance storage settings).
+$am    = array(
+	'general'       => array( 'gMapApiKey' => '', 'googleRecaptcha' => array( 'siteKey' => '6LcSite' . $tag . '1234abcd', 'secret' => '6LcSecr' . $tag . '5678efgh' ) ),
+	'notifications' => array( 'mailgunApiKey' => 'key-' . $tag . '0123456789abcdef', 'smtpPassword' => 'Smtp' . $tag . '4321pass', 'whatsAppAccessToken' => 'EAAG' . $tag . '998877aa' ),
+	'googleCalendar' => array( 'clientID' => 'gcal-client', 'clientSecret' => 'GOCSPX-' . $tag . '1122Bb33' ),
+	'payments'      => array( 'stripe' => array( 'livePublishableKey' => 'pk_live_' . $tag . '51Pub9x', 'liveSecretKey' => 'sk_live_' . $tag . '51Sec9x' ), 'payPal' => array( 'liveApiClientId' => 'pp-client', 'liveApiSecret' => 'EPp' . $tag . '7766Secret5' ) ),
+	'roles'         => array( 'customerCabinet' => array( 'headerJwtSecret' => 'Jw' . $tag . '12ab34cd56', 'tokenValidTime' => 1209600 ) ),
+);
+$found = array_map( 'strval', array_keys( Minn_Admin_DB::credential_strings( wp_json_encode( $am ) ) ) );
+$want  = array( $am['general']['googleRecaptcha']['secret'], $am['notifications']['mailgunApiKey'], $am['notifications']['smtpPassword'], $am['notifications']['whatsAppAccessToken'], $am['googleCalendar']['clientSecret'], $am['payments']['stripe']['liveSecretKey'], $am['payments']['payPal']['liveApiSecret'], $am['roles']['customerCabinet']['headerJwtSecret'] );
+$check( "S3 Amelia: the row's calendar, mail, WhatsApp, payment and cabinet JWT secrets become the fence's needles, its publishable and site keys do not", ! array_diff( $want, $found ) && ! in_array( $am['payments']['stripe']['livePublishableKey'], $found, true ) && ! in_array( $am['general']['googleRecaptcha']['siteKey'], $found, true ), wp_json_encode( $found ) );
+$ud    = array( 'version' => 1, 'settings' => array( 's-' . md5( $tag ) => array( 'appkey' => '', 'secret' => '', 'tk_access_token' => 'sl.' . $tag . 'B1x2Y3z4AccessTok9', 'folder' => 'site-backups-2026' ) ) );
+$found = array_map( 'strval', array_keys( Minn_Admin_DB::credential_strings( serialize( $ud ) ) ) );
+$check( "S3 UpdraftPlus: a storage row's token becomes a needle, its folder does not", in_array( 'sl.' . $tag . 'B1x2Y3z4AccessTok9', $found, true ) || in_array( $tag . 'B1x2Y3z4AccessTok9', $found, true ), wp_json_encode( $found ) );
+foreach ( array( 'amelia_settings', 'updraft_dropbox' ) as $o ) {
+	$oid = (int) $wpdb->get_var( $wpdb->prepare( "SELECT option_id FROM {$wpdb->options} WHERE option_name = %s", $o ) );
+	if ( ! $oid ) {
+		$skip( "S3 {$o}: no such row here" );
+		continue;
+	}
+	list( $st, $d ) = $send( 'GET', '/minn-admin/v1/db/row', array( 'table' => $wpdb->options, 'pk' => wp_json_encode( array( 'option_id' => $oid ) ) ) );
+	$cell           = null;
+	foreach ( (array) ( $d['columns'] ?? array() ) as $i => $c ) {
+		if ( 'option_value' === ( $c['name'] ?? '' ) ) {
+			$cell = $d['cells'][ $i ] ?? null;
+		}
+	}
+	$check( "S3 {$o}: the site's row opens redacted in the browser ({$st})", 200 === $st && is_array( $cell ) && ! empty( $cell['redacted'] ), is_array( $cell ) ? 'not redacted' : wp_json_encode( $cell ) );
+}
+// Amelia's generated cabinet JWT secret, read from the site's own row (never printed).
+$forget();
+$live = json_decode( (string) get_option( 'amelia_settings', '' ), true );
+$jwt  = is_array( $live ) ? (string) ( $live['roles']['customerCabinet']['headerJwtSecret'] ?? '' ) : '';
+if ( strlen( $jwt ) < 16 || preg_match_all( '/\d/', $jwt ) < 3 || preg_match_all( '/[A-Za-z]/', $jwt ) < 3 ) {
+	$skip( "S3 Amelia: this site's cabinet JWT secret is absent or too plain to count as a key" );
+} else {
+	$check( "S3 Amelia: the site's customer cabinet JWT secret is one of the fence's credentials", in_array( $jwt, Minn_Admin_DB::egress_credentials(), true ) );
+}
+$n = count( Minn_Admin_DB::egress_credentials() );
+$check( "S3 the fence's credential list stays bounded on this site ({$n} credentials)", $n > 0 && $n < 500 );
 
 $pass = count( array_filter( $results ) );
 printf( "\n%d/%d passed\n", $pass, count( $results ) );
