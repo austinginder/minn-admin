@@ -184,13 +184,6 @@ function minn_admin_perfmatters_tab_shape( $tab_id ) {
 }
 
 /**
- * Save edited keys. Each key is validated against the live registry (never
- * an arbitrary option write), coerced to Perfmatters' stored shapes
- * ('1'/absent flags, plain strings; one-per-line strings are handed to its
- * own sanitizer, which normalizes them to arrays exactly like its form),
- * then the whole option updates once per target option.
- */
-/**
  * Who may read and write Perfmatters settings through Minn.
  *
  * Perfmatters draws a boundary that is not a WordPress capability. Its
@@ -277,6 +270,17 @@ function minn_admin_perfmatters_is_raw_output( $section, $id ) {
 	return isset( $map[ $section ] ) && in_array( (string) $id, $map[ $section ], true );
 }
 
+/**
+ * Save edited keys. Each key is validated against the live registry (never
+ * an arbitrary option write), coerced to Perfmatters' stored shapes
+ * ('1'/absent flags, plain strings; one-per-line strings are handed to its
+ * own sanitizer, which normalizes them to arrays exactly like its form),
+ * then the whole option updates once per target option.
+ *
+ * @param array $values Sent values, by field key.
+ * @return true|WP_Error A 403 naming the raw-output fields this caller may
+ *                       not change, before anything is written.
+ */
 function minn_admin_perfmatters_save( $values ) {
 	$reg   = minn_admin_perfmatters_registry();
 	$byKey = array();
@@ -284,8 +288,51 @@ function minn_admin_perfmatters_save( $values ) {
 		foreach ( $section_fields as $field ) {
 			$f = minn_admin_perfmatters_field( $field );
 			if ( $f ) {
-				$byKey[ $f['key'] ] = array( 'args' => (array) $field['args'], 'type' => $f['type'] );
+				$byKey[ $f['key'] ] = array( 'args' => (array) $field['args'], 'type' => $f['type'], 'label' => $f['label'] );
 			}
+		}
+	}
+	// The settings form sends a field once it is touched, even when it is put
+	// back, so a value sent as the page read it stays as stored: the strip
+	// below rewrote one Perfmatters' own form had kept.
+	$unchanged = static function ( $args, $type, $v ) {
+		$was = minn_admin_perfmatters_value( $args, $type );
+		return 'toggle' === $type ? ( ! empty( $v ) && 'false' !== $v ) === $was : is_scalar( $v ) && (string) $v === $was;
+	};
+	// Fields whose value goes into the page as raw markup carry the same rule as
+	// every other code-authoring surface here rather than riding in on
+	// manage_options with the ordinary settings. Keyed on what the value DOES,
+	// not on whether the field is labelled as code. Asked of the whole save
+	// before anything is written: skipping only those fields stored the rest
+	// of a mixed save under "Settings saved" while the CDN URL or tracking id
+	// the person typed was dropped.
+	$may_raw = current_user_can( 'unfiltered_html' ) && ( ! class_exists( 'Minn_Admin' ) || Minn_Admin::code_edits_allowed() );
+	if ( ! $may_raw ) {
+		$refused = array();
+		foreach ( (array) $values as $key => $v ) {
+			if ( ! isset( $byKey[ $key ] ) ) {
+				continue;
+			}
+			$args = $byKey[ $key ]['args'];
+			if ( minn_admin_perfmatters_is_raw_output( (string) ( $args['section'] ?? '' ), (string) ( $args['id'] ?? '' ) ) && ! $unchanged( $args, $byKey[ $key ]['type'], $v ) ) {
+				$refused[ $key ] = $byKey[ $key ]['label'];
+			}
+		}
+		if ( $refused ) {
+			return new WP_Error(
+				'minn_perfmatters_raw_output',
+				sprintf(
+					/* translators: %s: comma-separated setting names. */
+					_n(
+						'Nothing was saved. %s goes into your pages as raw code, which your account cannot change here.',
+						'Nothing was saved. %s go into your pages as raw code, which your account cannot change here.',
+						count( $refused ),
+						'minn-admin'
+					),
+					implode( ', ', $refused )
+				),
+				array( 'status' => 403, 'fields' => array_keys( $refused ) )
+			);
 		}
 	}
 	$pending = array(); // option name → stored array with edits applied
@@ -296,23 +343,12 @@ function minn_admin_perfmatters_save( $values ) {
 		$args   = $byKey[ $key ]['args'];
 		$type   = $byKey[ $key ]['type'];
 		$option = ! empty( $args['option'] ) ? $args['option'] : 'perfmatters_options';
-		// Fields whose value goes into the page as raw markup carry the same rule as
-		// every other code-authoring surface here rather than riding in on
-		// manage_options with the ordinary settings. Keyed on what the value DOES,
-		// not on whether the field is labelled as code.
-		if ( minn_admin_perfmatters_is_raw_output( (string) ( $args['section'] ?? '' ), (string) ( $args['id'] ?? '' ) ) ) {
-			if ( ! current_user_can( 'unfiltered_html' ) ) {
-				continue;
-			}
-			if ( class_exists( 'Minn_Admin' ) && ! Minn_Admin::code_edits_allowed() ) {
-				continue;
-			}
+		if ( $unchanged( $args, $type, $v ) ) {
+			continue;
 		}
-		// The settings form sends a field once it is touched, even when it
-		// is put back, so a value sent as the page read it stays as stored:
-		// the strip below rewrote one Perfmatters' own form had kept.
-		$was = minn_admin_perfmatters_value( $args, $type );
-		if ( 'toggle' === $type ? ( ! empty( $v ) && 'false' !== $v ) === $was : is_scalar( $v ) && (string) $v === $was ) {
+		// Belt and braces: the refusal above has already answered for a
+		// changed raw-output field this caller may not write.
+		if ( ! $may_raw && minn_admin_perfmatters_is_raw_output( (string) ( $args['section'] ?? '' ), (string) ( $args['id'] ?? '' ) ) ) {
 			continue;
 		}
 		if ( ! isset( $pending[ $option ] ) ) {
@@ -406,7 +442,10 @@ add_action( 'rest_api_init', function () {
 		'run'                 => function ( $req ) {
 			$body   = $req->get_json_params();
 			$values = isset( $body['values'] ) && is_array( $body['values'] ) ? $body['values'] : array();
-			minn_admin_perfmatters_save( $values );
+			$saved  = minn_admin_perfmatters_save( $values );
+			if ( is_wp_error( $saved ) ) {
+				return $saved;
+			}
 			return rest_ensure_response( minn_admin_perfmatters_tab_shape( Minn_Admin::path_param( $req, 'tab' ) ) );
 		},
 	) );
