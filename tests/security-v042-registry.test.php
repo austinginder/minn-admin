@@ -769,8 +769,14 @@ if ( class_exists( 'WPCode_Snippet' ) && function_exists( 'minn_admin_wpcode_gua
 if ( class_exists( 'Tribe__Events__API' ) && function_exists( 'minn_admin_tec_active' ) && minn_admin_tec_active() ) {
 	$page_priv = wp_insert_post( array( 'post_type' => 'page', 'post_status' => 'private', 'post_title' => 'Minn v042 private page' ) );
 	$ev        = Tribe__Events__API::createEvent( array( 'post_title' => 'Minn v042 link check', 'post_status' => 'draft', 'EventStartDate' => '2026-11-10', 'EventStartTime' => '19:00:00', 'EventEndDate' => '2026-11-10', 'EventEndTime' => '21:00:00' ) );
-	list( $st ) = $call( 'POST', '/wp/v2/tribe_events/' . $ev, array( 'minn_tec' => array( 'venue' => array( 'value' => (string) $page_priv, 'label' => 'x' ) ) ) );
-	$check( 'The Events Calendar: a page id is refused as a venue', 400 === $st && ! get_post_meta( $ev, '_EventVenueID', true ), 'status ' . $st );
+	list( $st, $tec_d ) = $call( 'POST', '/wp/v2/tribe_events/' . $ev, array( 'minn_tec' => array( 'venue' => array( 'value' => (string) $page_priv, 'label' => 'x' ) ) ) );
+	// The event is already saved when the panel's field runs, so the refusal
+	// rides on its 200 answer, naming the venue (minn_admin_panel_held()).
+	$tec_named = false;
+	foreach ( (array) ( $tec_d['minn_field_errors'] ?? array() ) as $tec_row ) {
+		$tec_named = $tec_named || ( 'minn_tec' === ( $tec_row['field'] ?? '' ) && 'venue' === ( $tec_row['key'] ?? '' ) );
+	}
+	$check( 'The Events Calendar: a page id is refused as a venue', 200 === $st && $tec_named && ! get_post_meta( $ev, '_EventVenueID', true ), 'status ' . $st . ' ' . wp_json_encode( $tec_d['minn_field_errors'] ?? null ) );
 	wp_delete_post( $ev, true );
 	wp_delete_post( $page_priv, true );
 }

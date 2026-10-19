@@ -15,6 +15,14 @@
  *    add or take off; an absolute balance is taken only beside the balance
  *    the person saw, and refused with 409 when the card no longer holds it.
  *
+ *  - S1 The Events Calendar panel (fix-delta review): a date it could not
+ *    read, or a venue or organizer it refused, answered 400 after the event
+ *    was stored, so a new event's editor never learned its id and every save
+ *    made another draft.
+ *  - S2 ACF, Meta Box, JetEngine and Seriously Simple Podcasting panels (fix-delta
+ *    review): a value the panel refused kept the stored one but answered
+ *    200 with nothing said, so the editor adopted it as saved.
+ *
  * Each section calls what the route calls, as the role the finding named,
  * with a control where the fix could over-block. Fixtures (users, a listing,
  * gift cards, the Perfmatters option) are put back at the end however the
@@ -394,6 +402,220 @@ foreach ( $vendors as $prefix => $v ) {
 		}
 	} )();
 }
+
+/*
+ * S1 The Events Calendar (fix-delta review). A new event's first save with a
+ * Starts the panel cannot read: TEC's field used to answer 400 after
+ * WordPress had stored the event, so the editor never learned its id and
+ * each retry made another event draft. Venue refusals took the same path.
+ */
+( function () use ( $check, $skip, $call, $once, $field_err, $admin, $tag ) {
+	if ( ! post_type_exists( 'tribe_events' ) || ! class_exists( 'Tribe__Events__API' ) || ! function_exists( 'minn_admin_tec_panel_values' ) ) {
+		$skip( 'S1 TEC: The Events Calendar is not active' );
+		return;
+	}
+	$title = 'Minn v047 tec ' . $tag;
+	$page  = 0;
+	// By title in the table itself: TEC's query filters leave an event with
+	// no stored dates out of get_posts(), and such a draft is the point here.
+	$ids   = static function () use ( $title ) {
+		global $wpdb;
+		return array_map( 'intval', $wpdb->get_col( $wpdb->prepare( "SELECT ID FROM {$wpdb->posts} WHERE post_type = 'tribe_events' AND post_title = %s", $title ) ) );
+	};
+	$clean = $once( static function () use ( $ids, &$page ) {
+		foreach ( $ids() as $pid ) {
+			wp_delete_post( $pid, true );
+		}
+		if ( $page ) {
+			wp_delete_post( $page, true );
+		}
+	} );
+	try {
+		$drafts = static function () use ( $ids ) {
+			return count( $ids() );
+		};
+		$tec     = array( 'start' => '2026-13-01 10:00' );
+		$answers = array( $call( 'POST', '/wp/v2/tribe_events', array( 'title' => $title, 'status' => 'draft', 'minn_tec' => $tec ) ) );
+		$id      = (int) ( $answers[0][1]['id'] ?? 0 );
+		for ( $i = 0; $i < 2; $i++ ) {
+			$answers[] = $id ? $call( 'POST', '/wp/v2/tribe_events/' . $id, array( 'title' => $title, 'minn_tec' => $tec ) ) : $call( 'POST', '/wp/v2/tribe_events', array( 'title' => $title, 'status' => 'draft', 'minn_tec' => $tec ) );
+		}
+		$check( 'S1 TEC: a new event with an unreadable start answers 201 with its id', 201 === $answers[0][0] && $id > 0, $answers[0][0] . ' ' . wp_json_encode( $answers[0][1]['code'] ?? '' ) );
+		$check( 'S1 TEC: the answer names Starts as not saved', (bool) $field_err( $answers[0][1], 'minn_tec', 'start' ), wp_json_encode( $answers[0][1]['minn_field_errors'] ?? null ) );
+		$check( 'S1 TEC: the retries update that event, so one draft exists', 1 === $drafts() && 200 === $answers[1][0] && 200 === $answers[2][0], $drafts() . ' drafts; ' . $answers[1][0] . '/' . $answers[2][0] );
+
+		if ( ! $id ) {
+			return;
+		}
+		list( $st, $d ) = $call( 'POST', '/wp/v2/tribe_events/' . $id, array( 'minn_tec' => array( 'start' => '2026-11-02 10:00', 'end' => '2026-11-02 12:00' ) ) );
+		$check( 'S1 TEC control: readable dates are stored with no refusal', 200 === $st && empty( $d['minn_field_errors'] ) && 0 === strpos( (string) get_post_meta( $id, '_EventStartDate', true ), '2026-11-02 10:00' ), $st . ' ' . get_post_meta( $id, '_EventStartDate', true ) . ' ' . wp_json_encode( $d['minn_field_errors'] ?? null ) );
+
+		$page = wp_insert_post( array( 'post_type' => 'page', 'post_status' => 'private', 'post_title' => 'Minn v047 not a venue ' . $tag, 'post_author' => $admin ) );
+		$was  = get_post_meta( $id, '_EventVenueID', true );
+		list( $st, $d ) = $call( 'POST', '/wp/v2/tribe_events/' . $id, array( 'minn_tec' => array( 'venue' => array( 'value' => (string) $page, 'label' => 'x' ), 'end' => '2026-11-02 13:00' ) ) );
+		$check( 'S1 TEC: a page sent as the venue answers 200 and names Venue', 200 === $st && $field_err( $d, 'minn_tec', 'venue' ) && ! $field_err( $d, 'minn_tec', 'end' ), $st . ' ' . wp_json_encode( $d['minn_field_errors'] ?? $d['code'] ?? null ) );
+		$check( 'S1 TEC: the venue stays as stored and the new end is written', (string) $was === (string) get_post_meta( $id, '_EventVenueID', true ) && 0 === strpos( (string) get_post_meta( $id, '_EventEndDate', true ), '2026-11-02 13:00' ), wp_json_encode( array( get_post_meta( $id, '_EventVenueID', true ), get_post_meta( $id, '_EventEndDate', true ) ) ) );
+
+		list( $st, $d ) = $call( 'POST', '/wp/v2/tribe_events/' . $id, array( 'minn_tec' => array( 'start' => '2026-11-03 10:00', 'end' => '2026-11-02 09:00' ) ) );
+		// TEC moves an end before the start itself (its own form does too), so
+		// this is no refusal; what matters is that the answer is the event.
+		$check( 'S1 TEC: an end before the start still answers 200 with the event', 200 === $st && (int) ( $d['id'] ?? 0 ) === $id, $st . ' ' . wp_json_encode( $d['minn_field_errors'] ?? $d['code'] ?? null ) );
+	} finally {
+		$clean();
+	}
+} )();
+
+/*
+ * S2 Panels that refuse a value (fix-delta review). Each kept the stored
+ * value, as it should, but answered 200 with nothing said, so the editor
+ * adopted what was typed as saved.
+ */
+$s2_post = static function ( $label ) use ( $admin, $tag ) {
+	return (int) wp_insert_post( array( 'post_title' => 'Minn v047 ' . $label . ' ' . $tag, 'post_status' => 'draft', 'post_type' => 'post', 'post_author' => $admin ) );
+};
+
+( function () use ( $check, $skip, $call, $once, $field_err, $tag, $s2_post ) {
+	if ( ! function_exists( 'acf_add_local_field_group' ) || ! function_exists( 'minn_admin_acf_write_values' ) ) {
+		$skip( 'S2 ACF: not active' );
+		return;
+	}
+	$pid   = 0;
+	$clean = $once( static function () use ( &$pid ) {
+		if ( $pid ) {
+			wp_delete_post( $pid, true );
+		}
+		if ( function_exists( 'acf_remove_local_field_group' ) ) {
+			acf_remove_local_field_group( 'group_minn_v047_s2' );
+		}
+	} );
+	try {
+		acf_add_local_field_group( array(
+			'key'      => 'group_minn_v047_s2',
+			'title'    => 'Minn v047 refusal probe',
+			'fields'   => array(
+				array( 'key' => 'field_minn_v047_url', 'name' => 'minn_v047_url', 'label' => 'Probe link', 'type' => 'url' ),
+				array( 'key' => 'field_minn_v047_day', 'name' => 'minn_v047_day', 'label' => 'Probe day', 'type' => 'date_picker' ),
+				array( 'key' => 'field_minn_v047_txt', 'name' => 'minn_v047_txt', 'label' => 'Probe text', 'type' => 'text' ),
+			),
+			'location' => array( array( array( 'param' => 'post_type', 'operator' => '==', 'value' => 'post' ) ) ),
+		) );
+		$pid = $s2_post( 'acf' );
+		update_field( 'field_minn_v047_url', 'https://example.com/kept', $pid );
+		update_field( 'field_minn_v047_day', '20261101', $pid );
+		list( $st, $d ) = $call( 'POST', '/wp/v2/posts/' . $pid, array( 'minn_acf' => array( 'minn_v047_url' => 'javascript:alert(1)', 'minn_v047_day' => 'someday', 'minn_v047_txt' => 'Written ' . $tag ) ) );
+		$check( 'S2 ACF: the save answers 200 and names the link and the date', 200 === $st && $field_err( $d, 'minn_acf', 'minn_v047_url' ) && $field_err( $d, 'minn_acf', 'minn_v047_day' ), $st . ' ' . wp_json_encode( $d['minn_field_errors'] ?? null ) );
+		$check( 'S2 ACF: and not the text it stored', ! $field_err( $d, 'minn_acf', 'minn_v047_txt' ), wp_json_encode( $d['minn_field_errors'] ?? null ) );
+		$check( 'S2 ACF: what is stored is unchanged: link and date kept, text written', 'https://example.com/kept' === get_post_meta( $pid, 'minn_v047_url', true ) && '20261101' === get_post_meta( $pid, 'minn_v047_day', true ) && 'Written ' . $tag === get_post_meta( $pid, 'minn_v047_txt', true ), wp_json_encode( array( get_post_meta( $pid, 'minn_v047_url', true ), get_post_meta( $pid, 'minn_v047_day', true ), get_post_meta( $pid, 'minn_v047_txt', true ) ) ) );
+		list( $st, $d ) = $call( 'POST', '/wp/v2/posts/' . $pid, array( 'minn_acf' => array( 'minn_v047_url' => '', 'minn_v047_day' => '' ) ) );
+		$check( 'S2 ACF control: clearing is not a refusal', 200 === $st && empty( $d['minn_field_errors'] ) && '' === get_post_meta( $pid, 'minn_v047_url', true ), $st . ' ' . wp_json_encode( $d['minn_field_errors'] ?? null ) );
+	} finally {
+		$clean();
+	}
+} )();
+
+( function () use ( $check, $skip, $call, $once, $field_err, $tag, $s2_post ) {
+	if ( ! function_exists( 'rwmb_get_registry' ) || ! function_exists( 'minn_admin_meta_box_write_values' ) ) {
+		$skip( 'S2 Meta Box: not active' );
+		return;
+	}
+	$pid   = 0;
+	$clean = $once( static function () use ( &$pid ) {
+		if ( $pid ) {
+			wp_delete_post( $pid, true );
+		}
+	} );
+	try {
+		$box = rwmb_get_registry( 'meta_box' )->make( array(
+			'id'         => 'minn_v047_mb',
+			'title'      => 'Minn v047 refusal probe',
+			'post_types' => array( 'post' ),
+			'fields'     => array(
+				array( 'id' => 'minn_v047_mb_url', 'name' => 'Probe link', 'type' => 'url' ),
+				array( 'id' => 'minn_v047_mb_txt', 'name' => 'Probe text', 'type' => 'text' ),
+			),
+		) );
+		// A box made after init never reaches the field registry the setter reads.
+		if ( method_exists( $box, 'register_fields' ) ) {
+			$box->register_fields();
+		}
+		$pid = $s2_post( 'mb' );
+		update_post_meta( $pid, 'minn_v047_mb_url', 'https://example.com/kept' );
+		list( $st, $d ) = $call( 'POST', '/wp/v2/posts/' . $pid, array( 'minn_meta_box' => array( 'minn_v047_mb_url' => 'javascript:alert(1)', 'minn_v047_mb_txt' => 'Written' ) ) );
+		$check( 'S2 Meta Box: a javascript: link answers 200 and is named', 200 === $st && $field_err( $d, 'minn_meta_box', 'minn_v047_mb_url' ) && ! $field_err( $d, 'minn_meta_box', 'minn_v047_mb_txt' ), $st . ' ' . wp_json_encode( $d['minn_field_errors'] ?? null ) );
+		$check( 'S2 Meta Box: the link stays as stored, the text is written', 'https://example.com/kept' === get_post_meta( $pid, 'minn_v047_mb_url', true ) && 'Written' === get_post_meta( $pid, 'minn_v047_mb_txt', true ), wp_json_encode( array( get_post_meta( $pid, 'minn_v047_mb_url', true ), get_post_meta( $pid, 'minn_v047_mb_txt', true ) ) ) );
+	} finally {
+		$clean();
+	}
+} )();
+
+( function () use ( $check, $skip, $call, $once, $field_err, $tag, $s2_post ) {
+	if ( ! function_exists( 'minn_admin_jet_write_values' ) || ! minn_admin_jet_fields_active() ) {
+		$skip( 'S2 JetEngine: not active' );
+		return;
+	}
+	global $wpdb;
+	$pid   = 0;
+	$clean = $once( static function () use ( &$pid ) {
+		if ( $pid ) {
+			wp_delete_post( $pid, true );
+		}
+	} );
+	try {
+		$pid   = $s2_post( 'jet' );
+		$map   = minn_admin_jet_field_map( $pid );
+		$image = '';
+		$pick  = '';
+		$text  = '';
+		foreach ( $map as $name => $f ) {
+			if ( '' === $image && 'image' === ( $f['type'] ?? '' ) ) {
+				$image = $name;
+			} elseif ( '' === $pick && in_array( $f['type'] ?? '', array( 'select', 'radio' ), true ) ) {
+				$pick = $name;
+			} elseif ( '' === $text && 'text' === ( $f['type'] ?? '' ) ) {
+				$text = $name;
+			}
+		}
+		if ( '' === $image || '' === $text ) {
+			$skip( 'S2 JetEngine: no picture and text field on posts here' );
+			return;
+		}
+		$dead = (int) $wpdb->get_var( "SELECT MAX(ID) FROM {$wpdb->posts}" ) + 500000; // never an attachment
+		$body = array( $image => (string) $dead, $text => 'Written ' . $tag );
+		if ( '' !== $pick ) {
+			$body[ $pick ] = 'minn-not-a-choice';
+		}
+		list( $st, $d ) = $call( 'POST', '/wp/v2/posts/' . $pid, array( 'minn_jet' => $body ) );
+		$check( 'S2 JetEngine: a picture that is no attachment answers 200 and is named', 200 === $st && $field_err( $d, 'minn_jet', $image ) && ! $field_err( $d, 'minn_jet', $text ), $st . ' ' . wp_json_encode( $d['minn_field_errors'] ?? null ) );
+		if ( '' !== $pick ) {
+			$check( 'S2 JetEngine: and an unknown choice', (bool) $field_err( $d, 'minn_jet', $pick ), wp_json_encode( $d['minn_field_errors'] ?? null ) );
+		}
+		$check( 'S2 JetEngine: nothing refused is stored, the text is written', '' === get_post_meta( $pid, $image, true ) && ( '' === $pick || '' === get_post_meta( $pid, $pick, true ) ) && 'Written ' . $tag === get_post_meta( $pid, $text, true ), wp_json_encode( array( get_post_meta( $pid, $image, true ), '' === $pick ? null : get_post_meta( $pid, $pick, true ), get_post_meta( $pid, $text, true ) ) ) );
+	} finally {
+		$clean();
+	}
+} )();
+
+( function () use ( $check, $skip, $call, $once, $field_err, $tag, $admin ) {
+	if ( ! function_exists( 'minn_admin_ssp_write_values' ) || ! minn_admin_ssp_active() || ! post_type_exists( 'podcast' ) ) {
+		$skip( 'S2 SSP: not active' );
+		return;
+	}
+	$pid   = 0;
+	$clean = $once( static function () use ( &$pid ) {
+		if ( $pid ) {
+			wp_delete_post( $pid, true );
+		}
+	} );
+	try {
+		$pid = (int) wp_insert_post( array( 'post_title' => 'Minn v047 ssp ' . $tag, 'post_status' => 'draft', 'post_type' => 'podcast', 'post_author' => $admin ) );
+		update_post_meta( $pid, 'episode_type', 'audio' );
+		list( $st, $d ) = $call( 'POST', '/wp/v2/podcast/' . $pid, array( 'minn_ssp' => array( 'episode_type' => 'hologram', 'itunes_title' => 'Written ' . $tag ) ) );
+		$check( 'S2 SSP: an unknown episode type answers 200 and is named', 200 === $st && $field_err( $d, 'minn_ssp', 'episode_type' ) && ! $field_err( $d, 'minn_ssp', 'itunes_title' ), $st . ' ' . wp_json_encode( $d['minn_field_errors'] ?? null ) );
+		$check( 'S2 SSP: the type stays as stored, the title is written', 'audio' === get_post_meta( $pid, 'episode_type', true ) && 'Written ' . $tag === get_post_meta( $pid, 'itunes_title', true ), wp_json_encode( array( get_post_meta( $pid, 'episode_type', true ), get_post_meta( $pid, 'itunes_title', true ) ) ) );
+	} finally {
+		$clean();
+	}
+} )();
 
 $failed = count( array_filter( $results, static function ( $ok ) {
 	return ! $ok;

@@ -278,7 +278,7 @@ add_action( 'rest_api_init', function () {
 				}
 				return (object) minn_admin_tec_panel_values( $id );
 			},
-			'update_callback' => function ( $value, $post ) {
+			'update_callback' => function ( $value, $post, $field_name = '', $request = null ) {
 				if ( ! $post instanceof WP_Post || ! current_user_can( 'edit_post', $post->ID ) ) {
 					return null;
 				}
@@ -288,6 +288,47 @@ add_action( 'rest_api_init', function () {
 				if ( ! is_array( $value ) || ! $value ) {
 					return null;
 				}
+				// Never an error from here. The post is already saved, a new
+				// event included, so an error answer would hide its id from
+				// the editor (each retry and autosave then made another event
+				// draft). A value TEC or this panel refuses keeps only itself
+				// from being stored and rides on the post's own answer, named,
+				// so the editor keeps it unsaved (minn_admin_panel_report_held(),
+				// adapters/acpt.php).
+				$labels  = array(
+					'start'     => __( 'Starts', 'minn-admin' ),
+					'end'       => __( 'Ends', 'minn-admin' ),
+					'all_day'   => __( 'All-day event', 'minn-admin' ),
+					'venue'     => __( 'Venue', 'minn-admin' ),
+					'organizer' => __( 'Organizer', 'minn-admin' ),
+					'cost'      => __( 'Cost', 'minn-admin' ),
+					'website'   => __( 'Event website', 'minn-admin' ),
+				);
+				$sent    = array_values( array_intersect( array_map( 'strval', array_keys( $value ) ), array_keys( $labels ) ) );
+				$refused = array();
+				$refuse  = function ( $code, $message, $status, $keys ) use ( &$refused, $labels ) {
+					$fields = array();
+					foreach ( $keys as $key ) {
+						$fields[] = array(
+							'key'     => (string) $key,
+							'label'   => $labels[ $key ] ?? (string) $key,
+							'message' => $message,
+						);
+					}
+					$refused[] = new WP_Error( $code, $message, array( 'status' => $status, 'fields' => $fields ) );
+				};
+				$finish = function () use ( &$refused, $request ) {
+					if ( ! $refused ) {
+						return null;
+					}
+					if ( $request instanceof WP_REST_Request && function_exists( 'minn_admin_panel_held' ) ) {
+						foreach ( $refused as $error ) {
+							minn_admin_panel_held( $request, $error, 'minn_tec' );
+						}
+						return null;
+					}
+					return $refused[0];
+				};
 				// The editor sends only the fields that changed, and
 				// saveEventMeta() is a full-form save: an absent all-day flag
 				// reads as off and an absent cost is deleted. Fields the body
@@ -323,7 +364,8 @@ add_action( 'rest_api_init', function () {
 					$ts = strtotime( $raw );
 					if ( ! $ts ) {
 						/* translators: %s: which date could not be parsed, "start" or "end". */
-						return new WP_Error( 'minn_tec_bad_date', sprintf( __( 'Could not read the %s date — use YYYY-MM-DD HH:MM.', 'minn-admin' ), strtolower( $side ) ), array( 'status' => 400 ) );
+						$refuse( 'minn_tec_bad_date', sprintf( __( 'Could not read the %s date — use YYYY-MM-DD HH:MM.', 'minn-admin' ), strtolower( $side ) ), 400, array( $key ) );
+						continue;
 					}
 					// The exact shape TEC's own REST endpoint sends.
 					$data[ "Event{$side}Date" ] = date( 'Y-m-d', $ts );
@@ -360,16 +402,18 @@ add_action( 'rest_api_init', function () {
 				if ( array_key_exists( 'venue', $value ) && ! minn_admin_tec_multi_venue( $post->ID ) ) {
 					$vid = $linked_id( $value['venue'] );
 					if ( ! $linkable( $vid, 'tribe_venue', '_EventVenueID' ) ) {
-						return new WP_Error( 'minn_tec_bad_venue', __( 'Pick a venue from the list.', 'minn-admin' ), array( 'status' => 400 ) );
+						$refuse( 'minn_tec_bad_venue', __( 'Pick a venue from the list.', 'minn-admin' ), 400, array( 'venue' ) );
+					} else {
+						$data['venue'] = array( 'VenueID' => $vid );
 					}
-					$data['venue'] = array( 'VenueID' => $vid );
 				}
 				if ( array_key_exists( 'organizer', $value ) && ! minn_admin_tec_multi_organizer( $post->ID ) ) {
 					$oid = $linked_id( $value['organizer'] );
 					if ( ! $linkable( $oid, 'tribe_organizer', '_EventOrganizerID' ) ) {
-						return new WP_Error( 'minn_tec_bad_organizer', __( 'Pick an organizer from the list.', 'minn-admin' ), array( 'status' => 400 ) );
+						$refuse( 'minn_tec_bad_organizer', __( 'Pick an organizer from the list.', 'minn-admin' ), 400, array( 'organizer' ) );
+					} else {
+						$data['organizer'] = array( 'OrganizerID' => $oid ? array( $oid ) : array() );
 					}
-					$data['organizer'] = array( 'OrganizerID' => $oid ? array( $oid ) : array() );
 				}
 				// saveEventMeta() always rewrites the cost (an absent one is
 				// deleted) and stores through add_post_meta(), which unslashes,
@@ -395,13 +439,13 @@ add_action( 'rest_api_init', function () {
 					$data['EventURL'] = wp_slash( esc_url_raw( (string) $value['website'] ) );
 				}
 				if ( ! $data ) {
-					return null;
+					return $finish();
 				}
 				// The panel is locked on a recurring event (the fields route
 				// offers nothing); values that still arrive are ignored rather
 				// than failing the post's own save.
 				if ( minn_admin_tec_is_recurring( $post->ID ) ) {
-					return null;
+					return $finish();
 				}
 
 				// TEC treats a linked type MISSING from the submission as "keep the
@@ -477,12 +521,20 @@ add_action( 'rest_api_init', function () {
 					}
 				}
 
+				// What TEC itself refuses is the whole submission: every field
+				// this save sent that was not already refused above.
+				$rest = $sent;
+				foreach ( $refused as $error ) {
+					$rest = array_diff( $rest, array_column( (array) ( $error->get_error_data()['fields'] ?? array() ), 'key' ) );
+				}
+				$rest = array_values( $rest );
+				$ok   = null;
 				try {
 					// Pass the post: TEC's own save and its listeners (Community
 					// Events types the third argument) expect it.
 					$ok = Tribe__Events__API::saveEventMeta( $post->ID, $data, $post );
 				} catch ( \Throwable $e ) {
-					return new WP_Error( 'minn_tec_save_failed', $e->getMessage(), array( 'status' => 500 ) );
+					$refuse( 'minn_tec_save_failed', $e->getMessage(), 500, $rest );
 				} finally {
 					// TEC resets the map flags early in the save, so put them
 					// back even when a later listener throws.
@@ -500,9 +552,9 @@ add_action( 'rest_api_init', function () {
 				}
 				if ( false === $ok ) {
 					// Their invalid-meta path (e.g. end before start).
-					return new WP_Error( 'minn_tec_refused', __( 'The Events Calendar refused those event details (check that the end is after the start).', 'minn-admin' ), array( 'status' => 400 ) );
+					$refuse( 'minn_tec_refused', __( 'The Events Calendar refused those event details (check that the end is after the start).', 'minn-admin' ), 400, $rest );
 				}
-				return null;
+				return $finish();
 			},
 			'schema'          => array(
 				'description' => __( 'The Events Calendar event details for Minn Admin.', 'minn-admin' ),
