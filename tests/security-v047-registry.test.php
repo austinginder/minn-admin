@@ -169,7 +169,9 @@ $field_err = static function ( $data, $panel, $key ) {
 		WPSEO_Options::set( 'display-metabox-pt-post', false );
 		$check( '14-1 Yoast: the metabox is switched off for posts', ! minn_admin_seo_shows_for_type( $plugin, 'post' ) );
 		$check( '14-1 Yoast: the panel offers an Author no fields on a new post of that type', 0 === $groups( $author, array( 'post' => 0, 'type' => 'posts' ) ) );
-		$check( '14-1 Yoast control: a new page still gets the panel', $groups( $author, array( 'post' => 0, 'type' => 'pages' ) ) > 0 );
+		// An Author makes no pages, and a new post's fields answer to its
+		// type's edit_posts first, so the control asks as an Editor.
+		$check( '14-1 Yoast control: a new page still gets the panel', $groups( $user( 'editor' ), array( 'post' => 0, 'type' => 'pages' ) ) > 0 );
 		list( $id, $answers ) = $three( $author, array( 'title' => 'Author SEO ' . $title ) );
 		$check( '14-1 Yoast: a first save with an SEO change on a switched-off type answers 201 with the post', 201 === $answers[0][0] && $id > 0, $answers[0][0] . ' ' . wp_json_encode( $answers[0][1]['code'] ?? '' ) );
 		$check( '14-1 Yoast: and names the SEO field it did not store', (bool) $field_err( $answers[0][1], 'minn_seo', 'title' ), wp_json_encode( $answers[0][1]['minn_field_errors'] ?? null ) );

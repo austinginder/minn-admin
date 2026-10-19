@@ -110,6 +110,9 @@ $hints = array(
 	'minn_powerpress:duration'      => array( '01:02:03', '45:10' ),
 	'minn_powerpress:episode_no'    => array( 12, 7 ),
 	'minn_powerpress:season'        => array( 3, 2 ),
+	// Whole numbers, -1 for no limit (Rank Math's and AIOSEO's robots limits).
+	'minn_seo:adv_max_snippet'       => array( 160, -1 ),
+	'minn_seo:adv_max_video_preview' => array( 30, -1 ),
 	'minn_seo:canonical'        => array( 'https://example.com/canon?a=1&b=2', 'https://example.org/other/' ),
 );
 

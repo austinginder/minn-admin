@@ -1825,7 +1825,9 @@ if ( defined( 'WPSEO_VERSION' ) && function_exists( 'minn_admin_seo_plugin' ) ) 
 }
 
 // --- #25 SEO unchanged-value rule, by field type (every provider) ----------
-if ( function_exists( 'minn_admin_seo_unchanged' ) ) {
+// The rule is the fields tier's now (Minn_Admin_Kernel_Panels::same()),
+// asked with each SEO field as the panel declares it.
+if ( class_exists( 'Minn_Admin_Kernel_Panels' ) && function_exists( 'minn_admin_seo_tier_field' ) ) {
 	$fsl_uc = array(
 		// type, submitted, read back, expected "unchanged"
 		array( 'toggle', null, false, true ),    // the editor seeds an untouched false as null
@@ -1840,18 +1842,20 @@ if ( function_exists( 'minn_admin_seo_unchanged' ) ) {
 		array( 'select', 'index', '', false ),
 		array( 'text', 'a%ABb', 'a%ABb', true ),
 		array( 'text', array( 'a' ), 'a', false ),
-		array( 'image', 5, 5, false ),           // images compare by id in their own branch
-		array( 'note', 'x', 'x', false ),
+		array( 'image', 5, 5, true ),            // the same attachment id is nothing to write
+		array( 'image', array( 'id' => 5, 'url' => 'x' ), 6, false ),
+		array( 'note', 'x', 'x', true ),         // a note sent back as read is nothing to refuse
 	);
 	$fsl_uc_bad = array();
 	foreach ( $fsl_uc as $fsl_uc_row ) {
-		if ( minn_admin_seo_unchanged( $fsl_uc_row[0], $fsl_uc_row[1], $fsl_uc_row[2] ) !== $fsl_uc_row[3] ) {
+		$fsl_uc_f = minn_admin_seo_tier_field( array( 'name' => 'x', 'type' => $fsl_uc_row[0], 'options' => array( array( 'index', 'Index' ) ) ) );
+		if ( Minn_Admin_Kernel_Panels::same( $fsl_uc_f, $fsl_uc_row[1], $fsl_uc_row[2] ) !== $fsl_uc_row[3] ) {
 			$fsl_uc_bad[] = wp_json_encode( $fsl_uc_row );
 		}
 	}
 	$check( 'SEO: the unchanged-value rule compares each type the way it writes', ! $fsl_uc_bad, implode( ' ', $fsl_uc_bad ) );
 } else {
-	$check( 'SEO: the unchanged-value rule exists for every scalar type', false, 'minn_admin_seo_unchanged() missing' );
+	$check( 'SEO: the unchanged-value rule exists for every scalar type', false, 'the fields tier or the SEO field map is missing' );
 }
 
 // --- #25 SEO panel keeps SureRank's explicit per-post robots 'no' -----------

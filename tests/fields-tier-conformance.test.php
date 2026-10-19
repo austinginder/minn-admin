@@ -91,6 +91,16 @@ $draft  = $post_of( 'post', $admin );
 $page   = $post_of( 'page', $admin, 'publish' );
 $other  = $post_of( 'post', $admin, 'publish' );
 $own    = $post_of( 'post', $contrib );
+$image  = 0;
+$pdf    = 0;
+foreach ( array( 'image' => array( 'image/png', 'minn-fx.png' ), 'pdf' => array( 'application/pdf', 'minn-fx.pdf' ) ) as $kind => $spec ) {
+	$aid = (int) wp_insert_attachment( array( 'post_title' => 'Minn fields tier ' . $tag, 'post_mime_type' => $spec[0], 'post_status' => 'inherit', 'post_author' => $admin ), $spec[1] );
+	if ( $aid ) {
+		$made['posts'][] = $aid;
+		update_attached_file( $aid, $spec[1] );
+	}
+	${$kind} = $aid;
+}
 
 /*
  * The fixture panel: its store is in memory, its write a spy that can
@@ -125,6 +135,9 @@ $fx_fields = static function () use ( $page ) {
 			}
 			return 'bad' === $v ? 'The vendor refuses bad.' : true;
 		} ),
+		array( 'name' => 'so', 'label' => 'Ordered', 'type' => 'select', 'options' => array( array( 'x', 'X' ), array( 'y', 'Y' ) ) ),
+		array( 'name' => 'm', 'label' => 'Picture', 'type' => 'media', 'image' => true ),
+		array( 'name' => 'nt', 'label' => 'Note', 'type' => 'note' ),
 		array( 'name' => 'rep', 'label' => 'Rows', 'type' => 'repeater' ),
 		array( 'name' => 'odd', 'label' => 'Odd', 'type' => 'text', 'unknown_key' => 1 ),
 	);
@@ -144,6 +157,9 @@ $fx_def = static function () use ( &$fx, $fx_fields ) {
 			}
 			if ( 'post' === $fx['can'] ) {
 				return 0 === (int) $post_id && '' === $type;
+			}
+			if ( 'say' === $fx['can'] ) {
+				return 0 === (int) $post_id && '' === $type ? true : 'The fixture plugin says why.';
 			}
 			return $fx['can'];
 		},
@@ -168,6 +184,10 @@ $fx_def = static function () use ( &$fx, $fx_fields ) {
 			}
 			return $fx['answer'];
 		},
+		'extra'       => static function ( $post_id, $type ) use ( &$fx ) {
+			$fx['extra'][] = array( $post_id, $type );
+			return array( 'preview' => array( 'for' => $post_id ) );
+		},
 		'description' => '',
 	);
 };
@@ -177,6 +197,7 @@ $fx_reset = static function ( $store = array() ) use ( &$fx ) {
 	$fx['spy']    = array();
 	$fx['answer'] = null;
 	$fx['throw']  = false;
+	$fx['extra']  = array();
 };
 // What reached the write, merged; and whether a key was refused.
 $wrote   = static function () use ( &$fx ) {
@@ -217,7 +238,7 @@ $names = static function ( $answer ) {
 /**
  * Every check, against one tier class.
  */
-$run = static function ( $T ) use ( $check, $skip, $as, $fx_def, $fx_reset, &$fx, $wrote, $refused, $req, $status, $names, $draft, $page, $other, $own, $contrib, $admin, $post_of ) {
+$run = static function ( $T ) use ( $check, $skip, $as, $fx_def, $fx_reset, &$fx, $wrote, $refused, $req, $status, $names, $draft, $page, $other, $own, $contrib, $admin, $post_of, $image, $pdf ) {
 	$def  = $fx_def();
 	$post = get_post( $draft );
 
@@ -255,6 +276,16 @@ $run = static function ( $T ) use ( $check, $skip, $as, $fx_def, $fx_reset, &$fx
 	$fx['can'] = false;
 	$check( 'R1 the plugin\'s check closes the panel and its route', false === $T::allowed( $def, 0, '' ) );
 	$fx_reset();
+	$a = $T::fields_answer( $def, $req( array( 'post_id' => $draft, 'post_type' => 'posts' ) ) );
+	$check( 'R1 the route\'s extra keys join the answer once its gates pass', ( $a['preview']['for'] ?? null ) === $draft && array( array( $draft, 'post' ) ) === $fx['extra'], wp_json_encode( array( $a, $fx['extra'] ) ) );
+	$fx_reset();
+	$a = $as( $contrib, static function () use ( $T, $def, $req, $draft ) {
+		return $T::fields_answer( $def, $req( array( 'post_id' => $draft, 'post_type' => 'posts' ) ) );
+	} );
+	$fx['can'] = false;
+	$b         = $T::fields_answer( $def, $req( array( 'post_id' => $draft, 'post_type' => 'posts' ) ) );
+	$check( 'R1 the route\'s extra keys are never asked for a refused post', ! $fx['extra'] && ! isset( $b['preview'] ) && is_wp_error( $a ), wp_json_encode( array( $fx['extra'], $b ) ) );
+	$fx_reset();
 	$a      = $T::fields_answer( $def, $req( array( 'post_id' => $draft, 'post_type' => 'posts' ) ) );
 	$locked = (int) ( $a['groups'][0]['locked'] ?? 0 );
 	$check( 'R1 a field of a type the tier does not clean, or with a key it does not read, is locked', ! in_array( 'rep', $names( $a ), true ) && ! in_array( 'odd', $names( $a ), true ) && 3 === $locked, wp_json_encode( array( $names( $a ), $locked ) ) );
@@ -278,12 +309,23 @@ $run = static function ( $T ) use ( $check, $skip, $as, $fx_def, $fx_reset, &$fx
 	$fx['can'] = true;
 	$v         = (array) $T::values( $def, $draft );
 	$check( 'R1 the read carries only offered fields', array( 't' => 'stored' ) === $v, wp_json_encode( $v ) );
-	$check( 'R1 the read is an object, even when empty', is_object( $T::values( $def, 999999999 ) ) && is_object( $T::values( $def, $draft ) ) );
+	$ddef           = $def;
+	$ddef['groups'] = static function () {
+		return array( array( 'group' => 'Digits', 'fields' => array( array( 'name' => '42', 'label' => 'Digits', 'type' => 'text' ) ) ) );
+	};
+	$ddef['read']   = static function () {
+		return array( '42' => 'kept' );
+	};
+	$dv = $T::values( $ddef, $draft );
+	$check( 'R1 the read leaves as an object when empty or keyed by digits', is_object( $T::values( $def, 999999999 ) ) && is_object( $dv ) && array( '42' => 'kept' ) === (array) $dv, wp_json_encode( $dv ) );
 
 	$fx_reset( array( 't' => 'stored' ) );
 	$fx['can'] = false;
 	$rows      = $T::save( $def, $post, array( 't' => 'changed' ) );
 	$check( 'R1 a save the plugin\'s check refuses writes nothing and names the field', ! $fx['spy'] && $refused( $rows, 't' ) && 'The fixture plugin keeps you out.' === ( $refused( $rows, 't' )['message'] ?? '' ), wp_json_encode( array( $fx['spy'], $rows ) ) );
+	$fx['can'] = 'say';
+	$rows      = $T::save( $def, $post, array( 't' => 'changed' ) );
+	$check( 'R1 a plugin check that answers why names the field with its words', ! $fx['spy'] && 'The fixture plugin says why.' === ( $refused( $rows, 't' )['message'] ?? '' ), wp_json_encode( $rows ) );
 	$fx['can'] = 'throw';
 	$rows      = $T::save( $def, $post, array( 't' => 'changed' ) );
 	$check( 'R1 a save whose plugin check throws writes nothing', ! $fx['spy'] && $refused( $rows, 't' ), wp_json_encode( array( $fx['spy'], $rows ) ) );
@@ -352,6 +394,11 @@ $run = static function ( $T ) use ( $check, $skip, $as, $fx_def, $fx_reset, &$fx
 	$fx_reset();
 	$rows = $T::save( $def, $post, array( 'rep' => 'x', 'hidden_extra' => 'y', 'odd' => 'z' ) );
 	$check( 'R3 a field the post does not offer (locked, unknown or read-only) is named and not written', ! $fx['spy'] && $refused( $rows, 'rep' ) && $refused( $rows, 'hidden_extra' ) && $refused( $rows, 'odd' ), wp_json_encode( array( $fx['spy'], $rows ) ) );
+	$fx_reset( array( 'nt' => 'A note' ) );
+	$rows = $T::save( $def, $post, array( 'nt' => 'Changed note' ) );
+	$check( 'R3 a note is drawn, never written: a changed one is named as not changeable', ! $fx['spy'] && 'This field cannot be changed here.' === ( $refused( $rows, 'nt' )['message'] ?? '' ), wp_json_encode( array( $fx['spy'], $rows ) ) );
+	$rows = $T::save( $def, $post, array( 'nt' => 'A note' ) );
+	$check( 'R3 control: a note sent back as read is nothing to refuse', ! $fx['spy'] && ! $rows, wp_json_encode( $rows ) );
 	$fx_reset();
 	$fx['answer'] = array( 't' => 'The vendor kept the old text.', 'unoffered' => 'ignored' );
 	$rows         = $T::save( $def, $post, array( 't' => 'changed', 'n' => '4' ) );
@@ -410,6 +457,8 @@ $run = static function ( $T ) use ( $check, $skip, $as, $fx_def, $fx_reset, &$fx
 		array( 'd', '2026-11-02', '2026-11-02', 'someday' ),
 		array( 'dt', '2026-11-02 10:30', '2026-11-02 10:30:00', 'not a time' ),
 		array( 'sg', array( 'value' => (string) $page, 'label' => 'p' ), $page, (string) $other ),
+		array( 'so', 'y', 'y', 'z' ),
+		array( 'm', array( 'id' => $image, 'url' => 'x' ), $image, (string) $other ),
 	);
 	foreach ( $cases as $c ) {
 		list( $k, $good, $want, $bad ) = $c;
@@ -434,6 +483,28 @@ $run = static function ( $T ) use ( $check, $skip, $as, $fx_def, $fx_reset, &$fx
 		return $T::save( $def, get_post( $own ), array( 'sg' => (string) $hidden ) );
 	} );
 	$check( 'T sg: a post of the right type the caller may not read is refused', $refused( $rows, 'sg' ) && ! $fx['spy'], wp_json_encode( $rows ) );
+	$fx_reset();
+	$rows = $T::save( $def, $post, array( 't' => '100%Accurate, %category% & more' ) );
+	$check( 'T t: text keeps what only looks like a percent-encoded octet', '100%Accurate, %category% & more' === ( $wrote()['t'] ?? null ), wp_json_encode( $wrote() ) );
+	$fx_reset();
+	$rows = $T::save( $def, $post, array( 'm' => (string) $pdf ) );
+	$check( 'T m: an attachment that is no image is refused for an image field', $refused( $rows, 'm' ) && ! $fx['spy'], wp_json_encode( $rows ) );
+	$fx_reset();
+	$rows = $as( $contrib, static function () use ( $T, $def, $own, $image ) {
+		return $T::save( $def, get_post( $own ), array( 'm' => $image ) );
+	} );
+	$check( 'T m: someone who cannot upload files cannot pick an attachment', $refused( $rows, 'm' ) && ! $fx['spy'], wp_json_encode( $rows ) );
+	$fx_reset( array( 'm' => array( 'id' => $pdf, 'url' => 'x' ) ) );
+	$rows = $as( $contrib, static function () use ( $T, $def, $own, $pdf ) {
+		return $T::save( $def, get_post( $own ), array( 'm' => array( 'id' => $pdf, 'url' => 'changed' ) ) );
+	} );
+	$check( 'T m: the attachment already stored, sent back, is nothing to check or write', ! $rows && ! $fx['spy'], wp_json_encode( $rows ) );
+	$fx_reset( array( 'm' => null ) );
+	$rows = $T::save( $def, $post, array( 'm' => '' ) );
+	$check( 'T m: an empty pick over an empty read writes nothing', ! $rows && ! $fx['spy'], wp_json_encode( $rows ) );
+	$fx_reset( array( 'm' => array( 'id' => $image, 'url' => 'x' ) ) );
+	$rows = $T::save( $def, $post, array( 'm' => null ) );
+	$check( 'T m: an emptied pick clears', array_key_exists( 'm', $wrote() ) && null === $wrote()['m'] && ! $rows, wp_json_encode( array( $wrote(), $rows ) ) );
 	$fx_reset();
 	$rows = $T::save( $def, $post, array( 'sg' => '' ) );
 	$check( 'T sg: an emptied pick clears', array_key_exists( 'sg', $wrote() ) && null === $wrote()['sg'] && ! $rows, wp_json_encode( array( $wrote(), $rows ) ) );
@@ -598,6 +669,9 @@ $run = static function ( $T ) use ( $check, $skip, $as, $fx_def, $fx_reset, &$fx
 			$value = $bad[ $f['type'] ] ?? null;
 			if ( 'suggest' === $f['type'] ) {
 				$value = (string) ( 'page' === $f['post_type'] ? $other : $page );
+			}
+			if ( 'media' === $f['type'] ) {
+				$value = (string) $other;
 			}
 			if ( null === $value ) {
 				continue;

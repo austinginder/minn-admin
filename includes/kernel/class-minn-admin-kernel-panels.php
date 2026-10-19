@@ -32,12 +32,16 @@
  *                   // array( array( 'group' => 'Label', 'fields' => array( field, … ),
  *                   //               'locked' => int ) ), the fields the plugin lets
  *                   // this user edit on this post; 'locked' counts what stays in
- *                   // the plugin's own screen
+ *                   // the plugin's own screen. 'can' may answer a string: no,
+ *                   // and what to tell the person
  *       'read'   => callable( int $post_id ): array, // name => value, the panel's shape
  *       'write'  => callable( int $post_id, array $changes, array $fields ): array|WP_Error|null,
  *                   // $changes: name => cleaned value, null to clear. Answers
  *                   // name => message for each value the plugin refused, or a
  *                   // WP_Error that refuses every one of them
+ *       'extra'  => callable( int $post_id, string $post_type ): array,
+ *                   // optional: more keys for the fields route's answer (a
+ *                   // search-result preview), asked only once its gates pass
  *       'description' => 'For the REST schema',
  *     );
  *   } );
@@ -47,17 +51,23 @@
  *   array(
  *     'name' => 'key', 'label' => 'Label', 'type' => one of TYPES,
  *     'input'       => 'text',     // the control drawn, when not the type's own
- *     'choices'     => array( value => label ),            // select (required)
+ *     'choices'     => array( value => label ),            // select: these, or
+ *     'options'     => array( array( value, label ), … ),  // an ordered list (one is required)
  *     'min', 'max', 'integer' => true,                     // number
  *     'html'        => true,       // textarea: post HTML (wp_kses_post), not plain text
  *     'required'    => true,       // an emptied box is refused, not a clear
  *     'post_type'   => 'tribe_venue',   // suggest (required): what a pick must be
- *     'route', 'placeholder',      // drawn as given
+ *     'image'       => true,       // media: the attachment must be an image
+ *     'route', 'placeholder', 'help', 'counter', 'cond',   // drawn as given
  *     'check'       => callable( mixed $clean, int $post_id ): true|string,
  *                                  // the plugin's own rule for a cleaned value; a
  *                                  // string refuses with it
  *     'refuse'      => 'Why',      // told instead of the type's own message
  *   )
+ *
+ * A media field takes an attachment the caller may upload with and read (a
+ * social image); its value is { id, url } or an id. A note is drawn and
+ * never written.
  *
  * What the kernel holds every panel to (tests/fields-tier-conformance.test.php
  * checks each one):
@@ -87,16 +97,16 @@ defined( 'ABSPATH' ) || exit;
 final class Minn_Admin_Kernel_Panels {
 
 	/** The field types a panel may offer: a field of any other type is locked. */
-	const TYPES = array( 'text', 'textarea', 'number', 'select', 'checkbox', 'email', 'url', 'date', 'datetime', 'suggest' );
+	const TYPES = array( 'text', 'textarea', 'number', 'select', 'checkbox', 'email', 'url', 'date', 'datetime', 'suggest', 'media', 'note' );
 
 	/** The keys a declaration may hold: one holding any other registers nothing. */
-	const KEYS = array( 'active', 'label', 'sub', 'key', 'params', 'types', 'can', 'refuse', 'groups', 'read', 'write', 'description' );
+	const KEYS = array( 'active', 'label', 'sub', 'key', 'params', 'types', 'can', 'refuse', 'groups', 'read', 'write', 'extra', 'description' );
 
 	/** The keys a field may hold: a field holding any other is locked. */
-	const FIELD_KEYS = array( 'name', 'label', 'type', 'input', 'choices', 'min', 'max', 'integer', 'html', 'required', 'post_type', 'route', 'placeholder', 'check', 'refuse' );
+	const FIELD_KEYS = array( 'name', 'label', 'type', 'input', 'choices', 'options', 'min', 'max', 'integer', 'html', 'required', 'post_type', 'image', 'route', 'placeholder', 'help', 'counter', 'cond', 'check', 'refuse' );
 
 	/** What of a field the client is sent. */
-	const WIRE_KEYS = array( 'name', 'label', 'type', 'choices', 'min', 'max', 'placeholder', 'route' );
+	const WIRE_KEYS = array( 'name', 'label', 'type', 'choices', 'options', 'min', 'max', 'placeholder', 'route', 'help', 'counter', 'cond' );
 
 	/** @var array id => declaration as given (an array or a function). */
 	private static $given = array();
@@ -236,8 +246,10 @@ final class Minn_Admin_Kernel_Panels {
 				return "has a \"{$k}\" that cannot be called";
 			}
 		}
-		if ( isset( $def['can'] ) && ! is_callable( $def['can'] ) ) {
-			return 'has a "can" that cannot be called';
+		foreach ( array( 'can', 'extra' ) as $k ) {
+			if ( isset( $def[ $k ] ) && ! is_callable( $def[ $k ] ) ) {
+				return "has a \"{$k}\" that cannot be called";
+			}
 		}
 		if ( isset( $def['active'] ) && ! is_bool( $def['active'] ) && ! is_callable( $def['active'] ) ) {
 			return 'has an "active" that is neither a boolean nor a function';
@@ -268,6 +280,7 @@ final class Minn_Admin_Kernel_Panels {
 			'groups'      => $def['groups'],
 			'read'        => $def['read'],
 			'write'       => $def['write'],
+			'extra'       => isset( $def['extra'] ) && is_callable( $def['extra'] ) ? $def['extra'] : null,
 			'description' => (string) ( $def['description'] ?? '' ),
 		);
 	}
@@ -366,7 +379,7 @@ final class Minn_Admin_Kernel_Panels {
 		if ( ! in_array( $f['type'], self::TYPES, true ) || array_diff( array_keys( $f ), self::FIELD_KEYS ) ) {
 			return null;
 		}
-		if ( 'select' === $f['type'] && ( empty( $f['choices'] ) || ! is_array( $f['choices'] ) ) ) {
+		if ( 'select' === $f['type'] && ! self::choice_keys( $f ) ) {
 			return null;
 		}
 		if ( 'suggest' === $f['type'] && ( empty( $f['post_type'] ) || ! is_string( $f['post_type'] ) ) ) {
@@ -385,10 +398,26 @@ final class Minn_Admin_Kernel_Panels {
 		return $f;
 	}
 
+	/** The values a select takes, from its choices or its options, as strings. */
+	private static function choice_keys( array $f ) {
+		$keys = array();
+		if ( isset( $f['choices'] ) && is_array( $f['choices'] ) ) {
+			$keys = array_map( 'strval', array_keys( $f['choices'] ) );
+		} elseif ( isset( $f['options'] ) && is_array( $f['options'] ) ) {
+			foreach ( $f['options'] as $o ) {
+				$v = is_array( $o ) ? ( $o[0] ?? null ) : $o;
+				if ( is_scalar( $v ) ) {
+					$keys[] = (string) $v;
+				}
+			}
+		}
+		return $keys;
+	}
+
 	/** A field as the client is sent it. */
 	private static function wire( array $f ) {
 		$out         = array_intersect_key( $f, array_flip( self::WIRE_KEYS ) );
-		$out['type'] = isset( $f['input'] ) && is_string( $f['input'] ) && '' !== $f['input'] ? $f['input'] : ( 'checkbox' === $f['type'] ? 'true_false' : $f['type'] );
+		$out['type'] = isset( $f['input'] ) && is_string( $f['input'] ) && '' !== $f['input'] ? $f['input'] : ( 'checkbox' === $f['type'] ? 'true_false' : ( 'media' === $f['type'] ? 'image' : $f['type'] ) );
 		return $out;
 	}
 
@@ -441,7 +470,16 @@ final class Minn_Admin_Kernel_Panels {
 			$g['fields'] = array_values( array_map( array( __CLASS__, 'wire' ), $g['fields'] ) );
 			$groups[]    = $g;
 		}
-		return array( 'groups' => $groups );
+		$out = array( 'groups' => $groups );
+		if ( $def['extra'] ) {
+			try {
+				$more = call_user_func( $def['extra'], $post_id, $type );
+			} catch ( \Throwable $e ) {
+				$more = array();
+			}
+			$out += is_array( $more ) ? $more : array();
+		}
+		return $out;
 	}
 
 	/**
@@ -459,8 +497,10 @@ final class Minn_Admin_Kernel_Panels {
 		}
 		$fields = self::fields( $def, $post->ID, $post->post_type );
 		$stored = self::stored( $def, $post->ID );
-		// An object even when the names are digits, which PHP keys as ints.
-		return (object) array_intersect_key( $stored, $fields );
+		// An object when empty or when the names are digits, which PHP keys
+		// as ints (a list would leave as a JSON array).
+		$out = array_intersect_key( $stored, $fields );
+		return $out && ! array_filter( array_keys( $out ), 'is_int' ) ? $out : (object) $out;
 	}
 
 	/** What the plugin holds for a post, as its read gives it (nothing when it throws). */
@@ -497,7 +537,16 @@ final class Minn_Admin_Kernel_Panels {
 		}
 		$typed = in_array( $post->post_type, self::types( $def ), true );
 		if ( ! $typed || ! current_user_can( 'edit_post', $post->ID ) || ! self::allowed( $def, $post->ID, $post->post_type ) ) {
-			$why = '' !== $def['refuse'] && $typed && current_user_can( 'edit_post', $post->ID ) ? $def['refuse'] : __( 'You cannot edit this post.', 'minn-admin' );
+			$why = __( 'You cannot edit this post.', 'minn-admin' );
+			if ( $typed && current_user_can( 'edit_post', $post->ID ) ) {
+				$why = '' !== $def['refuse'] ? $def['refuse'] : $why;
+				try {
+					$said = is_callable( $def['can'] ) ? call_user_func( $def['can'], (int) $post->ID, (string) $post->post_type ) : null;
+				} catch ( \Throwable $e ) {
+					$said = null;
+				}
+				$why = is_string( $said ) && '' !== $said ? $said : $why;
+			}
 			foreach ( array_keys( $values ) as $key ) {
 				$refuse( $key, $key, $why, 403 );
 			}
@@ -518,6 +567,10 @@ final class Minn_Admin_Kernel_Panels {
 				}
 				$f = $fields[ $key ];
 				if ( array_key_exists( $key, $served ) && self::same( $f, $sent, $served[ $key ] ) ) {
+					continue;
+				}
+				if ( 'note' === $f['type'] ) {
+					$refuse( $key, $f['label'], __( 'This field cannot be changed here.', 'minn-admin' ), 403 );
 					continue;
 				}
 				$clean = self::clean( $f, $sent, $served[ $key ] ?? null );
@@ -568,7 +621,12 @@ final class Minn_Admin_Kernel_Panels {
 	}
 
 	/** Whether a sent value is the one the read served for the field. */
-	private static function same( array $f, $sent, $served ) {
+	public static function same( array $f, $sent, $served ) {
+		// A list or object sent for a one-value field is never the value
+		// served: its shape is refused before anything compares it.
+		if ( ! in_array( $f['type'], array( 'suggest', 'media' ), true ) && null !== $sent && ! is_scalar( $sent ) ) {
+			return false;
+		}
 		switch ( $f['type'] ) {
 			case 'checkbox':
 				return Minn_Admin::unchanged( $sent, $served, 'bool' );
@@ -578,20 +636,24 @@ final class Minn_Admin_Kernel_Panels {
 				$a = self::pick( $sent );
 				$b = self::pick( $served );
 				return null !== $a && $a === $b;
+			case 'media':
+				$a = self::pick( $sent, 'id' );
+				$b = self::pick( $served, 'id' );
+				return null !== $a && $a === $b;
 		}
 		return Minn_Admin::unchanged( $sent, $served );
 	}
 
-	/** A picked post's id from { value, label }, an id or '', 0 for none, null for no id. */
-	private static function pick( $v ) {
+	/** A picked post's id from { value, label } (media: { id, url }), an id or '', 0 for none, null for no id. */
+	private static function pick( $v, $key = 'value' ) {
 		if ( is_object( $v ) ) {
 			$v = (array) $v;
 		}
 		if ( is_array( $v ) ) {
-			if ( ! array_key_exists( 'value', $v ) ) {
+			if ( ! array_key_exists( $key, $v ) ) {
 				return null;
 			}
-			$v = $v['value'];
+			$v = $v[ $key ];
 		}
 		if ( null === $v || '' === $v || false === $v ) {
 			return 0;
@@ -637,6 +699,28 @@ final class Minn_Admin_Kernel_Panels {
 			}
 			return array( $id );
 		}
+		if ( 'media' === $type ) {
+			$id = self::pick( $sent, 'id' );
+			if ( null === $id ) {
+				return self::says( $f );
+			}
+			if ( 0 === $id ) {
+				return ! empty( $f['required'] ) ? __( 'This field cannot be empty.', 'minn-admin' ) : array( null );
+			}
+			// A bare id names any row of the media table: the caller must be
+			// able to pick it (upload_files, as the vendor's media modal asks)
+			// and read it, or storing it and reading the URL back is an
+			// enumeration oracle over every upload.
+			if ( ! current_user_can( 'upload_files' ) || 'attachment' !== get_post_type( $id ) || ! current_user_can( 'read_post', $id ) ) {
+				return __( 'You cannot use that media item.', 'minn-admin' );
+			}
+			// Asked only after the checks above, so it tells nothing about an
+			// item the caller cannot read.
+			if ( ! empty( $f['image'] ) && ! wp_attachment_is_image( $id ) ) {
+				return __( 'That media item is not an image.', 'minn-admin' );
+			}
+			return array( $id );
+		}
 		if ( null !== $sent && ! is_scalar( $sent ) ) {
 			return self::says( $f );
 		}
@@ -646,10 +730,10 @@ final class Minn_Admin_Kernel_Panels {
 		$s = (string) $sent;
 		switch ( $type ) {
 			case 'text':
-				$v = sanitize_text_field( $s );
+				$v = self::text( $s, false );
 				break;
 			case 'textarea':
-				$v = ! empty( $f['html'] ) ? wp_kses_post( $s ) : sanitize_textarea_field( $s );
+				$v = ! empty( $f['html'] ) ? wp_kses_post( $s ) : self::text( $s, true );
 				break;
 			case 'number':
 				$v = trim( $s );
@@ -663,7 +747,7 @@ final class Minn_Admin_Kernel_Panels {
 				}
 				break;
 			case 'select':
-				$v = in_array( $s, array_map( 'strval', array_keys( $f['choices'] ) ), true ) ? $s : '';
+				$v = in_array( $s, self::choice_keys( $f ), true ) ? $s : '';
 				break;
 			case 'email':
 				$v = sanitize_email( trim( $s ) );
@@ -685,6 +769,26 @@ final class Minn_Admin_Kernel_Panels {
 		}
 		// A value that was there, made nothing by its cleaner, is no clear.
 		return ( null === $v || '' === $v ) ? self::says( $f ) : array( $v );
+	}
+
+	/**
+	 * Plain text: sanitize_text_field() with one step left out. It deletes
+	 * anything shaped like a percent-encoded octet, and a typed "100%Accurate"
+	 * or an SEO plugin's "%category%" variable is text, not an octet ("%ca"
+	 * went). Everything else is core's own sequence: invalid UTF-8 dropped,
+	 * tags stripped, and for a single line the whitespace collapsed.
+	 *
+	 * @param string $s         Typed text.
+	 * @param bool   $multiline Keep line breaks.
+	 * @return string
+	 */
+	public static function text( $s, $multiline = false ) {
+		$s = wp_check_invalid_utf8( (string) $s );
+		$s = wp_strip_all_tags( wp_pre_kses_less_than( $s ), ! $multiline );
+		if ( ! $multiline ) {
+			$s = preg_replace( '/[\r\n\t ]+/', ' ', $s );
+		}
+		return trim( (string) $s );
 	}
 
 	/** The message a field's type refuses a value with. */

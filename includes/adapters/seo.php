@@ -7,13 +7,12 @@
  * focus keyword); a provider that declares a `fields` callable describes
  * its full per-post depth — robots meta, canonical URL, the social split,
  * schema notes (Rank Math is the reference). None of these plugins expose
- * per-post SEO over REST, so this adapter registers a dedicated `minn_seo`
- * REST field (NOT the generic meta API — the editor writes its whole panel
- * object back on save, and a dedicated field keeps that write scoped to
- * declared values) and describes the panel through the standard
- * editor-panels framework. The declared field map doubles as the write
- * whitelist, with per-type sanitizers in the REST layer. Scores and
- * content analysis stay in wp-admin — that's the plugins' moat.
+ * per-post SEO over REST, so this adapter declares a fields-tier panel
+ * (minn_admin_fields()) with a dedicated `minn_seo` REST field (NOT the
+ * generic meta API: a dedicated field keeps a write scoped to declared
+ * values). The declared fields are the write whitelist, cleaned by type in
+ * the tier. Scores and content analysis stay in wp-admin — that's the
+ * plugins' moat.
  *
  * Yoast, Rank Math, SEOPress and SiteSEO store postmeta; AIOSEO v4 keeps
  * its own {prefix}aioseo_posts table, SureRank keeps GROUPED postmeta
@@ -1935,26 +1934,6 @@ function minn_admin_seo_preview( $plugin, $post_id ) {
 }
 
 /**
- * Resolve the editor's REST base (or a post type slug) to a post type name.
- *
- * @param string $rest_base From the editor.
- * @return string The post type, or '' when none matches.
- */
-function minn_admin_seo_resolve_type( $rest_base ) {
-	$rest_base = sanitize_key( $rest_base );
-	if ( '' === $rest_base ) {
-		return '';
-	}
-	foreach ( get_post_types( array( 'show_in_rest' => true ), 'objects' ) as $obj ) {
-		$base = $obj->rest_base ? $obj->rest_base : $obj->name;
-		if ( $base === $rest_base || $obj->name === $rest_base ) {
-			return $obj->name;
-		}
-	}
-	return '';
-}
-
-/**
  * Whether the active SEO plugin lets the current user edit a post's SEO.
  *
  * The vendor's own predicate on top of edit_post. The panel, the values it
@@ -2051,374 +2030,104 @@ function minn_admin_seo_shows_for_type( $plugin, $post_type ) {
 	return true;
 }
 
-add_filter( 'minn_admin_editor_panels', function ( $panels ) {
-	$plugin = minn_admin_seo_plugin();
-	if ( ! $plugin ) {
-		return $panels;
+/**
+ * A provider's field as a fields-tier field (minn_admin_fields()): the
+ * panel draws what the provider declares, and the tier cleans it by type.
+ *
+ * @param array $f Provider field.
+ * @return array
+ */
+function minn_admin_seo_tier_field( $f ) {
+	$out  = array_intersect_key( (array) $f, array_flip( array( 'name', 'label', 'help', 'counter', 'cond', 'options', 'placeholder' ) ) );
+	$type = isset( $f['type'] ) ? (string) $f['type'] : 'text';
+	switch ( $type ) {
+		case 'text':
+			if ( isset( $f['sanitize'] ) && 'url' === $f['sanitize'] ) {
+				$out['type']  = 'url';
+				$out['input'] = 'text';
+			} else {
+				$out['type'] = 'text';
+			}
+			break;
+		case 'toggle':
+			$out['type']  = 'checkbox';
+			$out['input'] = 'toggle';
+			break;
+		case 'number':
+			$out['type']    = 'number';
+			$out['integer'] = true;
+			break;
+		case 'image':
+			$out['type']  = 'media';
+			$out['image'] = true;
+			break;
+		default:
+			// textarea, select, note; anything else the tier locks.
+			$out['type'] = $type;
 	}
-	$panels['seo'] = array(
+	return $out;
+}
+
+minn_admin_fields( 'seo', function () {
+	$plugin = minn_admin_seo_plugin();
+	return array(
+		'active'      => null !== $plugin,
 		'label'       => 'SEO',
-		'sub'         => $plugin['name'],
-		'cap'         => 'edit_posts',
-		'fieldsRoute' => 'minn-admin/v1/seo/fields?post={id}&type={type}',
-		'valuesKey'   => 'minn_seo',
-		'writeKey'    => 'minn_seo',
-	);
-	return $panels;
-} );
-
-add_action( 'rest_api_init', function () {
-	$plugin = minn_admin_seo_plugin();
-	if ( ! $plugin ) {
-		return;
-	}
-
-	minn_admin_endpoint( '/seo/fields', array(
-		'methods'             => 'GET',
-		'gate'                => function () {
-			return current_user_can( 'edit_posts' );
+		'sub'         => $plugin ? $plugin['name'] : '',
+		'key'         => 'minn_seo',
+		'params'      => array( 'post', 'type' ),
+		'types'       => function () {
+			return get_post_types( array( 'show_in_rest' => true ), 'names' );
 		},
-		'args'                => array(
-			'post' => array( 'type' => 'integer' ),
-			'type' => array( 'type' => 'string' ),
-		),
-		'run'                 => function ( $request ) use ( $plugin ) {
-			$post_id = (int) $request->get_param( 'post' );
-			// A panel the save would refuse is a panel not to offer: the post
-			// is stored before its REST fields are written, so a refusal
-			// there came after a new draft already existed.
+		// The vendor's own predicate on top of edit_post, and its per-type
+		// metabox switch (minn_admin_seo_can_edit(), minn_admin_seo_shows_for_type()).
+		// The panel itself is always listed; a post or type the vendor keeps
+		// its controls from is offered no fields.
+		'can'         => function ( $post_id, $post_type ) use ( $plugin ) {
+			if ( ! $post_id && '' === $post_type ) {
+				return true;
+			}
 			if ( ! minn_admin_seo_can_edit( $plugin, $post_id ) ) {
-				return rest_ensure_response( array( 'groups' => array() ) );
+				return __( 'You cannot edit SEO fields on this site.', 'minn-admin' );
 			}
-			// A post type the vendor withdrew its own metabox from has no SEO
-			// fields on this site, so offer none here either. A post not saved
-			// yet has no type of its own; the editor names the one it makes.
-			$ptype = $post_id > 0 ? (string) get_post_type( $post_id ) : '';
-			if ( '' === $ptype ) {
-				$ptype = minn_admin_seo_resolve_type( (string) $request->get_param( 'type' ) );
+			if ( ! minn_admin_seo_shows_for_type( $plugin, $post_type ) ) {
+				return __( 'SEO fields are switched off for this content type.', 'minn-admin' );
 			}
-			if ( '' !== $ptype && ! minn_admin_seo_shows_for_type( $plugin, $ptype ) ) {
-				return rest_ensure_response( array( 'groups' => array() ) );
-			}
-			// Groups can be post-aware (Yoast hides the article type on
-			// pages) and are already per-user (capability-gated groups).
-			$out = array( 'groups' => minn_admin_seo_groups( $plugin, $post_id ) );
-			// The preview quotes the post's resolved title and excerpt, so
-			// it is gated per POST, not just on the route's edit_posts.
-			if ( $post_id > 0 && current_user_can( 'edit_post', $post_id ) ) {
-				$preview = minn_admin_seo_preview( $plugin, $post_id );
-				if ( $preview ) {
-					$out['preview'] = $preview;
-				}
-			}
-			return rest_ensure_response( $out );
+			return true;
 		},
-	) );
-
-	// A read/write `minn_seo` object on every REST-visible post type,
-	// context=edit only so values never appear on public API responses.
-	$types = array();
-	foreach ( get_post_types( array( 'show_in_rest' => true ), 'objects' ) as $obj ) {
-		$types[] = $obj->name;
-	}
-	register_rest_field( $types, 'minn_seo', array(
-		'get_callback'    => function ( $post_arr ) use ( $plugin ) {
-			// Object-level gate, like the pods/meta-box adapters. Core's
-			// collection check for context=edit is the blanket post-type
-			// edit_posts cap, so without this a Contributor reading
-			// wp/v2/posts?context=edit gets everyone's focus keywords.
-			// A _fields request that names minn_seo but not id hands this
-			// callback an id-less array (core prepares only requested
-			// fields) — the isset is load-bearing, not defensive noise.
-			$id = isset( $post_arr['id'] ) ? (int) $post_arr['id'] : 0;
-			if ( ! $id || ! current_user_can( 'edit_post', $id ) ) {
-				return new stdClass();
+		'groups'      => function ( $post_id ) use ( $plugin ) {
+			$groups = minn_admin_seo_groups( $plugin, $post_id );
+			foreach ( $groups as $i => $g ) {
+				$groups[ $i ]['fields'] = array_map( 'minn_admin_seo_tier_field', isset( $g['fields'] ) && is_array( $g['fields'] ) ? $g['fields'] : array() );
 			}
-			// The same vendor predicate the write path asks. A role the SEO
-			// plugin hides its metabox from should not read the values back
-			// either, and reading was the half that never asked.
-			if ( ! minn_admin_seo_can_edit( $plugin, $id ) ) {
-				return new stdClass();
-			}
-			// And the other half of the same question the write path asks:
-			// turning the SEO controls off for a content type hides them from
-			// wp-admin for everybody, so the values should not read back on
-			// that type either.
-			if ( ! minn_admin_seo_shows_for_type( $plugin, get_post_type( $id ) ) ) {
-				return new stdClass();
-			}
-			return call_user_func( $plugin['read'], $id );
+			return $groups;
 		},
-		'update_callback' => function ( $value, $post, $field_name = '', $request = null ) use ( $plugin ) {
-			if ( ! is_array( $value ) ) {
-				return null;
-			}
-			$map = null;
-			// Never an error from here. The post is already saved, a new one
-			// included, so an error answer would hide its id from the editor
-			// (each retry and autosave then made another draft) and stop the
-			// controller writing the REST fields registered after this one.
-			// The refusal rides on the post's own answer instead, naming each
-			// field it kept from being stored (minn_admin_panel_report_held()).
-			$refuse = function ( $code, $message, $status, $keys ) use ( $request, $plugin, $post, &$map ) {
-				if ( null === $map ) {
-					$map = minn_admin_seo_field_map( $plugin, $post->ID );
+		'read'        => $plugin ? $plugin['read'] : '__return_empty_array',
+		'write'       => function ( $post_id, $changes, $fields ) use ( $plugin ) {
+			foreach ( $changes as $field => $value ) {
+				switch ( $fields[ $field ]['type'] ) {
+					case 'media':
+						break; // an attachment id, or null to clear
+					case 'checkbox':
+						$value = (bool) $value;
+						break;
+					case 'number':
+						$value = null === $value ? '' : (int) $value;
+						break;
+					default:
+						// '' clears or inherits, for every provider.
+						$value = null === $value ? '' : (string) $value;
 				}
-				$fields = array();
-				foreach ( $keys as $key ) {
-					$fields[] = array(
-						'key'     => (string) $key,
-						'label'   => isset( $map[ $key ]['label'] ) ? (string) $map[ $key ]['label'] : (string) $key,
-						'message' => $message,
-					);
-				}
-				$error = new WP_Error( $code, $message, array( 'status' => $status, 'fields' => $fields ) );
-				if ( $request instanceof WP_REST_Request && function_exists( 'minn_admin_panel_held' ) ) {
-					minn_admin_panel_held( $request, $error, 'minn_seo' );
-					return null;
-				}
-				return $error;
-			};
-			$sent = array_map( 'strval', array_keys( $value ) );
-			if ( ! current_user_can( 'edit_post', $post->ID ) ) {
-				return $refuse( 'rest_forbidden', __( 'You cannot edit SEO fields on this post.', 'minn-admin' ), 403, $sent );
-			}
-			// The active SEO plugin may withhold its metabox from this user's
-			// role even when they can edit the post; honor that here so Minn
-			// never writes SEO meta the vendor's own screen would refuse.
-			if ( ! minn_admin_seo_can_edit( $plugin, $post->ID ) ) {
-				return $refuse( 'rest_forbidden', __( 'You cannot edit SEO fields on this site.', 'minn-admin' ), 403, $sent );
-			}
-			// And the same answer the read side gives: a content type the
-			// vendor withdrew its metabox from is not one Minn writes SEO for.
-			if ( ! minn_admin_seo_shows_for_type( $plugin, (string) $post->post_type ) ) {
-				return $refuse( 'rest_forbidden', __( 'SEO fields are switched off for this content type.', 'minn-admin' ), 403, $sent );
-			}
-			$refused = array();
-			// The panel sends every field it shows. A field whose value is what
-			// the provider already holds is left alone, so an untouched title
-			// never goes back through a sanitizer and comes out different, and
-			// an untouched toggle never turns a stored state the read folds
-			// together (SureRank's explicit 'no', an inherited null) into
-			// another one.
-			$stored = isset( $plugin['read'] ) && is_callable( $plugin['read'] ) ? (array) call_user_func( $plugin['read'], $post->ID ) : array();
-			foreach ( minn_admin_seo_field_map( $plugin, $post->ID ) as $field => $def ) {
-				if ( ! array_key_exists( $field, $value ) ) {
-					continue;
-				}
-				$type = isset( $def['type'] ) ? $def['type'] : 'text';
-				$raw  = $value[ $field ];
-				if ( array_key_exists( $field, $stored ) && minn_admin_seo_unchanged( $type, $raw, $stored[ $field ] ) ) {
-					continue;
-				}
-
-				// Notes are read-only rows; nothing to write.
-				if ( 'note' === $type ) {
-					continue;
-				}
-
-				if ( 'image' === $type ) {
-					$att  = is_array( $raw ) ? (int) ( isset( $raw['id'] ) ? $raw['id'] : 0 ) : ( is_numeric( $raw ) ? (int) $raw : 0 );
-					$held = $stored[ $field ] ?? null;
-					$held = is_array( $held ) ? (int) ( $held['id'] ?? 0 ) : ( is_numeric( $held ) ? (int) $held : 0 );
-					// The panel re-sends the image it was given. An unchanged id
-					// is nothing to authorise or write; checking it refused the
-					// whole SEO save for anyone without upload_files (or read
-					// access to someone else's image) after the post body had
-					// already saved. A CHANGED id still answers to the check.
-					if ( $att > 0 && $att === $held ) {
-						continue;
-					}
-					$empty = null === $raw || '' === $raw || false === $raw;
-					// An empty image is also how the read reports a source a
-					// provider keeps and Minn does not model (AIOSEO's featured or
-					// attached image), so the panel sends one back for every such
-					// post. Over an empty read it says nothing; writing it as a
-					// clear reset that source to the site default and wiped the
-					// stored URL whenever any other SEO field was edited.
-					if ( $empty && array_key_exists( $field, $stored ) && null === $stored[ $field ] ) {
-						continue;
-					}
-					if ( $empty ) {
-						call_user_func( $plugin['write'], $post->ID, $field, null );
-					} elseif ( $att > 0 ) {
-						// edit_post above authorises the POST. It says nothing about
-						// the ATTACHMENT, which arrives as a bare id in the body.
-						// Without a check here, posting ids one at a time and
-						// reading the stored value back is an enumeration oracle
-						// over the whole media table — and uploads are served with
-						// no authorisation, so learning the URL is reading the file.
-						// The vendors whose field this is put a media modal in
-						// front of it, which means upload_files.
-						if ( ! current_user_can( 'upload_files' )
-							|| 'attachment' !== get_post_type( $att )
-							|| ! current_user_can( 'read_post', $att ) ) {
-							$refused['rest_forbidden'][] = $field;
-							continue;
-						}
-						// A social image has to be an image. Asked only after the
-						// checks above, so it tells nothing about an item the
-						// caller cannot read; AIOSEO refuses its own seed image
-						// on the same test.
-						if ( ! wp_attachment_is_image( $att ) ) {
-							$refused['rest_invalid_param'][] = $field;
-							continue;
-						}
-						// The URL is DERIVED from the id, never taken from the
-						// caller: every provider resolves it the same way, and
-						// accepting one let anyone who can edit a draft pin an
-						// arbitrary third-party image as the og:image of a post
-						// somebody else publishes later.
-						call_user_func( $plugin['write'], $post->ID, $field, $att );
-					}
-					continue;
-				}
-
-				// Every type below takes one scalar, and the panel never sends an
-				// array or object for one. Coerced, it became '' and cleared what
-				// was stored (or "Array"), so it is nothing to write.
-				if ( null !== $raw && ! is_scalar( $raw ) ) {
-					continue;
-				}
-
-				if ( 'toggle' === $type ) {
-					call_user_func( $plugin['write'], $post->ID, $field, (bool) $raw );
-					continue;
-				}
-
-				if ( 'number' === $type ) {
-					if ( null === $raw || '' === $raw ) {
-						call_user_func( $plugin['write'], $post->ID, $field, '' );
-					} elseif ( is_numeric( $raw ) ) {
-						call_user_func( $plugin['write'], $post->ID, $field, (int) $raw );
-					}
-					continue;
-				}
-
-				if ( 'select' === $type ) {
-					$raw = ( null === $raw || false === $raw ) ? '' : (string) $raw;
-					// The declared options are the whitelist; '' always
-					// means clear/inherit.
-					$allowed = array();
-					foreach ( ( isset( $def['options'] ) && is_array( $def['options'] ) ? $def['options'] : array() ) as $opt ) {
-						$allowed[] = (string) ( is_array( $opt ) ? $opt[0] : $opt );
-					}
-					if ( '' === $raw || in_array( $raw, $allowed, true ) ) {
-						call_user_func( $plugin['write'], $post->ID, $field, $raw );
-					}
-					continue;
-				}
-
-				$clean = minn_admin_seo_clean_text( $raw, 'textarea' === $type );
-				if ( isset( $def['sanitize'] ) && 'url' === $def['sanitize'] ) {
-					// Only an emptied box clears. An address the house rule
-					// refuses (javascript:, an unknown scheme) cleaned to '' and
-					// cleared the stored canonical without a word.
-					$clean = minn_admin_url_clean( trim( (string) $raw ) );
-					if ( null === $clean ) {
-						$refused['url'][] = $field;
-						continue;
-					}
-				}
-				call_user_func( $plugin['write'], $post->ID, $field, $clean );
-			}
-			// A refused image keeps only itself from being stored; the other
-			// fields this save changed are written.
-			if ( ! empty( $refused['rest_forbidden'] ) ) {
-				$error = $refuse( 'rest_forbidden', __( 'You cannot use that media item.', 'minn-admin' ), 403, $refused['rest_forbidden'] );
-				if ( is_wp_error( $error ) ) {
-					return $error;
-				}
-			}
-			if ( ! empty( $refused['url'] ) ) {
-				$error = $refuse( 'rest_invalid_param', __( 'That URL is not valid.', 'minn-admin' ), 400, $refused['url'] );
-				if ( is_wp_error( $error ) ) {
-					return $error;
-				}
-			}
-			if ( ! empty( $refused['rest_invalid_param'] ) ) {
-				return $refuse( 'rest_invalid_param', __( 'That media item is not an image.', 'minn-admin' ), 400, $refused['rest_invalid_param'] );
+				call_user_func( $plugin['write'], $post_id, $field, $value );
 			}
 			return null;
 		},
-		// The declared object stays loose on purpose: providers add their
-		// own keys (robots, canonical, Twitter split) and the write path
-		// sanitizes each by its declared type — the field map, not this
-		// schema, is the whitelist.
-		'schema'          => array(
-			'type'        => 'object',
-			'description' => __( 'Per-post SEO fields for the active SEO plugin (Minn Admin editor panel).', 'minn-admin' ),
-			'context'     => array( 'edit' ),
-			'properties'  => array(
-				'title'         => array( 'type' => 'string' ),
-				'description'   => array( 'type' => 'string' ),
-				'focus_keyword' => array( 'type' => 'string' ),
-				'social_image'  => array(
-					'type'       => array( 'object', 'null' ),
-					'properties' => array(
-						'id'  => array( 'type' => 'integer' ),
-						'url' => array( 'type' => 'string' ),
-					),
-				),
-			),
-		),
-	) );
+		// The search-result preview quotes the post's resolved title and
+		// excerpt, so it is offered only once the post's own gate passed.
+		'extra'       => function ( $post_id ) use ( $plugin ) {
+			$preview = $post_id > 0 ? minn_admin_seo_preview( $plugin, $post_id ) : null;
+			return $preview ? array( 'preview' => $preview ) : array();
+		},
+		'description' => __( 'Per-post SEO fields for the active SEO plugin (Minn Admin editor panel).', 'minn-admin' ),
+	);
 } );
-
-/**
- * Whether a submitted SEO value is the one the provider read back, compared
- * the way its field type writes it. Images compare in the write path itself
- * (by attachment id, and an empty image over an empty read); anything else
- * is never "unchanged".
- *
- * @param string $type Declared field type.
- * @param mixed  $raw  Submitted value.
- * @param mixed  $held The provider's read value.
- * @return bool
- */
-function minn_admin_seo_unchanged( $type, $raw, $held ) {
-	if ( ! ( is_scalar( $raw ) || null === $raw ) || ! ( is_scalar( $held ) || null === $held ) ) {
-		return false;
-	}
-	switch ( $type ) {
-		case 'toggle':
-			// The editor seeds a false toggle as null, so an untouched one
-			// comes back as null.
-			return is_bool( $held ) && (bool) $raw === $held;
-		case 'number':
-			$norm = function ( $v ) {
-				if ( null === $v || '' === $v ) {
-					return '';
-				}
-				return is_numeric( $v ) ? (string) (int) $v : null;
-			};
-			return null !== $norm( $raw ) && $norm( $raw ) === $norm( $held );
-		case 'text':
-		case 'textarea':
-		case 'select':
-			return (string) $raw === (string) $held;
-	}
-	return false;
-}
-
-/**
- * Plain text for an SEO title or description.
- *
- * sanitize_text_field() with one step left out: it deletes anything shaped
- * like a percent-encoded octet, and every SEO plugin's snippet variables are
- * percent-delimited (%category%, %%sitename%%), so "%category%" lost "%ca".
- * Everything else is core's own sequence: invalid UTF-8 dropped, tags
- * stripped, and for a single-line field the whitespace collapsed.
- *
- * @param mixed $raw      Submitted value.
- * @param bool  $textarea Keep line breaks.
- * @return string
- */
-function minn_admin_seo_clean_text( $raw, $textarea = false ) {
-	$text = wp_check_invalid_utf8( is_scalar( $raw ) ? (string) $raw : '' );
-	$text = wp_strip_all_tags( wp_pre_kses_less_than( $text ), ! $textarea );
-	if ( ! $textarea ) {
-		$text = preg_replace( '/[\r\n\t ]+/', ' ', $text );
-	}
-	return trim( $text );
-}
