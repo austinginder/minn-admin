@@ -40,8 +40,9 @@
  * kind and
  * a tier: "declarable" (a list, an item, an item action, a status card) or
  * "handler" (a job, a send, a builder, a licence flow and the like). An
- * adapter is "kernel" when it uses the kernel and registers no routes of its
- * own, "partial" when it does both, and "legacy" otherwise.
+ * adapter is "kernel" when it uses the kernel (a resource, an endpoint, or a
+ * screen or panel declared on the settings or fields tier) and registers no
+ * routes of its own, "partial" when it does both, and "legacy" otherwise.
  *
  * The family comes from bin/demo/catalog.json (the category its plugin is
  * listed under); the catalog's shared helpers are their own family.
@@ -274,6 +275,8 @@ function measure( file, src, families ) {
 	const resources = count( src, /minn_admin_resource\s*\(/g );
 	// Kernel-owned routes whose logic the adapter keeps (the handler tier).
 	const endpoints = count( src, /minn_admin_endpoint\s*\(/g );
+	// Settings screens and editor panels the tiers save.
+	const tiers = count( src, /(?<!function\s)minn_admin_(settings|fields)\s*\(/g );
 	const routeList = routesOf( src );
 	const shapes = [];
 	if ( /'collection'\s*=>/.test( src ) ) shapes.push( 'collection' );
@@ -309,7 +312,8 @@ function measure( file, src, families ) {
 		detect_helpers: count( src, /^function\s+minn_admin_\w+_(active|can|ready|allowed|available|enabled|installed|has_\w+)\s*\(/gm ),
 		resources,
 		endpoints,
-		status: ( resources || endpoints ) && ! routes ? 'kernel' : ( resources || endpoints ) ? 'partial' : 'legacy',
+		tiers,
+		status: ( resources || endpoints || tiers ) && ! routes ? 'kernel' : ( resources || endpoints || tiers ) ? 'partial' : 'legacy',
 		route_list: routeList,
 	};
 }
