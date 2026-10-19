@@ -63,8 +63,8 @@ A few properties worth knowing before auditing (details in
   version the update service named, downloaded from that version's own
   path. It never installs a release older than the floor Minn Admin
   carries (`Minn_Admin_Switch::ENGINE_FLOOR`), nor one older than the
-  highest release that site has staged (it rises only on an archive that
-  passed every check, never on what the service names): a signature covers
+  highest release that site has switched to (it rises only when a switch
+  completes, never on a check or on what the service names): a signature covers
   bytes, not which release they are, so the floor rises whenever a release
   fixes something an older one would bring back. Builds signed with a
   release key that hold the same version are interchangeable to whoever
@@ -74,8 +74,10 @@ A few properties worth knowing before auditing (details in
   only when nothing PHP ran before the define may define the same
   constant (what wp-config.php loads, a PHP `auto_prepend_file`, every file
   PHP lists ahead of wp-config.php). A file with no `define(` call and no
-  mention of the constant cannot define it, whatever its size; a file that
-  cannot be read, or is over 8 MB, locks the switch.
+  mention of the constant cannot define it, whatever its size; a file over
+  512 KB is judged by pattern rather than parsed (any define of the
+  constant, even in a comment, or of a name it cannot read, counts), and a
+  file that cannot be read, or is over 8 MB, locks the switch.
 - Maintenance mode holds back the front end (including form posts that
   plugins process once the request is routed, from `parse_request`
   priority 15 on, such as Contact Form 7 and Gravity Forms; a plugin that
@@ -166,9 +168,13 @@ A few properties worth knowing before auditing (details in
   Form 7's `wpcf7`, Yoast SEO's `wpseo`, Amelia's `amelia_settings`, and
   UpdraftPlus' remote storage rows (`updraft_<destination>`, every
   destination but email), its UpdraftCentral and Migrator keys, the sites
-  it sends backups to and its encryption phrase; the copies UpdraftPlus'
-  job rows take of the storage rows during a backup are redacted as
-  copies. Ninja Forms' settings are not: its own screen prints its
+  it sends backups to, its encryption phrase, settings lock password, extra
+  database logins, UpdraftPlus.com account login and the single-value
+  secret rows older versions kept. UpdraftPlus' running-job rows
+  (`updraft_jobdata_*`, in options or the network's sitemeta) copy every
+  storage destination's settings, typed passwords included, and are
+  redacted whole by name, since a copy is recognised only when its value
+  looks like a key. Ninja Forms' settings are not: its own screen prints its
   reCAPTCHA secret to the same administrator.
 - The database browser is read-only and redacts credentials three ways: by
   column name (a column named like a password, secret or token, in any
@@ -225,9 +231,13 @@ A few properties worth knowing before auditing (details in
   never by ending the request. A panel the plugin would refuse altogether
   (the SEO plugin's own edit rule, or its box switched off for the type of
   post being made) is not offered, and a field its own edit check refuses
-  (WP Job Manager's Featured and Expiry) is left out. Every refused value
-  is named in `minn_field_errors` and never overwrites the stored one (a
-  refused PowerPress media address keeps the stored episode). A settings
+  (WP Job Manager's Featured and Expiry) is left out. A refused value
+  never overwrites the stored one (a typed address the URL check refuses
+  keeps the stored address; only an empty box clears) and is named in
+  `minn_field_errors`, except where a panel still keeps the stored value
+  without naming it: a refused value inside an ACF repeater or flexible
+  row, a relation id ACF's panel will not accept, and an SEO number or
+  choice it cannot read. A settings
   save carrying a value the plugin refuses (Perfmatters' raw-code fields
   without `unfiltered_html`, an ACF options page) is refused whole before
   anything is written. A preview made from a real entry fills the
