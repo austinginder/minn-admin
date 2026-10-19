@@ -388,6 +388,11 @@ class Minn_Admin_Kernel_SQL {
 			if ( ! in_array( $op, array( '=', '!=', '<', '<=', '>', '>=' ), true ) ) {
 				throw new InvalidArgumentException( 'minn_kernel_operator=' . $op );
 			}
+			// NULL meets no comparison (a moment its clock could not read),
+			// where a placeholder would read it as '' and meet every date.
+			if ( null === ( $rule['value'] ?? null ) ) {
+				return array( '1 = 0', array() );
+			}
 			return array( "{$c} {$op} " . self::ph( $rule['value'] ), array( $rule['value'] ) );
 		}
 		$vals = array_values( (array) $rule['not'] );
@@ -501,8 +506,11 @@ class Minn_Admin_Kernel_SQL {
 			return '' === $end || substr( $text, -strlen( $end ) ) === $end;
 		}
 		if ( 'op' === $kind ) {
-			$want = $rule['value'];
+			$want = $rule['value'] ?? null;
 			$op   = (string) $rule['op'];
+			if ( null === $want ) {
+				return false; // As where() reads it: NULL meets no comparison.
+			}
 			if ( '=' === $op ) {
 				return $same( $v, $want );
 			}
@@ -1233,7 +1241,7 @@ class Minn_Admin_Kernel_SQL {
 	 * is, so a day is still two rows however many texts it holds.
 	 *
 	 * @param array $c table, column (the date), clock (utc|local|date|epoch|
-	 *                 local-epoch), where (conditions for every counted row),
+	 *                 local-epoch|db; utc when none), where (conditions for every counted row),
 	 *                 split (column, optional), secondary (its values), ahead,
 	 *                 label (a date format for each day's label).
 	 * @return array Days keyed Y-m-d: label, value, secondary (and from / to
@@ -1245,7 +1253,10 @@ class Minn_Admin_Kernel_SQL {
 		$col   = self::col( $c['column'] );
 		$clock = (string) ( $c['clock'] ?? 'utc' );
 		$days  = self::empty_days( $ahead, (string) ( $c['label'] ?? '' ) );
-		$day   = self::day_sql( $col, in_array( $clock, array( 'date', 'utc', 'epoch', 'local-epoch', 'db' ), true ) ? $clock : 'local' );
+		if ( ! in_array( $clock, Minn_Admin_Kernel::CLOCKS, true ) ) {
+			return $days; // A clock it cannot read: no days, never days guessed on another.
+		}
+		$day   = self::day_sql( $col, $clock );
 		$since = $ahead ? Minn_Admin_Kernel::at( $clock, 0 ) : Minn_Admin_Kernel::at( $clock, -13 );
 		if ( null === $since || ( $ahead && null === Minn_Admin_Kernel::at( $clock, 14 ) ) ) {
 			return $days; // A bound the database could not read: no days, never every row.

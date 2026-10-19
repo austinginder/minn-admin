@@ -2680,6 +2680,37 @@ foreach ( $encs as $what => $pair ) {
 $check( 'every field encoding gives its one shape: bool, int, text, nullable, enum, raw, and each datetime clock on each wire', ! $enc_bad, wp_json_encode( $enc_bad ) );
 $check( 'a field the row lacks is left out, and a declared null leaves as its type', array( 'a' => '', 'n' => null ) === Minn_Admin_Kernel_Fields::out( array( 'a' => 'text', 'n' => array( 'type' => 'int', 'nullable' => true ), 'gone' => 'int' ), array( 'a' => null, 'n' => null ) ) );
 
+// --- 1l. Route claims by the URLs they serve; clocks passed in code ---------
+Minn_Admin_Kernel::endpoint( 'minn-conformance/shape/(?P<id>\d+)', array( 'gate' => '__return_true', 'run' => function () {
+	return array( 'which' => 'first' );
+} ) );
+Minn_Admin_Kernel::endpoint( 'minn-conformance/shape/(?P<id>[0-9]+)', array( 'gate' => '__return_true', 'run' => function () {
+	return array( 'which' => 'second' );
+} ) );
+Minn_Admin_Kernel::endpoint( 'minn-conformance/shape-tab/(?P<tab>one)', array( 'gate' => '__return_true', 'run' => function () {
+	return array( 'which' => 'one' );
+} ) );
+Minn_Admin_Kernel::endpoint( 'minn-conformance/shape-tab/(?P<tab>two)', array( 'gate' => '__return_true', 'run' => function () {
+	return array( 'which' => 'two' );
+} ) );
+list( , $sh1 ) = $call( 'GET', '/minn-admin/v1/minn-conformance/shape/5' );
+list( , $sh2 ) = $call( 'GET', '/minn-admin/v1/minn-conformance/shape-tab/one' );
+list( , $sh3 ) = $call( 'GET', '/minn-admin/v1/minn-conformance/shape-tab/two' );
+$check( 'a second pattern for the URLs a route already serves is refused, the first kept; two literal captures are two routes', 'first' === ( $sh1['which'] ?? '' ) && $rv_drew( 'minn-conformance/shape/(?P<id>[0-9]+): GET /minn-conformance/shape/(?P<id>[0-9]+) is already declared by minn-conformance/shape/(?P<id>\d+)' ) && 'one' === ( $sh2['which'] ?? '' ) && 'two' === ( $sh3['which'] ?? '' ), wp_json_encode( array( $sh1, $sh2, $sh3 ) ) );
+$ck_today = minn_admin_chart_day( 0 );
+$ck_days  = array();
+foreach ( array( 'local', 'utcc', 'site', '' ) as $clock ) {
+	$ck_days[ $clock ] = Minn_Admin_Kernel_SQL::chart_days( array( 'table' => 'minn_conf_review', 'column' => 'created', 'clock' => $clock ) )[ $ck_today ]['value'] ?? -1;
+}
+$ck = array(
+	'chart'     => $ck_days,
+	'since'     => array( Minn_Admin_Kernel_SQL::count( 'minn_conf_review', array( 'created' => Minn_Admin_Kernel::since( 'local', 3650 * DAY_IN_SECONDS ) ) ), Minn_Admin_Kernel_SQL::count( 'minn_conf_review', array( 'created' => Minn_Admin_Kernel::since( 'utcc', 3650 * DAY_IN_SECONDS ) ) ) ),
+	'at'        => array( is_string( Minn_Admin_Kernel::at( 'utc' ) ), Minn_Admin_Kernel::at( 'utcc' ), Minn_Admin_Kernel::at( 'site', 0 ) ),
+	'ago'       => Minn_Admin_Kernel::ago( '2026-01-02 03:04:05', 'utcc' ),
+	'null op'   => array( Minn_Admin_Kernel_SQL::count( 'minn_conf_review', array( 'created' => array( 'op' => '>=', 'value' => null ) ) ), Minn_Admin_Kernel_SQL::matches( array( 'n' => 5 ), array( 'n' => array( 'op' => '>=', 'value' => null ) ) ) ),
+);
+$check( 'a clock passed in code that the kernel does not read narrows to nothing: no chart days, no window, no moment, no age; a comparison with no value meets no row', array( 'local' => 2, 'utcc' => 0, 'site' => 0, '' => 0 ) === $ck['chart'] && array( 8, 0 ) === $ck['since'] && array( true, null, null ) === $ck['at'] && '—' === $ck['ago'] && array( 0, false ) === $ck['null op'], wp_json_encode( $ck ) );
+
 // --- 2. Every real declaration ----------------------------------------------
 $real = array_filter( Minn_Admin_Kernel::resources(), function ( $r ) {
 	return 0 !== strpos( $r['id'], 'minn-conformance/' );
@@ -2817,6 +2848,38 @@ foreach ( Minn_Admin_Kernel::endpoints() as $ep ) {
 	}
 }
 $check( "every endpoint's gate takes nothing or the request it is asked with ({$n_gates})", $n_gates > 0 && ! $odd_gates, implode( ', ', $odd_gates ) );
+
+// No kernel route is served by a hand-written one first: a URL each kernel
+// route serves, with its method, matches no other route of the namespace.
+$shadowed = array();
+$kroutes  = 0;
+foreach ( rest_get_server()->get_routes( 'minn-admin/v1' ) as $route => $eps ) {
+	foreach ( $eps as $ep ) {
+		if ( empty( $ep['minn_file'] ) ) {
+			continue;
+		}
+		$kroutes++;
+		$sample = preg_replace_callback( '/\(\?P<\w+>((?:[^()\\\\]|\\\\.|\((?1)\))*)\)/', function ( $m ) {
+			foreach ( array( $m[1], '1', 'abc', 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6', 'abc-1' ) as $fill ) {
+				if ( preg_match( '@^(?:' . $m[0] . ')$@', $fill ) ) {
+					return $fill;
+				}
+			}
+			return '1';
+		}, $route );
+		foreach ( rest_get_server()->get_routes( 'minn-admin/v1' ) as $other => $oeps ) {
+			if ( $other === $route || ! preg_match( '@^' . $other . '$@i', $sample ) ) {
+				continue;
+			}
+			foreach ( $oeps as $oep ) {
+				if ( array_intersect_key( (array) $ep['methods'], (array) ( $oep['methods'] ?? array() ) ) && empty( $oep['minn_file'] ) ) {
+					$shadowed[] = "{$route} ~ {$other}";
+				}
+			}
+		}
+	}
+}
+$check( "no kernel route's URL is also served by a hand-written route ({$kroutes} kernel routes)", $kroutes > 0 && ! $shadowed, implode( ' | ', array_slice( array_unique( $shadowed ), 0, 5 ) ) );
 
 // The kernel refused nothing a real adapter declares: no key it does not
 // read, no gate it cannot ask, no route twice. It records each refusal

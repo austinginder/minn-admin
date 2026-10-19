@@ -164,7 +164,7 @@ class Minn_Admin_Kernel {
 	/** What the kernel refused (see wrong()). */
 	private static $refused = array();
 
-	/** "METHOD /route" => who registered it, so a second declaration of one is refused, never shadowed. */
+	/** "METHOD /route" (its shape(): one {} per captured part) => who registered it, so a second declaration of one is refused, never shadowed. */
 	private static $claimed = array();
 
 	/** The clocks a date column may be read on. */
@@ -733,9 +733,26 @@ class Minn_Admin_Kernel {
 	}
 
 	/**
+	 * A route as the URLs it serves: each captured part one placeholder,
+	 * whatever its pattern, unless it captures one word ("(?P<tab>general)"),
+	 * so "/x/(?P<id>\d+)" and "/x/(?P<id>[0-9]+)" are one route, and two
+	 * patterns for one place (which WordPress would both match, serving the
+	 * first) are taken for one.
+	 *
+	 * @param string $route Route pattern.
+	 * @return string
+	 */
+	private static function shape( $route ) {
+		return (string) preg_replace_callback( '/\(\?P<\w+>((?:[^()\\\\]|\\\\.|\((?1)\))*)\)/', function ( $m ) {
+			return preg_match( '/^[\w-]+$/', $m[1] ) ? $m[1] : '{}';
+		}, (string) $route );
+	}
+
+	/**
 	 * Register a route's endpoints, each method on each route once across
-	 * every declaration: one claimed already is refused, not left to
-	 * WordPress, which would serve whichever came first.
+	 * every declaration: one claimed already, under any pattern for the same
+	 * URLs (shape()), is refused, not left to WordPress, which would serve
+	 * whichever came first.
 	 *
 	 * @param string $route Route under the namespace, with its leading slash.
 	 * @param array  $eps   Endpoint args (one, or a list of them).
@@ -751,18 +768,19 @@ class Minn_Admin_Kernel {
 					$methods[] = strtoupper( trim( $one ) );
 				}
 			}
+			$shape = self::shape( $route );
 			$taken = array();
 			foreach ( $methods as $m ) {
-				if ( isset( self::$claimed[ "{$m} {$route}" ] ) ) {
+				if ( isset( self::$claimed[ "{$m} {$shape}" ] ) ) {
 					$taken[] = $m;
 				}
 			}
 			if ( $taken ) {
-				self::wrong( 'minn_admin_resource', "{$who}: " . implode( ', ', $taken ) . " {$route} is already declared by " . self::$claimed[ "{$taken[0]} {$route}" ] . ', so it has no route.' );
+				self::wrong( 'minn_admin_resource', "{$who}: " . implode( ', ', $taken ) . " {$route} is already declared by " . self::$claimed[ "{$taken[0]} {$shape}" ] . ', so it has no route.' );
 				continue;
 			}
 			foreach ( $methods as $m ) {
-				self::$claimed[ "{$m} {$route}" ] = $who;
+				self::$claimed[ "{$m} {$shape}" ] = $who;
 			}
 			$keep[] = $ep;
 		}
@@ -2220,6 +2238,9 @@ class Minn_Admin_Kernel {
 	 */
 	public static function since( $clock, $seconds ) {
 		$seconds = (int) $seconds;
+		if ( ! in_array( $clock, self::CLOCKS, true ) ) {
+			return array(); // A clock it cannot read matches no row (an empty IN list), never every row.
+		}
 		switch ( (string) $clock ) {
 			case 'db':
 				// A moment the database cannot read matches no row (an empty IN list).
@@ -2231,7 +2252,7 @@ class Minn_Admin_Kernel {
 				return array( 'op' => '>=', 'value' => (int) current_time( 'timestamp' ) - $seconds ); // phpcs:ignore WordPress.DateTime.CurrentTimeTimestamp.Requested -- the column holds this clock.
 			case 'local':
 				return array( 'op' => '>=', 'value' => gmdate( 'Y-m-d H:i:s', (int) current_time( 'timestamp' ) - $seconds ) ); // phpcs:ignore WordPress.DateTime.CurrentTimeTimestamp.Requested
-			default:
+			default: // utc, and a date compared as one
 				return array( 'op' => '>=', 'value' => gmdate( 'Y-m-d H:i:s', time() - $seconds ) );
 		}
 	}
@@ -2244,7 +2265,7 @@ class Minn_Admin_Kernel {
 	 * @return string
 	 */
 	public static function ago( $stored, $clock ) {
-		if ( null === $stored || ! is_scalar( $stored ) || '' === (string) $stored ) {
+		if ( null === $stored || ! is_scalar( $stored ) || '' === (string) $stored || ! in_array( $clock, self::CLOCKS, true ) ) {
 			return '—';
 		}
 		$now = time();
@@ -2387,9 +2408,12 @@ class Minn_Admin_Kernel {
 	 *
 	 * @param string     $clock utc | local | date | epoch | local-epoch | db.
 	 * @param string|int $when  'now' or a day offset.
-	 * @return string|int|null
+	 * @return string|int|null null for a clock it does not know.
 	 */
 	public static function at( $clock, $when = 'now' ) {
+		if ( ! in_array( $clock, self::CLOCKS, true ) ) {
+			return null; // Never a moment on a guessed clock.
+		}
 		if ( 'db' === $clock ) {
 			return Minn_Admin_Kernel_SQL::db_at( (int) self::at( 'epoch', $when ) );
 		}
@@ -2421,7 +2445,7 @@ class Minn_Admin_Kernel {
 				return $t->format( 'Y-m-d H:i:s' );
 			case 'date':
 				return $t->format( 'Y-m-d' );
-			default:
+			default: // utc
 				return $t->setTimezone( new DateTimeZone( 'UTC' ) )->format( 'Y-m-d H:i:s' );
 		}
 	}
