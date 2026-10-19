@@ -311,7 +311,7 @@ function minn_admin_perfmatters_write( $changes, $fields ) {
 		if ( 'toggle' === $type ) {
 			// Perfmatters stores checked as '1' and reads !empty(); its own
 			// form omits unchecked boxes, so off = the key goes away.
-			if ( ! empty( $v ) && 'false' !== $v ) {
+			if ( Minn_Admin_Kernel_Settings::on( $v ) ) {
 				$slot[ $args['id'] ] = '1';
 			} else {
 				unset( $slot[ $args['id'] ] );
@@ -398,5 +398,7 @@ minn_admin_settings( 'perfmatters', array(
 	'read'   => function ( $field ) {
 		return minn_admin_perfmatters_value( $field['_args'], $field['type'] );
 	},
-	'write'  => 'minn_admin_perfmatters_write',
+	// Options API: a hidden key sent back goes back to its credential.
+	'restore' => true,
+	'write'   => 'minn_admin_perfmatters_write',
 ) );

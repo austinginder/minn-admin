@@ -239,6 +239,8 @@ minn_admin_settings( 'jet-engine-options', array(
 	// Slashed: their Save hands update_options() the slashed $_REQUEST and
 	// stores what it gets, and get() unslashes every read, so an unslashed
 	// write lost each backslash in Minn, wp-admin and on the front end.
+	// Options API: a hidden key sent back goes back to its credential.
+	'restore'  => true,
 	'write'    => function ( $data, $fields, $ctx ) {
 		if ( $data ) {
 			$ctx['page']->update_options( wp_slash( $data ), false, true );

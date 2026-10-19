@@ -38,6 +38,9 @@
  *     'validate' => callable( array $changes, array $fields, array $ctx ): null|array|WP_Error,
  *                   // optional: the plugin's own validator; an array it answers is what
  *                   // write() gets in place of the changes (the values as the store takes them)
+ *     'restore'  => true,   // optional: the store is options-API, where a placeholder sent back
+ *                   // goes back to its credential (see step 5); without it a store with no
+ *                   // restore (form meta, a table) refuses any placeholder left in an edit
  *     'write'    => callable( array $changes, array $fields, array $ctx ): true|WP_Error,
  *     'labels'   => array( 'may' => callable( string[] $labels ): string ),   // the gate's refusal
  *   ) );
@@ -55,11 +58,16 @@
  *   2. a value equal to what read() serves for it is dropped: an untouched
  *      value, and a credential sent back as its [redacted:…] placeholder
  *      (Minn_Admin::unchanged() against the stored value);
- *   3. when the body carries the values the page loaded ('base'), a field
- *      whose stored value moved since answers 409, so the person reloads;
- *      a body without one (an app cached from before) is saved as before;
- *   4. the per-field gates ('_raw' and 'may') answer 403;
- *   5. a mask left in an edited value answers 400 (minn_egress_mask);
+ *   3. the per-field gates ('_raw' and 'may') answer 403;
+ *   4. when the body carries the values the page loaded ('base'), a field
+ *      whose value as served (credentials masked, so a base can never test
+ *      a guess at one) moved since answers 409, so the person reloads; a
+ *      body without one (an app cached from before) is saved as before;
+ *   5. a placeholder left in an edited value: on a 'restore' screen each
+ *      one goes back to the credential the page was shown it for, at the
+ *      same place in the value (a list position counts as any position, so
+ *      a row may move), and one anywhere else answers 400 minn_egress_mask,
+ *      as does any placeholder on a screen without 'restore';
  *   6. the plugin's validator answers what it answers.
  * A refusal names its fields (data.fields: key, label, message; data.field:
  * the first key, for a page that puts the message on a field), and nothing
@@ -82,7 +90,7 @@ class Minn_Admin_Kernel_Settings {
 	);
 
 	/** The keys a declaration may hold. */
-	const KEYS = array( 'route', 'active', 'gate', 'target', 'layout', 'read', 'same', 'view', 'sent', 'may', 'validate', 'write', 'labels' );
+	const KEYS = array( 'route', 'active', 'gate', 'target', 'layout', 'read', 'same', 'view', 'sent', 'may', 'validate', 'restore', 'write', 'labels' );
 
 	/** The keys a declaration must hold. */
 	const REQUIRED = array( 'route', 'gate', 'layout', 'read', 'write' );
@@ -167,7 +175,171 @@ class Minn_Admin_Kernel_Settings {
 		if ( isset( $def['labels'] ) && ! is_array( $def['labels'] ) ) {
 			return 'its labels are not a list';
 		}
+		if ( isset( $def['restore'] ) && ! is_bool( $def['restore'] ) ) {
+			return 'its restore is not true or false';
+		}
+		if ( ! self::takes_request( $def['gate'] ) ) {
+			return 'its gate takes something other than the request it is asked with';
+		}
 		return '';
+	}
+
+	/**
+	 * Whether a gate takes the request and nothing else (or nothing): the
+	 * routes ask it with the request, so a gate written for another argument
+	 * would read the request as that argument.
+	 */
+	private static function takes_request( $gate ) {
+		try {
+			if ( is_string( $gate ) && false !== strpos( $gate, '::' ) ) {
+				$gate = explode( '::', $gate, 2 );
+			}
+			if ( is_array( $gate ) ) {
+				$rf = new ReflectionMethod( $gate[0], $gate[1] );
+			} elseif ( is_object( $gate ) && ! $gate instanceof Closure ) {
+				$rf = new ReflectionMethod( $gate, '__invoke' );
+			} else {
+				$rf = new ReflectionFunction( $gate );
+			}
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+		foreach ( $rf->getParameters() as $prm ) {
+			$t = $prm->getType();
+			if ( false === strpos( $t instanceof ReflectionNamedType ? $t->getName() : (string) $t, 'WP_REST_Request' ) ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Whether a switch is on, the one reading of on/off the compare and the
+	 * writes share: a switch sent as "off" or "false" is off everywhere.
+	 *
+	 * @param mixed $v Value.
+	 * @return bool
+	 */
+	public static function on( $v ) {
+		if ( is_string( $v ) ) {
+			return ! in_array( strtolower( trim( $v ) ), array( '', '0', 'false', 'off' ), true );
+		}
+		return ! empty( $v );
+	}
+
+	/** A value as a minn-admin/v1 response shows it: every credential copy masked. */
+	private static function shown( $v ) {
+		$out = Minn_Admin_Egress::scrub( array( 'v' => $v ), null, new WP_REST_Request( 'GET', '/minn-admin/v1/settings-tier' ) );
+		$out = json_decode( (string) wp_json_encode( $out ), true );
+		return is_array( $out ) && array_key_exists( 'v', $out ) ? $out['v'] : $v;
+	}
+
+	/**
+	 * A path's next step. A list position is "#", so a placeholder may follow
+	 * its row when rows move, never move to another name.
+	 */
+	private static function step( $path, $k ) {
+		return $path . ( ( is_int( $k ) || ctype_digit( (string) $k ) ) ? '/#' : '/' . strlen( (string) $k ) . ':' . $k );
+	}
+
+	/** Each placeholder the page was shown, by path, mapped to the credential stored there. */
+	private static function held( $raw, $shown, $path, array &$map, $depth = 0 ) {
+		if ( is_string( $raw ) && is_string( $shown ) ) {
+			$parts = preg_split( '/(\[redacted:[0-9a-f]{6}\])/', $shown, -1, PREG_SPLIT_DELIM_CAPTURE );
+			if ( count( $parts ) < 2 ) {
+				return;
+			}
+			// The text around each placeholder is the stored text; what sits
+			// between in the stored value is the credential it stands for.
+			$re     = '/^';
+			$tokens = array();
+			foreach ( $parts as $i => $part ) {
+				if ( $i % 2 ) {
+					$re      .= '(.+?)';
+					$tokens[] = $part;
+				} else {
+					$re .= preg_quote( $part, '/' );
+				}
+			}
+			if ( preg_match( $re . '$/s', $raw, $m ) ) {
+				foreach ( $tokens as $i => $t ) {
+					$map[ $path ][ $t ] = $m[ $i + 1 ];
+				}
+			}
+			return;
+		}
+		if ( $depth < 32 && is_array( $raw ) && is_array( $shown ) ) {
+			foreach ( $raw as $k => $v ) {
+				if ( array_key_exists( $k, $shown ) ) {
+					self::held( $v, $shown[ $k ], self::step( $path, $k ), $map, $depth + 1 );
+				}
+			}
+		}
+	}
+
+	/** The sent value with each placeholder put back at the path it was shown at; $bad when one sits anywhere else. */
+	private static function put_back( $v, array $map, $path, array &$used, &$bad, $depth = 0 ) {
+		if ( is_string( $v ) ) {
+			if ( ! preg_match_all( Minn_Admin_Egress::TOKEN, $v, $m ) ) {
+				return $v;
+			}
+			foreach ( array_unique( $m[0] ) as $t ) {
+				if ( ! isset( $map[ $path ][ $t ] ) ) {
+					$bad = true;
+					return $v;
+				}
+				$used[ $map[ $path ][ $t ] ] = true;
+			}
+			return strtr( $v, $map[ $path ] );
+		}
+		if ( ! is_array( $v ) ) {
+			return $v;
+		}
+		if ( $depth >= 32 ) {
+			$bad = $bad || (bool) preg_match( Minn_Admin_Egress::TOKEN, (string) wp_json_encode( $v ) );
+			return $v;
+		}
+		foreach ( $v as $k => $x ) {
+			if ( is_string( $k ) && preg_match( Minn_Admin_Egress::TOKEN, $k ) ) {
+				$bad = true;
+				return $v;
+			}
+			$v[ $k ] = self::put_back( $x, $map, self::step( $path, $k ), $used, $bad, $depth + 1 );
+		}
+		return $v;
+	}
+
+	/**
+	 * An edited value with each placeholder the page was shown put back to
+	 * its credential, as the options API's own restore does; null when a
+	 * placeholder sits where none was shown, or when the credential put back
+	 * no longer reads as one (text typed against it), which a later read
+	 * would print whole.
+	 *
+	 * @param mixed $v   The value sent.
+	 * @param mixed $raw The stored value, as read() serves it before the fence.
+	 * @return array|null array( value )
+	 */
+	private static function restore( $v, $raw ) {
+		$raw  = json_decode( (string) wp_json_encode( $raw ), true );
+		$map  = array();
+		$used = array();
+		$bad  = false;
+		self::held( $raw, self::shown( $raw ), '', $map );
+		$out = self::put_back( $v, $map, '', $used, $bad );
+		if ( $bad ) {
+			return null;
+		}
+		if ( $used && method_exists( 'Minn_Admin_DB', 'credential_strings' ) ) {
+			$before = Minn_Admin_DB::credential_strings( (string) maybe_serialize( $raw ) );
+			$after  = Minn_Admin_DB::credential_strings( (string) maybe_serialize( $out ) );
+			foreach ( array_keys( $used ) as $c ) {
+				if ( isset( $before[ $c ] ) && ! isset( $after[ $c ] ) ) {
+					return null;
+				}
+			}
+		}
+		return array( $out );
 	}
 
 	/** Declared screens, for the conformance runner and the inventory. */
@@ -420,7 +592,8 @@ class Minn_Admin_Kernel_Settings {
 		if ( is_array( $served ) || is_object( $served ) ) {
 			$served = json_decode( (string) wp_json_encode( $served ), true );
 		}
-		if ( Minn_Admin::unchanged( $sent, $served, self::kind( $field ) ) ) {
+		$kind = self::kind( $field );
+		if ( 'bool' === $kind ? self::on( $sent ) === self::on( $served ) : Minn_Admin::unchanged( $sent, $served, $kind ) ) {
 			return true;
 		}
 		return isset( $def['same'] ) && Minn_Admin_Kernel::yes( $def['same'], $field, $sent, $served, $ctx );
@@ -500,7 +673,7 @@ class Minn_Admin_Kernel_Settings {
 		$fields = $built[1];
 		$values = self::sent( $def, $body, $ctx );
 		if ( is_wp_error( $values ) ) {
-			return $values;
+			return self::named( $values, array(), $fields );
 		}
 
 		// 1-2. What changed: an offered field whose value is not the one served.
@@ -524,25 +697,8 @@ class Minn_Admin_Kernel_Settings {
 			return true;
 		}
 
-		// 3. A stale copy: the page loaded a value that is no longer stored.
-		if ( isset( $body['base'] ) && is_array( $body['base'] ) ) {
-			self::$journal['steps'][] = 'stale';
-			$base = isset( $def['sent'] ) ? self::sent( $def, $body['base'], $ctx ) : $body['base'];
-			if ( is_wp_error( $base ) ) {
-				return $base;
-			}
-			$moved = array();
-			foreach ( $changes as $key => $v ) {
-				if ( array_key_exists( $key, $base ) && ! self::same( $def, $fields[ $key ], $base[ $key ], $served[ $key ], $ctx ) ) {
-					$moved[] = $key;
-				}
-			}
-			if ( $moved ) {
-				return self::named( new WP_Error( 'minn_stale', __( 'This changed since you opened it. Reload to get the latest version, then make your changes again.', 'minn-admin' ), array( 'status' => 409 ) ), $moved, $fields );
-			}
-		}
-
-		// 4. Per-field gates, beyond the screen's.
+		// 3. Per-field gates, beyond the screen's, before anything else is
+		// answered about a field the caller may not change.
 		self::$journal['steps'][] = 'gates';
 		$raw    = array();
 		$denied = array();
@@ -587,12 +743,40 @@ class Minn_Admin_Kernel_Settings {
 			return self::named( new WP_Error( 'minn_settings_forbidden', $message, array( 'status' => 403 ) ), $denied, $fields );
 		}
 
+		// 4. A stale copy: the page loaded a value that is no longer stored,
+		// compared as the page was shown it, credentials masked.
+		if ( isset( $body['base'] ) && is_array( $body['base'] ) ) {
+			self::$journal['steps'][] = 'stale';
+			$base = isset( $def['sent'] ) ? self::sent( $def, $body['base'], $ctx ) : $body['base'];
+			if ( is_wp_error( $base ) ) {
+				return self::named( $base, array(), $fields );
+			}
+			$moved = array();
+			foreach ( $changes as $key => $v ) {
+				if ( array_key_exists( $key, $base ) && ! self::same( $def, $fields[ $key ], $base[ $key ], self::shown( $served[ $key ] ), $ctx ) ) {
+					$moved[] = $key;
+				}
+			}
+			if ( $moved ) {
+				return self::named( new WP_Error( 'minn_stale', __( 'This changed since you opened it. Reload to get the latest version, then make your changes again.', 'minn-admin' ), array( 'status' => 409 ) ), $moved, $fields );
+			}
+		}
+
 		// 5. A hidden key's placeholder left in an edited value.
 		self::$journal['steps'][] = 'masks';
 		$masked = array();
 		$error  = null;
 		foreach ( $changes as $key => $v ) {
-			$e = Minn_Admin_Egress::refuse_masks( array( $key => $v ), array( $key => $served[ $key ] ) );
+			if ( ! empty( $def['restore'] ) ) {
+				$back = self::restore( $v, $served[ $key ] );
+				if ( null !== $back ) {
+					$changes[ $key ] = $back[0];
+					continue;
+				}
+				$e = new WP_Error( 'minn_egress_mask', __( 'Nothing was saved: this change holds a hidden key, shown as [redacted:…], and saving it would put that placeholder where the key was. Type the real value in its place, or leave that part as it was.', 'minn-admin' ), array( 'status' => 400 ) );
+			} else {
+				$e = Minn_Admin_Egress::refuse_masks( array( $key => $v ), array( $key => $served[ $key ] ) );
+			}
 			if ( $e ) {
 				$masked[] = $key;
 				$error    = $e;

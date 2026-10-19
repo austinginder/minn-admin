@@ -219,7 +219,13 @@ add_action( 'rest_api_init', function () {
 			if ( ! $target ) {
 				return new WP_Error( 'minn_no_tab', __( 'Unknown settings tab.', 'minn-admin' ), array( 'status' => 404 ) );
 			}
-			return minn_admin_option_dispatch( $target, 'POST', (array) $req->get_json_params() );
+			// The body only, as JSON: a form-encoded save would reach the
+			// provider as no change and answer as saved.
+			$body = $req->get_json_params();
+			if ( ! is_array( $body ) ) {
+				return new WP_Error( 'invalid_body', __( 'Send the values as JSON.', 'minn-admin' ), array( 'status' => 400 ) );
+			}
+			return minn_admin_option_dispatch( $target, 'POST', $body );
 		},
 	) );
 } );

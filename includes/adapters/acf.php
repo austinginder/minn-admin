@@ -3815,6 +3815,10 @@ minn_admin_settings( 'acf-options', array(
 	'validate' => function ( $changes, $fields, $ctx ) {
 		return minn_admin_acf_options_parse( $ctx['page'], $changes, $fields );
 	},
+	// ACF stores an options page through the options API (or post meta for a
+	// page given a post id); the tier puts a hidden key sent back to its
+	// credential either way, only where the page was shown it.
+	'restore'  => true,
 	'write'    => function ( $writes, $fields, $ctx ) {
 		return minn_admin_acf_options_write( $ctx['page'], $writes, $fields );
 	},

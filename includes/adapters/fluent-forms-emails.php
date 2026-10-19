@@ -300,7 +300,7 @@ function minn_admin_fluent_emails_sent( $body, $ctx ) {
 	foreach ( (array) ( $body['notifications'] ?? array() ) as $in ) {
 		$id = is_array( $in ) ? (int) ( $in['metaId'] ?? 0 ) : 0;
 		if ( ! isset( $stored[ $id ] ) ) {
-			return new WP_Error( 'minn_ffe_unknown', __( 'That notification is not on this form.', 'minn-admin' ), array( 'status' => 400 ) );
+			return new WP_Error( 'minn_ffe_unknown', __( 'That notification is not on this form.', 'minn-admin' ), array( 'status' => 400, 'field' => 'n' . $id ) );
 		}
 		foreach ( $in as $k => $v ) {
 			if ( 'metaId' !== $k ) {
@@ -360,7 +360,7 @@ function minn_admin_fluent_emails_validate( $changes, $fields, $ctx ) {
 		}
 		// The switch only when it changed, so one turned off elsewhere stays off.
 		if ( array_key_exists( 'enabled', $in ) ) {
-			$n['enabled'] = ! empty( $in['enabled'] );
+			$n['enabled'] = Minn_Admin_Kernel_Settings::on( $in['enabled'] );
 		}
 		$n['sendTo']['type'] = $type;
 		if ( 'email' === $type && array_key_exists( 'toEmail', $in ) ) {

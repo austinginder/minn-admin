@@ -12,8 +12,12 @@
  *                      (a credential as its [redacted:…] placeholder),
  *                      change nothing and write nothing.
  *  R4 masks            a placeholder left in an edited value is refused
- *                      (400 minn_egress_mask) and nothing is written.
- *  R5 field gates      a raw-output field needs unfiltered_html, and the
+ *                      (400 minn_egress_mask) and nothing is written; on a
+ *                      'restore' (options-API) screen one goes back to its
+ *                      credential where the page was shown it, byte for
+ *                      byte, and one anywhere else is still refused.
+ *  R5 field gates      a raw-output field needs unfiltered_html and code
+ *                      edits left on (checked last: the constant stays), and the
  *                      screen's own per-field gate is asked, before anything
  *                      is written; an untouched gated field blocks nothing.
  *  R6 validator first  the plugin's validator is asked about every change
@@ -21,8 +25,10 @@
  *  R7 named refusals   every refusal names its fields ({ key, label,
  *                      message }, the first in data.field) and writes nothing.
  *  R8 stale copy       a body whose base says the page loaded a value no
- *                      longer stored answers 409; a body without a base (an
- *                      app cached from before) saves as it did.
+ *                      longer stored answers 409, compared as served so a
+ *                      base cannot test a guess at a credential, and after
+ *                      the field gates; a body without a base (an app cached
+ *                      from before) saves as it did.
  *
  * Live screens run with the tier stopped where it would write
  * (Minn_Admin_Kernel_Settings::dry()), so nothing on the lab changes; the
@@ -112,6 +118,9 @@ $fixture_store = array(
 	'checked' => 'ok',
 	'secret'  => 'Endpoint ' . $key,
 	'odd'     => 'cells',
+	'rows'    => array( array( 'svc' => 'a', 'key' => $key ), array( 'svc' => 'b', 'key' => 'x' ) ),
+	'num'     => '1234567890123456789',
+	'far'     => 'away',
 );
 $reset_fixture = static function () use ( $fixture_store ) {
 	$GLOBALS['minn_st']['store'] = $fixture_store;
@@ -125,12 +134,15 @@ $fixture = array(
 		return current_user_can( 'manage_options' );
 	},
 	'layout'   => function ( $ctx ) {
-		if ( null !== $ctx['tab'] && 'main' !== $ctx['tab'] ) {
+		if ( null !== $ctx['tab'] && ! in_array( $ctx['tab'], array( 'main', 'side' ), true ) ) {
 			return null;
 		}
 		$f = function ( $key, $label, $type, $extra = array() ) {
 			return array_merge( array( 'key' => $key, 'label' => $label, 'type' => $type, '_at' => $key ), $extra );
 		};
+		if ( 'side' === $ctx['tab'] ) {
+			return array( 'groups' => array( array( 'title' => 'Side', 'fields' => array( $f( 'elsewhere', 'Elsewhere', 'text', array( '_at' => 'far' ) ) ) ) ) );
+		}
 		return array(
 			'groups'   => array(
 				array(
@@ -143,6 +155,8 @@ $fixture = array(
 						$f( 'checked', 'Checked', 'text' ),
 						$f( 'secret', 'Endpoint', 'text' ),
 						$f( 'odd', 'Odd', 'spreadsheet' ),
+						$f( 'rows', 'Integrations', 'rows' ),
+						$f( 'num', 'Account id', 'number' ),
 					),
 					'locked' => 0,
 				),
@@ -170,7 +184,7 @@ $fixture = array(
 	'write'    => function ( $changes, $fields ) {
 		$GLOBALS['minn_st']['log'][] = 'write';
 		foreach ( $changes as $k => $v ) {
-			$GLOBALS['minn_st']['store'][ $fields[ $k ]['_at'] ] = 'toggle' === $fields[ $k ]['type'] ? ( $v ? '1' : '' ) : $v;
+			$GLOBALS['minn_st']['store'][ $fields[ $k ]['_at'] ] = 'toggle' === $fields[ $k ]['type'] ? ( Minn_Admin_Kernel_Settings::on( $v ) ? '1' : '' ) : $v;
 		}
 		return true;
 	},
@@ -184,6 +198,9 @@ $bad_decls = array(
 	'no write'         => array_diff_key( array_merge( $fixture, array( 'route' => 'minn-st-bad-b' ) ), array( 'write' => 1 ) ),
 	'no gate'          => array_diff_key( array_merge( $fixture, array( 'route' => 'minn-st-bad-c' ) ), array( 'gate' => 1 ) ),
 	'a read it cannot call' => array_merge( $fixture, array( 'route' => 'minn-st-bad-d', 'read' => 'minn_st_no_such_function' ) ),
+	'a gate that takes something else' => array_merge( $fixture, array( 'route' => 'minn-st-bad-e', 'gate' => function ( $user ) {
+		return true;
+	} ) ),
 );
 $bad_taken = array();
 foreach ( $bad_decls as $why => $decl ) {
@@ -192,6 +209,9 @@ foreach ( $bad_decls as $why => $decl ) {
 	}
 }
 $declared = minn_admin_settings( 'minn-st-fixture', $fixture );
+// The same screen over an options-API store, where a placeholder sent back
+// goes back to its credential.
+$declared = minn_admin_settings( 'minn-st-options', array_merge( $fixture, array( 'route' => 'minn-st-options/(?P<tab>[a-z]+)', 'restore' => true ) ) ) && $declared;
 
 // What a browser receives: dispatch, the server's response filters, the
 // body as sent (the egress fence runs on rest_pre_echo_response).
@@ -235,9 +255,9 @@ try {
 	/* ---------- The fixture: each rule against its own case ---------- */
 	$fx = '/minn-admin/v1/minn-st-fixture/main';
 
-	$check( 'R1 declared whole: a declaration with an unknown key, no write, no gate or a read it cannot call is refused', ! $bad_taken && 4 <= count( Minn_Admin_Kernel_Settings::refused() ), wp_json_encode( $bad_taken ) );
+	$check( 'R1 declared whole: a declaration with an unknown key, no write, no gate, a read it cannot call or a gate that takes something else is refused', ! $bad_taken && 5 <= count( Minn_Admin_Kernel_Settings::refused() ), wp_json_encode( $bad_taken ) );
 	$no_route = true;
-	foreach ( array( 'a', 'b', 'c', 'd' ) as $x ) {
+	foreach ( array( 'a', 'b', 'c', 'd', 'e' ) as $x ) {
 		$no_route = $no_route && ! isset( $routes[ '/minn-admin/v1/minn-st-bad-' . $x ] );
 	}
 	$check( 'R1 declared whole: and gets no route', $no_route );
@@ -256,7 +276,7 @@ try {
 			}
 		}
 	}
-	$check( 'R2 shared types: a field of a type the form cannot draw is not offered, nor its value served', 200 === $st && ! in_array( 'odd', $offered, true ) && ! array_key_exists( 'odd', (array) ( $page['values'] ?? array() ) ) && 6 === count( $offered ), $st . ' ' . wp_json_encode( $offered ) );
+	$check( 'R2 shared types: a field of a type the form cannot draw is not offered, nor its value served', 200 === $st && ! in_array( 'odd', $offered, true ) && ! array_key_exists( 'odd', (array) ( $page['values'] ?? array() ) ) && 8 === count( $offered ), $st . ' ' . wp_json_encode( $offered ) );
 	$check( 'R2 shared types: none of the adapter\'s own keys leaves', ! $leaked, wp_json_encode( $leaked ) );
 	$reset_fixture();
 	list( $st ) = $send( 'POST', $fx, array( 'values' => array( 'odd' => 'changed' ) ) );
@@ -322,6 +342,62 @@ try {
 	list( $st ) = $send( 'POST', $fx, array( 'values' => array( 'plain' => 'Two' ) ) );
 	$check( 'R8 stale copy control: a body with no base saves as before', 200 === $st && 'Two' === $GLOBALS['minn_st']['store']['plain'], $st );
 
+	$reset_fixture();
+	list( $st ) = $send( 'POST', $fx, array( 'values' => array( 'elsewhere' => 'here' ) ) );
+	$check( 'R2 shared types: a key from another tab is ignored', 200 === $st && array() === ( Minn_Admin_Kernel_Settings::journal()['changes'] ?? null ) && 'away' === $GLOBALS['minn_st']['store']['far'] && $wrote_nothing(), $st . ' ' . wp_json_encode( Minn_Admin_Kernel_Settings::journal() ) );
+
+	$reset_fixture();
+	list( $st ) = $send( 'POST', $fx, array( 'values' => array( 'flag' => 'off' ) ) );
+	$check( 'R3 untouched: a switch sent as "off" reads as off in the compare and the write alike', 200 === $st && '' === $GLOBALS['minn_st']['store']['flag'], $st . ' ' . wp_json_encode( $GLOBALS['minn_st']['store']['flag'] ) );
+
+	$reset_fixture();
+	list( $st ) = $send( 'POST', $fx, array( 'values' => array( 'num' => '01234567890123456789' ) ) );
+	$check( 'R3 untouched: a long whole number in another spelling is no change', 200 === $st && $wrote_nothing(), wp_json_encode( Minn_Admin_Kernel_Settings::journal() ) );
+	$reset_fixture();
+	list( $st ) = $send( 'POST', $fx, array( 'values' => array( 'num' => '1234567890123456790' ) ) );
+	$check( 'R3 untouched: a long whole number that differs in its last digit is a change, and is written', 200 === $st && '1234567890123456790' === $GLOBALS['minn_st']['store']['num'], $st . ' ' . wp_json_encode( $GLOBALS['minn_st']['store']['num'] ) );
+
+	$strip = true;
+	$reset_fixture();
+	list( $st ) = $send( 'POST', $fx, array( 'values' => array( 'code' => '<i>new</i>' ), 'base' => array( 'code' => 'not what was stored' ) ) );
+	$strip = false;
+	$check( 'R5 field gates: a field the caller may not change answers 403 before its base is looked at', 403 === $st && $wrote_nothing(), (string) $st );
+
+	// An options-API screen: a placeholder goes back where it was shown.
+	$ox = '/minn-admin/v1/minn-st-options/main';
+	$reset_fixture();
+	list( $st, $opage ) = $send( 'GET', $ox );
+	$ov   = (array) ( $opage['values'] ?? array() );
+	$rows = (array) ( $ov['rows'] ?? array() );
+	$check( 'R4 masks (restore): the options screen shows the row\'s key as its placeholder', 200 === $st && $fp( $key ) === ( $rows[0]['key'] ?? null ), $st . ' ' . wp_json_encode( $rows ) );
+	$edit           = $rows;
+	$edit[1]['svc'] = 'c';
+	list( $st, $d ) = $send( 'POST', $ox, array( 'values' => array( 'rows' => $edit ) ) );
+	$got            = $GLOBALS['minn_st']['store']['rows'];
+	$check( 'R4 masks (restore): an edit to another row saves, and the key beside it stays byte for byte', 200 === $st && $key === ( $got[0]['key'] ?? null ) && 'c' === ( $got[1]['svc'] ?? null ), $st . ' ' . wp_json_encode( array( $d['code'] ?? null, $got ) ) );
+	$reset_fixture();
+	list( $st, $d ) = $send( 'POST', $ox, array( 'values' => array( 'secret' => ( $ov['secret'] ?? '' ) . ' v2' ) ) );
+	$check( 'R4 masks (restore): text typed beside the placeholder saves with the credential back in place', 200 === $st && 'Endpoint ' . $key . ' v2' === $GLOBALS['minn_st']['store']['secret'], $st . ' ' . wp_json_encode( array( $d['code'] ?? null, $GLOBALS['minn_st']['store']['secret'] ) ) );
+	$reset_fixture();
+	$moved          = $rows;
+	$moved[1]['svc'] = $fp( $key );
+	list( $st, $d )  = $send( 'POST', $ox, array( 'values' => array( 'plain' => 'Two', 'rows' => $moved ) ) );
+	$check( 'R4 masks (restore): a placeholder moved to a place it was not shown is refused, and nothing is written', 400 === $st && 'minn_egress_mask' === ( $d['code'] ?? '' ) && $wrote_nothing() && $fixture_store === $GLOBALS['minn_st']['store'], $st . ' ' . wp_json_encode( $GLOBALS['minn_st'] ) );
+	$check( 'R7 named refusals: the moved placeholder names its field', $names_ok( $d, array( 'rows' ) ), wp_json_encode( $d['data'] ?? null ) );
+	$reset_fixture();
+	list( $st, $d ) = $send( 'POST', $ox, array( 'values' => array( 'plain' => 'One ' . $fp( $key ) ) ) );
+	$check( 'R4 masks (restore): a placeholder pasted into a field that never held it is refused', 400 === $st && 'minn_egress_mask' === ( $d['code'] ?? '' ) && $wrote_nothing(), $st . ' ' . wp_json_encode( $d['code'] ?? null ) );
+
+	$guess = static function ( $g ) use ( $send, $ox, $ov, $reset_fixture ) {
+		$reset_fixture();
+		list( $st ) = $send( 'POST', $ox, array( 'values' => array( 'secret' => ( $ov['secret'] ?? '' ) . ' x' ), 'base' => array( 'secret' => $g ) ) );
+		return $st;
+	};
+	$right = $guess( 'Endpoint ' . $key );
+	$wrong = $guess( 'Endpoint not-the-key' );
+	$check( 'R8 stale copy: a base cannot test a guess at a credential (the right guess and a wrong one answer alike, 409)', 409 === $right && $right === $wrong && $wrote_nothing(), $right . ' / ' . $wrong );
+	$check( 'R8 stale copy control: the base as the page was shown it (placeholder and all) saves', 200 === $guess( $ov['secret'] ?? '' ), '' );
+
 	/* ---------- Every declared screen ---------- */
 
 	// Where each screen can be reached: every settings route the app is
@@ -348,6 +424,7 @@ try {
 		}
 	}
 	$candidates[] = $fx;
+	$candidates[] = $ox;
 	// A screen whose body is its own shape: how flat values go into it.
 	$bodies = array(
 		'fluent-forms-emails' => static function ( array $flat ) {
@@ -389,7 +466,8 @@ try {
 			$check( "{$id}: the runner can reach it (add a way to address it here)", false );
 			continue;
 		}
-		$probed = 0;
+		$probed  = 0;
+		$keys_at = array();
 		foreach ( $urls as $url ) {
 			$served = Minn_Admin_Kernel_Settings::served( $id, new WP_REST_Request( 'GET', $url ) );
 			if ( is_wp_error( $served ) ) {
@@ -397,7 +475,8 @@ try {
 				continue;
 			}
 			++$seen;
-			$fields = $served['fields'];
+			$fields          = $served['fields'];
+			$keys_at[ $url ] = array_keys( $fields );
 			$shown  = $masked( $served['values'], $url );
 			$bad    = array();
 			foreach ( $fields as $k => $f ) {
@@ -420,7 +499,7 @@ try {
 
 			list( $st, $d ) = $send( 'POST', $url, $body_for( $id, $shown ) );
 			$j              = Minn_Admin_Kernel_Settings::journal();
-			$check( "R3 untouched: {$url} sent back as served (" . count( $shown ) . ' values) changes nothing', 200 === $st && array() === ( $j['changes'] ?? null ), $st . ' ' . wp_json_encode( array( $j, $d['code'] ?? null ) ) );
+			$check( "R3 untouched: {$url} sent back as served (" . count( $shown ) . ' values) changes nothing', 200 === $st && count( $shown ) > 0 && array() === ( $j['changes'] ?? null ), $st . ' ' . wp_json_encode( array( $j, $d['code'] ?? null ) ) );
 
 			// One plain text field to edit: no raw-output rule, a string value.
 			$pick = null;
@@ -444,7 +523,7 @@ try {
 				list( $st, $d ) = $send( 'POST', $url, $body_for( $id, array( $pick => $was . ' st' ), array( $pick => $was ) ) );
 				$j              = Minn_Admin_Kernel_Settings::journal();
 				$check( "R8 stale copy control: {$url} takes the base the page loaded", 200 === $st && array( $pick ) === ( $j['changes'] ?? null ), $st . ' ' . wp_json_encode( array( $j, $d['code'] ?? null, $d['message'] ?? null ) ) );
-				$want = isset( $def['validate'] ) ? array( 'compare', 'stale', 'gates', 'masks', 'validate' ) : array( 'compare', 'stale', 'gates', 'masks' );
+				$want = isset( $def['validate'] ) ? array( 'compare', 'gates', 'stale', 'masks', 'validate' ) : array( 'compare', 'gates', 'stale', 'masks' );
 				$check( "R6 validator first: {$url} asks " . ( isset( $def['validate'] ) ? 'its validator' : 'every check' ) . ' in order, before the write', $want === ( $j['steps'] ?? null ), wp_json_encode( $j['steps'] ?? null ) );
 			}
 
@@ -465,9 +544,43 @@ try {
 			}
 			++$probed;
 		}
+		// A key another tab offers, sent to this one, is ignored.
+		$tabs = array_keys( $keys_at );
+		if ( count( $tabs ) > 1 ) {
+			$foreign = array_values( array_diff( $keys_at[ $tabs[1] ], $keys_at[ $tabs[0] ] ) );
+			if ( $foreign ) {
+				list( $st ) = $send( 'POST', $tabs[0], $body_for( $id, array( $foreign[0] => 'minn-st ' . $tag ) ) );
+				$j          = Minn_Admin_Kernel_Settings::journal();
+				$check( "R2 shared types: {$tabs[0]} ignores {$foreign[0]}, which another tab offers", 200 === $st && array() === ( $j['changes'] ?? null ) && empty( $j['wrote'] ), $st . ' ' . wp_json_encode( $j ) );
+			}
+		}
+		if ( 'fluent-forms-emails' === $id ) {
+			list( $st, $d ) = $send( 'POST', $tabs[0], array( 'notifications' => array( array( 'metaId' => 999999999, 'subject' => 'x' ) ) ) );
+			$check( "R7 named refusals: {$tabs[0]} names a notification that is not on the form", 400 === $st && 'minn_ffe_unknown' === ( $d['code'] ?? '' ) && $names_ok( $d, array( 'n999999999' ) ), $st . ' ' . wp_json_encode( $d ) );
+		}
 	}
 	Minn_Admin_Kernel_Settings::dry( false );
 	$check( 'every declared screen reachable here was probed', $seen > 0, (string) $seen );
+
+	// The shared Site options route hands a save to the page that owns the
+	// tab; a body that is not JSON would reach it as no change.
+	if ( isset( $routes['/minn-admin/v1/options/(?P<tab>tab-\d+)'] ) ) {
+		list( $st, $d ) = $send( 'POST', '/minn-admin/v1/options/tab-0' );
+		$check( 'R1 declared whole: Site options refuses a save that is not JSON (400)', 400 === $st && 'invalid_body' === ( $d['code'] ?? '' ), $st . ' ' . wp_json_encode( $d['code'] ?? null ) );
+	}
+
+	// Code edits turned off for the site: a raw-output field is refused even
+	// to a caller holding unfiltered_html. Last, since a constant stays.
+	if ( ! defined( 'DISALLOW_FILE_EDIT' ) ) {
+		define( 'DISALLOW_FILE_EDIT', true );
+	}
+	if ( true === DISALLOW_FILE_EDIT && current_user_can( 'unfiltered_html' ) ) {
+		$reset_fixture();
+		list( $st, $d ) = $send( 'POST', $fx, array( 'values' => array( 'plain' => 'Two', 'code' => '<i>new</i>' ) ) );
+		$check( 'R5 field gates: with code edits turned off, a changed raw-output field is refused to a caller with unfiltered_html', 403 === $st && $wrote_nothing() && $names_ok( $d, array( 'code' ) ), $st . ' ' . wp_json_encode( $GLOBALS['minn_st']['log'] ) );
+	} else {
+		$skip( 'R5 code edits: this site turns them off already, or the caller lacks unfiltered_html' );
+	}
 } finally {
 	$clean();
 }

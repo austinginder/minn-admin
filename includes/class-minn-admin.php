@@ -1205,6 +1205,21 @@ class Minn_Admin {
 			return wp_json_encode( $sent ) === wp_json_encode( $served ) || Minn_Admin_Egress::served_as( $sent, $served );
 		}
 		if ( 'number' === $kind && is_numeric( $sent ) && is_numeric( $served ) ) {
+			// Whole numbers compare as digits: a float keeps about fifteen, so
+			// two long ids that differ only at the end would read as equal and
+			// the edit would be dropped. A fraction or exponent compares as a
+			// number ('1.50' is '1.5').
+			$whole = function ( $v ) {
+				if ( ! preg_match( '/^([+-]?)0*(\d+)$/', trim( (string) $v ), $m ) ) {
+					return null;
+				}
+				return ( '-' === $m[1] && '0' !== $m[2] ? '-' : '' ) . $m[2];
+			};
+			$a = $whole( $sent );
+			$b = $whole( $served );
+			if ( null !== $a && null !== $b ) {
+				return $a === $b;
+			}
 			return (float) $sent === (float) $served;
 		}
 		$sent   = str_replace( "\r\n", "\n", (string) $sent );
