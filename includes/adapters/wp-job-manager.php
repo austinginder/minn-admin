@@ -204,7 +204,14 @@ function minn_admin_wpjm_write_values( $post_id, $values ) {
 				$value = (string) $value;
 				break;
 			case 'file':
-				$value = esc_url_raw( (string) $value );
+				// Only an emptied box clears. An address the house rule
+				// refuses cleaned to '' and cleared the stored one.
+				$clean = is_scalar( $value ) ? minn_admin_url_clean( trim( (string) $value ) ) : null;
+				if ( null === $clean ) {
+					$refuse( $key, $f, __( 'Enter an address that starts with http:// or https://.', 'minn-admin' ) );
+					continue 2;
+				}
+				$value = $clean;
 				break;
 			case 'text':
 				$value = is_scalar( $value ) ? (string) $value : '';

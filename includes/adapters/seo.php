@@ -2292,7 +2292,14 @@ add_action( 'rest_api_init', function () {
 
 				$clean = minn_admin_seo_clean_text( $raw, 'textarea' === $type );
 				if ( isset( $def['sanitize'] ) && 'url' === $def['sanitize'] ) {
-					$clean = esc_url_raw( trim( (string) $raw ) );
+					// Only an emptied box clears. An address the house rule
+					// refuses (javascript:, an unknown scheme) cleaned to '' and
+					// cleared the stored canonical without a word.
+					$clean = minn_admin_url_clean( trim( (string) $raw ) );
+					if ( null === $clean ) {
+						$refused['url'][] = $field;
+						continue;
+					}
 				}
 				call_user_func( $plugin['write'], $post->ID, $field, $clean );
 			}
@@ -2300,6 +2307,12 @@ add_action( 'rest_api_init', function () {
 			// fields this save changed are written.
 			if ( ! empty( $refused['rest_forbidden'] ) ) {
 				$error = $refuse( 'rest_forbidden', __( 'You cannot use that media item.', 'minn-admin' ), 403, $refused['rest_forbidden'] );
+				if ( is_wp_error( $error ) ) {
+					return $error;
+				}
+			}
+			if ( ! empty( $refused['url'] ) ) {
+				$error = $refuse( 'rest_invalid_param', __( 'Enter an address that starts with http:// or https://.', 'minn-admin' ), 400, $refused['url'] );
 				if ( is_wp_error( $error ) ) {
 					return $error;
 				}

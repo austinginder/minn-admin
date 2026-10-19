@@ -141,10 +141,34 @@ function minn_admin_ssp_write_values( $post_id, $values ) {
 				$value = ( ! empty( $value ) && 'false' !== $value && '0' !== (string) $value ) ? 'on' : '';
 				break;
 			case 'episode_file':
-				$value = esc_url_raw( (string) $value );
+				// Only an emptied box clears. An address the house rule
+				// refuses (javascript:, an unknown scheme) cleaned to '' and
+				// cleared the stored file without a word.
+				$typed = is_scalar( $value ) ? trim( (string) $value ) : null;
+				$clean = null === $typed ? null : minn_admin_url_clean( $typed );
+				if ( null === $clean ) {
+					$refused[] = array(
+						'key'     => (string) $key,
+						'label'   => isset( $schema[ $key ]['name'] ) ? rtrim( wp_strip_all_tags( (string) $schema[ $key ]['name'] ), ': ' ) : (string) $key,
+						'message' => __( 'Enter a file address that starts with http:// or https://.', 'minn-admin' ),
+					);
+					continue 2;
+				}
+				$value = $clean;
 				break;
 			case 'number':
-				$value = '' === (string) $value ? '' : (string) absint( $value );
+				// A whole number, or empty to clear: absint() made 'abc' a 0
+				// and -5 a 5.
+				$typed = is_scalar( $value ) ? trim( (string) $value ) : null;
+				if ( null === $typed || ( '' !== $typed && ! ctype_digit( $typed ) ) ) {
+					$refused[] = array(
+						'key'     => (string) $key,
+						'label'   => isset( $schema[ $key ]['name'] ) ? rtrim( wp_strip_all_tags( (string) $schema[ $key ]['name'] ), ': ' ) : (string) $key,
+						'message' => __( 'Enter a whole number.', 'minn-admin' ),
+					);
+					continue 2;
+				}
+				$value = '' === $typed ? '' : (string) absint( $typed );
 				break;
 			case 'radio':
 			case 'select':

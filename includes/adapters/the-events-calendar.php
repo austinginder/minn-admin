@@ -436,7 +436,15 @@ add_action( 'rest_api_init', function () {
 					}
 				}
 				if ( array_key_exists( 'website', $value ) && ! Minn_Admin::unchanged( $value['website'], $stored_url ) ) {
-					$data['EventURL'] = wp_slash( esc_url_raw( (string) $value['website'] ) );
+					// Only an emptied box clears. An address the house rule
+					// refuses (javascript:, an unknown scheme) cleaned to '' and
+					// cleared the stored website without a word.
+					$clean = null === $value['website'] || is_scalar( $value['website'] ) ? minn_admin_url_clean( trim( (string) $value['website'] ) ) : null;
+					if ( null === $clean ) {
+						$refuse( 'minn_tec_bad_url', __( 'Enter a web address that starts with http:// or https://.', 'minn-admin' ), 400, array( 'website' ) );
+					} else {
+						$data['EventURL'] = wp_slash( $clean );
+					}
 				}
 				if ( ! $data ) {
 					return $finish();
