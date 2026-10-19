@@ -477,18 +477,20 @@ $check( "S3 the fence's credential list stays bounded on this site ({$n} credent
 /*
  * O3 (review round): UpdraftPlus' remaining secret rows (its settings lock
  * password, the extra databases' logins, its account login for updates,
- * the single-value secret rows of older versions) and its job rows, which
+ * the secret and settings rows of older versions, which it still reads
+ * once to move them, such as the old FTP password and the SFTP and WebDAV
+ * settings) and its job rows, which
  * copy the destinations' settings, a typed password among them, while a
  * backup runs.
  */
 $miss = array();
-foreach ( array( 'updraft_adminlocking', 'updraft_extradbs', 'updraftplus-addons_options', 'updraft_googledrive_secret', 'updraft_googledrive_token', 'updraft_dropboxtk_access_token', 'updraft_dropboxtk_request_token', 'updraft_s3_pass', 'updraft_s3generic_pass', 'updraft_dreamobjects_pass', 'updraft_cloudfiles_apikey', 'updraft_jobdata_' . $tag ) as $o ) {
+foreach ( array( 'updraft_adminlocking', 'updraft_extradbs', 'updraftplus-addons_options', 'updraft_googledrive_secret', 'updraft_googledrive_token', 'updraft_dropboxtk_access_token', 'updraft_dropboxtk_request_token', 'updraft_s3_pass', 'updraft_s3generic_pass', 'updraft_dreamobjects_pass', 'updraft_cloudfiles_apikey', 'updraft_ftp_pass', 'updraft_sftp_settings', 'updraft_webdav_settings', 'updraft_jobdata_' . $tag ) as $o ) {
 	if ( ! Minn_Admin_DB::is_credential_option( $o ) || ! Minn_Admin_DB::redacts_cell( $wpdb->options, 'option_value', array( 'option_name' => $o, 'option_value' => 'x' ) ) ) {
 		$miss[] = $o;
 	}
 }
 $check( 'O3 every remaining UpdraftPlus secret row, and its job rows by name, are redacted whole in the browser', ! $miss, implode( ', ', $miss ) );
-$check( 'O3 control: UpdraftPlus rows holding no secret (history, last backup, last message, schedule stamps, the S3 access key id) stay readable', ! Minn_Admin_DB::is_credential_option( 'updraft_backup_history' ) && ! Minn_Admin_DB::is_credential_option( 'updraft_last_backup' ) && ! Minn_Admin_DB::is_credential_option( 'updraft_lastmessage' ) && ! Minn_Admin_DB::is_credential_option( 'updraft_last_scheduled_fd' ) && ! Minn_Admin_DB::is_credential_option( 'updraft_s3_login' ) );
+$check( 'O3 control: UpdraftPlus rows holding no secret (history, last backup, last message, schedule stamps, the S3 access key id, the old FTP login and host) stay readable', ! Minn_Admin_DB::is_credential_option( 'updraft_backup_history' ) && ! Minn_Admin_DB::is_credential_option( 'updraft_last_backup' ) && ! Minn_Admin_DB::is_credential_option( 'updraft_lastmessage' ) && ! Minn_Admin_DB::is_credential_option( 'updraft_last_scheduled_fd' ) && ! Minn_Admin_DB::is_credential_option( 'updraft_s3_login' ) && ! Minn_Admin_DB::is_credential_option( 'updraft_ftp_login' ) && ! Minn_Admin_DB::is_credential_option( 'updraft_server_address' ) );
 // A job row as UpdraftPlus writes it (update_site_option), holding a typed
 // FTP password no needle would recognise.
 $nonce = 'm047' . $tag . 'ab12';
