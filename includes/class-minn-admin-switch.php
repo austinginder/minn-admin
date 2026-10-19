@@ -50,14 +50,15 @@ class Minn_Admin_Switch {
 	const ENGINE_FLOOR = '0.1.0';
 
 	/**
-	 * The highest release this site has staged: fetched, matched to its
-	 * checksum, signed by a trusted key and holding the version its release
-	 * names. Nothing older is staged again. It rises only on an archive
-	 * that passed those checks, never on what the service names before
-	 * them: a service that is not to be trusted could name a version no
-	 * release carries and so refuse every real release after it, while a
-	 * staged version is one Minn really signed. Not autoloaded: only the
-	 * switch reads it.
+	 * The highest release this site has switched to: fetched, matched to
+	 * its checksum, signed by a trusted key, holding the version its
+	 * release names, and installed. Nothing older is staged again. It
+	 * rises only once a switch completes: never on what the service names
+	 * (a service that is not to be trusted could name a version no release
+	 * carries and so refuse every real release after it), and not at a
+	 * check, which installs nothing (a release pulled after sites checked
+	 * it would leave them refusing the one that replaces it). Not
+	 * autoloaded: only the switch reads it.
 	 */
 	const FLOOR_OPTION = 'minn_admin_switch_floor';
 
@@ -241,7 +242,6 @@ class Minn_Admin_Switch {
 			return new WP_Error( 'minn_switch_zip', __( "Minn's release is not a Minn Engine: its minn/ folder is incomplete.", 'minn-admin' ) );
 		}
 		$version = self::version_of( (string) file_get_contents( $engine . '/bootstrap.php' ) );
-		self::remember( $version );
 		$core    = (string) @file_get_contents( $engine . '/src/Minn/Engine.php' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 		$speaks  = preg_match( "/const WP_VERSION = '([^']+)'/", $core, $m ) ? $m[1] : '';
 		return array(
@@ -284,8 +284,8 @@ class Minn_Admin_Switch {
 		return preg_match( '/^\d+\.\d+\.\d+$/', $seen ) && version_compare( $seen, self::ENGINE_FLOOR, '>' ) ? $seen : self::ENGINE_FLOOR;
 	}
 
-	/** Raises this site's floor to a release it has staged; it never falls. */
-	private static function remember( $version ) {
+	/** Raises this site's floor to a release it has switched to; it never falls. */
+	public static function remember( $version ) {
 		$seen = (string) get_option( self::FLOOR_OPTION, '' );
 		if ( preg_match( '/^\d+\.\d+\.\d+$/', (string) $version ) && ( ! preg_match( '/^\d+\.\d+\.\d+$/', $seen ) || version_compare( $version, $seen, '>' ) ) ) {
 			update_option( self::FLOOR_OPTION, (string) $version, false );
@@ -557,6 +557,7 @@ class Minn_Admin_Switch {
 			);
 		}
 		if ( 0 === $result['code'] ) {
+			self::remember( (string) $held['version'] );
 			// The engine copied itself into the webroot; its staged copy is spent.
 			self::remove( $held['dir'] );
 			return;
@@ -717,6 +718,7 @@ class Minn_Admin_Switch_Command {
 		if ( 0 !== $result['code'] ) {
 			WP_CLI::error( __( 'Minn was not installed; the site is still WordPress.', 'minn-admin' ) );
 		}
+		Minn_Admin_Switch::remember( (string) $staged['version'] );
 		/* translators: %s: Minn Admin's address. */
 		WP_CLI::success( sprintf( __( 'This site now runs on Minn. Minn Admin is at %s', 'minn-admin' ), home_url( '/minn-admin/' ) ) );
 		// WordPress's files have moved away under this process: stop before anything asks for one.
