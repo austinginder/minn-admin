@@ -11,10 +11,11 @@
  * which is already filtered through job_manager_job_listing_data_fields, so
  * site and add-on customizations track live).
  *
- * Writes prefer each field's own declared sanitize_callback (WPJM ships
- * them: application accepts email OR url, dates validate to Y-m-d),
- * falling back per data_type. Their admin save handler is nonce-gated, so
- * Minn's REST saves are never clobbered.
+ * Each field is plain postmeta under its own key, which the fields tier
+ * reads and writes itself (flags as WPJM's 1/0), after each field's own
+ * declared sanitize_callback (WPJM ships them: application accepts email OR
+ * url, dates validate to Y-m-d). Their admin save handler is nonce-gated,
+ * so Minn's REST saves are never clobbered.
  *
  * @package minn-admin
  */
@@ -104,7 +105,7 @@ function minn_admin_wpjm_groups( $post_id = 0 ) {
 		}
 		$type  = isset( $f['auth_edit_field_type'] ) ? (string) $f['auth_edit_field_type'] : ( isset( $f['type'] ) ? (string) $f['type'] : 'text' );
 		$label = isset( $f['label'] ) ? wp_strip_all_tags( (string) $f['label'] ) : $key;
-		$out   = array( 'name' => $key, 'label' => $label );
+		$out   = array( 'name' => $key, 'label' => $label, 'meta' => $key );
 		if ( ! empty( $f['placeholder'] ) && is_string( $f['placeholder'] ) ) {
 			$out['placeholder'] = $f['placeholder'];
 		}
@@ -116,7 +117,8 @@ function minn_admin_wpjm_groups( $post_id = 0 ) {
 				$out['type'] = 'url';
 				break;
 			case 'checkbox':
-				$out['type'] = 'checkbox';
+				$out['type']  = 'checkbox';
+				$out['store'] = 'int';
 				break;
 			case 'select':
 				$options = isset( $f['options'] ) && is_array( $f['options'] ) ? $f['options'] : array();
@@ -133,65 +135,16 @@ function minn_admin_wpjm_groups( $post_id = 0 ) {
 				$locked++;
 				continue 2;
 		}
+		// Their own field sanitizer has the last word (a value it empties is
+		// refused, not stored as a clear).
+		if ( 'checkbox' !== $out['type'] && isset( $f['sanitize_callback'] ) && is_callable( $f['sanitize_callback'] ) ) {
+			$out['sanitize'] = $f['sanitize_callback'];
+		}
 		$fields[] = $out;
 	}
 	return array(
 		array( 'group' => __( 'Listing details', 'minn-admin' ), 'fields' => $fields, 'locked' => $locked ),
 	);
-}
-
-/** Read panel values: { key => value } (checkboxes as bool). */
-function minn_admin_wpjm_read_values( $post_id ) {
-	$out = array();
-	foreach ( minn_admin_wpjm_raw_fields() as $key => $f ) {
-		$type = isset( $f['auth_edit_field_type'] ) ? (string) $f['auth_edit_field_type'] : ( isset( $f['type'] ) ? (string) $f['type'] : 'text' );
-		if ( ! in_array( $type, array( 'text', 'file', 'checkbox', 'select' ), true ) ) {
-			continue;
-		}
-		$val         = get_post_meta( $post_id, $key, true );
-		$out[ $key ] = 'checkbox' === $type ? ( (int) $val > 0 ) : ( is_scalar( $val ) ? (string) $val : '' );
-	}
-	return $out;
-}
-
-/**
- * Store cleaned values through WPJM's own per-field sanitizers.
- *
- * @param int   $post_id Listing id.
- * @param array $changes Meta key => cleaned value, null to clear.
- * @param array $fields  The offered fields, by key.
- * @return array Meta key => why WPJM did not take it.
- */
-function minn_admin_wpjm_store( $post_id, $changes, $fields ) {
-	$schema  = minn_admin_wpjm_raw_fields();
-	$refused = array();
-	foreach ( $changes as $key => $value ) {
-		$f = isset( $schema[ $key ] ) ? $schema[ $key ] : array();
-		if ( 'checkbox' === $fields[ $key ]['type'] ) {
-			// WPJM stores 1/0 integers (data_type integer).
-			update_post_meta( $post_id, $key, $value ? 1 : 0 );
-			continue;
-		}
-		$typed = null === $value ? '' : (string) $value;
-		$value = $typed;
-		// Their own field sanitizer wins when declared (application's
-		// email-or-url rule, the expiry date's Y-m-d validation). A value it
-		// takes away whole is refused, not stored as a clear.
-		if ( isset( $f['sanitize_callback'] ) && is_callable( $f['sanitize_callback'] ) ) {
-			try {
-				$value = call_user_func( $f['sanitize_callback'], $typed, $key );
-			} catch ( \Throwable $e ) {
-				$refused[ $key ] = __( 'WP Job Manager did not accept this value.', 'minn-admin' );
-				continue;
-			}
-			if ( '' !== $typed && ( null === $value || '' === $value || false === $value ) ) {
-				$refused[ $key ] = __( 'WP Job Manager did not accept this value.', 'minn-admin' );
-				continue;
-			}
-		}
-		update_post_meta( $post_id, $key, wp_slash( $value ) ); // update_post_meta() unslashes
-	}
-	return $refused;
 }
 
 // Their per-field VIEW and EDIT callbacks decide what the panel offers
@@ -207,8 +160,6 @@ minn_admin_fields( 'wpjm', function () {
 		'key'         => 'minn_wpjm',
 		'types'       => array( 'job_listing' ),
 		'groups'      => 'minn_admin_wpjm_groups',
-		'read'        => 'minn_admin_wpjm_read_values',
-		'write'       => 'minn_admin_wpjm_store',
 		'description' => __( 'WP Job Manager listing fields for Minn Admin.', 'minn-admin' ),
 	);
 } );

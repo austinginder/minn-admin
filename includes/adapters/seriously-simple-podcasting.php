@@ -10,8 +10,8 @@
  * (CPT_Podcast_Handler::custom_fields() through their service container), so
  * a field SSP adds or a site disables (iTunes fields off) tracks live.
  *
- * Writes mirror SSP's metabox storage exactly: plain postmeta, checkboxes
- * as 'on'/''. SSP's own save_post handler bails without its metabox nonce,
+ * Each field is plain postmeta under its own key, which the fields tier
+ * reads and writes itself (checkboxes in SSP's 'on'/'' shape). SSP's own save_post handler bails without its metabox nonce,
  * so a Minn REST save never gets clobbered. Castos hosting sync (the hidden
  * podmotor and castos fields, sync_status) and the cover-image uploader stay
  * SSP's — cover image counts as locked with the wp-admin escape.
@@ -58,17 +58,17 @@ function minn_admin_ssp_groups() {
 		$label = isset( $f['name'] ) ? rtrim( wp_strip_all_tags( (string) $f['name'] ), ': ' ) : $key;
 		switch ( $type ) {
 			case 'episode_file':
-				$fields[] = array( 'name' => $key, 'label' => $label, 'type' => 'url' );
+				$fields[] = array( 'name' => $key, 'label' => $label, 'type' => 'url', 'meta' => $key );
 				break;
 			case 'text':
 			case 'datepicker': // stored as display text; keep their format
-				$fields[] = array( 'name' => $key, 'label' => $label, 'type' => 'text' );
+				$fields[] = array( 'name' => $key, 'label' => $label, 'type' => 'text', 'meta' => $key );
 				break;
 			case 'number':
-				$fields[] = array( 'name' => $key, 'label' => $label, 'type' => 'number', 'integer' => true, 'min' => 0 );
+				$fields[] = array( 'name' => $key, 'label' => $label, 'type' => 'number', 'integer' => true, 'min' => 0, 'meta' => $key );
 				break;
 			case 'checkbox':
-				$fields[] = array( 'name' => $key, 'label' => $label, 'type' => 'checkbox' );
+				$fields[] = array( 'name' => $key, 'label' => $label, 'type' => 'checkbox', 'meta' => $key, 'store' => 'on' );
 				break;
 			case 'radio':
 			case 'select':
@@ -85,6 +85,7 @@ function minn_admin_ssp_groups() {
 					'choices'  => $options,
 					// SSP's own control always holds one of its choices.
 					'required' => ! array_key_exists( '', $options ),
+					'meta'     => $key,
 				);
 				break;
 			default:
@@ -95,43 +96,6 @@ function minn_admin_ssp_groups() {
 	return array(
 		array( 'group' => __( 'Episode details', 'minn-admin' ), 'fields' => $fields, 'locked' => $locked ),
 	);
-}
-
-/** Read panel values for an episode: { key => value } (checkboxes as bool). */
-function minn_admin_ssp_read_values( $post_id ) {
-	$out = array();
-	foreach ( minn_admin_ssp_raw_fields() as $key => $f ) {
-		$type = isset( $f['type'] ) ? (string) $f['type'] : '';
-		if ( in_array( $type, array( 'hidden', 'sync_status', 'image' ), true ) ) {
-			continue;
-		}
-		$val = get_post_meta( $post_id, $key, true );
-		// SSP checkboxes store 'on' or '' (their metabox convention).
-		$out[ $key ] = 'checkbox' === $type ? ( 'on' === $val ) : ( is_scalar( $val ) ? (string) $val : '' );
-	}
-	return $out;
-}
-
-/**
- * Store cleaned values with SSP's own storage conventions: plain postmeta,
- * checkboxes as 'on' or '', an emptied box as ''.
- *
- * @param int   $post_id Episode id.
- * @param array $changes Meta key => cleaned value, null to clear.
- * @param array $fields  The offered fields, by key.
- */
-function minn_admin_ssp_store( $post_id, $changes, $fields ) {
-	foreach ( $changes as $key => $value ) {
-		if ( 'checkbox' === $fields[ $key ]['type'] ) {
-			$value = $value ? 'on' : '';
-		} elseif ( null === $value ) {
-			$value = '';
-		} elseif ( 'number' === $fields[ $key ]['type'] ) {
-			$value = (string) absint( $value );
-		}
-		update_post_meta( $post_id, $key, wp_slash( (string) $value ) ); // update_post_meta() unslashes
-	}
-	return null;
 }
 
 minn_admin_fields( 'ssp', function () {
@@ -148,8 +112,6 @@ minn_admin_fields( 'ssp', function () {
 			} ) );
 		},
 		'groups'      => 'minn_admin_ssp_groups',
-		'read'        => 'minn_admin_ssp_read_values',
-		'write'       => 'minn_admin_ssp_store',
 		'description' => __( 'Seriously Simple Podcasting episode fields for Minn Admin.', 'minn-admin' ),
 	);
 } );

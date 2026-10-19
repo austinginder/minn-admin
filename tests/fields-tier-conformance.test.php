@@ -138,6 +138,7 @@ $fx_fields = static function () use ( $page ) {
 		array( 'name' => 'so', 'label' => 'Ordered', 'type' => 'select', 'options' => array( array( 'x', 'X' ), array( 'y', 'Y' ) ) ),
 		array( 'name' => 'm', 'label' => 'Picture', 'type' => 'media', 'image' => true ),
 		array( 'name' => 'nt', 'label' => 'Note', 'type' => 'note' ),
+		array( 'name' => 'mt', 'label' => 'Own meta', 'type' => 'text', 'meta' => '_minn_fx_mt' ),
 		array( 'name' => 'rep', 'label' => 'Rows', 'type' => 'repeater' ),
 		array( 'name' => 'odd', 'label' => 'Odd', 'type' => 'text', 'unknown_key' => 1 ),
 	);
@@ -308,7 +309,7 @@ $run = static function ( $T ) use ( $check, $skip, $as, $fx_def, $fx_reset, &$fx
 	$check( 'R1 the read is empty when the plugin\'s check throws', array() === (array) $v, wp_json_encode( $v ) );
 	$fx['can'] = true;
 	$v         = (array) $T::values( $def, $draft );
-	$check( 'R1 the read carries only offered fields', array( 't' => 'stored' ) === $v, wp_json_encode( $v ) );
+	$check( 'R1 the read carries only offered fields', array( 't' => 'stored', 'mt' => '' ) === $v, wp_json_encode( $v ) );
 	$ddef           = $def;
 	$ddef['groups'] = static function () {
 		return array( array( 'group' => 'Digits', 'fields' => array( array( 'name' => '42', 'label' => 'Digits', 'type' => 'text' ) ) ) );
@@ -576,6 +577,97 @@ $run = static function ( $T ) use ( $check, $skip, $as, $fx_def, $fx_reset, &$fx
 		}
 	}
 	$check( 'R1 the REST field is registered on the panel\'s types and no other', array( 'post' ) === $on, wp_json_encode( $on ) );
+
+	// -------------------------------------------- default storage (meta)
+	$m      = $post_of( 'post', $admin );
+	$mpost  = get_post( $m );
+	$mdef   = $def;
+	$mdef['read']   = null;
+	$mdef['write']  = null;
+	$mdef['extra']  = null;
+	$mdef['groups'] = static function () {
+		return array(
+			array(
+				'group'  => 'Meta',
+				'fields' => array(
+					array( 'name' => 'a', 'label' => 'Text', 'type' => 'text', 'meta' => '_minn_fxm_a' ),
+					array( 'name' => 'u', 'label' => 'Link', 'type' => 'url', 'meta' => '_minn_fxm_u' ),
+					array( 'name' => 'n', 'label' => 'Count', 'type' => 'number', 'integer' => true, 'min' => 0, 'meta' => '_minn_fxm_n' ),
+					array( 'name' => 'on', 'label' => 'On', 'type' => 'checkbox', 'meta' => '_minn_fxm_on', 'store' => 'on' ),
+					array( 'name' => 'int', 'label' => 'Int', 'type' => 'checkbox', 'meta' => '_minn_fxm_int', 'store' => 'int' ),
+					array( 'name' => 'flag', 'label' => 'Flag', 'type' => 'checkbox', 'meta' => '_minn_fxm_flag' ),
+					array( 'name' => 'up', 'label' => 'Upper', 'type' => 'text', 'meta' => '_minn_fxm_up', 'sanitize' => static function ( $v ) {
+						if ( 'throw' === $v ) {
+							throw new RuntimeException( 'vendor sanitizer threw' );
+						}
+						return 'gone' === $v ? '' : strtoupper( $v );
+					} ),
+					array( 'name' => 'rows', 'label' => 'Rows', 'type' => 'repeater', 'meta' => '_minn_fxm_rows' ),
+				),
+			),
+		);
+	};
+	$meta = static function ( $k ) use ( $m ) {
+		wp_cache_delete( $m, 'post_meta' );
+		return metadata_exists( 'post', $m, $k ) ? get_post_meta( $m, $k, true ) : null;
+	};
+	update_post_meta( $m, '_minn_fxm_a', wp_slash( 'Save 50%AB <3 C:\new' ) );
+	update_post_meta( $m, '_minn_fxm_u', 'https://example.com/kept' );
+	update_post_meta( $m, '_minn_fxm_on', 'on' );
+	update_post_meta( $m, '_minn_fxm_int', 1 );
+	update_post_meta( $m, '_minn_fxm_rows', 'locked rows' );
+	$v = (array) $T::values( $mdef, $m );
+	$check( 'M R1 a meta field reads its post meta, in its store\'s shape, and only offered fields read', 'Save 50%AB <3 C:\new' === ( $v['a'] ?? null ) && true === ( $v['on'] ?? null ) && true === ( $v['int'] ?? null ) && false === ( $v['flag'] ?? null ) && ! isset( $v['rows'] ), wp_json_encode( $v ) );
+	update_post_meta( $m, '_minn_fxm_on', 'yes' );
+	$v = (array) $T::values( $mdef, $m );
+	$check( 'M R1 a checkbox reads by its store: only \'on\' is on for an on/\'\' store', false === ( $v['on'] ?? null ), wp_json_encode( $v ) );
+	update_post_meta( $m, '_minn_fxm_on', 'on' );
+	$v = $as( $contrib, static function () use ( $T, $mdef, $m ) {
+		return $T::values( $mdef, $m );
+	} );
+	$check( 'M R1 a meta field reads nothing for someone who cannot edit the post', array() === (array) $v, wp_json_encode( $v ) );
+	$rows = $as( $contrib, static function () use ( $T, $mdef, $mpost ) {
+		return $T::save( $mdef, $mpost, array( 'a' => 'theirs' ) );
+	} );
+	$check( 'M R1 a meta field is not written by someone who cannot edit the post', 'Save 50%AB <3 C:\new' === $meta( '_minn_fxm_a' ) && $rows, wp_json_encode( $rows ) );
+	$writes = 0;
+	$count  = static function ( $check ) use ( &$writes ) {
+		$writes++;
+		return $check;
+	};
+	add_filter( 'update_post_metadata', $count );
+	$rows = $T::save( $mdef, $mpost, array( 'a' => 'Save 50%AB <3 C:\new', 'on' => 'true', 'int' => 1 ) );
+	remove_filter( 'update_post_metadata', $count );
+	$check( 'M U a meta value sent back as read is not written at all', 0 === $writes && ! $rows && 'Save 50%AB <3 C:\new' === $meta( '_minn_fxm_a' ), $writes . ' ' . wp_json_encode( $rows ) );
+	$r   = new WP_REST_Request( 'POST', '/wp/v2/posts/' . $m );
+	$out = $T::update( $mdef, array( 'u' => 'javascript:alert(1)', 'a' => 'Typed C:\path 100%Sure' ), $mpost, $r );
+	$held = $T::held( $r );
+	$check( 'M R2 a meta panel\'s refused save answers no error and holds the refusal', null === $out && $held, wp_json_encode( array( $out, $held ) ) );
+	$check( 'M R3 a refused meta value keeps what is stored; the value beside it is stored slashed as core expects', 'https://example.com/kept' === $meta( '_minn_fxm_u' ) && 'Typed C:\path 100%Sure' === $meta( '_minn_fxm_a' ), wp_json_encode( array( $meta( '_minn_fxm_u' ), $meta( '_minn_fxm_a' ) ) ) );
+	$rows = $T::save( $mdef, $mpost, array( 'a' => '<p></p>' ) );
+	$check( 'M R4 a meta value its cleaner empties is refused and the meta kept', $refused( $rows, 'a' ) && 'Typed C:\path 100%Sure' === $meta( '_minn_fxm_a' ), wp_json_encode( $rows ) );
+	$rows = $T::save( $mdef, $mpost, array( 'a' => '', 'u' => null ) );
+	$check( 'M R4 an emptied box deletes its meta', ! $rows && null === $meta( '_minn_fxm_a' ) && null === $meta( '_minn_fxm_u' ), wp_json_encode( array( $rows, $meta( '_minn_fxm_a' ) ) ) );
+	$rows = $T::save( $mdef, $mpost, array( 'on' => false, 'int' => false, 'flag' => true, 'n' => '007' ) );
+	$check( 'M T checkbox: each store keeps its off and on shape', ! $rows && '' === $meta( '_minn_fxm_on' ) && '0' === (string) $meta( '_minn_fxm_int' ) && '1' === $meta( '_minn_fxm_flag' ), wp_json_encode( array( $rows, $meta( '_minn_fxm_on' ), $meta( '_minn_fxm_int' ), $meta( '_minn_fxm_flag' ) ) ) );
+	$check( 'M T number: a whole number is stored without its leading zeros', '7' === $meta( '_minn_fxm_n' ), wp_json_encode( $meta( '_minn_fxm_n' ) ) );
+	$rows = $T::save( $mdef, $mpost, array( 'flag' => false ) );
+	$check( 'M T checkbox: a plain flag turned off is deleted', ! $rows && null === $meta( '_minn_fxm_flag' ), wp_json_encode( $rows ) );
+	$rows = $T::save( $mdef, $mpost, array( 'up' => 'shout' ) );
+	$check( 'M T sanitize: the plugin\'s own cleaner has the last word', ! $rows && 'SHOUT' === $meta( '_minn_fxm_up' ), wp_json_encode( array( $rows, $meta( '_minn_fxm_up' ) ) ) );
+	$rows = $T::save( $mdef, $mpost, array( 'up' => 'gone' ) );
+	$check( 'M R4 a value the plugin\'s cleaner empties is refused and the meta kept', $refused( $rows, 'up' ) && 'SHOUT' === $meta( '_minn_fxm_up' ), wp_json_encode( $rows ) );
+	$rows = $T::save( $mdef, $mpost, array( 'up' => 'throw' ) );
+	$check( 'M R2 a plugin cleaner that throws refuses its field', $refused( $rows, 'up' ) && 'SHOUT' === $meta( '_minn_fxm_up' ), wp_json_encode( $rows ) );
+	$rows = $T::save( $mdef, $mpost, array( 'rows' => 'x' ) );
+	$check( 'M R3 a locked field\'s meta is never written', $refused( $rows, 'rows' ) && 'locked rows' === $meta( '_minn_fxm_rows' ), wp_json_encode( $rows ) );
+	$fx_reset();
+	$rows = $T::save( $def, $post, array( 'mt' => 'Mine', 't' => 'Theirs' ) );
+	wp_cache_delete( $draft, 'post_meta' );
+	$check( 'M a panel may mix: a meta field is stored by the tier, the rest go to the plugin\'s write', 'Mine' === get_post_meta( $draft, '_minn_fx_mt', true ) && array( 't' => 'Theirs' ) === $wrote() && ! $rows, wp_json_encode( array( $wrote(), $rows ) ) );
+	$v = (array) $T::values( $def, $draft );
+	$check( 'M a mixed panel reads its meta field beside the plugin\'s read', 'Mine' === ( $v['mt'] ?? null ), wp_json_encode( $v ) );
+	delete_post_meta( $draft, '_minn_fx_mt' );
 
 	// ------------------------------------------------- declared panels
 	foreach ( Minn_Admin_Kernel_Panels::ids() as $id ) {

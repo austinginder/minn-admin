@@ -38,7 +38,9 @@
  *       'write'  => callable( int $post_id, array $changes, array $fields ): array|WP_Error|null,
  *                   // $changes: name => cleaned value, null to clear. Answers
  *                   // name => message for each value the plugin refused, or a
- *                   // WP_Error that refuses every one of them
+ *                   // WP_Error that refuses every one of them. Both are for
+ *                   // stores the plugin keeps whole (a form saved at once, a
+ *                   // blob); a field that names its post meta needs neither
  *       'extra'  => callable( int $post_id, string $post_type ): array,
  *                   // optional: more keys for the fields route's answer (a
  *                   // search-result preview), asked only once its gates pass
@@ -58,6 +60,12 @@
  *     'required'    => true,       // an emptied box is refused, not a clear
  *     'post_type'   => 'tribe_venue',   // suggest (required): what a pick must be
  *     'image'       => true,       // media: the attachment must be an image
+ *     'meta'        => '_key',     // stored as this post meta (one value): read with
+ *                                  // get_post_meta(), written slashed, deleted to clear
+ *     'store'       => 'on' | 'int',   // checkbox in meta: 'on'/'' or 1/0 (default '1', deleted when off)
+ *     'sanitize'    => callable( mixed $clean, string $name ): mixed,
+ *                                  // the plugin's own cleaner, after the type's; a
+ *                                  // value it empties, or a throw, is refused
  *     'route', 'placeholder', 'help', 'counter', 'cond',   // drawn as given
  *     'check'       => callable( mixed $clean, int $post_id ): true|string,
  *                                  // the plugin's own rule for a cleaned value; a
@@ -103,7 +111,7 @@ final class Minn_Admin_Kernel_Panels {
 	const KEYS = array( 'active', 'label', 'sub', 'key', 'params', 'types', 'can', 'refuse', 'groups', 'read', 'write', 'extra', 'description' );
 
 	/** The keys a field may hold: a field holding any other is locked. */
-	const FIELD_KEYS = array( 'name', 'label', 'type', 'input', 'choices', 'options', 'min', 'max', 'integer', 'html', 'required', 'post_type', 'image', 'route', 'placeholder', 'help', 'counter', 'cond', 'check', 'refuse' );
+	const FIELD_KEYS = array( 'name', 'label', 'type', 'input', 'choices', 'options', 'min', 'max', 'integer', 'html', 'required', 'post_type', 'image', 'route', 'placeholder', 'help', 'counter', 'cond', 'meta', 'store', 'check', 'sanitize', 'refuse' );
 
 	/** What of a field the client is sent. */
 	const WIRE_KEYS = array( 'name', 'label', 'type', 'choices', 'options', 'min', 'max', 'placeholder', 'route', 'help', 'counter', 'cond' );
@@ -233,7 +241,7 @@ final class Minn_Admin_Kernel_Panels {
 				return "holds \"{$k}\", which the tier does not read";
 			}
 		}
-		foreach ( array( 'label', 'key', 'types', 'groups', 'read', 'write' ) as $k ) {
+		foreach ( array( 'label', 'key', 'types', 'groups' ) as $k ) {
 			if ( ! isset( $def[ $k ] ) ) {
 				return "has no \"{$k}\"";
 			}
@@ -241,12 +249,10 @@ final class Minn_Admin_Kernel_Panels {
 		if ( ! is_string( $def['key'] ) || ! preg_match( '/^[a-z][a-z0-9_]*$/', $def['key'] ) ) {
 			return 'has a REST key that is not a lowercase name';
 		}
-		foreach ( array( 'groups', 'read', 'write' ) as $k ) {
-			if ( ! is_callable( $def[ $k ] ) ) {
-				return "has a \"{$k}\" that cannot be called";
-			}
+		if ( ! is_callable( $def['groups'] ) ) {
+			return 'has a "groups" that cannot be called';
 		}
-		foreach ( array( 'can', 'extra' ) as $k ) {
+		foreach ( array( 'read', 'write', 'can', 'extra' ) as $k ) {
 			if ( isset( $def[ $k ] ) && ! is_callable( $def[ $k ] ) ) {
 				return "has a \"{$k}\" that cannot be called";
 			}
@@ -278,8 +284,8 @@ final class Minn_Admin_Kernel_Panels {
 			'can'         => $def['can'] ?? null,
 			'refuse'      => isset( $def['refuse'] ) ? (string) $def['refuse'] : '',
 			'groups'      => $def['groups'],
-			'read'        => $def['read'],
-			'write'       => $def['write'],
+			'read'        => $def['read'] ?? null,
+			'write'       => $def['write'] ?? null,
 			'extra'       => isset( $def['extra'] ) && is_callable( $def['extra'] ) ? $def['extra'] : null,
 			'description' => (string) ( $def['description'] ?? '' ),
 		);
@@ -385,7 +391,15 @@ final class Minn_Admin_Kernel_Panels {
 		if ( 'suggest' === $f['type'] && ( empty( $f['post_type'] ) || ! is_string( $f['post_type'] ) ) ) {
 			return null;
 		}
-		if ( isset( $f['check'] ) && ! is_callable( $f['check'] ) ) {
+		foreach ( array( 'check', 'sanitize' ) as $k ) {
+			if ( isset( $f[ $k ] ) && ! is_callable( $f[ $k ] ) ) {
+				return null;
+			}
+		}
+		if ( isset( $f['meta'] ) && ( ! is_string( $f['meta'] ) || '' === $f['meta'] || in_array( $f['type'], array( 'note', 'suggest', 'media' ), true ) ) ) {
+			return null;
+		}
+		if ( isset( $f['store'] ) && ! in_array( $f['store'], array( 'on', 'int' ), true ) ) {
 			return null;
 		}
 		foreach ( array( 'min', 'max' ) as $k ) {
@@ -496,7 +510,7 @@ final class Minn_Admin_Kernel_Panels {
 			return new stdClass();
 		}
 		$fields = self::fields( $def, $post->ID, $post->post_type );
-		$stored = self::stored( $def, $post->ID );
+		$stored = self::stored( $def, $post->ID, $fields );
 		// An object when empty or when the names are digits, which PHP keys
 		// as ints (a list would leave as a JSON array).
 		$out = array_intersect_key( $stored, $fields );
@@ -504,13 +518,62 @@ final class Minn_Admin_Kernel_Panels {
 	}
 
 	/** What the plugin holds for a post, as its read gives it (nothing when it throws). */
-	private static function stored( array $def, $post_id ) {
-		try {
-			$v = call_user_func( $def['read'], (int) $post_id );
-		} catch ( \Throwable $e ) {
-			return array();
+	private static function stored( array $def, $post_id, array $fields = array() ) {
+		$v = array();
+		if ( is_callable( $def['read'] ) ) {
+			try {
+				$v = call_user_func( $def['read'], (int) $post_id );
+			} catch ( \Throwable $e ) {
+				$v = array();
+			}
+			$v = is_array( $v ) ? $v : ( is_object( $v ) ? (array) $v : array() );
 		}
-		return is_array( $v ) ? $v : ( is_object( $v ) ? (array) $v : array() );
+		foreach ( $fields as $name => $f ) {
+			if ( isset( $f['meta'] ) ) {
+				$raw        = get_post_meta( (int) $post_id, $f['meta'], true );
+				$v[ $name ] = 'checkbox' === $f['type'] ? self::flag_of( $f, $raw ) : ( is_scalar( $raw ) ? (string) $raw : '' );
+			}
+		}
+		return $v;
+	}
+
+	/** A checkbox's stored meta as on or off, in its store's shape. */
+	private static function flag_of( array $f, $raw ) {
+		$store = $f['store'] ?? '';
+		if ( 'on' === $store ) {
+			return 'on' === $raw;
+		}
+		if ( 'int' === $store ) {
+			return (int) $raw > 0;
+		}
+		return ! empty( $raw ) && '0' !== (string) $raw;
+	}
+
+	/**
+	 * Store cleaned values in the post meta their fields name: slashed, as
+	 * update_post_meta() unslashes; a clear deletes, except a checkbox whose
+	 * store keeps its off state.
+	 */
+	private static function store( $post_id, array $changes, array $fields ) {
+		foreach ( $changes as $name => $value ) {
+			$f     = $fields[ $name ];
+			$store = $f['store'] ?? '';
+			if ( 'checkbox' === $f['type'] ) {
+				if ( 'on' === $store ) {
+					update_post_meta( $post_id, $f['meta'], $value ? 'on' : '' );
+				} elseif ( 'int' === $store ) {
+					update_post_meta( $post_id, $f['meta'], $value ? 1 : 0 );
+				} elseif ( $value ) {
+					update_post_meta( $post_id, $f['meta'], '1' );
+				} else {
+					delete_post_meta( $post_id, $f['meta'] );
+				}
+			} elseif ( null === $value ) {
+				delete_post_meta( $post_id, $f['meta'] );
+			} else {
+				update_post_meta( $post_id, $f['meta'], wp_slash( $value ) );
+			}
+		}
 	}
 
 	/**
@@ -553,7 +616,7 @@ final class Minn_Admin_Kernel_Panels {
 			return array_values( $refused );
 		}
 		$fields  = self::fields( $def, $post->ID, $post->post_type );
-		$served  = self::stored( $def, $post->ID );
+		$served  = self::stored( $def, $post->ID, $fields );
 		$changes = array();
 		foreach ( $values as $key => $sent ) {
 			$key = (string) $key;
@@ -590,6 +653,19 @@ final class Minn_Admin_Kernel_Panels {
 						continue;
 					}
 				}
+				if ( null !== $value && isset( $f['sanitize'] ) ) {
+					try {
+						$value = call_user_func( $f['sanitize'], $value, $key );
+					} catch ( \Throwable $e ) {
+						$value = null;
+					}
+					// The plugin's own cleaner taking a value away whole is a
+					// refusal, as the type's is.
+					if ( null === $value || '' === $value || false === $value || ! is_scalar( $value ) ) {
+						$refuse( $key, $f['label'], isset( $f['refuse'] ) && is_string( $f['refuse'] ) && '' !== $f['refuse'] ? $f['refuse'] : __( 'That value was not accepted.', 'minn-admin' ) );
+						continue;
+					}
+				}
 				$changes[ $key ] = $value;
 			} catch ( \Throwable $e ) {
 				$refuse( $key, isset( $fields[ $key ]['label'] ) ? $fields[ $key ]['label'] : $key, __( 'That did not work. Nothing was reported as done.', 'minn-admin' ), 500 );
@@ -598,7 +674,27 @@ final class Minn_Admin_Kernel_Panels {
 		if ( ! $changes ) {
 			return array_values( $refused );
 		}
+		$own = array_filter( $fields, function ( $f ) {
+			return isset( $f['meta'] );
+		} );
+		$mine    = array_intersect_key( $changes, $own );
+		$changes = array_diff_key( $changes, $own );
+		if ( $mine ) {
+			try {
+				self::store( (int) $post->ID, $mine, $fields );
+			} catch ( \Throwable $e ) {
+				foreach ( array_keys( $mine ) as $key ) {
+					$refuse( $key, $fields[ $key ]['label'], __( 'That did not work. Nothing was reported as done.', 'minn-admin' ), 500 );
+				}
+			}
+		}
+		if ( ! $changes ) {
+			return array_values( $refused );
+		}
 		try {
+			if ( ! is_callable( $def['write'] ) ) {
+				throw new LogicException( 'A field with no meta in a panel with no write.' );
+			}
 			$out = call_user_func( $def['write'], (int) $post->ID, $changes, $fields );
 		} catch ( \Throwable $e ) {
 			$out = new WP_Error( 'minn_failed', __( 'That did not work. Nothing was reported as done.', 'minn-admin' ), array( 'status' => 500 ) );
@@ -739,6 +835,9 @@ final class Minn_Admin_Kernel_Panels {
 				$v = trim( $s );
 				if ( ! is_numeric( $v ) || ( ! empty( $f['integer'] ) && ! preg_match( '/^-?\d+$/', $v ) ) ) {
 					return self::says( $f );
+				}
+				if ( ! empty( $f['integer'] ) ) {
+					$v = (string) preg_replace( '/^(-?)0+(?=\d)/', '$1', $v ); // '007' is 7
 				}
 				// '-0' is no less than 0, and no number a field from 0 up takes.
 				$below = isset( $f['min'] ) && ( (float) $v < (float) $f['min'] || ( (float) $f['min'] >= 0 && '-' === substr( $v, 0, 1 ) ) );
