@@ -1488,7 +1488,7 @@ class Minn_Admin_Kernel {
 		// under its own tag, never in their place.
 		$where = $rules['where'];
 		foreach ( $q['where'] as $k => $rule ) {
-			$where[ isset( $where[ $k ] ) ? $k . "\0list" : $k ] = $rule;
+			$where[ array_key_exists( $k, $where ) ? $k . "\0list" : $k ] = $rule;
 		}
 		$q['where'] = $where;
 		return $q;

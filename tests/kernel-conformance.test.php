@@ -2721,8 +2721,19 @@ $nm = array(
 	'count'       => Minn_Admin_Kernel_SQL::count( 'minn_conf_review', array( 'created' => array( 'none' => array( array( 'op' => '<', 'value' => null ) ) ) ) ),
 	'answerable'  => Minn_Admin_Kernel_SQL::count( 'minn_conf_review', array( 'created' => array( 'none' => array( array( 'op' => '<', 'value' => '2026-01-04 00:00:00' ) ) ) ) ),
 	'empty none'  => Minn_Admin_Kernel_SQL::where( array( 'created' => array( 'none' => array() ) ), 'e' )[0],
+	'empty any'   => Minn_Admin_Kernel_SQL::where( array( 'created' => array( 'none' => array( array( 'any' => array() ) ) ) ), 'e' )[0],
 );
-$check( "a 'none' holding a comparison with no value, an empty list or such an arm deeper matches no row; an answerable one still narrows, an empty one still matches all", array( '1 = 0' ) === $nm['null op'] && array( '1 = 0' ) === $nm['bad clock'] && array( '1 = 0' ) === $nm['nested'] && 0 === $nm['count'] && 5 === $nm['answerable'] && array( '1 = 1' ) === $nm['empty none'], wp_json_encode( $nm ) );
+// A malformed arm is still refused beside one that cannot be answered.
+$nm['refused'] = array();
+foreach ( array( array( array( 'op' => 'LIKE', 'value' => null ) ), array( array(), array( 'bogus' => 1 ) ) ) as $arms ) {
+	try {
+		Minn_Admin_Kernel_SQL::where( array( 'created' => array( 'none' => $arms ) ), 'e' );
+		$nm['refused'][] = 'compiled';
+	} catch ( InvalidArgumentException $e ) {
+		$nm['refused'][] = $e->getMessage();
+	}
+}
+$check( "a 'none' holding a comparison with no value, an empty list or such an arm deeper matches no row; an answerable one still narrows, an empty one still matches all", array( '1 = 0' ) === $nm['null op'] && array( '1 = 0' ) === $nm['bad clock'] && array( '1 = 0' ) === $nm['nested'] && 0 === $nm['count'] && 5 === $nm['answerable'] && array( '1 = 1' ) === $nm['empty none'] && array( '1 = 0' ) === $nm['empty any'] && array( 'minn_kernel_operator=LIKE', 'minn_kernel_rule=bogus' ) === $nm['refused'], wp_json_encode( $nm ) );
 
 // Inbox counts take only what they read: a scope handed over by hand would
 // otherwise be ignored and every form counted.
@@ -2739,6 +2750,13 @@ Minn_Admin_Kernel::resource( 'minn-conformance/review-collide', array_merge( $rv
 ) ) ) ) );
 list( , $d ) = $call( 'GET', $rv . '-collide' );
 $check( "a list condition keyed as the scope's own never replaces the scope", 2 === ( $d['total'] ?? -1 ), wp_json_encode( $d ) );
+// Nor one keyed as a fixed IS NULL condition (a value of null).
+Minn_Admin_Kernel::resource( 'minn-conformance/review-collide-null', array_merge( $rv_def, array(
+	'source' => array_merge( $rv_def['source'], array( 'where' => array( 'owner' => null ) ) ),
+	'list'   => array_merge( $rv_def['list'], array( 'filter' => array( 'param' => 'view', 'values' => array( 'all' => array( "owner\0fixed" => array( 10, 20, 30 ) ) ) ) ) ),
+) ) );
+list( , $d ) = $call( 'GET', $rv . '-collide-null' );
+$check( "a list condition keyed as a fixed IS NULL condition never replaces it", 0 === ( $d['total'] ?? -1 ), wp_json_encode( $d ) );
 
 // A route claim compares paths without regard to case, as WordPress
 // matches them, and a pattern it cannot read claims nothing and registers nothing.

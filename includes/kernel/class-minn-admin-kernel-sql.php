@@ -368,19 +368,20 @@ class Minn_Admin_Kernel_SQL {
 			}
 		}
 		if ( 'any' === $kind || 'none' === $kind ) {
-			$none = 'none' === $kind;
-			// An arm that cannot be answered (a comparison with no value, an
-			// empty list) matches no row, and NOT of it would match every row:
-			// a 'none' holding one matches nothing.
-			if ( $none && self::unanswerable( $rule[ $kind ] ) ) {
-				return array( '1 = 0', array() );
-			}
+			$none  = 'none' === $kind;
 			$parts = array();
 			$args  = array();
 			foreach ( $rule[ $kind ] as $one ) {
 				list( $s, $a ) = self::rule( $c, $one );
 				$parts[]       = $s;
 				$args          = array_merge( $args, $a );
+			}
+			// An arm that cannot be answered (a comparison with no value, an
+			// empty list or 'any') matches no row, and NOT of it would match
+			// every row: a 'none' holding one matches nothing. Asked once the
+			// arms compiled, so a malformed one is still refused.
+			if ( $none && self::unanswerable( $rule[ $kind ] ) ) {
+				return array( '1 = 0', array() );
 			}
 			if ( ! $parts ) {
 				return array( $none ? '1 = 1' : '1 = 0', $args );
@@ -407,9 +408,9 @@ class Minn_Admin_Kernel_SQL {
 
 	/**
 	 * Whether rules hold one that cannot be answered, at any depth: a
-	 * comparison whose value is null (a moment its clock could not read) or
-	 * an empty list (an empty IN list, as since() answers for a clock it
-	 * cannot read).
+	 * comparison whose value is null (a moment its clock could not read), an
+	 * empty list (an empty IN list, as since() answers for a clock it cannot
+	 * read) or an empty 'any'.
 	 *
 	 * @param array $rules Rules.
 	 * @return bool
@@ -423,7 +424,7 @@ class Minn_Admin_Kernel_SQL {
 				return true;
 			}
 			foreach ( array( 'any', 'none' ) as $k ) {
-				if ( ! self::is_list( $one ) && isset( $one[ $k ] ) && is_array( $one[ $k ] ) && self::unanswerable( $one[ $k ] ) ) {
+				if ( ! self::is_list( $one ) && isset( $one[ $k ] ) && is_array( $one[ $k ] ) && ( ( 'any' === $k && array() === $one[ $k ] ) || self::unanswerable( $one[ $k ] ) ) ) {
 					return true;
 				}
 			}
