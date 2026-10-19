@@ -545,6 +545,25 @@ class Minn_Admin_Egress {
 		if ( self::$depth < 1 || ! self::tokens( $value ) ) {
 			return $value;
 		}
+		list( $out, $moved, $kept ) = self::put_back( $value, $old_value );
+		if ( $moved ) {
+			self::$refused[] = $what;
+			return $old_value;
+		}
+		if ( $kept ) {
+			error_log( 'minn_egress_kept ' . $what . ' count=' . count( $kept ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		}
+		return $out;
+	}
+
+	/**
+	 * Each mask in a value put back to its credential, only where the old
+	 * value held that credential at the same path, and whether any mask
+	 * could not go back (a moved one), as keep() decides it.
+	 *
+	 * @return array [ value, moved, credentials put back ]
+	 */
+	private static function put_back( $value, $old_value ) {
 		$old = array();
 		self::paths( $old_value, '', $old );
 		$kept    = array();
@@ -563,14 +582,44 @@ class Minn_Admin_Egress {
 				}
 			}
 		}
-		if ( $moved ) {
-			self::$refused[] = $what;
-			return $old_value;
+		return array( $out, $moved, $kept );
+	}
+
+	/**
+	 * The options API's restore for a write that is not an option yet: a
+	 * settings screen whose store takes a value back the way update_option()
+	 * does (the settings tier's 'restore' screens) asks it before any write,
+	 * so a mask that cannot go back refuses the whole save instead of one
+	 * option of it.
+	 *
+	 * @param mixed $sent   The value about to be written.
+	 * @param mixed $stored The stored value it replaces.
+	 * @return array|null array( value ) with every mask put back, or null
+	 *                    when one cannot go back.
+	 */
+	public static function restore_value( $sent, $stored ) {
+		if ( ! self::tokens( $sent ) ) {
+			return array( $sent );
 		}
-		if ( $kept ) {
-			error_log( 'minn_egress_kept ' . $what . ' count=' . count( $kept ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		list( $out, $moved ) = self::put_back( $sent, $stored );
+		return $moved ? null : array( $out );
+	}
+
+	/**
+	 * A value as a minn-admin/v1 response shows it, every credential copy
+	 * masked, without touching the response being built: for a route that
+	 * compares what a page sent with what it was shown.
+	 *
+	 * @param mixed $value Value.
+	 * @return mixed The value, decoded as JSON arrays when anything was masked.
+	 */
+	public static function masked( $value ) {
+		$json = wp_json_encode( $value );
+		if ( false === $json ) {
+			return $value;
 		}
-		return $out;
+		list( $masked, $n ) = self::mask_json( $json, false );
+		return $n ? json_decode( $masked, true ) : $value;
 	}
 
 	/** How many masks a value holds anywhere: strings, keys, deep or non-public properties alike. */

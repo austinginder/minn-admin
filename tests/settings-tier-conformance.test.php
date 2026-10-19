@@ -87,6 +87,12 @@ $fp  = static function ( $k ) {
 $key  = 'MinnSettingsTier' . strtoupper( wp_generate_password( 10, false ) ) . '7731qz';
 $cred = 'pue_install_key_minnst' . $tag;
 add_option( $cred, $key, '', 'no' );
+// Two more: one holding a hyphen, one holding a slash (whose URL-encoded copy
+// differs from it), for the restore's harder cases.
+$hy = 'MinnTierHyphen' . strtoupper( wp_generate_password( 8, false ) ) . '-Tail' . strtoupper( wp_generate_password( 8, false ) ) . '4422qz';
+$sl = 'MinnTierSlash' . strtoupper( wp_generate_password( 8, false ) ) . '/Tail' . strtoupper( wp_generate_password( 8, false ) ) . '9031qz';
+add_option( $cred . 'hy', $hy, '', 'no' );
+add_option( $cred . 'sl', $sl, '', 'no' );
 Minn_Admin_Egress::reset();
 
 $strip  = false;
@@ -99,6 +105,8 @@ $clean = $once( static function () use ( $cred, $filter ) {
 	Minn_Admin_Kernel_Settings::dry( false );
 	remove_filter( 'map_meta_cap', $filter, 10 );
 	delete_option( $cred );
+	delete_option( $cred . 'hy' );
+	delete_option( $cred . 'sl' );
 	Minn_Admin_Egress::reset();
 } );
 
@@ -121,6 +129,8 @@ $fixture_store = array(
 	'rows'    => array( array( 'svc' => 'a', 'key' => $key ), array( 'svc' => 'b', 'key' => 'x' ) ),
 	'num'     => '1234567890123456789',
 	'far'     => 'away',
+	'pair'    => $hy . '-' . $key,
+	'links'   => array( array( 'svc' => 'a', 'key' => $sl ), array( 'svc' => 'b', 'key' => rawurlencode( $sl ) ), array( 'svc' => 'c', 'key' => 'x' ) ),
 );
 $reset_fixture = static function () use ( $fixture_store ) {
 	$GLOBALS['minn_st']['store'] = $fixture_store;
@@ -157,6 +167,8 @@ $fixture = array(
 						$f( 'odd', 'Odd', 'spreadsheet' ),
 						$f( 'rows', 'Integrations', 'rows' ),
 						$f( 'num', 'Account id', 'number' ),
+						$f( 'pair', 'Key pair', 'text' ),
+						$f( 'links', 'Links', 'rows' ),
 					),
 					'locked' => 0,
 				),
@@ -276,7 +288,7 @@ try {
 			}
 		}
 	}
-	$check( 'R2 shared types: a field of a type the form cannot draw is not offered, nor its value served', 200 === $st && ! in_array( 'odd', $offered, true ) && ! array_key_exists( 'odd', (array) ( $page['values'] ?? array() ) ) && 8 === count( $offered ), $st . ' ' . wp_json_encode( $offered ) );
+	$check( 'R2 shared types: a field of a type the form cannot draw is not offered, nor its value served', 200 === $st && ! in_array( 'odd', $offered, true ) && ! array_key_exists( 'odd', (array) ( $page['values'] ?? array() ) ) && 10 === count( $offered ), $st . ' ' . wp_json_encode( $offered ) );
 	$check( 'R2 shared types: none of the adapter\'s own keys leaves', ! $leaked, wp_json_encode( $leaked ) );
 	$reset_fixture();
 	list( $st ) = $send( 'POST', $fx, array( 'values' => array( 'odd' => 'changed' ) ) );
@@ -397,6 +409,36 @@ try {
 	$wrong = $guess( 'Endpoint not-the-key' );
 	$check( 'R8 stale copy: a base cannot test a guess at a credential (the right guess and a wrong one answer alike, 409)', 409 === $right && $right === $wrong && $wrote_nothing(), $right . ' / ' . $wrong );
 	$check( 'R8 stale copy control: the base as the page was shown it (placeholder and all) saves', 200 === $guess( $ov['secret'] ?? '' ), '' );
+	// A guess sent as the value itself, beside a base: the stored value and
+	// any other answer alike (409), so neither the value nor the base tells.
+	$probe = static function ( $value ) use ( $send, $ox, $reset_fixture ) {
+		$reset_fixture();
+		list( $st ) = $send( 'POST', $ox, array( 'values' => array( 'secret' => $value ), 'base' => array( 'secret' => 'a page that never loaded' ) ) );
+		return $st;
+	};
+	$right = $probe( 'Endpoint ' . $key );
+	$wrong = $probe( 'Endpoint not-the-key' );
+	$check( 'R8 stale copy: a guess sent as the value beside a base answers alike, right or wrong (409)', 409 === $right && $right === $wrong && $wrote_nothing(), $right . ' / ' . $wrong );
+
+	// Two placeholders with text typed between them, the first credential
+	// holding the same character typed: each goes back whole.
+	$reset_fixture();
+	$pair_shown = $fp( $hy ) . '-' . $fp( $key );
+	$check( 'R4 masks (restore): the pair is shown as two placeholders', $pair_shown === ( $ov['pair'] ?? null ), wp_json_encode( $ov['pair'] ?? null ) );
+	list( $st, $d ) = $send( 'POST', $ox, array( 'values' => array( 'pair' => $fp( $hy ) . ' -' . $fp( $key ) ) ) );
+	$check( 'R4 masks (restore): text typed between two placeholders puts each credential back whole', 200 === $st && $hy . ' -' . $key === $GLOBALS['minn_st']['store']['pair'], $st . ' ' . wp_json_encode( array( $d['code'] ?? null, $GLOBALS['minn_st']['store']['pair'] ) ) );
+
+	// The same credential raw in one row and URL-encoded in another: an
+	// edit to a third row leaves both as stored.
+	$reset_fixture();
+	$links = (array) ( $ov['links'] ?? array() );
+	$check( 'R4 masks (restore): both copies of the slashed key are shown as its placeholder', $fp( $sl ) === ( $links[0]['key'] ?? null ) && $fp( $sl ) === ( $links[1]['key'] ?? null ), wp_json_encode( $links ) );
+	$links[2]['svc'] = 'c2';
+	list( $st, $d )  = $send( 'POST', $ox, array( 'values' => array( 'links' => $links ) ) );
+	$got             = $GLOBALS['minn_st']['store']['links'];
+	// The options API's own restore puts a key back as the credential at that
+	// place, so the encoded copy may come back raw; the raw one stays raw.
+	$check( 'R4 masks (restore): an edit to another row leaves the raw key byte for byte, and the encoded row still holds the key', 200 === $st && $sl === ( $got[0]['key'] ?? null ) && in_array( $got[1]['key'] ?? null, array( $sl, rawurlencode( $sl ) ), true ) && 'c2' === ( $got[2]['svc'] ?? null ), $st . ' ' . wp_json_encode( array( $d['code'] ?? null, $got ) ) );
 
 	/* ---------- Every declared screen ---------- */
 

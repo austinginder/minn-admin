@@ -1677,7 +1677,8 @@ function minn_admin_acf_value_out( $f, $v ) {
 function minn_admin_acf_value_in( $f, $value, $scope = 'post' ) {
 	switch ( $f['type'] ) {
 		case 'true_false':
-			return ( ! empty( $value ) && 'false' !== $value && '0' !== (string) $value ) ? 1 : 0;
+			// The settings tier's reading of on/off, so "off" is off here too.
+			return Minn_Admin_Kernel_Settings::on( $value ) ? 1 : 0;
 		case 'image':
 		case 'file':
 			return minn_admin_acf_image_in( $value );
