@@ -267,6 +267,13 @@ $field_err = static function ( $data, $panel, $key ) {
 			'includes/class-minn-admin-egress.php'          => 'the rule itself',
 			'includes/class-minn-admin-preview.php'         => 'a merge tag as typed, not stored text',
 			'includes/adapters/transients-manager.php'      => 'withholds_cell() decides on the whole value first',
+			'includes/class-minn-admin-db.php'              => 'a binary cell in hex, after shown_cell() decides redaction',
+			'includes/class-minn-admin-plugin-links.php'    => 'a plugin action link label',
+		);
+		// Cuts of values that are never stored text, by their shape.
+		$fine  = array(
+			'substr( md5('            => 'a hash',
+			'substr( (string) $v, 0, 19 )' => 'a MySQL datetime',
 		);
 		$root  = dirname( __DIR__ ) . '/';
 		$found = array();
@@ -280,12 +287,19 @@ $field_err = static function ( $data, $panel, $key ) {
 				continue;
 			}
 			foreach ( file( $file->getPathname() ) as $i => $line ) {
-				if ( preg_match( "/substr\\([^;]*\\)\\s*\\.\\s*'(…|\\.\\.\\.)'/u", $line ) ) {
+				foreach ( $fine as $shape => $why ) {
+					if ( false !== strpos( $line, $shape ) ) {
+						continue 2;
+					}
+				}
+				// A prefix cut of 16 or more characters, with or without an
+				// ellipsis: a credential the fence knows is at least that long.
+				if ( preg_match( '/\\b(?:mb_)?substr\\(\\s*[^,;]+,\\s*0,\\s*(\\d+)\\s*\\)/', $line, $m ) && (int) $m[1] >= 16 ) {
 					$found[] = $rel . ':' . ( $i + 1 );
 				}
 			}
 		}
-		$check( 'clips: no stored text is cut by hand outside Minn_Admin_Egress::clip()', ! $found, implode( ', ', $found ) );
+		$check( 'clips: no stored text is cut to 16 characters or more by hand outside Minn_Admin_Egress::clip()', ! $found, implode( ', ', $found ) );
 	} finally {
 		$clean();
 	}
