@@ -319,8 +319,8 @@ function minn_admin_fluent_smtp_connection_options( $with_none = false ) {
 	return $out;
 }
 
-/** GET shape for the FluentSMTP settings tab: { groups, values, adminUrl }. */
-function minn_admin_fluent_smtp_settings_shape() {
+/** The misc settings as FluentSMTP reads them: its defaults under the stored row. */
+function minn_admin_fluent_smtp_misc() {
 	$misc = array();
 	if ( class_exists( 'FluentMail\\App\\Models\\Settings' ) ) {
 		try {
@@ -333,7 +333,11 @@ function minn_admin_fluent_smtp_settings_shape() {
 		$stored = get_option( 'fluentmail-settings', array() );
 		$misc   = isset( $stored['misc'] ) && is_array( $stored['misc'] ) ? $stored['misc'] : array();
 	}
+	return $misc;
+}
 
+/** The settings tab as offered: { groups, adminUrl }. */
+function minn_admin_fluent_smtp_settings_layout( array $misc ) {
 	// Simulation can be forced from wp-config — then it's read-only truth.
 	$sim_locked = defined( 'FLUENTMAIL_SIMULATE_EMAILS' ) && FLUENTMAIL_SIMULATE_EMAILS;
 
@@ -399,75 +403,8 @@ function minn_admin_fluent_smtp_settings_shape() {
 
 	return array(
 		'groups'   => $groups,
-		'values'   => array(
-			'default_connection'      => isset( $misc['default_connection'] ) ? (string) $misc['default_connection'] : '',
-			'fallback_connection'     => isset( $misc['fallback_connection'] ) ? (string) $misc['fallback_connection'] : '',
-			'log_emails'              => ! isset( $misc['log_emails'] ) || 'yes' === $misc['log_emails'],
-			'log_saved_interval_days' => $days,
-			'simulate_emails'         => isset( $misc['simulate_emails'] ) && 'yes' === $misc['simulate_emails'],
-		),
 		'adminUrl' => admin_url( 'options-general.php?page=fluent-mail#/settings' ),
 	);
-}
-
-/** POST: whitelist keys, then their Settings::updateMiscSettings. */
-function minn_admin_fluent_smtp_settings_save( WP_REST_Request $request ) {
-	if ( ! class_exists( 'FluentMail\\App\\Models\\Settings' ) ) {
-		return new WP_Error( 'minn_fsmtp_unavailable', __( 'FluentSMTP is not fully loaded.', 'minn-admin' ), array( 'status' => 500 ) );
-	}
-	$body = $request->get_json_params();
-	$vals = isset( $body['values'] ) && is_array( $body['values'] ) ? $body['values'] : array();
-
-	// The settings form sends a field once it is touched, even when it is
-	// put back, so a value sent as the page read it stays as stored: the
-	// clamp below turned a stored 0 ("keep logs forever") into 1 day.
-	$served = (array) ( minn_admin_fluent_smtp_settings_shape()['values'] ?? array() );
-	foreach ( $vals as $key => $v ) {
-		if ( array_key_exists( $key, $served ) && ( is_bool( $served[ $key ] ) ? (bool) $v === $served[ $key ] : is_scalar( $v ) && (string) $v === (string) $served[ $key ] ) ) {
-			unset( $vals[ $key ] );
-		}
-	}
-	if ( ! $vals ) {
-		return minn_admin_fluent_smtp_settings_shape();
-	}
-
-	$model = new \FluentMail\App\Models\Settings();
-	$misc  = (array) $model->getMisc();
-
-	$stored = get_option( 'fluentmail-settings', array() );
-	$conns  = ( is_array( $stored ) && ! empty( $stored['connections'] ) && is_array( $stored['connections'] ) )
-		? $stored['connections'] : array();
-
-	foreach ( array( 'default_connection', 'fallback_connection' ) as $key ) {
-		if ( ! array_key_exists( $key, $vals ) ) {
-			continue;
-		}
-		$pick = (string) $vals[ $key ];
-		if ( '' === $pick && 'fallback_connection' === $key ) {
-			$misc[ $key ] = '';
-			continue;
-		}
-		if ( ! isset( $conns[ $pick ] ) ) {
-			return new WP_Error( 'minn_fsmtp_bad_connection', __( 'That connection no longer exists.', 'minn-admin' ), array( 'status' => 400 ) );
-		}
-		$misc[ $key ] = $pick;
-	}
-	if ( array_key_exists( 'log_emails', $vals ) ) {
-		$misc['log_emails'] = $vals['log_emails'] ? 'yes' : 'no';
-	}
-	if ( array_key_exists( 'simulate_emails', $vals ) && ! ( defined( 'FLUENTMAIL_SIMULATE_EMAILS' ) && FLUENTMAIL_SIMULATE_EMAILS ) ) {
-		$misc['simulate_emails'] = $vals['simulate_emails'] ? 'yes' : 'no';
-	}
-	if ( array_key_exists( 'log_saved_interval_days', $vals ) ) {
-		$misc['log_saved_interval_days'] = (string) max( 1, min( 3650, intval( $vals['log_saved_interval_days'] ) ) );
-	}
-
-	try {
-		$model->updateMiscSettings( $misc ); // their own controller's exact write
-	} catch ( \Throwable $e ) {
-		return new WP_Error( 'minn_fsmtp_save_failed', $e->getMessage(), array( 'status' => 500 ) );
-	}
-	return minn_admin_fluent_smtp_settings_shape();
 }
 
 /** The capability check every FluentSMTP route answers to. */
@@ -701,17 +638,60 @@ minn_admin_endpoint( 'fluent-smtp/status', array(
 	'run'    => 'minn_admin_fluent_smtp_status_model',
 ) );
 
-minn_admin_endpoint( 'fluent-smtp/settings/(?P<tab>[a-z]+)', array(
-	'active' => 'minn_admin_fluent_smtp_active',
-	'gate'   => 'minn_admin_fluent_smtp_can',
-	'run'    => 'minn_admin_fluent_smtp_settings_shape',
-) );
-
-minn_admin_endpoint( 'fluent-smtp/settings/(?P<tab>[a-z]+)', array(
-	'methods' => 'POST',
-	'active'  => 'minn_admin_fluent_smtp_active',
-	'gate'    => 'minn_admin_fluent_smtp_can',
-	'run'     => 'minn_admin_fluent_smtp_settings_save',
+// The misc settings live inside FluentSMTP's own row and are written through
+// its Settings model, as its controller writes them, so the screen reads and
+// writes them itself; the tier compares, checks and refuses first.
+minn_admin_settings( 'fluent-smtp', array(
+	'route'    => 'fluent-smtp/settings/(?P<tab>[a-z]+)',
+	'active'   => 'minn_admin_fluent_smtp_active',
+	'gate'     => 'minn_admin_fluent_smtp_can',
+	'layout'   => function ( $ctx ) {
+		$ctx['memo']['misc'] = $ctx['memo']['misc'] ?? minn_admin_fluent_smtp_misc();
+		return minn_admin_fluent_smtp_settings_layout( $ctx['memo']['misc'] );
+	},
+	'read'     => function ( $f, $ctx ) {
+		$ctx['memo']['misc'] = $ctx['memo']['misc'] ?? minn_admin_fluent_smtp_misc();
+		$v                   = $ctx['memo']['misc'][ $f['key'] ] ?? null;
+		if ( 'log_saved_interval_days' === $f['key'] ) {
+			return null === $v ? '14' : (string) intval( $v );
+		}
+		if ( 'toggle' === $f['type'] ) {
+			// Logging is on until it is turned off; simulation the other way.
+			return 'yes' === $v || ( null === $v && 'log_emails' === $f['key'] );
+		}
+		return is_scalar( $v ) ? (string) $v : '';
+	},
+	'validate' => function ( $changes ) {
+		$stored = get_option( 'fluentmail-settings', array() );
+		$conns  = is_array( $stored ) && ! empty( $stored['connections'] ) && is_array( $stored['connections'] ) ? $stored['connections'] : array();
+		foreach ( array_intersect_key( $changes, array_flip( array( 'default_connection', 'fallback_connection' ) ) ) as $key => $pick ) {
+			// The fallback may be none; any other pick is a connection that exists.
+			if ( ! is_scalar( $pick ) || ( ! isset( $conns[ (string) $pick ] ) && ( '' !== (string) $pick || 'fallback_connection' !== $key ) ) ) {
+				return new WP_Error( 'minn_fsmtp_bad_connection', __( 'That connection no longer exists.', 'minn-admin' ), array( 'status' => 400, 'field' => $key ) );
+			}
+		}
+		return null;
+	},
+	'write'    => function ( $changes ) {
+		if ( ! class_exists( 'FluentMail\\App\\Models\\Settings' ) ) {
+			return new WP_Error( 'minn_fsmtp_unavailable', __( 'FluentSMTP is not fully loaded.', 'minn-admin' ), array( 'status' => 500 ) );
+		}
+		$model = new \FluentMail\App\Models\Settings();
+		$misc  = (array) $model->getMisc();
+		foreach ( $changes as $key => $v ) {
+			if ( 'log_saved_interval_days' === $key ) {
+				$misc[ $key ] = (string) max( 1, min( 3650, intval( $v ) ) );
+			} else {
+				$misc[ $key ] = in_array( $key, array( 'log_emails', 'simulate_emails' ), true ) ? ( Minn_Admin_Kernel_Settings::on( $v ) ? 'yes' : 'no' ) : (string) $v;
+			}
+		}
+		try {
+			$model->updateMiscSettings( $misc ); // their own controller's exact write
+		} catch ( \Throwable $e ) {
+			return new WP_Error( 'minn_fsmtp_save_failed', $e->getMessage(), array( 'status' => 500 ) );
+		}
+		return true;
+	},
 ) );
 
 minn_admin_endpoint( 'fluent-smtp/test', array(

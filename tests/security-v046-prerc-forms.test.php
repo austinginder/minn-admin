@@ -636,7 +636,7 @@ rest_get_server();
  * became 1 day on a save that changed nothing.
  */
 ( function () use ( $check, $skip, $call, $keep_option ) {
-	if ( ! function_exists( 'minn_admin_fluent_smtp_settings_save' ) || ! class_exists( 'FluentMail\\App\\Models\\Settings' ) || ! function_exists( 'minn_admin_fluent_smtp_can' ) || ! minn_admin_fluent_smtp_can() ) {
+	if ( ! class_exists( 'FluentMail\\App\\Models\\Settings' ) || ! function_exists( 'minn_admin_fluent_smtp_can' ) || ! minn_admin_fluent_smtp_can() ) {
 		$skip( 'FluentSMTP settings: FluentSMTP inactive' );
 		return;
 	}
