@@ -243,9 +243,11 @@ $no_row_gate['list']['scope'] = array( 'column' => 'owner', 'allowed' => functio
 	return array( 30 );
 } );
 Minn_Admin_Kernel::resource( 'minn-conformance/norowgate', $no_row_gate );
+$cl_tab = 'not asked';
 Minn_Admin_Kernel::resource( 'minn-conformance/callable', array_merge( $no_row_gate, array(
 	'source' => array(
-		'list' => function () use ( $wpdb, $t ) {
+		'list' => function ( $q ) use ( $wpdb, $t, &$cl_tab ) {
+			$cl_tab = $q['tab'] ?? null;
 			$rows = $wpdb->get_results( "SELECT * FROM {$t} ORDER BY id", ARRAY_A ); // phpcs:ignore
 			return array( $rows, count( $rows ) );
 		},
@@ -317,8 +319,9 @@ list( , $d ) = $call( 'GET', $base, array( 'search' => '_' ) );
 $check( 'a search for _ matches a literal underscore only', 1 === $d['total'], wp_json_encode( $d ) );
 list( , $d ) = $call( 'GET', $base, array( 'owner' => '10 OR 1=1' ) );
 $check( 'a tab value is read as an integer', 2 === $d['total'], wp_json_encode( $d ) );
-list( , $d ) = $call( 'GET', $base, array( 'after' => '2026-01-02 12:00:00', 'status' => 'spam' ) );
-$check( 'a chart day range narrows on the declared column', 1 === $d['total'] );
+list( , $d )  = $call( 'GET', $base, array( 'after' => '2026-01-02 12:00:00', 'status' => 'spam' ) );
+list( , $d2 ) = $call( 'GET', $base, array( 'after' => '2026-01-02 12:00:00' ) );
+$check( 'a chart day range narrows on the declared column', 1 === $d['total'] && 0 === $d2['total'], wp_json_encode( array( $d['total'], $d2['total'] ) ) );
 list( , $d ) = $call( 'GET', $base, array( 'status' => 'trash' ) );
 $check( 'stored entities reach the client as text', 'Delta & Sons' === $d['items'][0]['title'], wp_json_encode( $d ) );
 
@@ -453,6 +456,8 @@ list( $st ) = $call( 'POST', '/minn-admin/v1/minn-conformance/norowgate/1/close'
 $check( 'without a row gate, an action on a row outside the scope is refused', 403 === $st, (string) $st );
 list( , $d ) = $call( 'GET', '/minn-admin/v1/minn-conformance/callable' );
 $check( "a callable source's rows outside the scope never leave", array( 5 ) === array_column( (array) ( $d['items'] ?? array() ), 'id' ), wp_json_encode( $d ) );
+$call( 'GET', '/minn-admin/v1/minn-conformance/callable', array( 'owner' => '30 OR 1=1' ) );
+$check( 'a tab value reaches a source as an integer', 30 === $cl_tab, wp_json_encode( $cl_tab ) );
 
 // Lazy declarations.
 list( , $want ) = $call( 'GET', '/minn-admin/v1/minn-conformance/things' );
@@ -2528,6 +2533,152 @@ if ( ! method_exists( 'Minn_Admin_Kernel', 'table_refused' ) ) {
 	$check( "a whole table: a viewer scope the adapter says shows this viewer everything is shown, one it does not is refused, and an unreadable scope stays refused", ! in_array( false, $tr_v_no, true ) && ! in_array( true, $tr_v_yes, true ) && $tr_v_bad, wp_json_encode( array( $tr_v_no, $tr_v_yes, $tr_v_bad ) ) );
 	$check( "a whole table: a 'viewer' answer that throws or is anything but true refuses", $tr( $p . 'minn_conf_tr_vthrow' ) && $tr( $p . 'minn_conf_tr_vodd' ) );
 }
+
+// --- 1k. Blind spots: meta search, 'ends', PATCH, every field encoding ------
+$bt = $wpdb->prefix . 'minn_conf_blind';
+$bm = $wpdb->prefix . 'minn_conf_blind_meta';
+$wpdb->query( "CREATE TEMPORARY TABLE {$bt} ( id BIGINT UNSIGNED NOT NULL PRIMARY KEY, name VARCHAR(40) NOT NULL, path VARCHAR(80) NOT NULL, status VARCHAR(20) NOT NULL ) ENGINE=InnoDB" ); // phpcs:ignore
+$wpdb->query( "CREATE TEMPORARY TABLE {$bm} ( meta_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, item_id BIGINT UNSIGNED NOT NULL, k VARCHAR(40) NOT NULL, v VARCHAR(200) NOT NULL ) ENGINE=InnoDB" ); // phpcs:ignore
+foreach ( array( array( 1, 'Ann', '/a/report.pdf', 'open' ), array( 2, 'Bo', '/b/photo.png', 'open' ), array( 3, 'Cy', '/c/report.PDF.bak', 'open' ), array( 4, 'Di', '/d/x.pdf', 'done' ), array( 5, 'Ed', '/e/x_pdf', 'open' ) ) as $s ) {
+	$wpdb->insert( $bt, array( 'id' => $s[0], 'name' => $s[1], 'path' => $s[2], 'status' => $s[3] ) );
+}
+foreach ( array( array( 1, 'email', 'ann@x.test' ), array( 2, '_hidden', 'needle-hidden' ), array( 2, 'email', 'bo@x.test' ), array( 3, 'email', 'cy@needle.test' ), array( 4, 'phone', 'needle 555' ) ) as $s ) {
+	$wpdb->insert( $bm, array( 'item_id' => $s[0], 'k' => $s[1], 'v' => $s[2] ) );
+}
+$bl_renamed = array();
+$bl_def     = array(
+	'gates'   => array( 'view' => '__return_true', 'manage' => '__return_true' ),
+	'source'  => array( 'table' => 'minn_conf_blind', 'key' => 'id', 'columns' => array( 'id', 'name', 'path', 'status' ) ),
+	'list'    => array(
+		'order'  => array( 'column' => 'id', 'dir' => 'ASC' ),
+		'search' => array( 'columns' => array( 'name' ), 'meta' => array( 'table' => 'minn_conf_blind_meta', 'key' => 'item_id', 'name' => 'k', 'value' => 'v', 'skip' => '_' ) ),
+		'facets' => array( array( 'param' => 'kind', 'values' => array( 'pdf' => array( 'path' => array( 'ends' => '.pdf' ) ), 'odd' => array( 'path' => array( 'ends' => '_pdf' ) ) ) ) ),
+		'fields' => array( 'id' => 'int' ),
+	),
+	'item'    => array(
+		'view'   => function ( $row ) {
+			return array( 'id' => (int) $row['id'], 'name' => $row['name'] );
+		},
+		'fields' => array( 'id' => 'int', 'name' => 'text' ),
+	),
+	'actions' => array(
+		'rename' => array(
+			'method' => 'PATCH',
+			'gate'   => 'manage',
+			'when'   => array( 'status' => array( 'open' ) ),
+			'args'   => array( 'name' => array( 'type' => 'string', 'required' => true ) ),
+			'run'    => function ( $id, $row, $r ) use ( $wpdb, $bt, &$bl_renamed ) {
+				$bl_renamed[] = $id;
+				$wpdb->update( $bt, array( 'name' => (string) $r['name'] ), array( 'id' => $id ) );
+				return true;
+			},
+			'expect' => function ( $id, $fresh, $ran ) {
+				return is_array( $fresh ) && 'Renamed' === $fresh['name'];
+			},
+		),
+		'again'  => array(
+			'method' => 'PATCH',
+			'gate'   => 'manage',
+			'run'    => '__return_true',
+			'expect' => array( 'status' => 'open' ),
+		),
+	),
+);
+Minn_Admin_Kernel::resource( 'minn-conformance/blind', $bl_def );
+$bl_only                             = $bl_def;
+$bl_only['list']['search']['meta']   = array( 'table' => 'minn_conf_blind_meta', 'key' => 'item_id', 'name' => 'k', 'value' => 'v', 'only' => 'email' );
+Minn_Admin_Kernel::resource( 'minn-conformance/blind-only', $bl_only );
+$bl = '/minn-admin/v1/minn-conformance/blind';
+$bl_ids = function ( $route, array $params ) use ( $call ) {
+	list( , $d ) = $call( 'GET', $route, $params );
+	return array_column( (array) ( $d['items'] ?? array() ), 'id' );
+};
+$bl_meta = array(
+	'needle' => $bl_ids( $bl, array( 'search' => 'needle' ) ),
+	'ann'    => $bl_ids( $bl, array( 'search' => 'ann' ) ),
+	'bo@'    => $bl_ids( $bl, array( 'search' => 'bo@' ) ),
+	'only'   => $bl_ids( $bl . '-only', array( 'search' => 'needle' ) ),
+	'%'      => $bl_ids( $bl, array( 'search' => '%' ) ),
+);
+$check( "a search matches a row by its meta values: a name it skips never, one it is limited to only, the row's own meta and no other row's, a wildcard as a literal", array( 3, 4 ) === $bl_meta['needle'] && array( 1 ) === $bl_meta['ann'] && array( 2 ) === $bl_meta['bo@'] && array( 3 ) === $bl_meta['only'] && array() === $bl_meta['%'], wp_json_encode( $bl_meta ) );
+$bl_ends = array( $bl_ids( $bl, array( 'kind' => 'pdf' ) ), $bl_ids( $bl, array( 'kind' => 'odd' ) ) );
+$bl_php  = array(
+	Minn_Admin_Kernel_SQL::matches( array( 'p' => '/A/X.PDF' ), array( 'p' => array( 'ends' => '.pdf' ) ) ),
+	Minn_Admin_Kernel_SQL::matches( array( 'p' => '/c/x.pdf.bak' ), array( 'p' => array( 'ends' => '.pdf' ) ) ),
+	Minn_Admin_Kernel_SQL::matches( array( 'p' => 'pdf' ), array( 'p' => array( 'ends' => 'x.pdf' ) ) ),
+	Minn_Admin_Kernel_SQL::matches( array( 'p' => 'anything' ), array( 'p' => array( 'ends' => '' ) ) ),
+);
+$check( "'ends' matches a value's end only, its wildcards literal, in SQL and in PHP alike", array( array( 1, 4 ), array( 5 ) ) === $bl_ends && array( true, false, false, true ) === $bl_php, wp_json_encode( array( $bl_ends, $bl_php ) ) );
+$wpdb->query( 'START TRANSACTION' );
+list( $st, $d )   = $call( 'PATCH', $bl . '/2', array(), array( 'name' => 'Renamed' ) );
+list( $st2, $d2 ) = $call( 'PATCH', $bl . '/4', array(), array( 'name' => 'Renamed' ) );
+list( $st3, $d3 ) = $call( 'PATCH', $bl . '/2', array(), array() );
+list( $st4 )      = $call( 'POST', $bl . '/2/rename', array(), array( 'name' => 'Renamed' ) );
+list( $st5 )      = $call( 'PATCH', $bl . '/2/rename', array(), array( 'name' => 'Renamed' ) );
+$wpdb->query( 'ROLLBACK' );
+$bl_ui = Minn_Admin_Kernel::ui( 'minn-conformance/blind', 'rename', array( 'label' => 'Rename' ) );
+$check( 'a PATCH action answers on the item route, in its state only, its args checked, one PATCH per route, and a descriptor points at it', 200 === $st && true === ( $d['ok'] ?? null ) && 400 === $st2 && 'bad_status' === ( $d2['code'] ?? '' ) && 400 === $st3 && 'rest_missing_callback_param' === ( $d3['code'] ?? '' ) && 404 === $st4 && 404 === $st5 && array( 2 ) === $bl_renamed && 'PATCH' === $bl_ui['method'] && 'minn-admin/v1/minn-conformance/blind/{id}' === $bl_ui['route'] && $rv_drew( 'minn-conformance/blind action again: PATCH on its route is taken' ), wp_json_encode( array( $st, $d, $st2, $st3, $st4, $st5, $bl_renamed, $bl_ui ) ) );
+
+// Every field encoding, on a site ten hours ahead of UTC.
+$bl_zone = function () {
+	return '';
+};
+$bl_ten  = function () {
+	return 10;
+};
+add_filter( 'pre_option_timezone_string', $bl_zone );
+add_filter( 'pre_option_gmt_offset', $bl_ten );
+$enc  = function ( $spec, $v ) {
+	return Minn_Admin_Kernel_Fields::encode( Minn_Admin_Kernel_Fields::spec( $spec ), $v );
+};
+$at   = '2026-01-02 03:04:05';
+$ts   = 1767323045; // 2026-01-02 03:04:05 UTC.
+$dt   = function ( $stored, $wire ) {
+	return array( 'type' => 'datetime', 'stored' => $stored, 'wire' => $wire );
+};
+$encs = array(
+	'bool 0'                     => array( false, $enc( 'bool', '0' ) ),
+	'bool 1'                     => array( true, $enc( 'bool', 1 ) ),
+	'int of text'                => array( 0, $enc( 'int', 'x' ) ),
+	'text of a number'           => array( '5', $enc( 'text', 5 ) ),
+	'text keeps entities'        => array( 'a &amp; b', $enc( 'text', 'a &amp; b' ) ),
+	'nullable text null'         => array( null, $enc( array( 'type' => 'text', 'nullable' => true ), null ) ),
+	'nullable int set'           => array( 7, $enc( array( 'type' => 'int', 'nullable' => true ), '7' ) ),
+	'text null'                  => array( '', $enc( 'text', null ) ),
+	'int null'                   => array( 0, $enc( 'int', null ) ),
+	'enum in its set'            => array( 'b', $enc( array( 'type' => 'enum', 'values' => array( 'a', 'b' ) ), 'b' ) ),
+	'enum of a number'           => array( '2', $enc( array( 'type' => 'enum', 'values' => array( 1, 2 ) ), 2 ) ),
+	'raw'                        => array( array( 'x' => array( 1 ) ), $enc( 'raw', array( 'x' => array( 1 ) ) ) ),
+	'a spec with no type is raw' => array( array( 1 ), $enc( array(), array( 1 ) ) ),
+	'site naked'                 => array( '2026-01-02T03:04:05', $enc( $dt( 'site', 'naked' ), $at ) ),
+	'site sql'                   => array( '2026-01-02 03:04:05', $enc( $dt( 'site', 'sql' ), $at ) ),
+	'site iso'                   => array( '2026-01-02T03:04:05+10:00', $enc( $dt( 'site', 'iso' ), $at ) ),
+	'site iso-utc'               => array( '2026-01-01T17:04:05+00:00', $enc( $dt( 'site', 'iso-utc' ), $at ) ),
+	'site z'                     => array( '2026-01-01T17:04:05Z', $enc( $dt( 'site', 'z' ), $at ) ),
+	'utc iso'                    => array( '2026-01-02T13:04:05+10:00', $enc( $dt( 'utc', 'iso' ), $at ) ),
+	'utc z'                      => array( '2026-01-02T03:04:05Z', $enc( $dt( 'utc', 'z' ), $at ) ),
+	'utc z of a zero date'       => array( '', $enc( $dt( 'utc', 'z' ), '0000-00-00 00:00:00' ) ),
+	'utc iso of words'           => array( '', $enc( $dt( 'utc', 'iso' ), 'not a date' ) ),
+	'epoch naked'                => array( '2026-01-02T13:04:05', $enc( $dt( 'epoch', 'naked' ), $ts ) ),
+	'epoch sql'                  => array( '2026-01-02 13:04:05', $enc( $dt( 'epoch', 'sql' ), (string) $ts ) ),
+	'epoch iso'                  => array( '2026-01-02T13:04:05+10:00', $enc( $dt( 'epoch', 'iso' ), $ts ) ),
+	'epoch iso-utc'              => array( '2026-01-02T03:04:05+00:00', $enc( $dt( 'epoch', 'iso-utc' ), $ts ) ),
+	'epoch z'                    => array( '2026-01-02T03:04:05Z', $enc( $dt( 'epoch', 'z' ), $ts ) ),
+	'local-epoch naked'          => array( '2026-01-02T03:04:05', $enc( $dt( 'local-epoch', 'naked' ), $ts ) ),
+	'local-epoch iso-utc'        => array( '2026-01-01T17:04:05+00:00', $enc( $dt( 'local-epoch', 'iso-utc' ), $ts ) ),
+	'local-epoch z'              => array( '2026-01-01T17:04:05Z', $enc( $dt( 'local-epoch', 'z' ), $ts ) ),
+	'a datetime with no wire'    => array( '2026-01-02T03:04:05+10:00', $enc( array( 'type' => 'datetime' ), $at ) ),
+);
+remove_filter( 'pre_option_timezone_string', $bl_zone );
+remove_filter( 'pre_option_gmt_offset', $bl_ten );
+$enc_bad = array();
+foreach ( $encs as $what => $pair ) {
+	if ( $pair[0] !== $pair[1] ) {
+		$enc_bad[ $what ] = $pair[1];
+	}
+}
+$check( 'every field encoding gives its one shape: bool, int, text, nullable, enum, raw, and each datetime clock on each wire', ! $enc_bad, wp_json_encode( $enc_bad ) );
+$check( 'a field the row lacks is left out, and a declared null leaves as its type', array( 'a' => '', 'n' => null ) === Minn_Admin_Kernel_Fields::out( array( 'a' => 'text', 'n' => array( 'type' => 'int', 'nullable' => true ), 'gone' => 'int' ), array( 'a' => null, 'n' => null ) ) );
 
 // --- 2. Every real declaration ----------------------------------------------
 $real = array_filter( Minn_Admin_Kernel::resources(), function ( $r ) {
