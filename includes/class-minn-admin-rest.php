@@ -14420,24 +14420,60 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	 * Whether the one literal define config_define_scan() found is the value
 	 * WordPress runs with. A literal under a branch that did not run, or
 	 * after something that defined the constant first, is not: rewriting it
-	 * would change nothing. A file wp-config.php loads ahead of the line
-	 * can define it first to the very value the line holds, which the
-	 * running value cannot tell apart, so the line counts as live only when
-	 * none of the files loaded before WordPress may define the constant.
+	 * would change nothing. A file wp-config.php loads ahead of the line, or
+	 * one PHP ran before wp-config.php itself (a host's or firewall's
+	 * auto_prepend_file), can define it first to the very value the line
+	 * holds, which the running value cannot tell apart, so the line counts
+	 * as live only when none of those files may define the constant.
 	 *
 	 * @param string        $name   Constant name.
 	 * @param array         $scan   config_define_scan()'s answer, kind 'bool'.
 	 * @param string[]|null $loaded The files wp-config.php loaded, or null to ask PHP.
+	 * @param string[]|null $before The files PHP ran before wp-config.php, or null to ask PHP.
 	 * @return bool
 	 */
-	private static function config_define_live( $name, array $scan, $loaded = null ) {
+	private static function config_define_live( $name, array $scan, $loaded = null, $before = null ) {
 		if ( ! defined( $name ) || ! isset( $scan['value'] ) || constant( $name ) !== $scan['value'] ) {
 			return false;
 		}
 		if ( ! empty( $scan['blind'] ) ) {
 			return false;
 		}
+		if ( self::config_defined_by_loaded( $name, null === $before ? self::config_files_before() : $before ) ) {
+			return false;
+		}
 		return empty( $scan['loads'] ) || ! self::config_defined_by_loaded( $name, null === $loaded ? self::config_loaded_files() : $loaded );
+	}
+
+	/**
+	 * The files PHP ran before wp-config.php: the auto_prepend_file php.ini
+	 * or .user.ini names and, when PHP lists wp-config.php, every file it
+	 * lists ahead of it (what the prepend loaded, the entry script, core's
+	 * loader). A prepend that cannot be found here is kept as named, so it
+	 * reads as a file that cannot be read. WP-CLI does not list
+	 * wp-config.php (see config_loaded_files()), so there the prepend is
+	 * all there is.
+	 *
+	 * @param string[]|null $included What PHP has loaded, or null to ask it.
+	 * @param string|null   $prepend  The prepend as ini names it, or null to ask it.
+	 * @return string[]
+	 */
+	private static function config_files_before( $included = null, $prepend = null ) {
+		$prepend = (string) ( null === $prepend ? ini_get( 'auto_prepend_file' ) : $prepend );
+		$files   = array();
+		if ( '' !== $prepend ) {
+			$found   = stream_resolve_include_path( $prepend );
+			$real    = false === $found ? false : realpath( $found );
+			$files[] = false === $real ? $prepend : $real;
+		}
+		$included = null === $included ? get_included_files() : (array) $included;
+		$path     = self::wpconfig_path();
+		$config   = $path ? realpath( $path ) : false;
+		$at       = false === $config ? false : array_search( $config, $included, true );
+		if ( false !== $at ) {
+			$files = array_merge( $files, array_slice( $included, 0, $at ) );
+		}
+		return array_values( array_unique( $files ) );
 	}
 
 	/**
@@ -14496,7 +14532,8 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	/**
 	 * Whether editing wp-config is possible here, and the current state of each
 	 * debug constant. A constant defined OUTSIDE wp-config (a mu-plugin, the
-	 * host's prepend) is 'locked' — editing wp-config wouldn't change it.
+	 * host's prepend, even to the value wp-config's own line holds) is
+	 * 'locked' — editing wp-config wouldn't change it.
 	 */
 	private static function config_state() {
 		// Clean up the web-root backup older versions left behind (see
