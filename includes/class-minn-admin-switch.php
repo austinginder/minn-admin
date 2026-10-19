@@ -278,7 +278,7 @@ class Minn_Admin_Switch {
 		return null;
 	}
 
-	/** The oldest release this site installs: ENGINE_FLOOR, or the highest it has staged when that is newer. */
+	/** The oldest release this site installs: ENGINE_FLOOR, or the highest it has switched to when that is newer. */
 	private static function floor() {
 		$seen = (string) get_option( self::FLOOR_OPTION, '' );
 		return preg_match( '/^\d+\.\d+\.\d+$/', $seen ) && version_compare( $seen, self::ENGINE_FLOOR, '>' ) ? $seen : self::ENGINE_FLOOR;

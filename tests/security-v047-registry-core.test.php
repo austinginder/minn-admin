@@ -197,9 +197,13 @@ $private = static function ( $class, $method ) {
 			'a define of it inside a comment locks (no tokens, so it fails closed)' => array( $fx( 'p-comment.php', "// define( '{$name}', true );\n" ), true ),
 			'a define with a name it cannot read locks' => array( $looped, true ),
 			'a define of it with a comment before the parenthesis locks' => array( $fx( 'p-gap.php', "define /* x */ ( \"{$name}\", true );\n" ), true ),
+			'a define whose name is an interpolated string locks ("$k")' => array( $fx( 'p-interp.php', "foreach ( array( 'MINN_V047_CORE_A' => 1 ) as \$k => \$v ) {\n\tdefine( \"\$k\", \$v );\n}\n" ), true ),
+			'and one built inside the string ("WP_{$x}")' => array( $fx( 'p-interp-brace.php', "\$x = 'DEBUG_MINN';\ndefine( \"WP_{\$x}\", true );\n" ), true ),
+			'a double-quoted name with an escape locks' => array( $fx( 'p-escape.php', "define( \"MINN_V047_\\x41\", true );\n" ), true ),
 			'a const of that name locks' => array( $fx( 'p-const.php', "const {$name} = true;\n" ), true ),
 			'defined() checks of it alone do not (control)' => array( $fx( 'p-defined.php', "if ( defined( '{$name}' ) ) {\n\t\$x = 1;\n}\n" ), false ),
 			'a define of another constant does not (control)' => array( $fx( 'p-other.php', "define( 'MINN_V047_CORE_OTHER', true );\n" ), false ),
+			'a double-quoted define of another constant does not (control)' => array( $fx( 'p-other-dq.php', "define( \"MINN_V047_CORE_OTHER\", true );\n" ), false ),
 			'a firewall rule matching define text in a string does not (control)' => array( $fx( 'p-rule.php', "\$r = '#^define\\\\(\\\\s*\\'DONOTCACHEDB\\',\\\\s*true';\n" ), false ),
 		);
 		foreach ( $pattern as $label => $c ) {

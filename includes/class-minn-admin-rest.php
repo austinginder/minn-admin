@@ -14535,8 +14535,10 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				return true;
 			}
 			if ( $size > $whole ) {
+				// A double-quoted name holding a $ or a backslash is built
+				// as it runs ("$k", "WP_{$x}"), so it is not a plain string.
 				// A pattern that fails to run (false) counts as a match.
-				$found = preg_match( '/\bdefine' . $gap . '\(' . $gap . '(?:[^\'"\s]|([\'"])' . preg_quote( $name, '/' ) . '\1)/is', $src );
+				$found = preg_match( '/\bdefine' . $gap . '\(' . $gap . '(?:[^\'"\s]|"[^"]*[$\\\\]|([\'"])' . preg_quote( $name, '/' ) . '\1)/is', $src );
 				if ( 0 !== $found ) {
 					return true;
 				}
