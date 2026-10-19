@@ -14501,9 +14501,12 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	/**
 	 * Whether any of these files may define the constant: a define of it,
 	 * a define this cannot name (a loop over a list of settings), or a
-	 * const of that name. A file that cannot be read or is too large to
-	 * scan counts as one that may. With no list (WP-CLI) the running value
-	 * is all there is to judge by.
+	 * const of that name. A file that cannot be read, or is too large to
+	 * read (8 MB), counts as one that may. A file with no define call and
+	 * no mention of the name cannot, however large: a firewall's compiled
+	 * rules, loaded before wp-config.php on every request, run to about a
+	 * megabyte of defined() checks. With no list (WP-CLI) the running
+	 * value is all there is to judge by.
 	 *
 	 * @param string        $name  Constant name.
 	 * @param string[]|null $files Files to read.
@@ -14515,11 +14518,11 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		}
 		foreach ( $files as $file ) {
 			$size = is_readable( (string) $file ) ? filesize( (string) $file ) : false;
-			$src  = false !== $size && $size <= 524288 ? file_get_contents( (string) $file ) : false;
+			$src  = false !== $size && $size <= 8388608 ? file_get_contents( (string) $file ) : false;
 			if ( false === $src ) {
 				return true;
 			}
-			if ( false === stripos( $src, 'define' ) && false === strpos( $src, $name ) ) {
+			if ( ! preg_match( '/\bdefine\s*\(/i', $src ) && false === strpos( $src, $name ) ) {
 				continue;
 			}
 			if ( 'absent' !== self::config_define_scan( $name, $src )['kind'] || preg_match( '/\bconst\s+' . preg_quote( $name, '/' ) . '\b/i', $src ) ) {

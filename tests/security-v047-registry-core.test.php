@@ -58,6 +58,20 @@ $once = static function ( callable $fn ) {
 	register_shutdown_function( $run );
 	return $run;
 };
+// The floor Run on Minn keeps per site: cleared for a section, and put back
+// as it was (value and autoload) however the run ends.
+$floor_option = class_exists( 'Minn_Admin_Switch' ) && defined( 'Minn_Admin_Switch::FLOOR_OPTION' ) ? Minn_Admin_Switch::FLOOR_OPTION : 'minn_admin_switch_floor';
+$keep_floor   = static function () use ( $floor_option, $once ) {
+	global $wpdb;
+	$row = $wpdb->get_row( $wpdb->prepare( "SELECT option_value, autoload FROM {$wpdb->options} WHERE option_name = %s", $floor_option ) );
+	delete_option( $floor_option );
+	return $once( static function () use ( $floor_option, $row ) {
+		delete_option( $floor_option );
+		if ( $row ) {
+			add_option( $floor_option, maybe_unserialize( $row->option_value ), '', in_array( $row->autoload, array( 'yes', 'on', 'auto-on', 'auto' ), true ) ? 'yes' : 'no' );
+		}
+	} );
+};
 $private = static function ( $class, $method ) {
 	if ( ! method_exists( $class, $method ) ) {
 		return null;
@@ -107,6 +121,15 @@ $private = static function ( $class, $method ) {
 		$elsewise = $put( 'prepend-other.php', "<?php\ndefine( 'MINN_V047_CORE_OTHER', true );\nif ( {$name} ) {\n\terror_reporting( E_ALL );\n}\n" );
 		$reads    = $put( 'local-reads.php', "<?php\n\$minn_v047 = 1;\n" );
 		$missing  = $dir . '/prepend-missing.php';
+		// Wordfence's optimized firewall prepends wordfence-waf.php, which
+		// includes its compiled rules (wflogs/rules.php, about 900 KB) on
+		// every request: a large file of defined() checks and no define.
+		$checks   = str_repeat( "if ( defined( 'WFWAF_MINN_V047' ) && \$minn_v047 ) {\n\t\$minn_v047_rules[] = array( 'id' => 1, 'pattern' => '/x/' );\n}\n", 6000 );
+		$rules    = $put( 'rules.php', "<?php\n" . $checks );
+		$waf      = $put( 'prepend-waf.php', "<?php\ninclude __DIR__ . '/rules.php';\n" );
+		$named    = $put( 'rules-named.php', "<?php\n" . $checks . "if ( defined( '{$name}' ) ) {\n\t\$minn_v047 = 2;\n}\n" );
+		$big_def  = $put( 'big-defines.php', "<?php\n" . $checks . "define( '{$name}', true );\n" );
+		$huge     = $put( 'huge.php', "<?php\n" . str_repeat( '// ' . str_repeat( 'x', 1020 ) . "\n", 8300 ) );
 		$plain    = "<?php\ndefine( '{$name}', true );\nrequire_once ABSPATH . 'wp-settings.php';\n";
 		$after    = "<?php\nrequire_once __DIR__ . '/wp-config-local.php';\ndefine( '{$name}', true );\nrequire_once ABSPATH . 'wp-settings.php';\n";
 
@@ -155,7 +178,12 @@ $private = static function ( $class, $method ) {
 			'core\'s own entry files ahead of wp-config.php leave it a switch (control)' => array( $plain, array(), array( ABSPATH . 'index.php', ABSPATH . 'wp-blog-header.php', ABSPATH . 'wp-load.php' ), true ),
 			'a define after a harmless include and a prepend that defines it is locked' => array( $after, array( $reads ), array( $defines ), false ),
 			'a define after a harmless include with a harmless prepend stays a switch (control)' => array( $after, array( $reads ), array( $elsewise ), true ),
+			'N1 a prepend that loads a large file (over 512 KB) of defined() checks alone leaves it a switch (Wordfence\'s compiled rules)' => array( $plain, array(), array( $waf, $rules ), true ),
+			'N1 a large file that checks this very constant with defined() alone leaves it a switch' => array( $plain, array(), array( $named ), true ),
+			'N1 a large file that does define it is still read, and locks (control)' => array( $plain, array(), array( $big_def ), false ),
+			'N1 a file too large to read at all (over 8 MB) still locks' => array( $plain, array(), array( $huge ), false ),
 		);
+		$check( 'N1 the fixture rules file is over 512 KB and the huge one over 8 MB', filesize( $rules ) > 524288 && filesize( $big_def ) > 524288 && filesize( $huge ) > 8388608, filesize( $rules ) . ' / ' . filesize( $huge ) );
 		foreach ( $cases as $label => $c ) {
 			$got = $is_live( $c[0], $c[1], $c[2] );
 			$check( '00-1 ' . $label, $c[3] === $got, $got ? 'offered as a switch' : 'locked' );
@@ -220,6 +248,11 @@ $private = static function ( $class, $method ) {
 		$r  = $child( $other, $name, $src, true );
 		$sw = (array) ( $r['switch'] ?? array() );
 		$check( '00-1 child: a prepend that defines something else leaves the switch (control)', false === ( $sw['locked'] ?? null ), wp_json_encode( $r ) );
+		$big = $dir . '/prepend-rules.php';
+		file_put_contents( $big, "<?php\n" . str_repeat( "if ( defined( 'WFWAF_MINN_V047' ) && \$minn_v047 ) {\n\t\$minn_v047_rules[] = array( 'id' => 1, 'pattern' => '/x/' );\n}\n", 6000 ) );
+		$r  = $child( $big, $name, $src, true );
+		$sw = (array) ( $r['switch'] ?? array() );
+		$check( 'N1 child: a prepend over 512 KB holding only defined() checks leaves the switch', filesize( $big ) > 524288 && false === ( $sw['locked'] ?? null ), wp_json_encode( $r ) );
 
 		// The finding's own shape on this site's wp-config.php: the prepend
 		// defines WP_DEBUG_DISPLAY to the value its literal holds.
@@ -361,7 +394,7 @@ $private = static function ( $class, $method ) {
  * 10-1 the version rule stage() applies to what the archive holds: the
  * version its release names, and nothing older than the floor.
  */
-( static function () use ( $check, $skip ) {
+( static function () use ( $check, $skip, $keep_floor, $floor_option ) {
 	if ( ! class_exists( 'Minn_Admin_Switch' ) || Minn_Admin::is_engine() ) {
 		$skip( '10-1 rule: Run on Minn is not loaded here' );
 		return;
@@ -371,30 +404,58 @@ $private = static function ( $class, $method ) {
 	if ( ! $has ) {
 		return;
 	}
-	$floor = Minn_Admin_Switch::ENGINE_FLOOR;
-	$check( '10-1 rule: the floor is a major.minor.patch version', 1 === preg_match( '/^\d+\.\d+\.\d+$/', $floor ), $floor );
-	$parts = array_map( 'intval', explode( '.', $floor ) );
-	$older = $parts[2] > 0 ? "{$parts[0]}.{$parts[1]}." . ( $parts[2] - 1 ) : ( $parts[1] > 0 ? "{$parts[0]}." . ( $parts[1] - 1 ) . '.99' : '0.0.0' );
-	$newer = "{$parts[0]}.{$parts[1]}." . ( $parts[2] + 1 );
-	$code  = static function ( $e ) {
-		return is_wp_error( $e ) ? $e->get_error_code() : 'none';
-	};
-	$cases = array(
-		// label => [ the archive holds, the release names, refusal ]
-		'an archive holding the version its release names, at the floor, is taken (control)' => array( $floor, $floor, 'none' ),
-		'a newer one is taken (control)' => array( $newer, $newer, 'none' ),
-		'an archive holding another version than its release names is refused' => array( $floor, $newer, 'minn_switch_version' ),
-		'and the other way round' => array( $newer, $floor, 'minn_switch_version' ),
-		'a release older than the floor is refused, though signed in its day' => array( $older, $older, 'minn_switch_old' ),
-		'a pre-release of the floor version is older than it' => array( $floor . '-rc1', $floor . '-rc1', 'minn_switch_old' ),
-		'an archive whose bootstrap names no version is refused' => array( '', $floor, 'minn_switch_version' ),
-		'a zip in hand (no release names a version) at the floor is taken (control)' => array( $floor, '', 'none' ),
-		'a zip in hand older than the floor is refused' => array( $older, '', 'minn_switch_old' ),
-		'a zip in hand naming no version is refused' => array( '', '', 'minn_switch_old' ),
-	);
-	foreach ( $cases as $label => $c ) {
-		$got = $code( Minn_Admin_Switch::version_error( $c[0], $c[1] ) );
-		$check( '10-1 rule: ' . $label, $c[2] === $got, $got );
+	$restore = $keep_floor();
+	try {
+		$floor = Minn_Admin_Switch::ENGINE_FLOOR;
+		$check( '10-1 rule: the floor is a major.minor.patch version', 1 === preg_match( '/^\d+\.\d+\.\d+$/', $floor ), $floor );
+		$parts = array_map( 'intval', explode( '.', $floor ) );
+		$older = $parts[2] > 0 ? "{$parts[0]}.{$parts[1]}." . ( $parts[2] - 1 ) : ( $parts[1] > 0 ? "{$parts[0]}." . ( $parts[1] - 1 ) . '.99' : '0.0.0' );
+		$newer = "{$parts[0]}.{$parts[1]}." . ( $parts[2] + 1 );
+		$code  = static function ( $e ) {
+			return is_wp_error( $e ) ? $e->get_error_code() : 'none';
+		};
+		$cases = array(
+			// label => [ the archive holds, the release names, refusal ]
+			'an archive holding the version its release names, at the floor, is taken (control)' => array( $floor, $floor, 'none' ),
+			'a newer one is taken (control)' => array( $newer, $newer, 'none' ),
+			'an archive holding another version than its release names is refused' => array( $floor, $newer, 'minn_switch_version' ),
+			'and the other way round' => array( $newer, $floor, 'minn_switch_version' ),
+			'a release older than the floor is refused, though signed in its day' => array( $older, $older, 'minn_switch_old' ),
+			'a pre-release of the floor version is older than it' => array( $floor . '-rc1', $floor . '-rc1', 'minn_switch_old' ),
+			'an archive whose bootstrap names no version is refused' => array( '', $floor, 'minn_switch_version' ),
+			'a zip in hand (no release names a version) at the floor is taken (control)' => array( $floor, '', 'none' ),
+			'a zip in hand older than the floor is refused' => array( $older, '', 'minn_switch_old' ),
+			'a zip in hand naming no version is refused' => array( '', '', 'minn_switch_old' ),
+		);
+		foreach ( $cases as $label => $c ) {
+			$got = $code( Minn_Admin_Switch::version_error( $c[0], $c[1] ) );
+			$check( '10-1 rule: ' . $label, $c[2] === $got, $got );
+		}
+
+		// N2: the floor rises on its own with what this site has staged.
+		$remember = method_exists( 'Minn_Admin_Switch', 'remember' ) ? new ReflectionMethod( 'Minn_Admin_Switch', 'remember' ) : null;
+		$check( 'N2 Minn Admin keeps the highest release this site has staged (FLOOR_OPTION, remember)', defined( 'Minn_Admin_Switch::FLOOR_OPTION' ) && null !== $remember );
+		if ( null === $remember ) {
+			return;
+		}
+		$remember->setAccessible( true );
+		global $wpdb;
+		$remember->invoke( null, $newer );
+		$autoload = (string) $wpdb->get_var( $wpdb->prepare( "SELECT autoload FROM {$wpdb->options} WHERE option_name = %s", $floor_option ) );
+		$check( 'N2 a staged release is remembered, and not autoloaded', $newer === get_option( $floor_option ) && in_array( $autoload, array( 'no', 'off', 'auto-off' ), true ), wp_json_encode( array( get_option( $floor_option ), $autoload ) ) );
+		$got = $code( Minn_Admin_Switch::version_error( $floor, $floor ) );
+		$check( "N2 once this site has staged {$newer}, the signed {$floor} is refused", 'minn_switch_old' === $got, $got );
+		$got = $code( Minn_Admin_Switch::version_error( $floor, '' ) );
+		$check( "N2 and so is {$floor} as a zip in hand", 'minn_switch_old' === $got, $got );
+		$got = $code( Minn_Admin_Switch::version_error( $newer, $newer ) );
+		$check( "N2 {$newer} itself is still taken, so a check can run again (control)", 'none' === $got, $got );
+		$remember->invoke( null, $floor );
+		$check( 'N2 remembering an older release never lowers the floor', $newer === get_option( $floor_option ), wp_json_encode( get_option( $floor_option ) ) );
+		update_option( $floor_option, 'not a version', false );
+		$got = $code( Minn_Admin_Switch::version_error( $floor, $floor ) );
+		$check( 'N2 a stored value that is not a version leaves the shipped floor (control)', 'none' === $got, $got );
+	} finally {
+		$restore();
 	}
 } )();
 
@@ -403,7 +464,7 @@ $private = static function ( $class, $method ) {
  * naming another version than the archive holds. Only staging runs (fetch,
  * verify, unpack); the folder it makes is removed.
  */
-( static function () use ( $check, $skip, $once ) {
+( static function () use ( $check, $skip, $once, $keep_floor, $floor_option ) {
 	if ( ! class_exists( 'Minn_Admin_Switch' ) || Minn_Admin::is_engine() || is_multisite() || PHP_VERSION_ID < Minn_Admin_Switch::PHP_MIN || ! class_exists( 'ZipArchive' ) ) {
 		$skip( '10-1 stage: needs a single WordPress site on PHP 8.2+ with zip' );
 		return;
@@ -444,6 +505,7 @@ $private = static function ( $class, $method ) {
 			wp_clear_scheduled_hook( $hook );
 		}
 	} );
+	$restore = $keep_floor();
 	try {
 		$release = array(
 			'version'   => $other,
@@ -456,6 +518,7 @@ $private = static function ( $class, $method ) {
 		$check( "10-1 stage: a signed archive holding {$holds} is refused when its release names {$other}", is_wp_error( $r ) && 'minn_switch_version' === $r->get_error_code(), is_wp_error( $r ) ? $r->get_error_code() : 'staged as ' . $r['version'] );
 		clearstatcache();
 		$check( '10-1 stage: and leaves no folder behind', array() === array_diff( $listed(), $was ), wp_json_encode( array_values( array_diff( $listed(), $was ) ) ) );
+		$check( 'N2 stage: a refused archive is not remembered', false === get_option( $floor_option ), wp_json_encode( get_option( $floor_option ) ) );
 		if ( is_array( $r ) ) {
 			Minn_Admin_Switch::remove( $r['dir'] );
 		}
@@ -463,6 +526,7 @@ $private = static function ( $class, $method ) {
 		$r                  = Minn_Admin_Switch::stage( $release );
 		$ok                 = is_array( $r ) && $holds === $r['version'];
 		$check( "10-1 stage: the same archive is staged when its release names {$holds} (control)", $ok, is_wp_error( $r ) ? $r->get_error_code() : wp_json_encode( $r['version'] ?? null ) );
+		$check( "N2 stage: and this site now remembers {$holds}", $holds === get_option( $floor_option ), wp_json_encode( get_option( $floor_option ) ) );
 		if ( is_array( $r ) ) {
 			Minn_Admin_Switch::remove( $r['dir'] );
 		}
@@ -473,7 +537,20 @@ $private = static function ( $class, $method ) {
 		if ( is_array( $r ) ) {
 			Minn_Admin_Switch::remove( $r['dir'] );
 		}
+		// A site that has staged a newer release: the same signed archive,
+		// named as itself, is a replay of a superseded release.
+		update_option( $floor_option, $other, false );
+		$release['version'] = $holds;
+		$release['sha256']  = hash( 'sha256', $bytes );
+		$r                  = Minn_Admin_Switch::stage( $release );
+		$check( "N2 stage: once this site has staged {$other}, the signed {$holds} is refused", is_wp_error( $r ) && 'minn_switch_old' === $r->get_error_code(), is_wp_error( $r ) ? $r->get_error_code() : 'staged as ' . $r['version'] );
+		clearstatcache();
+		$check( 'N2 stage: and leaves no folder behind', array() === array_diff( $listed(), $was ), wp_json_encode( array_values( array_diff( $listed(), $was ) ) ) );
+		if ( is_array( $r ) ) {
+			Minn_Admin_Switch::remove( $r['dir'] );
+		}
 	} finally {
+		$restore();
 		$clean();
 	}
 } )();
