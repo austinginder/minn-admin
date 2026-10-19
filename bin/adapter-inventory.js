@@ -25,8 +25,19 @@
  * (tests/surface-ratchet.test.js). credential_rows counts the rows only the
  * database browser's central lists know about (an entry an adapter also
  * declares does not count), and declared_rows the stores adapters declare
- * with minn_admin_secrets(); the first falls as the second grows. Each
- * hand-written route also gets a kind and
+ * with minn_admin_secrets(); the first falls as the second grows.
+ *
+ * The weight measures count what keeps an adapter from being lean, so the
+ * logic it repeats can move into the kernel (tests/weight-ratchet.test.js):
+ * vendor_guards (function_exists, class_exists, method_exists and defined
+ * calls, the file's own ABSPATH guard aside, and catch blocks), hand_errors
+ * (new WP_Error), detect_helpers (top-level functions named
+ * minn_admin_*_active, _can, _ready, _allowed, _available, _enabled,
+ * _installed or _has_*), cap_checks, and adapter_kernel_lines, the code
+ * lines of the adapters (kits included) and of the kernel (includes/kernel/,
+ * every tier) together, so a line moved into the kernel is not a saving
+ * unless the kernel's copy is smaller. Each hand-written route also gets a
+ * kind and
  * a tier: "declarable" (a list, an item, an item action, a status card) or
  * "handler" (a job, a send, a builder, a licence flow and the like). An
  * adapter is "kernel" when it uses the kernel and registers no routes of its
@@ -293,6 +304,9 @@ function measure( file, src, families ) {
 		mask_rules: count( src, /(Minn_Admin_Egress::(served_as|refuse_masks)|Minn_Admin::unchanged)\s*\(/g ),
 		url_cleaning: count( src, /\b(esc_url_raw|minn_admin_url_clean)\s*\(/g ),
 		hand_clips: handClips( src ),
+		vendor_guards: count( src, /\b(function_exists|class_exists|method_exists|defined)\s*\(/g ) - count( src, /\bdefined\s*\(\s*'ABSPATH'\s*\)/g ) + count( src, /\bcatch\s*\(/g ),
+		hand_errors: count( src, /\bnew\s+WP_Error\s*\(/g ),
+		detect_helpers: count( src, /^function\s+minn_admin_\w+_(active|can|ready|allowed|available|enabled|installed|has_\w+)\s*\(/gm ),
 		resources,
 		endpoints,
 		status: ( resources || endpoints ) && ! routes ? 'kernel' : ( resources || endpoints ) ? 'partial' : 'legacy',
@@ -351,6 +365,10 @@ const snapshot = {
 	mask_rules: sum( 'mask_rules' ),
 	url_cleaning: sum( 'url_cleaning' ),
 	hand_clips: sum( 'hand_clips' ),
+	vendor_guards: sum( 'vendor_guards' ),
+	hand_errors: sum( 'hand_errors' ),
+	detect_helpers: sum( 'detect_helpers' ),
+	adapter_kernel_lines: sum( 'code_lines' ) + kernelCode,
 	credential_rows: centralRows.filter( ( e ) => ! declared.has( e ) ).length,
 	declared_rows: declared.size,
 };
