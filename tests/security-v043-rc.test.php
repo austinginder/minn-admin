@@ -811,8 +811,12 @@ if ( $seo_image ) {
 	wp_set_current_user( $admin );
 	$img2 = wp_insert_attachment( array( 'post_title' => 'minn-v043-og2', 'post_mime_type' => 'image/png', 'post_status' => 'inherit' ), 'minn-v043-og2.png' );
 	wp_set_current_user( $writer );
-	list( $st ) = $call( 'POST', "/wp/v2/posts/{$pid}", array( 'minn_seo' => array( $seo_image => array( 'id' => $img2 ) ) ) );
-	$check( 'SEO panel: that writer still cannot pick a different image (control)', 403 === $st, "status {$st}" );
+	list( $st, $d ) = $call( 'POST', "/wp/v2/posts/{$pid}", array( 'minn_seo' => array( $seo_image => array( 'id' => $img2 ) ) ) );
+	// The post saves; the refused image comes back as a field error.
+	$named = array_filter( (array) ( is_array( $d ) ? ( $d['minn_field_errors'] ?? array() ) : array() ), function ( $row ) use ( $seo_image ) {
+		return 'minn_seo' === ( $row['field'] ?? '' ) && $seo_image === ( $row['key'] ?? '' );
+	} );
+	$check( 'SEO panel: that writer still cannot pick a different image (control)', 200 === $st && $named, "status {$st}" );
 	wp_set_current_user( $admin );
 	wp_delete_attachment( $img2, true );
 	wp_delete_post( $pid, true );

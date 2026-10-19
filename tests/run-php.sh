@@ -128,6 +128,9 @@ MINN_SWAP_ADD=safe-redirect-manager/safe-redirect-manager.php run security-v046-
 MINN_SWAP_ADD=safe-redirect-manager/safe-redirect-manager.php,simple-301-redirects/wp-simple-301-redirects.php run security-v046-rc-round2 single --user=admin --require=tests/lib/plugin-swap.php --require=tests/security-v046-rc-round2.test.php
 run sweep-v044 single --user=admin
 run write-fences single --user=admin
+run security-v047-registry single --user=admin
+# Rank Math stays inactive on the lab; the swap loads it in Yoast's place for this process only.
+MINN_SEO_SWAP=rank-math run security-v047-registry single --user=admin --require=tests/lib/seo-swap.php
 
 # A network, from a site that is not the main one.
 run route-gates subsite --user=admin

@@ -949,12 +949,22 @@ $aio_active = function () {
 			list( , $read ) = $call( 'GET', '/wp/v2/posts/' . $pid, null, array( 'context' => 'edit' ) );
 			return $read['minn_seo']['social_image'] ?? null;
 		};
-		list( $st ) = $call( 'POST', '/wp/v2/posts/' . $pid, array( 'minn_seo' => array( 'social_image' => $txt ) ) );
-		$check( "SEO ({$name}): a text file is refused as the social image", $st >= 400 && null === $image_of(), 'status ' . $st . ' ' . wp_json_encode( $image_of() ) );
+		// The post is stored before its REST fields, so a refused image rides
+		// on the post's 200 as a field error rather than ending the save.
+		$refused = function ( $st, $d, $key ) {
+			foreach ( (array) ( is_array( $d ) ? ( $d['minn_field_errors'] ?? array() ) : array() ) as $row ) {
+				if ( 'minn_seo' === ( $row['field'] ?? '' ) && $key === ( $row['key'] ?? '' ) ) {
+					return 200 === $st;
+				}
+			}
+			return false;
+		};
+		list( $st, $d ) = $call( 'POST', '/wp/v2/posts/' . $pid, array( 'minn_seo' => array( 'social_image' => $txt ) ) );
+		$check( "SEO ({$name}): a text file is refused as the social image", $refused( $st, $d, 'social_image' ) && null === $image_of(), 'status ' . $st . ' ' . wp_json_encode( $image_of() ) );
 		if ( isset( $map['twitter_image'] ) ) {
-			list( $st ) = $call( 'POST', '/wp/v2/posts/' . $pid, array( 'minn_seo' => array( 'twitter_use_facebook' => false, 'twitter_image' => $txt ) ) );
+			list( $st, $d ) = $call( 'POST', '/wp/v2/posts/' . $pid, array( 'minn_seo' => array( 'twitter_use_facebook' => false, 'twitter_image' => $txt ) ) );
 			list( , $read ) = $call( 'GET', '/wp/v2/posts/' . $pid, null, array( 'context' => 'edit' ) );
-			$check( "SEO ({$name}): a text file is refused as the X image", $st >= 400 && null === ( $read['minn_seo']['twitter_image'] ?? null ), 'status ' . $st );
+			$check( "SEO ({$name}): a text file is refused as the X image", $refused( $st, $d, 'twitter_image' ) && null === ( $read['minn_seo']['twitter_image'] ?? null ), 'status ' . $st );
 		}
 		list( $st ) = $call( 'POST', '/wp/v2/posts/' . $pid, array( 'minn_seo' => array( 'social_image' => $img ) ) );
 		$check( "SEO ({$name}): an image still saves (control)", 200 === $st && (int) ( $image_of()['id'] ?? 0 ) === $img['id'], 'status ' . $st . ' ' . wp_json_encode( $image_of() ) );

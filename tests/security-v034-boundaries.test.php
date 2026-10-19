@@ -578,7 +578,15 @@ if ( is_wp_error( $seo_author ) || ! $seo_att || ! $seo_post || is_wp_error( $se
 		$req = new WP_REST_Request( 'POST', '/wp/v2/posts/' . $post_id );
 		$req->set_header( 'Content-Type', 'application/json' );
 		$req->set_body( wp_json_encode( array( 'minn_seo' => array( 'social_image' => array( 'id' => $att_id ) ) ) ) );
-		return rest_do_request( $req )->get_status();
+		$res = rest_do_request( $req );
+		// The post is stored before its REST fields, so the panel's refusal
+		// rides on the post's 200 as a field error rather than ending it.
+		foreach ( (array) ( $res->get_data()['minn_field_errors'] ?? array() ) as $row ) {
+			if ( 'minn_seo' === ( $row['field'] ?? '' ) && 'social_image' === ( $row['key'] ?? '' ) ) {
+				return 403;
+			}
+		}
+		return $res->get_status();
 	};
 	$check( 'Fixture author holds upload_files', user_can( $seo_author, 'upload_files' ) );
 	$check( 'Fixture author cannot read the attachment', ! user_can( $seo_author, 'read_post', $seo_att ) );

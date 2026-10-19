@@ -1918,6 +1918,49 @@ function minn_admin_seo_preview( $plugin, $post_id ) {
 }
 
 /**
+ * Resolve the editor's REST base (or a post type slug) to a post type name.
+ *
+ * @param string $rest_base From the editor.
+ * @return string The post type, or '' when none matches.
+ */
+function minn_admin_seo_resolve_type( $rest_base ) {
+	$rest_base = sanitize_key( $rest_base );
+	if ( '' === $rest_base ) {
+		return '';
+	}
+	foreach ( get_post_types( array( 'show_in_rest' => true ), 'objects' ) as $obj ) {
+		$base = $obj->rest_base ? $obj->rest_base : $obj->name;
+		if ( $base === $rest_base || $obj->name === $rest_base ) {
+			return $obj->name;
+		}
+	}
+	return '';
+}
+
+/**
+ * Whether the active SEO plugin lets the current user edit a post's SEO.
+ *
+ * The vendor's own predicate on top of edit_post. The panel, the values it
+ * reads back and the save all ask this one question, so a role the vendor
+ * hides its metabox from is never shown a panel whose save it then refuses.
+ * A predicate that throws refuses: an unanswerable gate is not an open one.
+ *
+ * @param array $plugin  Active provider.
+ * @param int   $post_id Post id, 0 for a post not saved yet.
+ * @return bool
+ */
+function minn_admin_seo_can_edit( $plugin, $post_id = 0 ) {
+	if ( ! isset( $plugin['can_edit'] ) || ! is_callable( $plugin['can_edit'] ) ) {
+		return true;
+	}
+	try {
+		return (bool) call_user_func( $plugin['can_edit'], (int) $post_id );
+	} catch ( \Throwable $e ) {
+		return false;
+	}
+}
+
+/**
  * Whether the active SEO plugin still offers its own metabox on this post type.
  *
  * Every one of these plugins lets a site switch its SEO controls off for a
@@ -1998,7 +2041,7 @@ add_filter( 'minn_admin_editor_panels', function ( $panels ) {
 		'label'       => 'SEO',
 		'sub'         => $plugin['name'],
 		'cap'         => 'edit_posts',
-		'fieldsRoute' => 'minn-admin/v1/seo/fields?post={id}',
+		'fieldsRoute' => 'minn-admin/v1/seo/fields?post={id}&type={type}',
 		'valuesKey'   => 'minn_seo',
 		'writeKey'    => 'minn_seo',
 	);
@@ -2018,12 +2061,23 @@ add_action( 'rest_api_init', function () {
 		},
 		'args'                => array(
 			'post' => array( 'type' => 'integer' ),
+			'type' => array( 'type' => 'string' ),
 		),
 		'run'                 => function ( $request ) use ( $plugin ) {
 			$post_id = (int) $request->get_param( 'post' );
+			// A panel the save would refuse is a panel not to offer: the post
+			// is stored before its REST fields are written, so a refusal
+			// there came after a new draft already existed.
+			if ( ! minn_admin_seo_can_edit( $plugin, $post_id ) ) {
+				return rest_ensure_response( array( 'groups' => array() ) );
+			}
 			// A post type the vendor withdrew its own metabox from has no SEO
-			// fields on this site, so offer none here either.
+			// fields on this site, so offer none here either. A post not saved
+			// yet has no type of its own; the editor names the one it makes.
 			$ptype = $post_id > 0 ? (string) get_post_type( $post_id ) : '';
+			if ( '' === $ptype ) {
+				$ptype = minn_admin_seo_resolve_type( (string) $request->get_param( 'type' ) );
+			}
 			if ( '' !== $ptype && ! minn_admin_seo_shows_for_type( $plugin, $ptype ) ) {
 				return rest_ensure_response( array( 'groups' => array() ) );
 			}
@@ -2064,16 +2118,8 @@ add_action( 'rest_api_init', function () {
 			// The same vendor predicate the write path asks. A role the SEO
 			// plugin hides its metabox from should not read the values back
 			// either, and reading was the half that never asked.
-			if ( isset( $plugin['can_edit'] ) && is_callable( $plugin['can_edit'] ) ) {
-				$allowed = false;
-				try {
-					$allowed = (bool) call_user_func( $plugin['can_edit'], $id );
-				} catch ( \Throwable $e ) {
-					$allowed = false;
-				}
-				if ( ! $allowed ) {
-					return new stdClass();
-				}
+			if ( ! minn_admin_seo_can_edit( $plugin, $id ) ) {
+				return new stdClass();
 			}
 			// And the other half of the same question the write path asks:
 			// turning the SEO controls off for a content type hides them from
@@ -2084,25 +2130,52 @@ add_action( 'rest_api_init', function () {
 			}
 			return call_user_func( $plugin['read'], $id );
 		},
-		'update_callback' => function ( $value, $post ) use ( $plugin ) {
+		'update_callback' => function ( $value, $post, $field_name = '', $request = null ) use ( $plugin ) {
 			if ( ! is_array( $value ) ) {
 				return null;
 			}
+			$map = null;
+			// Never an error from here. The post is already saved, a new one
+			// included, so an error answer would hide its id from the editor
+			// (each retry and autosave then made another draft) and stop the
+			// controller writing the REST fields registered after this one.
+			// The refusal rides on the post's own answer instead, naming each
+			// field it kept from being stored (minn_admin_panel_report_held()).
+			$refuse = function ( $code, $message, $status, $keys ) use ( $request, $plugin, $post, &$map ) {
+				if ( null === $map ) {
+					$map = minn_admin_seo_field_map( $plugin, $post->ID );
+				}
+				$fields = array();
+				foreach ( $keys as $key ) {
+					$fields[] = array(
+						'key'     => (string) $key,
+						'label'   => isset( $map[ $key ]['label'] ) ? (string) $map[ $key ]['label'] : (string) $key,
+						'message' => $message,
+					);
+				}
+				$error = new WP_Error( $code, $message, array( 'status' => $status, 'fields' => $fields ) );
+				if ( $request instanceof WP_REST_Request && function_exists( 'minn_admin_panel_held' ) ) {
+					minn_admin_panel_held( $request, $error, 'minn_seo' );
+					return null;
+				}
+				return $error;
+			};
+			$sent = array_map( 'strval', array_keys( $value ) );
 			if ( ! current_user_can( 'edit_post', $post->ID ) ) {
-				return new WP_Error( 'rest_forbidden', __( 'You cannot edit SEO fields on this post.', 'minn-admin' ), array( 'status' => 403 ) );
+				return $refuse( 'rest_forbidden', __( 'You cannot edit SEO fields on this post.', 'minn-admin' ), 403, $sent );
 			}
 			// The active SEO plugin may withhold its metabox from this user's
 			// role even when they can edit the post; honor that here so Minn
 			// never writes SEO meta the vendor's own screen would refuse.
-			if ( isset( $plugin['can_edit'] ) && is_callable( $plugin['can_edit'] )
-				&& ! call_user_func( $plugin['can_edit'], $post->ID ) ) {
-				return new WP_Error( 'rest_forbidden', __( 'You cannot edit SEO fields on this site.', 'minn-admin' ), array( 'status' => 403 ) );
+			if ( ! minn_admin_seo_can_edit( $plugin, $post->ID ) ) {
+				return $refuse( 'rest_forbidden', __( 'You cannot edit SEO fields on this site.', 'minn-admin' ), 403, $sent );
 			}
 			// And the same answer the read side gives: a content type the
 			// vendor withdrew its metabox from is not one Minn writes SEO for.
 			if ( ! minn_admin_seo_shows_for_type( $plugin, (string) $post->post_type ) ) {
-				return new WP_Error( 'rest_forbidden', __( 'SEO fields are switched off for this content type.', 'minn-admin' ), array( 'status' => 403 ) );
+				return $refuse( 'rest_forbidden', __( 'SEO fields are switched off for this content type.', 'minn-admin' ), 403, $sent );
 			}
+			$refused = array();
 			// The panel sends every field it shows. A field whose value is what
 			// the provider already holds is left alone, so an untouched title
 			// never goes back through a sanitizer and comes out different, and
@@ -2161,14 +2234,16 @@ add_action( 'rest_api_init', function () {
 						if ( ! current_user_can( 'upload_files' )
 							|| 'attachment' !== get_post_type( $att )
 							|| ! current_user_can( 'read_post', $att ) ) {
-							return new WP_Error( 'rest_forbidden', __( 'You cannot use that media item.', 'minn-admin' ), array( 'status' => 403 ) );
+							$refused['rest_forbidden'][] = $field;
+							continue;
 						}
 						// A social image has to be an image. Asked only after the
 						// checks above, so it tells nothing about an item the
 						// caller cannot read; AIOSEO refuses its own seed image
 						// on the same test.
 						if ( ! wp_attachment_is_image( $att ) ) {
-							return new WP_Error( 'rest_invalid_param', __( 'That media item is not an image.', 'minn-admin' ), array( 'status' => 400 ) );
+							$refused['rest_invalid_param'][] = $field;
+							continue;
 						}
 						// The URL is DERIVED from the id, never taken from the
 						// caller: every provider resolves it the same way, and
@@ -2220,6 +2295,17 @@ add_action( 'rest_api_init', function () {
 					$clean = esc_url_raw( trim( (string) $raw ) );
 				}
 				call_user_func( $plugin['write'], $post->ID, $field, $clean );
+			}
+			// A refused image keeps only itself from being stored; the other
+			// fields this save changed are written.
+			if ( ! empty( $refused['rest_forbidden'] ) ) {
+				$error = $refuse( 'rest_forbidden', __( 'You cannot use that media item.', 'minn-admin' ), 403, $refused['rest_forbidden'] );
+				if ( is_wp_error( $error ) ) {
+					return $error;
+				}
+			}
+			if ( ! empty( $refused['rest_invalid_param'] ) ) {
+				return $refuse( 'rest_invalid_param', __( 'That media item is not an image.', 'minn-admin' ), 400, $refused['rest_invalid_param'] );
 			}
 			return null;
 		},
