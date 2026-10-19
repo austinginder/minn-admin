@@ -11,7 +11,9 @@
  * bespoke callback (input rows, font subsets, quick exclusions) are counted
  * as locked and link out to wp-admin.
  *
- * Writes merge only the edited keys into the stored option and save through
+ * The screen is declared to the settings tier (kernel/class-minn-admin-
+ * kernel-settings.php), which owns the routes and the order of a save. Writes
+ * merge only the edited keys into the stored option and save through
  * `update_option`, which runs Perfmatters' own registered sanitizer
  * (`perfmatters_sanitize_options`) exactly like its own settings form —
  * including the one-per-line textarea → array normalization.
@@ -142,16 +144,23 @@ function minn_admin_perfmatters_value( $args, $type ) {
 	return (string) $v;
 }
 
-/** GET/POST shape for one tab: { groups, values, adminUrl }. */
-function minn_admin_perfmatters_tab_shape( $tab_id ) {
+/**
+ * One tab as offered, or every tab (null) for a save from PHP; null for a tab
+ * that does not exist. Each field carries its registration (`_args`) for the
+ * read and the write, and `_raw` when Perfmatters prints its value raw.
+ *
+ * @param string|null $tab_id Tab id, or null for the whole screen.
+ * @return array|null { groups, adminUrl }
+ */
+function minn_admin_perfmatters_layout( $tab_id ) {
 	$tabs = minn_admin_perfmatters_tabs();
-	if ( ! isset( $tabs[ $tab_id ] ) ) {
-		return new WP_Error( 'minn_no_tab', __( 'Unknown settings tab.', 'minn-admin' ), array( 'status' => 404 ) );
+	if ( null !== $tab_id && ! isset( $tabs[ $tab_id ] ) ) {
+		return null;
 	}
-	$reg    = minn_admin_perfmatters_registry();
-	$groups = array();
-	$values = array();
-	foreach ( $tabs[ $tab_id ]['sections'] as $section_id ) {
+	$reg      = minn_admin_perfmatters_registry();
+	$sections = null === $tab_id ? array_merge( ...array_values( wp_list_pluck( $tabs, 'sections' ) ) ) : $tabs[ $tab_id ]['sections'];
+	$groups   = array();
+	foreach ( $sections as $section_id ) {
 		if ( empty( $reg['fields'][ $section_id ] ) ) {
 			continue;
 		}
@@ -164,8 +173,10 @@ function minn_admin_perfmatters_tab_shape( $tab_id ) {
 				$locked++;
 				continue;
 			}
-			$fields[]                = $f;
-			$values[ $f['key'] ]     = minn_admin_perfmatters_value( (array) $field['args'], $f['type'] );
+			$args       = (array) $field['args'];
+			$f['_args'] = $args;
+			$f['_raw']  = minn_admin_perfmatters_is_raw_output( (string) ( $args['section'] ?? '' ), (string) ( $args['id'] ?? '' ) );
+			$fields[]   = $f;
 		}
 		if ( ! $fields && ! $locked ) {
 			continue;
@@ -178,7 +189,6 @@ function minn_admin_perfmatters_tab_shape( $tab_id ) {
 	}
 	return array(
 		'groups'   => $groups,
-		'values'   => $values,
 		'adminUrl' => admin_url( 'options-general.php?page=perfmatters' ),
 	);
 }
@@ -271,86 +281,22 @@ function minn_admin_perfmatters_is_raw_output( $section, $id ) {
 }
 
 /**
- * Save edited keys. Each key is validated against the live registry (never
- * an arbitrary option write), coerced to Perfmatters' stored shapes
- * ('1'/absent flags, plain strings; one-per-line strings are handed to its
- * own sanitizer, which normalizes them to arrays exactly like its form),
- * then the whole option updates once per target option.
+ * Write the changed keys, in Perfmatters' stored shapes ('1'/absent flags,
+ * plain strings; one-per-line strings are handed to its own sanitizer, which
+ * normalizes them to arrays exactly like its form), one update per target
+ * option. The settings tier has already kept every untouched value out and
+ * refused a raw-output field this caller may not change.
  *
- * @param array $values Sent values, by field key.
- * @return true|WP_Error A 403 naming the raw-output fields this caller may
- *                       not change, before anything is written.
+ * @param array $changes Changed values, by field key.
+ * @param array $fields  Their fields, by the same key.
+ * @return true
  */
-function minn_admin_perfmatters_save( $values ) {
-	$reg   = minn_admin_perfmatters_registry();
-	$byKey = array();
-	foreach ( $reg['fields'] as $section_fields ) {
-		foreach ( $section_fields as $field ) {
-			$f = minn_admin_perfmatters_field( $field );
-			if ( $f ) {
-				$byKey[ $f['key'] ] = array( 'args' => (array) $field['args'], 'type' => $f['type'], 'label' => $f['label'] );
-			}
-		}
-	}
-	// The settings form sends a field once it is touched, even when it is put
-	// back, so a value sent as the page read it stays as stored: the strip
-	// below rewrote one Perfmatters' own form had kept.
-	$unchanged = static function ( $args, $type, $v ) {
-		$was = minn_admin_perfmatters_value( $args, $type );
-		return 'toggle' === $type ? ( ! empty( $v ) && 'false' !== $v ) === $was : is_scalar( $v ) && (string) $v === $was;
-	};
-	// Fields whose value goes into the page as raw markup carry the same rule as
-	// every other code-authoring surface here rather than riding in on
-	// manage_options with the ordinary settings. Keyed on what the value DOES,
-	// not on whether the field is labelled as code. Asked of the whole save
-	// before anything is written: skipping only those fields stored the rest
-	// of a mixed save under "Settings saved" while the CDN URL or tracking id
-	// the person typed was dropped.
-	$may_raw = current_user_can( 'unfiltered_html' ) && ( ! class_exists( 'Minn_Admin' ) || Minn_Admin::code_edits_allowed() );
-	if ( ! $may_raw ) {
-		$refused = array();
-		foreach ( (array) $values as $key => $v ) {
-			if ( ! isset( $byKey[ $key ] ) ) {
-				continue;
-			}
-			$args = $byKey[ $key ]['args'];
-			if ( minn_admin_perfmatters_is_raw_output( (string) ( $args['section'] ?? '' ), (string) ( $args['id'] ?? '' ) ) && ! $unchanged( $args, $byKey[ $key ]['type'], $v ) ) {
-				$refused[ $key ] = $byKey[ $key ]['label'];
-			}
-		}
-		if ( $refused ) {
-			return new WP_Error(
-				'minn_perfmatters_raw_output',
-				sprintf(
-					/* translators: %s: comma-separated setting names. */
-					_n(
-						'Nothing was saved. %s goes into your pages as raw code, which your account cannot change here.',
-						'Nothing was saved. %s go into your pages as raw code, which your account cannot change here.',
-						count( $refused ),
-						'minn-admin'
-					),
-					implode( ', ', $refused )
-				),
-				array( 'status' => 403, 'fields' => array_keys( $refused ) )
-			);
-		}
-	}
+function minn_admin_perfmatters_write( $changes, $fields ) {
 	$pending = array(); // option name → stored array with edits applied
-	foreach ( (array) $values as $key => $v ) {
-		if ( ! isset( $byKey[ $key ] ) ) {
-			continue;
-		}
-		$args   = $byKey[ $key ]['args'];
-		$type   = $byKey[ $key ]['type'];
+	foreach ( $changes as $key => $v ) {
+		$args   = $fields[ $key ]['_args'];
+		$type   = $fields[ $key ]['type'];
 		$option = ! empty( $args['option'] ) ? $args['option'] : 'perfmatters_options';
-		if ( $unchanged( $args, $type, $v ) ) {
-			continue;
-		}
-		// Belt and braces: the refusal above has already answered for a
-		// changed raw-output field this caller may not write.
-		if ( ! $may_raw && minn_admin_perfmatters_is_raw_output( (string) ( $args['section'] ?? '' ), (string) ( $args['id'] ?? '' ) ) ) {
-			continue;
-		}
 		if ( ! isset( $pending[ $option ] ) ) {
 			$stored             = get_option( $option, array() );
 			$pending[ $option ] = is_array( $stored ) ? $stored : array();
@@ -372,15 +318,15 @@ function minn_admin_perfmatters_save( $values ) {
 			}
 		} else {
 			$val = is_scalar( $v ) ? (string) $v : '';
-			// Belt and braces on the two fields Perfmatters interpolates into a
-			// single-quoted attribute: strip the characters that would close it and
-			// open a tag. Hostnames, protocol-relative and absolute URLs are all
-			// unaffected, so this costs a legitimate value nothing even when the
-			// caller does hold unfiltered_html.
+			// Belt and braces on the fields Perfmatters interpolates into a
+			// single-quoted attribute or an inline script: strip the characters
+			// that would close it and open a tag. Hostnames, protocol-relative
+			// and absolute URLs are all unaffected, so this costs a legitimate
+			// value nothing even when the caller does hold unfiltered_html.
 			// login_url_message is prose wp_die() prints, not a value
 			// interpolated into an attribute, so it keeps its quotes and tags
-			// (the raw-output rule above already limits who may set it).
-			if ( minn_admin_perfmatters_is_raw_output( (string) ( $args['section'] ?? '' ), (string) ( $args['id'] ?? '' ) )
+			// (the raw-output rule already limits who may set it).
+			if ( ! empty( $fields[ $key ]['_raw'] )
 				&& ! in_array( (string) $args['id'], minn_admin_perfmatters_code_fields(), true )
 				&& 'login_url_message' !== (string) $args['id'] ) {
 				$val = str_replace( array( '"', "'", '<', '>' ), '', $val );
@@ -394,6 +340,18 @@ function minn_admin_perfmatters_save( $values ) {
 		update_option( $option, $data );
 	}
 	return true;
+}
+
+/**
+ * Save edited keys from PHP, over every tab, through the settings tier's
+ * checks (the same path the tab's POST takes).
+ *
+ * @param array $values Sent values, by field key.
+ * @return true|WP_Error A 403 naming the raw-output fields this caller may
+ *                       not change, before anything is written.
+ */
+function minn_admin_perfmatters_save( $values ) {
+	return minn_admin_settings_save( 'perfmatters', array( 'values' => (array) $values ), array( 'tab' => null ) );
 }
 
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
@@ -425,28 +383,20 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	return $surfaces;
 } );
 
-add_action( 'rest_api_init', function () {
-	if ( ! function_exists( 'perfmatters_settings' ) ) {
-		return;
-	}
-	minn_admin_endpoint( '/perfmatters/settings/(?P<tab>[a-z]+)', array(
-		'methods'             => 'GET',
-		'gate'                => 'minn_admin_perfmatters_can',
-		'run'                 => function ( $req ) {
-			return rest_ensure_response( minn_admin_perfmatters_tab_shape( Minn_Admin::path_param( $req, 'tab' ) ) );
-		},
-	) );
-	minn_admin_endpoint( '/perfmatters/settings/(?P<tab>[a-z]+)', array(
-		'methods'             => 'POST',
-		'gate'                => 'minn_admin_perfmatters_can',
-		'run'                 => function ( $req ) {
-			$body   = $req->get_json_params();
-			$values = isset( $body['values'] ) && is_array( $body['values'] ) ? $body['values'] : array();
-			$saved  = minn_admin_perfmatters_save( $values );
-			if ( is_wp_error( $saved ) ) {
-				return $saved;
-			}
-			return rest_ensure_response( minn_admin_perfmatters_tab_shape( Minn_Admin::path_param( $req, 'tab' ) ) );
-		},
-	) );
-} );
+
+// Every key is resolved against the live registry (never an arbitrary option
+// write); the tier compares, gates and refuses before the one write.
+minn_admin_settings( 'perfmatters', array(
+	'route'  => 'perfmatters/settings/(?P<tab>[a-z]+)',
+	'active' => function () {
+		return function_exists( 'perfmatters_settings' );
+	},
+	'gate'   => 'minn_admin_perfmatters_can',
+	'layout' => function ( $ctx ) {
+		return minn_admin_perfmatters_layout( $ctx['tab'] );
+	},
+	'read'   => function ( $field ) {
+		return minn_admin_perfmatters_value( $field['_args'], $field['type'] );
+	},
+	'write'  => 'minn_admin_perfmatters_write',
+) );

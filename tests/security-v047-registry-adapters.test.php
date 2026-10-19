@@ -244,7 +244,7 @@ $tag   = strtolower( wp_generate_password( 6, false ) );
 		$check( '04-3 Perfmatters: the caller holds manage_options but not unfiltered_html', current_user_can( 'manage_options' ) && ! current_user_can( 'unfiltered_html' ) && minn_admin_perfmatters_can() );
 		list( $st, $d ) = $call( 'POST', '/minn-admin/v1/perfmatters/settings/cdn', array( 'values' => array( $toggle => ! $was_on, $url => $new_url ) ) );
 		$check( '04-3 Perfmatters: a save with the CDN URL is refused with 403', 403 === $st, $st . ' ' . wp_json_encode( $d['code'] ?? '' ) );
-		$check( '04-3 Perfmatters: the refusal names the field, and only that one', 403 === $st && array( $url ) === (array) ( $d['data']['fields'] ?? null ), wp_json_encode( $d ) );
+		$check( '04-3 Perfmatters: the refusal names the field, and only that one', 403 === $st && array( $url ) === array_column( (array) ( $d['data']['fields'] ?? array() ), 'key' ), wp_json_encode( $d ) );
 		$after = $stored();
 		$check( '04-3 Perfmatters: nothing is written, not even the toggle beside it', $after['url'] === $was_url && $after['on'] === $was_on, wp_json_encode( $after ) );
 
