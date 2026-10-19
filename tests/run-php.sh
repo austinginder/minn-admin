@@ -135,6 +135,7 @@ run security-v047-registry-core single --user=admin
 run security-v047-registry-forms single --user=admin
 # PowerPress stays inactive on the lab; the swap loads it for this process only.
 MINN_SWAP_ADD=powerpress/powerpress.php run security-v047-registry-adapters single --user=admin --require=tests/lib/plugin-swap.php
+run secrets-tier-conformance single --user=admin
 # WP Mail SMTP stays inactive on the lab; the swap loads it for this process only.
 MINN_SWAP_ADD=wp-mail-smtp/wp_mail_smtp.php run security-v047-registry-egress single --user=admin --require=tests/lib/plugin-swap.php
 
