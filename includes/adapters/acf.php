@@ -3261,176 +3261,155 @@ function minn_admin_acf_options_admin_url( $page ) {
 }
 
 /**
- * GET/POST shape for one options-page tab: { groups, values, adminUrl }.
+ * One options-page tab as the settings tier offers it, or every tab of the
+ * page (null) for a save from PHP; null for a tab the page does not have.
  * Values key by ACF field KEY (unique and unambiguous across groups).
  * Flattened ACF group fields render as their own titled sections; the
- * tab-level locked count rides the last section.
+ * tab-level locked count rides the last section. Each field carries its
+ * mapped ACF field as `_acf`, for the read and the write.
  *
- * @param array  $page   Options page array.
- * @param string $tab_id Positional tab id.
- * @return array|WP_Error
+ * @param array       $page   Options page array.
+ * @param string|null $tab_id Positional tab id, or null for the whole page.
+ * @return array|null { groups, adminUrl }
  */
-function minn_admin_acf_options_tab_shape( $page, $tab_id ) {
-	$tabs = minn_admin_acf_options_tabs( $page );
-	$tab  = null;
-	foreach ( $tabs as $t ) {
-		if ( $t['id'] === $tab_id ) {
-			$tab = $t;
-			break;
+function minn_admin_acf_options_layout( $page, $tab_id ) {
+	$picked = array();
+	foreach ( minn_admin_acf_options_tabs( $page ) as $t ) {
+		if ( null === $tab_id || $t['id'] === $tab_id ) {
+			$picked[] = $t;
 		}
 	}
-	if ( ! $tab ) {
-		return new WP_Error( 'minn_no_tab', __( 'Unknown settings tab.', 'minn-admin' ), array( 'status' => 404 ) );
+	if ( ! $picked && null !== $tab_id ) {
+		return null;
 	}
-	$post_id    = ! empty( $page['post_id'] ) ? $page['post_id'] : 'options';
-	$parent_raw = array(); // top group key => raw array (fetched once per parent)
-	$read_raw   = function ( $f ) use ( $post_id, &$parent_raw ) {
-		if ( empty( $f['_parent'] ) ) {
-			return minn_admin_acf_raw_value( $f, $post_id );
-		}
-		$gk = $f['_parent'];
-		if ( ! array_key_exists( $gk, $parent_raw ) ) {
-			$raw = get_field( $gk, $post_id, false );
-			$parent_raw[ $gk ] = is_array( $raw ) ? $raw : array();
-		}
-		// Descend the group-key chain past the top parent (nested groups).
-		$node = $parent_raw[ $gk ];
-		foreach ( array_slice( (array) ( $f['_path'] ?? array( $gk ) ), 1 ) as $step ) {
-			$node = is_array( $node ) && isset( $node[ $step ] ) ? $node[ $step ] : null;
-		}
-		return is_array( $node ) && array_key_exists( $f['key'], $node ) ? $node[ $f['key'] ] : null;
-	};
-	$sections = array();
-	$values   = array();
-	foreach ( $tab['fields'] as $f ) {
-		$sf = array(
-			'key'   => $f['key'],
-			'label' => $f['label'],
-			'type'  => 'true_false' === $f['type'] ? 'toggle'
-				: ( in_array( $f['type'], array( 'select', 'radio' ), true ) ? 'select'
-				: ( in_array( $f['type'], array( 'number', 'range' ), true ) ? 'number'
-				: ( in_array( $f['type'], array( 'textarea', 'wysiwyg', 'gallery', 'image', 'file', 'link', 'multicheck', 'date', 'datetime', 'time', 'suggest', 'relation', 'rows', 'flex', 'color_picker' ), true ) ? $f['type'] : 'text' ) ) ),
-		);
-		if ( 'rows' === $sf['type'] ) {
-			$sf['subfields'] = $f['subfields'];
-			$sf['subLocked'] = $f['subLocked'];
-		}
-		if ( 'flex' === $sf['type'] ) {
-			$sf['layouts'] = $f['layouts'];
-		}
-		if ( ! empty( $f['route'] ) ) {
-			$sf['route'] = $f['route'];
-		}
-		if ( ! empty( $f['cond'] ) ) {
-			$sf['cond'] = $f['cond'];
-		}
-		if ( in_array( $sf['type'], array( 'select', 'multicheck' ), true ) ) {
-			$sf['options'] = array();
-			foreach ( (array) ( $f['choices'] ?? array() ) as $value => $label ) {
-				$sf['options'][] = array( (string) $value, (string) $label );
-			}
-		}
-		$sec_key = (string) ( $f['_parent'] ? $f['_parent'] : '' );
-		if ( ! isset( $sections[ $sec_key ] ) ) {
-			$sections[ $sec_key ] = array(
-				'title'  => (string) ( $f['_section'] ?? '' ),
-				'fields' => array(),
-				'locked' => 0,
+	$groups = array();
+	foreach ( $picked as $tab ) {
+		$sections = array();
+		foreach ( $tab['fields'] as $f ) {
+			$sf = array(
+				'key'   => $f['key'],
+				'label' => $f['label'],
+				'type'  => 'true_false' === $f['type'] ? 'toggle'
+					: ( in_array( $f['type'], array( 'select', 'radio' ), true ) ? 'select'
+					: ( in_array( $f['type'], array( 'number', 'range' ), true ) ? 'number'
+					: ( in_array( $f['type'], array( 'textarea', 'wysiwyg', 'gallery', 'image', 'file', 'link', 'multicheck', 'date', 'datetime', 'time', 'suggest', 'relation', 'rows', 'flex', 'color_picker' ), true ) ? $f['type'] : 'text' ) ) ),
 			);
+			if ( 'rows' === $sf['type'] ) {
+				$sf['subfields'] = $f['subfields'];
+				$sf['subLocked'] = $f['subLocked'];
+			}
+			if ( 'flex' === $sf['type'] ) {
+				$sf['layouts'] = $f['layouts'];
+			}
+			if ( ! empty( $f['route'] ) ) {
+				$sf['route'] = $f['route'];
+			}
+			if ( ! empty( $f['cond'] ) ) {
+				$sf['cond'] = $f['cond'];
+			}
+			if ( in_array( $sf['type'], array( 'select', 'multicheck' ), true ) ) {
+				$sf['options'] = array();
+				foreach ( (array) ( $f['choices'] ?? array() ) as $value => $label ) {
+					$sf['options'][] = array( (string) $value, (string) $label );
+				}
+			}
+			$sf['_acf'] = $f;
+			$sec_key    = (string) ( $f['_parent'] ? $f['_parent'] : '' );
+			if ( ! isset( $sections[ $sec_key ] ) ) {
+				$sections[ $sec_key ] = array(
+					'title'  => (string) ( $f['_section'] ?? '' ),
+					'fields' => array(),
+					'locked' => 0,
+				);
+			}
+			$sections[ $sec_key ]['fields'][] = $sf;
 		}
-		$sections[ $sec_key ]['fields'][] = $sf;
-
-		$v = $read_raw( $f );
-		if ( 'rows' === $f['type'] ) {
-			$values[ $f['key'] ] = minn_admin_acf_rows_out( $f, $v );
-		} elseif ( 'flex' === $f['type'] ) {
-			$values[ $f['key'] ] = minn_admin_acf_flex_out( $f, $v );
-		} else {
-			$values[ $f['key'] ] = minn_admin_acf_value_out( $f, $v );
+		$tab_groups = array_values( $sections );
+		if ( ! $tab_groups ) {
+			$tab_groups = array( array( 'title' => '', 'fields' => array(), 'locked' => 0 ) );
 		}
-	}
-	$groups = array_values( $sections );
-	if ( ! $groups ) {
-		$groups = array( array( 'title' => '', 'fields' => array(), 'locked' => 0 ) );
-	}
-	$groups[ count( $groups ) - 1 ]['locked'] = $tab['locked'];
-	if ( ! empty( $tab['lockedLabels'] ) ) {
-		// Name what the count hides — "1 advanced setting" alone reads as a
-		// bug when the tab's whole content is one flexible-content builder.
-		$groups[ count( $groups ) - 1 ]['lockedLabels'] = array_values( array_unique( $tab['lockedLabels'] ) );
+		$tab_groups[ count( $tab_groups ) - 1 ]['locked'] = $tab['locked'];
+		if ( ! empty( $tab['lockedLabels'] ) ) {
+			// Name what the count hides — "1 advanced setting" alone reads as a
+			// bug when the tab's whole content is one flexible-content builder.
+			$tab_groups[ count( $tab_groups ) - 1 ]['lockedLabels'] = array_values( array_unique( $tab['lockedLabels'] ) );
+		}
+		$groups = array_merge( $groups, $tab_groups );
 	}
 	return array(
 		'groups'   => $groups,
-		'values'   => $values,
 		'adminUrl' => minn_admin_acf_options_admin_url( $page ),
 	);
 }
 
 /**
- * Save edited values through ACF's own setter. Keys are whitelisted against
- * the page's mapped fields (never an arbitrary update_field) and coerced to
- * ACF's stored shapes through the shared value_in layer. Flattened group
- * subs collect into ONE parent write each: the stored group array is the
- * base, edited subs overlay it, so unmapped subs survive untouched (the
- * repeater-merge discipline, at group scale).
+ * A mapped field's raw stored value at its home: the field itself, or its
+ * place inside a group (the group-key chain past the top parent).
  *
- * Every value is parsed before anything is written. A value the parser
- * refuses refuses the whole save with a 400 naming its fields: the settings
- * view reports only an error answer, so skipping it stored the rest under
- * "Settings saved" while the typed value was dropped.
- *
- * @param array $page   Options page array.
- * @param array $values Field key => value.
- * @return true|WP_Error
+ * @param array      $f       Mapped field.
+ * @param string|int $post_id Where the page stores its values.
+ * @return mixed
  */
-function minn_admin_acf_options_save( $page, $values ) {
-	$byKey = array();
-	foreach ( minn_admin_acf_options_tabs( $page ) as $tab ) {
-		foreach ( $tab['fields'] as $f ) {
-			$byKey[ $f['key'] ] = $f;
-		}
+function minn_admin_acf_options_stored( $f, $post_id ) {
+	if ( empty( $f['_parent'] ) ) {
+		return minn_admin_acf_raw_value( $f, $post_id );
 	}
-	$post_id        = ! empty( $page['post_id'] ) ? $page['post_id'] : 'options';
-	$parent_updates = array(); // top group key => [ { path (past the top), key, value } ]
-	$parent_stored  = function ( $gkey ) use ( $post_id ) {
-		$raw = get_field( $gkey, $post_id, false );
-		return is_array( $raw ) ? $raw : array();
-	};
-	// Stored value at a field's nested home (rows need their original rows
-	// for the __idx merge).
-	$stored_at = function ( $f ) use ( $parent_stored, $post_id ) {
-		if ( empty( $f['_parent'] ) ) {
-			return minn_admin_acf_raw_value( $f, $post_id );
-		}
-		$node = $parent_stored( $f['_parent'] );
-		foreach ( array_slice( (array) ( $f['_path'] ?? array( $f['_parent'] ) ), 1 ) as $step ) {
-			$node = is_array( $node ) && isset( $node[ $step ] ) ? $node[ $step ] : null;
-		}
-		return is_array( $node ) && array_key_exists( $f['key'], $node ) ? $node[ $f['key'] ] : null;
-	};
+	$node = get_field( $f['_parent'], $post_id, false );
+	foreach ( array_slice( (array) ( $f['_path'] ?? array( $f['_parent'] ) ), 1 ) as $step ) {
+		$node = is_array( $node ) && isset( $node[ $step ] ) ? $node[ $step ] : null;
+	}
+	return is_array( $node ) && array_key_exists( $f['key'], $node ) ? $node[ $f['key'] ] : null;
+}
+
+/**
+ * A mapped field's value as the page shows it.
+ *
+ * @param array $f    Mapped field.
+ * @param array $page Options page array.
+ * @return mixed
+ */
+function minn_admin_acf_options_read( $f, $page ) {
+	$v = minn_admin_acf_options_stored( $f, ! empty( $page['post_id'] ) ? $page['post_id'] : 'options' );
+	if ( 'rows' === $f['type'] ) {
+		return minn_admin_acf_rows_out( $f, $v );
+	}
+	if ( 'flex' === $f['type'] ) {
+		return minn_admin_acf_flex_out( $f, $v );
+	}
+	return minn_admin_acf_value_out( $f, $v );
+}
+
+/**
+ * ACF's own parsing of every changed value, before anything is written: the
+ * shared value_in layer coerces each to ACF's stored shape. A value the
+ * parser refuses refuses the save with a 400 naming its fields (the settings
+ * tier writes nothing then).
+ *
+ * @param array $page    Options page array.
+ * @param array $changes Changed values, by field key.
+ * @param array $fields  Their fields, by the same key.
+ * @return array|WP_Error Parsed values to write, by field key.
+ */
+function minn_admin_acf_options_parse( $page, $changes, $fields ) {
+	$post_id = ! empty( $page['post_id'] ) ? $page['post_id'] : 'options';
 	$writes  = array();
 	$refused = array();
-	foreach ( (array) $values as $key => $v ) {
-		if ( ! isset( $byKey[ $key ] ) ) {
-			continue;
-		}
-		$f = $byKey[ $key ];
+	foreach ( $changes as $key => $v ) {
+		$f = $fields[ $key ]['_acf'];
 		if ( 'rows' === $f['type'] || 'flex' === $f['type'] ) {
+			// Rows need their stored rows for the __idx merge.
 			$v = 'rows' === $f['type']
-				? minn_admin_acf_rows_in( $f, $v, $stored_at( $f ), 'options' )
-				: minn_admin_acf_flex_in( $f, $v, $stored_at( $f ), 'options' );
+				? minn_admin_acf_rows_in( $f, $v, minn_admin_acf_options_stored( $f, $post_id ), 'options' )
+				: minn_admin_acf_flex_in( $f, $v, minn_admin_acf_options_stored( $f, $post_id ), 'options' );
 			if ( null === $v ) {
 				$refused[] = $f; // not a list of rows at all
 				continue;
 			}
 			$v = minn_admin_acf_links_upgraded( minn_admin_acf_definition( $f ), $v );
 		} else {
-			$stored = $stored_at( $f );
-			if ( minn_admin_acf_untouched( $f, $v, $stored ) ) {
-				continue; // the stored value as served, not an edit
-			}
-			$sent = $v;
-			$v    = minn_admin_acf_value_in( $f, $v, 'options' );
+			$stored = minn_admin_acf_options_stored( $f, $post_id );
+			$sent   = $v;
+			$v      = minn_admin_acf_value_in( $f, $v, 'options' );
 			if ( null === $v ) {
 				// The parser's refusal, not the relational keep below (which
 				// answers null for a withheld id, and is no refusal).
@@ -3443,28 +3422,46 @@ function minn_admin_acf_options_save( $page, $values ) {
 		if ( null === $v ) {
 			continue; // invalid input never clobbers a stored value
 		}
-		$writes[] = array( $key, $f, $v );
+		$writes[ $key ] = $v;
 	}
 	if ( $refused ) {
 		$message = __( 'That value was not accepted, so the stored one was kept.', 'minn-admin' );
-		$fields  = array();
+		$named   = array();
 		$names   = array();
 		foreach ( $refused as $f ) {
-			$label    = isset( $f['label'] ) && '' !== (string) $f['label'] ? (string) $f['label'] : (string) $f['key'];
-			$names[]  = $label;
-			$fields[] = array( 'key' => (string) $f['key'], 'label' => $label, 'message' => $message );
+			$label   = isset( $f['label'] ) && '' !== (string) $f['label'] ? (string) $f['label'] : (string) $f['key'];
+			$names[] = $label;
+			$named[] = array( 'key' => (string) $f['key'], 'label' => $label, 'message' => $message );
 		}
 		return new WP_Error(
 			'minn_acf_options_refused',
 			sprintf(
 				/* translators: %s: comma-separated field names. */
-				_n( 'Nothing was saved: %s has a value the field does not accept.', 'Nothing was saved: %s have values the fields do not accept.', count( $fields ), 'minn-admin' ),
+				_n( 'Nothing was saved: %s has a value the field does not accept.', 'Nothing was saved: %s have values the fields do not accept.', count( $named ), 'minn-admin' ),
 				implode( ', ', $names )
 			),
-			array( 'status' => 400, 'fields' => $fields )
+			array( 'status' => 400, 'fields' => $named )
 		);
 	}
-	foreach ( $writes as list( $key, $f, $v ) ) {
+	return $writes;
+}
+
+/**
+ * Write parsed values through ACF's own setter. Flattened group subs collect
+ * into ONE parent write each: the stored group array is the base, edited
+ * subs overlay it, so unmapped subs survive untouched (the repeater-merge
+ * discipline, at group scale).
+ *
+ * @param array $page   Options page array.
+ * @param array $writes Parsed values, by field key.
+ * @param array $fields Their fields, by the same key.
+ * @return true
+ */
+function minn_admin_acf_options_write( $page, $writes, $fields ) {
+	$post_id        = ! empty( $page['post_id'] ) ? $page['post_id'] : 'options';
+	$parent_updates = array(); // top group key => [ { path (past the top), key, value } ]
+	foreach ( $writes as $key => $v ) {
+		$f = $fields[ $key ]['_acf'];
 		if ( ! empty( $f['_parent'] ) ) {
 			$parent_updates[ $f['_parent'] ][] = array(
 				'path'  => array_slice( (array) ( $f['_path'] ?? array( $f['_parent'] ) ), 1 ),
@@ -3479,7 +3476,8 @@ function minn_admin_acf_options_save( $page, $values ) {
 	// edited sub set at its nested home (group arrays created as needed),
 	// so subs Minn cannot render survive untouched.
 	foreach ( $parent_updates as $gkey => $edits ) {
-		$base = $parent_stored( $gkey );
+		$base = get_field( $gkey, $post_id, false );
+		$base = is_array( $base ) ? $base : array();
 		foreach ( $edits as $edit ) {
 			$ref = &$base;
 			foreach ( $edit['path'] as $step ) {
@@ -3498,6 +3496,18 @@ function minn_admin_acf_options_save( $page, $values ) {
 		minn_admin_acf_raw_update( array( 'key' => $gkey ), $base, $post_id );
 	}
 	return true;
+}
+
+/**
+ * Save edited values from PHP, over every tab of the page, through the
+ * settings tier's checks (the same path the tab's POST takes).
+ *
+ * @param array $page   Options page array.
+ * @param array $values Field key => value.
+ * @return true|WP_Error
+ */
+function minn_admin_acf_options_save( $page, $values ) {
+	return minn_admin_settings_save( 'acf-options', array( 'values' => (array) $values ), array( 'page' => $page, 'tab' => null ) );
 }
 
 /**
@@ -3763,59 +3773,49 @@ add_filter( 'minn_admin_option_pages', function ( $pages ) {
 	return $pages;
 } );
 
-add_action( 'rest_api_init', function () {
-	if ( ! minn_admin_acf_options_active() ) {
-		return;
+/**
+ * What an options-page route addresses: a standalone allowed page, or a menu
+ * anchor (or every page at once) whose merged tab id delegates to the member
+ * page owning it, its own capability already filtered through pages_allowed.
+ *
+ * @param WP_REST_Request $req Request.
+ * @return array|null { page (array), tab (member-local id) }
+ */
+function minn_admin_acf_options_resolve( WP_REST_Request $req ) {
+	$pages = minn_admin_acf_options_pages_allowed();
+	$slug  = rawurldecode( Minn_Admin::path_param( $req, 'page' ) );
+	$tab   = Minn_Admin::path_param( $req, 'tab' );
+	if ( MINN_ADMIN_ACF_OPTIONS_ALL === $slug ) {
+		return minn_admin_acf_options_all_target( $tab );
 	}
-	// A slug is either a standalone allowed page, or a menu anchor whose
-	// merged tab id delegates to the member page owning it (its own
-	// capability already filtered through pages_allowed).
-	$resolve = function ( $req ) {
-		$pages = minn_admin_acf_options_pages_allowed();
-		$slug  = rawurldecode( Minn_Admin::path_param( $req, 'page' ) );
-		$tab   = Minn_Admin::path_param( $req, 'tab' );
-		if ( MINN_ADMIN_ACF_OPTIONS_ALL === $slug ) {
-			return minn_admin_acf_options_all_target( $tab );
-		}
-		$map   = minn_admin_acf_options_menu_map();
-		if ( isset( $map['menus'][ $slug ] ) ) {
-			$target = minn_admin_acf_options_menu_target( $slug, $tab );
-			return $target ? array(
-				'page' => $target['page'],
-				'tab'  => $target['tab'],
-			) : null;
-		}
-		return isset( $pages[ $slug ] ) ? array(
-			'page' => $pages[ $slug ],
-			'tab'  => $tab,
-		) : null;
-	};
-	register_rest_route( 'minn-admin/v1', '/acf/options/(?P<page>[A-Za-z0-9_%.\-]+)/(?P<tab>tab-\d+)', array(
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => function ( $req ) use ( $resolve ) {
-				return (bool) $resolve( $req ); // allowed-pages already filters by the page's own capability
-			},
-			'callback'            => function ( $req ) use ( $resolve ) {
-				$target = $resolve( $req );
-				return rest_ensure_response( minn_admin_acf_options_tab_shape( $target['page'], $target['tab'] ) );
-			},
-		),
-		array(
-			'methods'             => 'POST',
-			'permission_callback' => function ( $req ) use ( $resolve ) {
-				return (bool) $resolve( $req );
-			},
-			'callback'            => function ( $req ) use ( $resolve ) {
-				$target = $resolve( $req );
-				$body   = $req->get_json_params();
-				$values = isset( $body['values'] ) && is_array( $body['values'] ) ? $body['values'] : array();
-				$saved  = minn_admin_acf_options_save( $target['page'], $values );
-				if ( is_wp_error( $saved ) ) {
-					return $saved;
-				}
-				return rest_ensure_response( minn_admin_acf_options_tab_shape( $target['page'], $target['tab'] ) );
-			},
-		),
-	) );
-} );
+	$map = minn_admin_acf_options_menu_map();
+	if ( isset( $map['menus'][ $slug ] ) ) {
+		return minn_admin_acf_options_menu_target( $slug, $tab );
+	}
+	return isset( $pages[ $slug ] ) ? array(
+		'page' => $pages[ $slug ],
+		'tab'  => $tab,
+	) : null;
+}
+
+minn_admin_settings( 'acf-options', array(
+	'route'    => 'acf/options/(?P<page>[A-Za-z0-9_%.\-]+)/(?P<tab>tab-\d+)',
+	'active'   => 'minn_admin_acf_options_active',
+	// Allowed pages already filter by each page's own capability.
+	'gate'     => function ( WP_REST_Request $req ) {
+		return null !== minn_admin_acf_options_resolve( $req );
+	},
+	'target'   => 'minn_admin_acf_options_resolve',
+	'layout'   => function ( $ctx ) {
+		return minn_admin_acf_options_layout( $ctx['page'], $ctx['tab'] );
+	},
+	'read'     => function ( $field, $ctx ) {
+		return minn_admin_acf_options_read( $field['_acf'], $ctx['page'] );
+	},
+	'validate' => function ( $changes, $fields, $ctx ) {
+		return minn_admin_acf_options_parse( $ctx['page'], $changes, $fields );
+	},
+	'write'    => function ( $writes, $fields, $ctx ) {
+		return minn_admin_acf_options_write( $ctx['page'], $writes, $fields );
+	},
+) );
