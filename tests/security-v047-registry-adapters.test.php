@@ -22,6 +22,10 @@
  *  - S2 ACF, Meta Box, JetEngine and Seriously Simple Podcasting panels (fix-delta
  *    review): a value the panel refused kept the stored one but answered
  *    200 with nothing said, so the editor adopted it as saved.
+ *  - R3 PowerPress panel and ACF options pages (from the fix-delta sweep): a
+ *    refused media URL deleted the stored episode; PowerPress's own refusal
+ *    came after the post was stored; details with no episode file, and an
+ *    options-page value ACF refuses, were dropped under a success answer.
  *
  * Each section calls what the route calls, as the role the finding named,
  * with a control where the fix could over-block. Fixtures (users, a listing,
@@ -29,7 +33,7 @@
  * run ends. The gift card section runs for every gift card plugin loaded
  * (PW Gift Cards, WooCommerce Gift Cards, YITH) and SKIPs the others.
  *
- * Run: wp eval-file <ABSOLUTE path>/tests/security-v047-registry-adapters.test.php --user=admin --path=<site>
+ * Run: MINN_SWAP_ADD=powerpress/powerpress.php wp eval-file <ABSOLUTE path>/tests/security-v047-registry-adapters.test.php --user=admin --path=<site> --require=<ABSOLUTE path>/tests/lib/plugin-swap.php
  *
  * @package minn-admin
  */
@@ -612,6 +616,138 @@ $s2_post = static function ( $label ) use ( $admin, $tag ) {
 		list( $st, $d ) = $call( 'POST', '/wp/v2/podcast/' . $pid, array( 'minn_ssp' => array( 'episode_type' => 'hologram', 'itunes_title' => 'Written ' . $tag ) ) );
 		$check( 'S2 SSP: an unknown episode type answers 200 and is named', 200 === $st && $field_err( $d, 'minn_ssp', 'episode_type' ) && ! $field_err( $d, 'minn_ssp', 'itunes_title' ), $st . ' ' . wp_json_encode( $d['minn_field_errors'] ?? null ) );
 		$check( 'S2 SSP: the type stays as stored, the title is written', 'audio' === get_post_meta( $pid, 'episode_type', true ) && 'Written ' . $tag === get_post_meta( $pid, 'itunes_title', true ), wp_json_encode( array( get_post_meta( $pid, 'episode_type', true ), get_post_meta( $pid, 'itunes_title', true ) ) ) );
+	} finally {
+		$clean();
+	}
+} )();
+
+/*
+ * R3 PowerPress panel (from the fix-delta sweep). A media URL esc_url_raw()
+ * empties was read as a deliberate clear and deleted the stored episode; the
+ * 403 for a user PowerPress keeps from episodes came after the post was
+ * stored; and details typed before there was an episode file were dropped
+ * without a word. PowerPress rests inactive on the lab: this section runs
+ * under MINN_SWAP_ADD=powerpress/powerpress.php.
+ */
+( function () use ( $check, $skip, $call, $as, $once, $field_err, $admin, $tag ) {
+	if ( ! function_exists( 'minn_admin_powerpress_active' ) || ! minn_admin_powerpress_active() ) {
+		$skip( 'R3 PowerPress: not active (run with MINN_SWAP_ADD=powerpress/powerpress.php)' );
+		return;
+	}
+	global $wpdb;
+	$title   = 'Minn v047 pp ' . $tag;
+	$users   = array();
+	$general = $wpdb->get_row( $wpdb->prepare( "SELECT option_value, autoload FROM {$wpdb->options} WHERE option_name = %s", 'powerpress_general' ) );
+	$clean   = $once( static function () use ( $title, &$users, $general ) {
+		global $wpdb;
+		foreach ( $wpdb->get_col( $wpdb->prepare( "SELECT ID FROM {$wpdb->posts} WHERE post_title = %s", $title ) ) as $pid ) {
+			wp_delete_post( (int) $pid, true );
+		}
+		foreach ( $users as $uid ) {
+			wp_delete_user( $uid );
+		}
+		if ( $general ) {
+			$wpdb->update( $wpdb->options, array( 'option_value' => $general->option_value, 'autoload' => $general->autoload ), array( 'option_name' => 'powerpress_general' ) );
+		} else {
+			$wpdb->delete( $wpdb->options, array( 'option_name' => 'powerpress_general' ) );
+		}
+		wp_cache_delete( 'powerpress_general', 'options' );
+		wp_cache_delete( 'alloptions', 'options' );
+		wp_cache_delete( 'notoptions', 'options' );
+	} );
+	try {
+		$episode = "https://example.com/minn-v047.mp3\n4321\naudio/mpeg\n" . serialize( array( 'duration' => '01:02:03', 'set_duration' => 1 ) ); // phpcs:ignore -- their storage format
+		$pid     = (int) wp_insert_post( array( 'post_title' => $title, 'post_status' => 'draft', 'post_type' => 'post', 'post_author' => $admin ) );
+		update_post_meta( $pid, 'enclosure', wp_slash( $episode ) );
+
+		list( $st, $d ) = $call( 'POST', '/wp/v2/posts/' . $pid, array( 'minn_powerpress' => array( 'url' => 'javascript:alert(1)', 'subtitle' => 'Kept apart ' . $tag ) ) );
+		$enc = (string) get_post_meta( $pid, 'enclosure', true );
+		$check( 'R3 PowerPress: a javascript: media URL keeps the stored episode', 0 === strpos( $enc, 'https://example.com/minn-v047.mp3' ) && false !== strpos( $enc, '01:02:03' ), wp_json_encode( $enc ) );
+		$check( 'R3 PowerPress: and is named on the 200 answer', 200 === $st && $field_err( $d, 'minn_powerpress', 'url' ) && ! $field_err( $d, 'minn_powerpress', 'subtitle' ), $st . ' ' . wp_json_encode( $d['minn_field_errors'] ?? null ) );
+		$check( 'R3 PowerPress: the subtitle beside it is stored', false !== strpos( $enc, 'Kept apart ' . $tag ), wp_json_encode( $enc ) );
+
+		list( $st, $d ) = $call( 'POST', '/wp/v2/posts/' . $pid, array( 'minn_powerpress' => array( 'duration' => 'about an hour' ) ) );
+		$check( 'R3 PowerPress: an unreadable duration is named and the stored one kept', 200 === $st && $field_err( $d, 'minn_powerpress', 'duration' ) && false !== strpos( (string) get_post_meta( $pid, 'enclosure', true ), '01:02:03' ), $st . ' ' . wp_json_encode( $d['minn_field_errors'] ?? null ) );
+
+		list( $st, $d ) = $call( 'POST', '/wp/v2/posts/' . $pid, array( 'minn_powerpress' => array( 'url' => '' ) ) );
+		$check( 'R3 PowerPress control: an emptied media URL still removes the episode, with no refusal', 200 === $st && '' === get_post_meta( $pid, 'enclosure', true ) && empty( $d['minn_field_errors'] ), $st . ' ' . wp_json_encode( get_post_meta( $pid, 'enclosure', true ) ) );
+
+		list( $st, $d ) = $call( 'POST', '/wp/v2/posts/' . $pid, array( 'minn_powerpress' => array( 'size' => '1234', 'duration' => '00:10:00' ) ) );
+		$check( 'R3 PowerPress: size and duration with no episode file are named', 200 === $st && $field_err( $d, 'minn_powerpress', 'size' ) && $field_err( $d, 'minn_powerpress', 'duration' ) && '' === get_post_meta( $pid, 'enclosure', true ), $st . ' ' . wp_json_encode( $d['minn_field_errors'] ?? null ) );
+
+		// PowerPress's Roles and Capabilities: episodes for edit_podcast only,
+		// which PowerPress gives editors and up; an author writes posts
+		// without it.
+		$uid = wp_insert_user( array( 'user_login' => "minn047_pp_{$tag}", 'user_pass' => wp_generate_password( 24 ), 'user_email' => "minn047_pp_{$tag}@example.test", 'role' => 'author' ) );
+		if ( is_wp_error( $uid ) || user_can( $uid, 'edit_podcast' ) ) {
+			$check( 'R3 PowerPress: an author without edit_podcast exists', false, is_wp_error( $uid ) ? $uid->get_error_message() : 'the author role holds edit_podcast here' );
+			return;
+		}
+		$users[] = $uid;
+		$g       = get_option( 'powerpress_general', array() );
+		$g       = is_array( $g ) ? $g : array();
+		$g['use_caps'] = 1;
+		update_option( 'powerpress_general', $g );
+		$refused = $as( $uid, static function () use ( $call, $title ) {
+			return array(
+				'panel'  => function_exists( 'minn_admin_powerpress_can_podcast' ) ? minn_admin_powerpress_can_podcast() : null,
+				'fields' => $call( 'GET', '/minn-admin/v1/powerpress/fields', null, array( 'post_type' => 'posts' ) ),
+				'first'  => $call( 'POST', '/wp/v2/posts', array( 'title' => $title, 'status' => 'draft', 'minn_powerpress' => array( 'subtitle' => 'Not mine' ) ) ),
+			);
+		} );
+		$check( 'R3 PowerPress control: the author is not offered the fields', false === $refused['panel'] && 403 === $refused['fields'][0], wp_json_encode( array( $refused['panel'], $refused['fields'][0] ) ) );
+		$first = $refused['first'];
+		$check( 'R3 PowerPress: a new post sent anyway answers 201 with its id', 201 === $first[0] && ! empty( $first[1]['id'] ), $first[0] . ' ' . wp_json_encode( $first[1]['code'] ?? '' ) );
+		$check( 'R3 PowerPress: and names what PowerPress refused', (bool) $field_err( $first[1], 'minn_powerpress', 'subtitle' ), wp_json_encode( $first[1]['minn_field_errors'] ?? null ) );
+	} finally {
+		$clean();
+	}
+} )();
+
+/*
+ * R3 ACF options pages (from the fix-delta sweep). A value the parser
+ * refuses was skipped while the rest stored and the view said "Settings
+ * saved". The whole save is now refused before anything is written.
+ */
+( function () use ( $check, $skip, $call, $once, $tag ) {
+	if ( ! function_exists( 'acf_add_options_page' ) || ! function_exists( 'minn_admin_acf_options_save' ) ) {
+		$skip( 'R3 ACF options: ACF PRO options pages are not available' );
+		return;
+	}
+	$clean = $once( static function () {
+		global $wpdb;
+		$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE 'minn\\_v047\\_opts\\_%' OR option_name LIKE '\\_minn\\_v047\\_opts\\_%'" );
+		wp_cache_delete( 'alloptions', 'options' );
+		wp_cache_delete( 'notoptions', 'options' );
+		if ( function_exists( 'acf_remove_local_field_group' ) ) {
+			acf_remove_local_field_group( 'group_minn_v047_opts' );
+		}
+	} );
+	try {
+		acf_add_options_page( array( 'page_title' => 'Minn v047 opts', 'menu_title' => 'Minn v047 opts', 'menu_slug' => 'minn-v047-opts', 'post_id' => 'minn_v047_opts', 'capability' => 'edit_posts', 'redirect' => false ) );
+		acf_add_local_field_group( array(
+			'key'      => 'group_minn_v047_opts',
+			'title'    => 'Minn v047 opts',
+			'fields'   => array(
+				array( 'key' => 'field_minn_v047_olink', 'name' => 'minn_v047_olink', 'label' => 'Shop link', 'type' => 'url' ),
+				array( 'key' => 'field_minn_v047_otext', 'name' => 'minn_v047_otext', 'label' => 'Tagline', 'type' => 'text' ),
+			),
+			'location' => array( array( array( 'param' => 'options_page', 'operator' => '==', 'value' => 'minn-v047-opts' ) ) ),
+		) );
+		update_field( 'field_minn_v047_olink', 'https://example.com/shop', 'minn_v047_opts' );
+		update_field( 'field_minn_v047_otext', 'Old', 'minn_v047_opts' );
+		$raw = static function ( $name ) {
+			wp_cache_delete( 'alloptions', 'options' );
+			wp_cache_delete( 'minn_v047_opts_' . $name, 'options' );
+			return get_option( 'minn_v047_opts_' . $name );
+		};
+		$route = '/minn-admin/v1/acf/options/minn-v047-opts/tab-0';
+		list( $st, $d ) = $call( 'POST', $route, array( 'values' => array( 'field_minn_v047_olink' => 'javascript:alert(1)', 'field_minn_v047_otext' => 'New ' . $tag ) ) );
+		$check( 'R3 ACF options: a refused link refuses the save with 400', 400 === $st, $st . ' ' . wp_json_encode( $d['code'] ?? '' ) );
+		$check( 'R3 ACF options: naming the link and only the link', array( 'field_minn_v047_olink' ) === array_column( (array) ( $d['data']['fields'] ?? array() ), 'key' ) && false !== strpos( (string) ( $d['message'] ?? '' ), 'Shop link' ), wp_json_encode( $d ) );
+		$check( 'R3 ACF options: nothing is written, not even the text beside it', 'https://example.com/shop' === $raw( 'minn_v047_olink' ) && 'Old' === $raw( 'minn_v047_otext' ), wp_json_encode( array( $raw( 'minn_v047_olink' ), $raw( 'minn_v047_otext' ) ) ) );
+		list( $st ) = $call( 'POST', $route, array( 'values' => array( 'field_minn_v047_olink' => 'https://example.com/new', 'field_minn_v047_otext' => 'New ' . $tag ) ) );
+		$check( 'R3 ACF options control: a clean save stores both', 200 === $st && 'https://example.com/new' === $raw( 'minn_v047_olink' ) && 'New ' . $tag === $raw( 'minn_v047_otext' ), $st . ' ' . wp_json_encode( array( $raw( 'minn_v047_olink' ), $raw( 'minn_v047_otext' ) ) ) );
 	} finally {
 		$clean();
 	}
