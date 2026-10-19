@@ -654,8 +654,9 @@ function minn_admin_gfb_same( $a, $b ) {
 /**
  * The part of a submitted row that differs from the field as the builder
  * read it, so an untouched setting is never rewritten (a stored '' width
- * stays '', unchanged checkbox choices keep their inputs). Choices travel
- * with their show-values flag, since one decides how the other is read.
+ * stays '', unchanged checkbox choices keep their inputs). A value sent back
+ * as the read served it, a credential copy masked, is untouched too. Choices
+ * travel with their show-values flag, since one decides how the other is read.
  *
  * @param GF_Field $field The stored field.
  * @param array    $row   The submitted row.
@@ -665,7 +666,7 @@ function minn_admin_gfb_changed( $field, $row ) {
 	$base = minn_admin_gfb_field_row( $field );
 	$out  = array();
 	foreach ( $row as $k => $v ) {
-		if ( array_key_exists( $k, $base ) && ! minn_admin_gfb_same( $base[ $k ], $v ) ) {
+		if ( array_key_exists( $k, $base ) && ! minn_admin_gfb_same( $base[ $k ], $v ) && ! Minn_Admin_Egress::served_as( $v, $base[ $k ] ) ) {
 			$out[ $k ] = $v;
 		}
 	}
@@ -679,7 +680,7 @@ function minn_admin_gfb_changed( $field, $row ) {
 		foreach ( $row['subInputs'] as $in ) {
 			$now[] = array( 'id' => (string) ( $in['id'] ?? '' ), 'isHidden' => ! empty( $in['isHidden'] ), 'customLabel' => (string) ( $in['customLabel'] ?? '' ) );
 		}
-		if ( ! minn_admin_gfb_same( $was, $now ) ) {
+		if ( ! minn_admin_gfb_same( $was, $now ) && ! Minn_Admin_Egress::served_as( $now, $was ) ) {
 			$out['subInputs'] = $row['subInputs'];
 		}
 	}
@@ -813,16 +814,17 @@ function minn_admin_gfb_overlay( $arr, $row, $allowed, $form_id ) {
 		foreach ( $arr['inputs'] as &$in ) {
 			$sid = $suffix( rgar( $in, 'id' ) );
 			// The page sends every part when any part changes, so a part's
-			// setting sent back as stored stays as stored: Gravity Forms keeps
-			// markup in a sub-label, and cleaning stripped it from parts
-			// nobody touched.
+			// setting sent back as stored (or as served, a credential copy
+			// masked) stays as stored: Gravity Forms keeps markup in a
+			// sub-label, and cleaning stripped it from parts nobody touched.
 			if ( isset( $sub[ $sid ] ) ) {
 				$hide = ! empty( $sub[ $sid ]['isHidden'] );
 				if ( $hide !== ! empty( $in['isHidden'] ) ) {
 					$in['isHidden'] = $hide;
 				}
 				$label = (string) ( $sub[ $sid ]['customLabel'] ?? '' );
-				if ( $label !== (string) rgar( $in, 'customLabel' ) ) {
+				$was   = (string) rgar( $in, 'customLabel' );
+				if ( $label !== $was && ! Minn_Admin_Egress::served_as( $label, $was ) ) {
 					$in['customLabel'] = sanitize_text_field( $label );
 				}
 			}
@@ -847,11 +849,12 @@ function minn_admin_gfb_overlay( $arr, $row, $allowed, $form_id ) {
 		// any one changes. So each sent choice starts from the stored choice
 		// it stands for and only what differs is written: the keys an add-on
 		// keeps on a choice (an image, a limit, a price) survive an edit of
-		// another choice, and a text or value sent back as stored keeps its
-		// bytes. A sent choice stands for the stored one with its text (and
-		// value, when values show); else, with values shown, the one with its
-		// value (a relabel); else the unclaimed one in its place, when the
-		// list kept its length or the two share a text or value (a rename).
+		// another choice, and a text or value sent back as stored (or as
+		// served, a credential copy masked) keeps its bytes. A sent choice
+		// stands for the stored one with its text (and value, when values
+		// show); else, with values shown, the one with its value (a
+		// relabel); else the unclaimed one in its place, when the list kept
+		// its length or the two share a text or value (a rename).
 		$was   = array_values( array_filter( (array) rgar( $arr, 'choices' ), 'is_array' ) );
 		$sent  = array_values( array_filter( $row['choices'], 'is_array' ) );
 		$from  = array();
@@ -865,7 +868,9 @@ function minn_admin_gfb_overlay( $arr, $row, $allowed, $form_id ) {
 			}
 		};
 		$same = function ( $c, $w, $key ) {
-			return (string) ( $c[ $key ] ?? '' ) === (string) rgar( $w, $key );
+			$sent = (string) ( $c[ $key ] ?? '' );
+			$was  = (string) rgar( $w, $key );
+			return $sent === $was || Minn_Admin_Egress::served_as( $sent, $was );
 		};
 		foreach ( array_keys( $sent ) as $i ) {
 			$claim( $i, function ( $c, $w ) use ( $same, $values ) {
@@ -1010,16 +1015,32 @@ function minn_admin_gfb_save( $form_id, $body ) {
 		return new WP_Error( 'minn_gfb_stale', __( 'This form changed since you opened it. Reload to get the latest version, then make your changes again.', 'minn-admin' ), array( 'status' => 409 ) );
 	}
 
-	if ( array_key_exists( 'title', $body ) ) {
+	// Sent back as the read served it (a credential copy masked), a
+	// property stays as stored.
+	$as_stored = $meta;
+	$put = function ( $key, $stored ) use ( $body ) {
+		return array_key_exists( $key, $body ) && ! Minn_Admin::unchanged( is_scalar( $body[ $key ] ) ? (string) $body[ $key ] : '', (string) $stored );
+	};
+	if ( $put( 'title', rgar( $meta, 'title' ) ) ) {
 		$meta['title'] = trim( wp_strip_all_tags( (string) $body['title'] ) );
 	}
-	if ( array_key_exists( 'description', $body ) ) {
+	if ( $put( 'description', rgar( $meta, 'description' ) ) ) {
 		$meta['description'] = (string) $body['description'];
 	}
-	if ( array_key_exists( 'buttonText', $body ) ) {
+	if ( $put( 'buttonText', rgars( $meta, 'button/text' ) ) ) {
 		$button         = is_array( rgar( $meta, 'button' ) ) ? $meta['button'] : array( 'type' => 'text', 'imageUrl' => '' );
 		$button['text'] = sanitize_text_field( (string) $body['buttonText'] );
 		$meta['button'] = $button;
+	}
+	// Form meta has no restore: an edit still carrying a mask would be
+	// stored where the credential was. Each field is asked the same below,
+	// all before their save.
+	$masked = Minn_Admin_Egress::refuse_masks(
+		array( 'title' => rgar( $meta, 'title' ), 'description' => rgar( $meta, 'description' ), 'button' => rgar( $meta, 'button' ) ),
+		array( 'title' => rgar( $as_stored, 'title' ), 'description' => rgar( $as_stored, 'description' ), 'button' => rgar( $as_stored, 'button' ) )
+	);
+	if ( $masked ) {
+		return $masked;
 	}
 
 	$creatable = minn_admin_gfb_creatable();
@@ -1061,6 +1082,10 @@ function minn_admin_gfb_save( $form_id, $body ) {
 		}
 		if ( is_wp_error( $arr ) ) {
 			return $arr;
+		}
+		$masked = Minn_Admin_Egress::refuse_masks( $arr, $rid ? minn_admin_gfb_field_array( $stored[ $rid ] ) : array() );
+		if ( $masked ) {
+			return $masked;
 		}
 		if ( array_key_exists( 'conditionalLogic', $changed ) && in_array( 'conditionalLogic', $settings, true ) ) {
 			$logic_set[ count( $out ) ] = true;
@@ -1137,6 +1162,10 @@ function minn_admin_gfb_create( $body ) {
 	$title = trim( wp_strip_all_tags( (string) ( $body['title'] ?? '' ) ) );
 	if ( '' === $title ) {
 		return new WP_Error( 'minn_gfb_title', __( 'Give the form a title first.', 'minn-admin' ), array( 'status' => 400 ) );
+	}
+	$masked = Minn_Admin_Egress::refuse_masks( array( 'title' => $title, 'description' => (string) ( $body['description'] ?? '' ) ), array() );
+	if ( $masked ) {
+		return $masked;
 	}
 	$meta    = array(
 		'title'                => $title,
