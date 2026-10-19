@@ -2964,7 +2964,7 @@ add_action( 'rest_api_init', function () {
 					// Never an error from here: the post is already saved, a
 					// new one included. The refusal rides on the post's own
 					// answer instead (minn_admin_panel_report_held(),
-					// adapters/acpt.php).
+					// the fields tier).
 					if ( is_wp_error( $error ) && $request instanceof WP_REST_Request && function_exists( 'minn_admin_panel_held' ) ) {
 						minn_admin_panel_held( $request, $error, 'minn_acf' );
 					}

@@ -33,10 +33,14 @@ function minn_admin_tec_active() {
 		&& post_type_exists( 'tribe_events' );
 }
 
-/** 'Y-m-d H:i' for the panel from TEC's stored 'Y-m-d H:i:s', or ''. */
+/**
+ * 'Y-m-d H:i' for the panel from TEC's stored 'Y-m-d H:i:s', or ''. A wall
+ * time, so read and printed on one clock: a time in a default zone's DST
+ * gap moved.
+ */
 function minn_admin_tec_panel_datetime( $meta_value ) {
-	$ts = $meta_value ? strtotime( (string) $meta_value ) : false;
-	return $ts ? date( 'Y-m-d H:i', $ts ) : '';
+	$d = $meta_value ? date_create_immutable( (string) $meta_value, new DateTimeZone( 'UTC' ) ) : false;
+	return $d ? $d->format( 'Y-m-d H:i' ) : '';
 }
 
 /** { value, label } for a linked post id, or '' when unset/missing. */
@@ -188,22 +192,26 @@ function minn_admin_tec_store( $post_id, $changes ) {
 	$post   = get_post( $post_id );
 	$served = minn_admin_tec_panel_values( $post_id );
 	$data   = array();
+	// Wall times, read on the clock they are written on (UTC, as the tier
+	// cleans them): parsed in PHP's default zone and printed back, a value
+	// moved by the zone's offset wherever that is not UTC.
+	$utc = new DateTimeZone( 'UTC' );
 	foreach ( array( 'start' => 'Start', 'end' => 'End' ) as $key => $side ) {
-		$ts = isset( $changes[ $key ] ) ? strtotime( (string) $changes[ $key ] ) : false;
-		if ( $ts ) {
+		$d = isset( $changes[ $key ] ) ? date_create_immutable( (string) $changes[ $key ], $utc ) : false;
+		if ( $d ) {
 			// The exact shape TEC's own REST endpoint sends.
-			$data[ "Event{$side}Date" ] = date( 'Y-m-d', $ts );
-			$data[ "Event{$side}Time" ] = date( 'H:i:s', $ts );
+			$data[ "Event{$side}Date" ] = $d->format( 'Y-m-d' );
+			$data[ "Event{$side}Time" ] = $d->format( 'H:i:s' );
 		}
 	}
 	// TEC takes new times only as a pair (both or it keeps the stored ones),
 	// so a changed side goes with the other as stored, to the second.
 	foreach ( array( 'Start' => 'End', 'End' => 'Start' ) as $side => $other ) {
 		if ( isset( $data[ "Event{$other}Date" ] ) && ! isset( $data[ "Event{$side}Date" ] ) ) {
-			$ts = strtotime( (string) get_post_meta( $post_id, "_Event{$side}Date", true ) );
-			if ( $ts ) {
-				$data[ "Event{$side}Date" ] = date( 'Y-m-d', $ts );
-				$data[ "Event{$side}Time" ] = date( 'H:i:s', $ts );
+			$d = date_create_immutable( (string) get_post_meta( $post_id, "_Event{$side}Date", true ), $utc );
+			if ( $d ) {
+				$data[ "Event{$side}Date" ] = $d->format( 'Y-m-d' );
+				$data[ "Event{$side}Time" ] = $d->format( 'H:i:s' );
 			}
 		}
 	}

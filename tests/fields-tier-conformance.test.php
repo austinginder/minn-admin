@@ -102,6 +102,7 @@ $fx = array(
 	'spy'    => array(),
 	'answer' => null,      // what the write answers
 	'throw'  => false,
+	'boom'   => false,     // a capability filter throws
 );
 $fx_fields = static function () use ( $page ) {
 	return array(
@@ -437,6 +438,74 @@ $run = static function ( $T ) use ( $check, $skip, $as, $fx_def, $fx_reset, &$fx
 	$rows = $T::save( $def, $post, array( 'sg' => '' ) );
 	$check( 'T sg: an emptied pick clears', array_key_exists( 'sg', $wrote() ) && null === $wrote()['sg'] && ! $rows, wp_json_encode( array( $wrote(), $rows ) ) );
 
+	// ------------------------------------------- clocks, filters, types
+	$tz_was = date_default_timezone_get();
+	$w      = array();
+	$rows   = array( 'not run' );
+	date_default_timezone_set( 'Europe/Berlin' );
+	try {
+		$fx_reset();
+		$rows = $T::save( $def, $post, array( 'd' => '2026-10-20', 'dt' => '2026-10-20 10:00' ) );
+		$w    = $wrote();
+	} finally {
+		date_default_timezone_set( $tz_was );
+	}
+	$check( 'T d, dt: a date and a time are stored as typed when PHP\'s zone is not UTC', '2026-10-20' === ( $w['d'] ?? null ) && '2026-10-20 10:00:00' === ( $w['dt'] ?? null ) && ! $rows, wp_json_encode( array( $w, $rows ) ) );
+	$fx_reset();
+	$rows = $T::save( $def, $post, array( 'n' => '-0' ) );
+	$check( 'T n: "-0" is refused by a field that starts at 0', $refused( $rows, 'n' ) && ! $fx['spy'], wp_json_encode( $rows ) );
+
+	$boom = static function ( $url ) {
+		if ( false !== strpos( (string) $url, 'minn-boom' ) ) {
+			throw new RuntimeException( 'a clean_url filter threw' );
+		}
+		return $url;
+	};
+	add_filter( 'clean_url', $boom );
+	$threw = false;
+	try {
+		$fx_reset();
+		$rows = $T::save( $def, $post, array( 'u' => 'https://example.com/minn-boom', 't' => 'beside it' ) );
+	} catch ( \Throwable $e ) {
+		$threw = true;
+	} finally {
+		remove_filter( 'clean_url', $boom );
+	}
+	$check( 'R2 a cleaner whose filter throws refuses that field only', ! $threw && $refused( $rows, 'u' ) && ! $refused( $rows, 't' ) && 'beside it' === ( $wrote()['t'] ?? null ) && ! array_key_exists( 'u', $wrote() ), $threw ? 'threw' : wp_json_encode( array( $wrote(), $rows ) ) );
+	$cap_boom = static function ( $caps ) use ( &$fx ) {
+		if ( $fx['boom'] ) {
+			throw new RuntimeException( 'a map_meta_cap filter threw' );
+		}
+		return $caps;
+	};
+	add_filter( 'map_meta_cap', $cap_boom );
+	$r = new WP_REST_Request( 'POST', '/wp/v2/posts/' . $draft );
+	try {
+		$fx_reset();
+		$fx['boom'] = true;
+		$out        = $T::update( $def, array( 't' => 'changed' ), $post, $r );
+	} catch ( \Throwable $e ) {
+		$out = 'threw';
+	} finally {
+		$fx['boom'] = false;
+		remove_filter( 'map_meta_cap', $cap_boom );
+	}
+	$held = $T::held( $r );
+	$check( 'R2 a save whose gate throws answers no error and names what it was sent', null === $out && ! $fx['spy'] && $held, wp_json_encode( array( $out, $held ) ) );
+
+	global $wp_rest_additional_fields;
+	$rdef        = $def;
+	$rdef['key'] = 'minn_fx_reg_' . strtolower( wp_generate_password( 4, false ) );
+	$T::register_rest( $rdef );
+	$on = array();
+	foreach ( (array) $wp_rest_additional_fields as $t => $list ) {
+		if ( isset( $list[ $rdef['key'] ] ) ) {
+			$on[] = $t;
+			unset( $wp_rest_additional_fields[ $t ][ $rdef['key'] ] );
+		}
+	}
+	$check( 'R1 the REST field is registered on the panel\'s types and no other', array( 'post' ) === $on, wp_json_encode( $on ) );
+
 	// ------------------------------------------------- declared panels
 	foreach ( Minn_Admin_Kernel_Panels::ids() as $id ) {
 		$real = Minn_Admin_Kernel_Panels::panel( $id );
@@ -493,6 +562,17 @@ $run = static function ( $T ) use ( $check, $skip, $as, $fx_def, $fx_reset, &$fx
 		$out = $T::update( $spied, array( 'minn_not_offered_' . $id => 'x' ), $p, $r );
 		$T::held( $r );
 		$check( "panel {$id} R2: a refused save answers no error", null === $out, wp_json_encode( $out ) );
+		if ( 'tec' === $id ) {
+			$tz_was = date_default_timezone_get();
+			date_default_timezone_set( 'Europe/Berlin' );
+			try {
+				$rows = $T::save( $real, $p, array( 'start' => '2026-10-20 10:00', 'end' => '2026-10-20 12:30' ) );
+			} finally {
+				date_default_timezone_set( $tz_was );
+			}
+			wp_cache_delete( $pid, 'post_meta' );
+			$check( 'panel tec T datetime: an event keeps the times typed when PHP\'s zone is not UTC', 0 === strpos( (string) get_post_meta( $pid, '_EventStartDate', true ), '2026-10-20 10:00' ) && 0 === strpos( (string) get_post_meta( $pid, '_EventEndDate', true ), '2026-10-20 12:30' ) && ! $rows, wp_json_encode( array( get_post_meta( $pid, '_EventStartDate', true ), get_post_meta( $pid, '_EventEndDate', true ), $rows ) ) );
+		}
 		$fields = $T::fields( $real, $pid, $type );
 		if ( ! $fields ) {
 			$skip( "panel {$id}: offers no fields on a new {$type} here" );

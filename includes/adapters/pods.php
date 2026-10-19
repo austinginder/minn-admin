@@ -769,7 +769,7 @@ add_action( 'rest_api_init', function () {
 					// Never an error from here: the post is already saved, a
 					// new one included. The refusal rides on the post's own
 					// answer instead, beside any other panel's
-					// (minn_admin_panel_report_held(), adapters/acpt.php).
+					// (minn_admin_panel_report_held(), the fields tier).
 					if ( $request instanceof WP_REST_Request && function_exists( 'minn_admin_panel_held' ) ) {
 						minn_admin_panel_held( $request, $error, 'minn_pods' );
 						return;

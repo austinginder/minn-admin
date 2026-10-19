@@ -508,32 +508,39 @@ final class Minn_Admin_Kernel_Panels {
 		$changes = array();
 		foreach ( $values as $key => $sent ) {
 			$key = (string) $key;
-			if ( ! isset( $fields[ $key ] ) ) {
-				$refuse( $key, $key, __( 'This field cannot be changed here.', 'minn-admin' ), 403 );
-				continue;
-			}
-			$f = $fields[ $key ];
-			if ( array_key_exists( $key, $served ) && self::same( $f, $sent, $served[ $key ] ) ) {
-				continue;
-			}
-			$clean = self::clean( $f, $sent, $served[ $key ] ?? null );
-			if ( is_string( $clean ) ) {
-				$refuse( $key, $f['label'], isset( $f['refuse'] ) && is_string( $f['refuse'] ) && '' !== $f['refuse'] ? $f['refuse'] : $clean );
-				continue;
-			}
-			$value = $clean[0];
-			if ( null !== $value && isset( $f['check'] ) ) {
-				try {
-					$ok = call_user_func( $f['check'], $value, (int) $post->ID );
-				} catch ( \Throwable $e ) {
-					$ok = false;
-				}
-				if ( true !== $ok ) {
-					$refuse( $key, $f['label'], is_string( $ok ) && '' !== $ok ? $ok : ( isset( $f['refuse'] ) && is_string( $f['refuse'] ) && '' !== $f['refuse'] ? $f['refuse'] : self::says( $f ) ) );
+			// A cleaner, a capability check or a compare runs filters any plugin
+			// can hook, and the post is stored already: whatever throws refuses
+			// its own field and nothing else.
+			try {
+				if ( ! isset( $fields[ $key ] ) ) {
+					$refuse( $key, $key, __( 'This field cannot be changed here.', 'minn-admin' ), 403 );
 					continue;
 				}
+				$f = $fields[ $key ];
+				if ( array_key_exists( $key, $served ) && self::same( $f, $sent, $served[ $key ] ) ) {
+					continue;
+				}
+				$clean = self::clean( $f, $sent, $served[ $key ] ?? null );
+				if ( is_string( $clean ) ) {
+					$refuse( $key, $f['label'], isset( $f['refuse'] ) && is_string( $f['refuse'] ) && '' !== $f['refuse'] ? $f['refuse'] : $clean );
+					continue;
+				}
+				$value = $clean[0];
+				if ( null !== $value && isset( $f['check'] ) ) {
+					try {
+						$ok = call_user_func( $f['check'], $value, (int) $post->ID );
+					} catch ( \Throwable $e ) {
+						$ok = false;
+					}
+					if ( true !== $ok ) {
+						$refuse( $key, $f['label'], is_string( $ok ) && '' !== $ok ? $ok : ( isset( $f['refuse'] ) && is_string( $f['refuse'] ) && '' !== $f['refuse'] ? $f['refuse'] : self::says( $f ) ) );
+						continue;
+					}
+				}
+				$changes[ $key ] = $value;
+			} catch ( \Throwable $e ) {
+				$refuse( $key, isset( $fields[ $key ]['label'] ) ? $fields[ $key ]['label'] : $key, __( 'That did not work. Nothing was reported as done.', 'minn-admin' ), 500 );
 			}
-			$changes[ $key ] = $value;
 		}
 		if ( ! $changes ) {
 			return array_values( $refused );
@@ -649,7 +656,9 @@ final class Minn_Admin_Kernel_Panels {
 				if ( ! is_numeric( $v ) || ( ! empty( $f['integer'] ) && ! preg_match( '/^-?\d+$/', $v ) ) ) {
 					return self::says( $f );
 				}
-				if ( ( isset( $f['min'] ) && (float) $v < (float) $f['min'] ) || ( isset( $f['max'] ) && (float) $v > (float) $f['max'] ) ) {
+				// '-0' is no less than 0, and no number a field from 0 up takes.
+				$below = isset( $f['min'] ) && ( (float) $v < (float) $f['min'] || ( (float) $f['min'] >= 0 && '-' === substr( $v, 0, 1 ) ) );
+				if ( $below || ( isset( $f['max'] ) && (float) $v > (float) $f['max'] ) ) {
 					return __( 'That number is outside the range this field takes.', 'minn-admin' );
 				}
 				break;
@@ -665,8 +674,11 @@ final class Minn_Admin_Kernel_Panels {
 				break;
 			case 'date':
 			case 'datetime':
-				$ts = strtotime( trim( $s ) );
-				$v  = $ts ? gmdate( 'date' === $type ? 'Y-m-d' : 'Y-m-d H:i:s', $ts ) : '';
+				// Read and written as a wall time on one clock (UTC), so the
+				// value typed is the value stored whatever PHP's default zone.
+				$d = date_create_immutable( trim( $s ), new DateTimeZone( 'UTC' ) );
+				$e = DateTimeImmutable::getLastErrors();
+				$v = $d && ! ( $e && $e['warning_count'] ) ? $d->format( 'date' === $type ? 'Y-m-d' : 'Y-m-d H:i:s' ) : '';
 				break;
 			default:
 				$v = '';
@@ -715,7 +727,20 @@ final class Minn_Admin_Kernel_Panels {
 		if ( ! is_array( $value ) || ! $value ) {
 			return null;
 		}
-		$refused = self::save( $def, $post, $value );
+		try {
+			$refused = self::save( $def, $post, $value );
+		} catch ( \Throwable $e ) {
+			// The gates before the fields run filters too.
+			$refused = array();
+			foreach ( array_keys( $value ) as $key ) {
+				$refused[] = array(
+					'key'     => (string) $key,
+					'label'   => (string) $key,
+					'message' => __( 'That did not work. Nothing was reported as done.', 'minn-admin' ),
+					'status'  => 500,
+				);
+			}
+		}
 		if ( $refused && $request instanceof WP_REST_Request ) {
 			$by = array();
 			foreach ( $refused as $row ) {
@@ -733,9 +758,13 @@ final class Minn_Admin_Kernel_Panels {
 	/** rest_api_init: each active panel's REST field on its types. */
 	public static function register_field( $id ) {
 		$def = self::active( $id );
-		if ( null === $def ) {
-			return;
+		if ( null !== $def ) {
+			self::register_rest( $def );
 		}
+	}
+
+	/** A panel's REST field, on the types it serves and no other. */
+	public static function register_rest( array $def ) {
 		$types = self::types( $def );
 		if ( ! $types ) {
 			return;
