@@ -230,6 +230,17 @@ The number of hand-written REST routes in `includes/adapters/` may only go
 down. The inventory measures it; a suite fails when it
 rises.
 
+Routes are not the whole surface. The registry scans keep finding the same
+bug in another adapter wherever a security rule is written by hand, so the
+inventory also counts those rules, and `tests/surface-ratchet.test.js` holds
+each of them to the same may-only-fall rule: editor-panel save callbacks,
+panel refusals held by hand, the egress mask compare and refusal, URL
+cleaning, and stored text cut outside `Minn_Admin_Egress::clip()`. Each
+should reach zero outside the kernel as the tiers absorb it. Raising a
+ceiling is a decision the commit explains, not a fix. The inventory also
+counts the credential rows only the database browser's central lists know,
+until adapters declare their own stores.
+
 ## v0.46 scope
 
 1. **The parity capture and diff tool, first.** Before any kernel code, so the

@@ -14,7 +14,17 @@
  * comment never counts as code), hand-written REST routes, permission callbacks,
  * capability checks, raw SQL reads and writes, the screen shapes it declares,
  * kernel resources (minn_admin_resource() calls) and kernel handlers
- * (minn_admin_endpoint() calls). Each hand-written route also gets a kind and
+ * (minn_admin_endpoint() calls).
+ *
+ * The surface measures count the security rules an adapter still writes by
+ * hand, the places the registry scans keep finding the same bug in another
+ * file: editor-panel save callbacks, held panel refusals, the egress mask
+ * compare and refusal (served_as, refuse_masks, unchanged), URL cleaning,
+ * and stored text cut by hand rather than through Minn_Admin_Egress::clip().
+ * Each should reach 0 outside the kernel as the tiers absorb them
+ * (tests/surface-ratchet.test.js). credential_rows counts the rows only the
+ * database browser's central lists know about, until adapters declare their
+ * own stores. Each hand-written route also gets a kind and
  * a tier: "declarable" (a list, an item, an item action, a status card) or
  * "handler" (a job, a send, a builder, a licence flow and the like). An
  * adapter is "kernel" when it uses the kernel and registers no routes of its
@@ -86,6 +96,32 @@ function familyMap() {
 }
 
 const count = ( src, re ) => ( src.match( re ) || [] ).length;
+
+// Prefix cuts of 16 characters or more: a credential the egress fence knows
+// is at least that long. A hash or a MySQL datetime is never stored text.
+function handClips( src ) {
+	return src.split( '\n' ).filter( ( line ) => {
+		if ( line.includes( 'substr( md5(' ) || line.includes( 'substr( (string) $v, 0, 19 )' ) ) return false;
+		const m = line.match( /\b(?:mb_)?substr\(\s*[^,;]+,\s*0,\s*(\d+)\s*\)/ );
+		return m && parseInt( m[ 1 ], 10 ) >= 16;
+	} ).length;
+}
+
+// Entries in one of the database browser's credential lists: quoted names
+// in a *_KEYS list, array( prefix, suffix ) pairs in a *_SHAPES list.
+function constEntries( src, name ) {
+	const start = src.indexOf( 'const ' + name + ' = array(' );
+	if ( start < 0 ) return 0;
+	let i = src.indexOf( '(', start );
+	let depth = 0;
+	let end = i;
+	for ( ; end < src.length; end++ ) {
+		if ( '(' === src[ end ] ) depth++;
+		if ( ')' === src[ end ] && 0 === --depth ) break;
+	}
+	const body = src.slice( i + 1, end );
+	return name.endsWith( '_SHAPES' ) ? count( body, /array\s*\(/g ) : count( body, /'[^']*'/g );
+}
 
 // Hand-written routes, each with its path and a kind. The kind says which
 // tier a port can reach (docs/adapter-kernel.md, "Three tiers"): the generic
@@ -196,6 +232,11 @@ function measure( file, src, families ) {
 		cap_checks: count( src, /current_user_can\s*\(/g ),
 		sql_reads: count( src, /\$wpdb->(get_results|get_var|get_row|get_col)\s*\(/g ),
 		sql_writes: count( src, /\$wpdb->(query|update|insert|delete|replace)\s*\(/g ),
+		panel_saves: count( src, /'update_callback'\s*=>/g ),
+		held_refusals: count( src, /(?<!function\s)minn_admin_panel_held\s*\(/g ),
+		mask_rules: count( src, /(Minn_Admin_Egress::(served_as|refuse_masks)|Minn_Admin::unchanged)\s*\(/g ),
+		url_cleaning: count( src, /\b(esc_url_raw|minn_admin_url_clean)\s*\(/g ),
+		hand_clips: handClips( src ),
 		resources,
 		endpoints,
 		status: ( resources || endpoints ) && ! routes ? 'kernel' : ( resources || endpoints ) ? 'partial' : 'legacy',
@@ -247,6 +288,12 @@ const snapshot = {
 	collection_lines: sum( 'lines', collection ),
 	collection_code_lines: sum( 'code_lines', collection ),
 	collection_routes: sum( 'routes', collection ),
+	panel_saves: sum( 'panel_saves' ),
+	held_refusals: sum( 'held_refusals' ),
+	mask_rules: sum( 'mask_rules' ),
+	url_cleaning: sum( 'url_cleaning' ),
+	hand_clips: sum( 'hand_clips' ),
+	credential_rows: ( ( db ) => db ? [ 'SECRET_OPTION_KEYS', 'SECRET_OPTION_SHAPES', 'SECRET_USERMETA_KEYS', 'SECRET_USERMETA_SHAPES' ].reduce( ( n, c ) => n + constEntries( db, c ), 0 ) : 0 )( readIfExists( 'includes/class-minn-admin-db.php' ) ),
 };
 
 if ( outDir ) {
