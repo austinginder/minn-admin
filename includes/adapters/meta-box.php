@@ -3,10 +3,11 @@
  * Bundled adapter: Meta Box (wp.org free).
  *
  * Sibling of the ACF editor-panel adapter. Meta Box free does not expose a
- * first-class REST object like ACF's `acf` field, so this adapter:
- *   1. Lists simple fields for the post being edited via fieldsRoute
- *   2. Registers a `minn_meta_box` REST field on every show_in_rest post type
- *      for read/write of those values through rwmb_get_value / rwmb_set_meta
+ * first-class REST object like ACF's `acf` field, so this adapter declares a
+ * fields-tier panel (minn_admin_fields(), includes/kernel/class-minn-admin-kernel-panels.php):
+ * the simple fields of the boxes that apply to the post, read and written
+ * through rwmb_get_value / rwmb_set_meta under a `minn_meta_box` REST field on
+ * every show_in_rest post type.
  *
  * Complex field types (clones, media, post/user pickers, maps…) count as
  * locked and link out to wp-admin, same philosophy as ACF.
@@ -16,18 +17,18 @@
 
 defined( 'ABSPATH' ) || exit;
 
-/** Meta Box field types Minn can render as panel inputs. */
+/** Meta Box field types Minn can render as panel inputs, as the tier's types. */
 const MINN_ADMIN_META_BOX_SIMPLE = array(
 	'text'     => 'text',
 	'textarea' => 'textarea',
 	'number'   => 'number',
-	'range'    => 'range',
+	'range'    => 'number',
 	'email'    => 'email',
 	'url'      => 'url',
 	'select'   => 'select',
-	'radio'    => 'radio',
-	'checkbox' => 'true_false',
-	'switch'   => 'true_false',
+	'radio'    => 'select',
+	'checkbox' => 'checkbox',
+	'switch'   => 'checkbox',
 );
 
 /**
@@ -38,27 +39,10 @@ function minn_admin_meta_box_active() {
 }
 
 /**
- * Resolve REST base (or post type slug) to a post type name.
- *
- * @param string $rest_base From the editor.
- * @return string
- */
-function minn_admin_meta_box_resolve_type( $rest_base ) {
-	$rest_base = sanitize_key( $rest_base );
-	foreach ( get_post_types( array( 'show_in_rest' => true ), 'objects' ) as $obj ) {
-		$base = $obj->rest_base ? $obj->rest_base : $obj->name;
-		if ( $base === $rest_base || $obj->name === $rest_base ) {
-			return $obj->name;
-		}
-	}
-	return 'post';
-}
-
-/**
  * Map one Meta Box field onto the panel vocabulary, or null if locked.
  *
  * @param array $field Normalized Meta Box field.
- * @return array|null { name, label, type, choices?, min?, max? }
+ * @return array|null A fields-tier field.
  */
 function minn_admin_meta_box_map_field( $field ) {
 	if ( empty( $field['id'] ) || empty( $field['type'] ) ) {
@@ -91,15 +75,23 @@ function minn_admin_meta_box_map_field( $field ) {
 		'label' => ! empty( $field['name'] ) ? $field['name'] : $field['id'],
 		'type'  => MINN_ADMIN_META_BOX_SIMPLE[ $type ],
 	);
+	if ( in_array( $type, array( 'range', 'radio' ), true ) ) {
+		// Drawn as Meta Box names them (the panel reads range as a number
+		// box and radio as a select).
+		$mapped['input'] = $type;
+	}
+	if ( 'textarea' === $type ) {
+		// Meta Box keeps post HTML in a textarea (wp_kses_post).
+		$mapped['html'] = true;
+	}
 	if ( ! empty( $field['options'] ) && is_array( $field['options'] ) ) {
 		// Meta Box options are value => label; panel formNormField accepts choices object.
 		$mapped['choices'] = $field['options'];
 	}
-	if ( isset( $field['min'] ) && '' !== $field['min'] && null !== $field['min'] ) {
-		$mapped['min'] = $field['min'];
-	}
-	if ( isset( $field['max'] ) && '' !== $field['max'] && null !== $field['max'] ) {
-		$mapped['max'] = $field['max'];
+	foreach ( array( 'min', 'max' ) as $bound ) {
+		if ( isset( $field[ $bound ] ) && is_numeric( $field[ $bound ] ) ) {
+			$mapped[ $bound ] = $field[ $bound ];
+		}
 	}
 	return $mapped;
 }
@@ -138,20 +130,19 @@ function minn_admin_meta_box_boxes_for( $post_type, $post_id = 0 ) {
 }
 
 /**
- * Build the fieldsRoute response for a post.
+ * The panel's groups: one per box that applies to the post.
  *
  * @param int    $post_id   Post ID (0 for new).
  * @param string $post_type Post type slug.
- * @return array{groups: array}
+ * @return array[]
  */
-function minn_admin_meta_box_fields_payload( $post_id, $post_type ) {
+function minn_admin_meta_box_groups( $post_id, $post_type ) {
 	$groups = array();
 	foreach ( minn_admin_meta_box_boxes_for( $post_type, $post_id ) as $mb ) {
 		$mapped = array();
 		$locked = 0;
 		// RW_Meta_Box exposes fields via __get — isset( $mb->fields ) is false.
-		$fields = (array) $mb->fields;
-		foreach ( $fields as $field ) {
+		foreach ( (array) $mb->fields as $field ) {
 			// Divider / heading / custom_html are chrome, not locked data.
 			if ( in_array( $field['type'] ?? '', array( 'divider', 'heading', 'custom_html', 'button' ), true ) ) {
 				continue;
@@ -165,7 +156,6 @@ function minn_admin_meta_box_fields_payload( $post_id, $post_type ) {
 		}
 		if ( $mapped || $locked ) {
 			// Prefer settings title: __get can surface empty for some boxes.
-			$title = '';
 			if ( ! empty( $mb->meta_box['title'] ) ) {
 				$title = (string) $mb->meta_box['title'];
 			} elseif ( $mb->title ) {
@@ -180,30 +170,7 @@ function minn_admin_meta_box_fields_payload( $post_id, $post_type ) {
 			);
 		}
 	}
-	return array( 'groups' => $groups );
-}
-
-/**
- * All simple field ids that apply to a post (for REST get/update).
- *
- * @param int $post_id Post ID.
- * @return string[]
- */
-function minn_admin_meta_box_simple_ids_for_post( $post_id ) {
-	$post = get_post( $post_id );
-	if ( ! $post ) {
-		return array();
-	}
-	$ids = array();
-	foreach ( minn_admin_meta_box_boxes_for( $post->post_type, $post_id ) as $mb ) {
-		foreach ( (array) $mb->fields as $field ) {
-			$simple = minn_admin_meta_box_map_field( $field );
-			if ( $simple ) {
-				$ids[] = $simple['name'];
-			}
-		}
-	}
-	return array_values( array_unique( $ids ) );
+	return $groups;
 }
 
 /**
@@ -213,20 +180,24 @@ function minn_admin_meta_box_simple_ids_for_post( $post_id ) {
  * @return array
  */
 function minn_admin_meta_box_read_values( $post_id ) {
+	$post = get_post( $post_id );
+	if ( ! $post ) {
+		return array();
+	}
 	$out = array();
-	foreach ( minn_admin_meta_box_simple_ids_for_post( $post_id ) as $id ) {
-		$val = rwmb_get_value( $id, array(), $post_id );
-		// Checkbox/switch store 0/1 or empty — normalize booleans for the panel.
-		$field = function_exists( 'rwmb_get_field_settings' ) ? rwmb_get_field_settings( $id, array(), $post_id ) : null;
-		$type  = is_array( $field ) && ! empty( $field['type'] ) ? $field['type'] : '';
-		if ( in_array( $type, array( 'checkbox', 'switch' ), true ) ) {
-			$out[ $id ] = ! empty( $val );
-		} else {
-			// Arrays shouldn't appear for simple non-multiple fields; stringify edge cases.
-			if ( is_array( $val ) ) {
-				$out[ $id ] = '';
+	foreach ( minn_admin_meta_box_boxes_for( $post->post_type, $post_id ) as $mb ) {
+		foreach ( (array) $mb->fields as $field ) {
+			$simple = minn_admin_meta_box_map_field( $field );
+			if ( ! $simple || array_key_exists( $simple['name'], $out ) ) {
+				continue;
+			}
+			$val = rwmb_get_value( $simple['name'], array(), $post_id );
+			if ( 'checkbox' === $simple['type'] ) {
+				// Checkbox/switch store 0/1 or empty.
+				$out[ $simple['name'] ] = ! empty( $val );
 			} else {
-				$out[ $id ] = $val;
+				// Arrays shouldn't appear for simple non-multiple fields.
+				$out[ $simple['name'] ] = is_array( $val ) ? '' : $val;
 			}
 		}
 	}
@@ -234,174 +205,47 @@ function minn_admin_meta_box_read_values( $post_id ) {
 }
 
 /**
- * Write simple field values through Meta Box's own setter.
+ * Write cleaned values through Meta Box's own setter.
  *
  * @param int   $post_id Post ID.
- * @param array $values  Field id => value.
- * @return WP_Error|null The fields whose value was refused (each kept as
- *                       stored), or null.
+ * @param array $changes Field id => cleaned value, null to clear.
+ * @param array $fields  The offered fields, by id.
  */
-function minn_admin_meta_box_write_values( $post_id, $values ) {
-	if ( ! is_array( $values ) ) {
-		return null;
-	}
-	$refused = array();
-	$allowed = array_flip( minn_admin_meta_box_simple_ids_for_post( $post_id ) );
-	// The panel sends every field back when any one of them changes. A value
-	// equal to what the read handed out is left as stored, so an untouched
-	// field never goes back through Meta Box's sanitizer (sanitize_text_field
-	// deletes anything shaped like a %XX octet).
-	$held = minn_admin_meta_box_read_values( $post_id );
-	foreach ( $values as $key => $value ) {
-		if ( ! isset( $allowed[ $key ] ) ) {
-			continue;
-		}
-		$field = function_exists( 'rwmb_get_field_settings' ) ? rwmb_get_field_settings( $key, array(), $post_id ) : null;
-		$type  = is_array( $field ) && ! empty( $field['type'] ) ? $field['type'] : '';
-		$flag  = in_array( $type, array( 'checkbox', 'switch' ), true );
-		if ( $flag ) {
-			// Meta Box checkbox/switch expect 1 or empty/0.
-			$value = ( ! empty( $value ) && 'false' !== $value && '0' !== (string) $value ) ? 1 : 0;
-		}
-		if ( array_key_exists( $key, $held ) && ( is_scalar( $value ) || null === $value ) && is_scalar( $held[ $key ] )
-			&& ( $flag ? (bool) $value === (bool) $held[ $key ] : (string) $value === (string) $held[ $key ] ) ) {
-			continue;
-		}
-		if ( 'url' === $type && '' !== trim( (string) $value ) ) {
-			// The house rule every other URL writer applies: an address that
-			// runs code instead of going somewhere is refused, and refusing
-			// it leaves the stored address alone.
-			$clean = minn_admin_url_clean( $value );
-			if ( null === $clean ) {
-				$refused[] = array(
-					'key'     => (string) $key,
-					'label'   => is_array( $field ) && isset( $field['name'] ) && '' !== (string) $field['name'] ? wp_strip_all_tags( (string) $field['name'] ) : (string) $key,
-					'message' => __( 'That URL is not valid.', 'minn-admin' ),
-				);
-				continue;
+function minn_admin_meta_box_store( $post_id, $changes, $fields ) {
+	foreach ( $changes as $key => $value ) {
+		if ( null === $value ) {
+			// Delete the meta so the field is truly empty.
+			if ( function_exists( 'rwmb_delete_meta' ) ) {
+				rwmb_delete_meta( $post_id, $key );
+			} else {
+				delete_post_meta( $post_id, $key );
 			}
-			$value = $clean;
-		}
-		// Empty string on a clearable select: delete the meta so the field is truly empty.
-		if ( ( '' === $value || null === $value ) && function_exists( 'rwmb_delete_meta' ) ) {
-			rwmb_delete_meta( $post_id, $key );
 			continue;
+		}
+		if ( 'checkbox' === $fields[ $key ]['type'] ) {
+			// Meta Box checkbox/switch expect 1 or 0.
+			$value = $value ? 1 : 0;
 		}
 		// Slashed: Meta Box's own form feeds this pipeline the slashed $_POST
 		// and its storage write (update_metadata()) unslashes, so a raw REST
 		// value lost a level of backslashes (^\d+$ saved as ^d+$).
 		rwmb_set_meta( $post_id, $key, wp_slash( $value ) );
 	}
-	if ( ! $refused ) {
-		return null;
-	}
-	return new WP_Error(
-		'minn_meta_box_refused',
-		_n( 'One custom field was not saved.', 'Some custom fields were not saved.', count( $refused ), 'minn-admin' ),
-		array( 'status' => 400, 'fields' => $refused )
-	);
+	return null;
 }
 
-add_filter( 'minn_admin_editor_panels', function ( $panels ) {
-	if ( ! minn_admin_meta_box_active() ) {
-		return $panels;
-	}
-	$panels['meta-box'] = array(
+minn_admin_fields( 'meta-box', function () {
+	return array(
+		'active'      => 'minn_admin_meta_box_active',
 		'label'       => __( 'Custom fields', 'minn-admin' ),
 		'sub'         => 'Meta Box',
-		'cap'         => 'edit_posts',
-		'fieldsRoute' => 'minn-admin/v1/meta-box/fields?post_id={id}&post_type={type}',
-		'valuesKey'   => 'minn_meta_box',
-		'writeKey'    => 'minn_meta_box',
+		'key'         => 'minn_meta_box',
+		'types'       => function () {
+			return get_post_types( array( 'show_in_rest' => true ), 'names' );
+		},
+		'groups'      => 'minn_admin_meta_box_groups',
+		'read'        => 'minn_admin_meta_box_read_values',
+		'write'       => 'minn_admin_meta_box_store',
+		'description' => __( 'Meta Box simple field values for Minn Admin.', 'minn-admin' ),
 	);
-	return $panels;
-} );
-
-add_action( 'rest_api_init', function () {
-	if ( ! minn_admin_meta_box_active() ) {
-		return;
-	}
-
-	register_rest_route( 'minn-admin/v1', '/meta-box/fields', array(
-		'methods'             => 'GET',
-		'permission_callback' => function () {
-			return current_user_can( 'edit_posts' );
-		},
-		'args'                => array(
-			'post_id'   => array( 'type' => 'integer', 'default' => 0 ),
-			'post_type' => array( 'type' => 'string', 'default' => 'posts' ),
-		),
-		'callback'            => function ( WP_REST_Request $request ) {
-			$post_id   = (int) $request['post_id'];
-			$post_type = minn_admin_meta_box_resolve_type( $request['post_type'] );
-			if ( $post_id ) {
-				$post = get_post( $post_id );
-				// A missing post used to fall THROUGH with the caller's own
-				// post_type intact, which is the same hole as post_id=0.
-				if ( ! $post ) {
-					return new WP_Error( 'not_found', __( 'Post not found.', 'minn-admin' ), array( 'status' => 404 ) );
-				}
-				if ( ! current_user_can( 'edit_post', $post_id ) ) {
-					return new WP_Error( 'rest_forbidden', __( 'You cannot edit this post.', 'minn-admin' ), array( 'status' => 403 ) );
-				}
-				$post_type = $post->post_type;
-			} else {
-				// No post to authorize against, so authorize against the TYPE.
-				// edit_posts alone let a Contributor enumerate field labels,
-				// names, types and choice lists for types they cannot edit —
-				// internal naming and credential field ids are common there.
-				$type_obj = get_post_type_object( $post_type );
-				if ( ! $type_obj || ! current_user_can( $type_obj->cap->edit_posts ) ) {
-					return new WP_Error( 'rest_forbidden', __( 'You cannot edit that post type.', 'minn-admin' ), array( 'status' => 403 ) );
-				}
-			}
-			return rest_ensure_response( minn_admin_meta_box_fields_payload( $post_id, $post_type ) );
-		},
-	) );
-
-	// Values ride the post REST object (same shape ACF uses with its `acf` key).
-	$types = get_post_types( array( 'show_in_rest' => true ), 'names' );
-	foreach ( $types as $type ) {
-		register_rest_field(
-			$type,
-			'minn_meta_box',
-			array(
-				'get_callback'    => function ( $obj ) {
-					$id = isset( $obj['id'] ) ? (int) $obj['id'] : 0;
-					if ( ! $id || ! current_user_can( 'edit_post', $id ) ) {
-						return new stdClass(); // empty object in JSON
-					}
-					return (object) minn_admin_meta_box_read_values( $id );
-				},
-				'update_callback' => function ( $value, $post, $field_name = '', $request = null ) {
-					if ( ! $post instanceof WP_Post ) {
-						return;
-					}
-					if ( ! current_user_can( 'edit_post', $post->ID ) ) {
-						return;
-					}
-					// REST may deliver object as array or stdClass.
-					if ( is_object( $value ) ) {
-						$value = (array) $value;
-					}
-					if ( ! is_array( $value ) ) {
-						return;
-					}
-					$error = minn_admin_meta_box_write_values( $post->ID, $value );
-					// Never an error from here: the post is already saved, a
-					// new one included. The refusal rides on the post's own
-					// answer instead (minn_admin_panel_report_held(),
-					// adapters/acpt.php).
-					if ( is_wp_error( $error ) && $request instanceof WP_REST_Request && function_exists( 'minn_admin_panel_held' ) ) {
-						minn_admin_panel_held( $request, $error, 'minn_meta_box' );
-					}
-				},
-				'schema'          => array(
-					'description' => __( 'Meta Box simple field values for Minn Admin.', 'minn-admin' ),
-					'type'        => 'object',
-					'context'     => array( 'edit' ),
-				),
-			)
-		);
-	}
 } );

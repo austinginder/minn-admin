@@ -309,7 +309,7 @@ if ( function_exists( 'minn_admin_powerpress_active' ) && minn_admin_powerpress_
 }
 
 // --- #21 Meta Box readonly / disabled fields stay locked -------------------
-if ( function_exists( 'rwmb_get_registry' ) && function_exists( 'minn_admin_meta_box_write_values' ) ) {
+if ( function_exists( 'rwmb_get_registry' ) && class_exists( 'Minn_Admin_Kernel_Panels' ) && Minn_Admin_Kernel_Panels::panel( 'meta-box' ) ) {
 	$mb_box = rwmb_get_registry( 'meta_box' )->make( array(
 		'id'         => 'minn_v042_mb',
 		'title'      => 'Minn v042 probe',
@@ -327,7 +327,8 @@ if ( function_exists( 'rwmb_get_registry' ) && function_exists( 'minn_admin_meta
 	$mb_post = wp_insert_post( array( 'post_title' => 'Minn v042 meta box probe', 'post_status' => 'draft' ) );
 	update_post_meta( $mb_post, 'minn_v042_ro', 'set by code' );
 	update_post_meta( $mb_post, 'minn_v042_dis', 'set by code' );
-	minn_admin_meta_box_write_values( $mb_post, array( 'minn_v042_ro' => 'overwritten', 'minn_v042_dis' => 'overwritten', 'minn_v042_ok' => 'written' ) );
+	// Through the panel's save (the fields tier), as the REST field runs it.
+	Minn_Admin_Kernel_Panels::save( Minn_Admin_Kernel_Panels::panel( 'meta-box' ), get_post( $mb_post ), array( 'minn_v042_ro' => 'overwritten', 'minn_v042_dis' => 'overwritten', 'minn_v042_ok' => 'written' ) );
 	$check( 'Meta Box: a readonly field is not written', 'set by code' === get_post_meta( $mb_post, 'minn_v042_ro', true ), get_post_meta( $mb_post, 'minn_v042_ro', true ) );
 	$check( 'Meta Box: a field disabled in its attributes is not written', 'set by code' === get_post_meta( $mb_post, 'minn_v042_dis', true ), get_post_meta( $mb_post, 'minn_v042_dis', true ) );
 	$check( 'Meta Box: an ordinary field is still written (control)', 'written' === get_post_meta( $mb_post, 'minn_v042_ok', true ) );

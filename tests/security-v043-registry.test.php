@@ -1519,7 +1519,7 @@ if ( ! class_exists( '\Bricks\License' ) || ! function_exists( 'minn_admin_licen
 // The editor sends the whole panel back when any field in it changes. Meta Box's
 // own form hands rwmb_set_meta()'s pipeline the slashed $_POST, and the storage
 // write unslashes once, so an unslashed REST value lost a level of backslashes.
-if ( function_exists( 'rwmb_get_registry' ) && function_exists( 'minn_admin_meta_box_write_values' ) ) {
+if ( function_exists( 'rwmb_get_registry' ) && function_exists( 'minn_admin_meta_box_active' ) && minn_admin_meta_box_active() ) {
 	$fsl_mb_box = rwmb_get_registry( 'meta_box' )->make( array(
 		'id'         => 'minn_v043_mb_slash',
 		'title'      => 'Minn v043 slash probe',

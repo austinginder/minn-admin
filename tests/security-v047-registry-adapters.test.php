@@ -525,7 +525,7 @@ $s2_post = static function ( $label ) use ( $admin, $tag ) {
 } )();
 
 ( function () use ( $check, $skip, $call, $once, $field_err, $tag, $s2_post ) {
-	if ( ! function_exists( 'rwmb_get_registry' ) || ! function_exists( 'minn_admin_meta_box_write_values' ) ) {
+	if ( ! function_exists( 'rwmb_get_registry' ) || ! function_exists( 'minn_admin_meta_box_active' ) || ! minn_admin_meta_box_active() ) {
 		$skip( 'S2 Meta Box: not active' );
 		return;
 	}
