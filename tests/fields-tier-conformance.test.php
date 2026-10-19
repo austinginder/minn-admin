@@ -93,6 +93,17 @@ $other  = $post_of( 'post', $admin, 'publish' );
 $own    = $post_of( 'post', $contrib );
 $image  = 0;
 $pdf    = 0;
+$writer = wp_insert_user( array( 'user_login' => 'minn_fxa_' . $tag, 'user_pass' => wp_generate_password( 24 ), 'user_email' => 'minn_fxa_' . $tag . '@example.test', 'role' => 'author' ) );
+$writer = is_wp_error( $writer ) ? 0 : (int) $writer;
+if ( $writer ) {
+	$made['users'][] = $writer;
+}
+$writer_post = $post_of( 'post', $writer );
+$hidden_file = (int) wp_insert_attachment( array( 'post_title' => 'Minn fields tier private ' . $tag, 'post_mime_type' => 'application/pdf', 'post_status' => 'private', 'post_author' => $admin ), 'minn-fx-private.pdf', $page );
+if ( $hidden_file ) {
+	$made['posts'][] = $hidden_file;
+	update_attached_file( $hidden_file, 'minn-fx-private.pdf' );
+}
 foreach ( array( 'image' => array( 'image/png', 'minn-fx.png' ), 'pdf' => array( 'application/pdf', 'minn-fx.pdf' ) ) as $kind => $spec ) {
 	$aid = (int) wp_insert_attachment( array( 'post_title' => 'Minn fields tier ' . $tag, 'post_mime_type' => $spec[0], 'post_status' => 'inherit', 'post_author' => $admin ), $spec[1] );
 	if ( $aid ) {
@@ -137,8 +148,9 @@ $fx_fields = static function () use ( $page ) {
 		} ),
 		array( 'name' => 'so', 'label' => 'Ordered', 'type' => 'select', 'options' => array( array( 'x', 'X' ), array( 'y', 'Y' ) ) ),
 		array( 'name' => 'm', 'label' => 'Picture', 'type' => 'media', 'image' => true ),
+		array( 'name' => 'mf', 'label' => 'File', 'type' => 'media' ),
 		array( 'name' => 'nt', 'label' => 'Note', 'type' => 'note' ),
-		array( 'name' => 'mt', 'label' => 'Own meta', 'type' => 'text', 'meta' => '_minn_fx_mt' ),
+		array( 'name' => 'mt', 'label' => 'Own meta', 'type' => 'text', 'meta' => 'minn_fx_mt' ),
 		array( 'name' => 'rw', 'label' => 'Raw', 'type' => 'textarea', 'raw' => true ),
 		array( 'name' => 'ru', 'label' => 'Raw link', 'type' => 'url', 'raw' => true ),
 		array( 'name' => 'rep', 'label' => 'Rows', 'type' => 'repeater' ),
@@ -241,7 +253,7 @@ $names = static function ( $answer ) {
 /**
  * Every check, against one tier class.
  */
-$run = static function ( $T ) use ( $check, $skip, $as, $fx_def, $fx_reset, &$fx, $wrote, $refused, $req, $status, $names, $draft, $page, $other, $own, $contrib, $admin, $post_of, $image, $pdf ) {
+$run = static function ( $T ) use ( $check, $skip, $as, $fx_def, $fx_reset, &$fx, $wrote, $refused, $req, $status, $names, $draft, $page, $other, $own, $contrib, $admin, $post_of, $image, $pdf, $writer, $writer_post, $hidden_file ) {
 	$def  = $fx_def();
 	$post = get_post( $draft );
 
@@ -432,6 +444,9 @@ $run = static function ( $T ) use ( $check, $skip, $as, $fx_def, $fx_reset, &$fx
 	$fx_reset( array( 'sg' => array( 'value' => (string) $page, 'label' => 'x' ) ) );
 	$rows = $T::save( $def, $post, array( 'sg' => 'the page' ) );
 	$check( 'R4 a pick that is no post id is refused, not a clear', ! $fx['spy'] && $refused( $rows, 'sg' ), wp_json_encode( array( $fx['spy'], $rows ) ) );
+	$fx_reset( array( 'c' => true ) );
+	$rows = $T::save( $def, $post, array( 'c' => array( 'on' ) ) );
+	$check( 'R4 a list sent for a box that is on is refused, not read as the same on', ! $fx['spy'] && $refused( $rows, 'c' ), wp_json_encode( array( $fx['spy'], $rows ) ) );
 	$fx_reset( array( 'req' => 'stored' ) );
 	$rows = $T::save( $def, $post, array( 'req' => '' ) );
 	$check( 'R4 an emptied box on a field that cannot be empty is refused', ! $fx['spy'] && $refused( $rows, 'req' ), wp_json_encode( array( $fx['spy'], $rows ) ) );
@@ -503,6 +518,25 @@ $run = static function ( $T ) use ( $check, $skip, $as, $fx_def, $fx_reset, &$fx
 		return $T::save( $def, get_post( $own ), array( 'm' => $image ) );
 	} );
 	$check( 'T m: someone who cannot upload files cannot pick an attachment', $refused( $rows, 'm' ) && ! $fx['spy'], wp_json_encode( $rows ) );
+	$fx_reset();
+	$rows = $T::save( $def, $post, array( 'mf' => (string) $other ) );
+	$check( 'T mf: a post that is no attachment is refused for any media field', $refused( $rows, 'mf' ) && ! $fx['spy'], wp_json_encode( $rows ) );
+	$fx_reset();
+	$rows = $T::save( $def, $post, array( 'mf' => (string) $pdf ) );
+	$check( 'T mf: control: any attachment the caller may use is taken where no image is asked', ! $rows && $pdf === ( $wrote()['mf'] ?? null ), wp_json_encode( array( $wrote(), $rows ) ) );
+	$fx_reset();
+	$rows = $as( $writer, static function () use ( $T, $def, $writer_post, $hidden_file ) {
+		return $T::save( $def, get_post( $writer_post ), array( 'mf' => (string) $hidden_file ) );
+	} );
+	$check( 'T mf: an attachment the caller cannot read is refused though they may upload', user_can( $writer, 'upload_files' ) && $refused( $rows, 'mf' ) && ! $fx['spy'], wp_json_encode( $rows ) );
+	$fx_reset();
+	$rows = $as( $writer, static function () use ( $T, $def, $writer_post, $pdf ) {
+		return $T::save( $def, get_post( $writer_post ), array( 'mf' => (string) $pdf ) );
+	} );
+	$check( 'T mf: control: the same author may pick an attachment they can read', ! $rows && $pdf === ( $wrote()['mf'] ?? null ), wp_json_encode( array( $wrote(), $rows ) ) );
+	$fx_reset();
+	$rows = $T::save( $def, $post, array( 'dt' => 'tomorrow 09:00', 'd' => '+1 week' ) );
+	$check( 'T d, dt: a relative date is refused (it would resolve against the server\'s now)', $refused( $rows, 'dt' ) && $refused( $rows, 'd' ) && ! $fx['spy'], wp_json_encode( $rows ) );
 	$fx_reset( array( 'm' => array( 'id' => $pdf, 'url' => 'x' ) ) );
 	$rows = $as( $contrib, static function () use ( $T, $def, $own, $pdf ) {
 		return $T::save( $def, get_post( $own ), array( 'm' => array( 'id' => $pdf, 'url' => 'changed' ) ) );
@@ -598,19 +632,21 @@ $run = static function ( $T ) use ( $check, $skip, $as, $fx_def, $fx_reset, &$fx
 			array(
 				'group'  => 'Meta',
 				'fields' => array(
-					array( 'name' => 'a', 'label' => 'Text', 'type' => 'text', 'meta' => '_minn_fxm_a' ),
-					array( 'name' => 'u', 'label' => 'Link', 'type' => 'url', 'meta' => '_minn_fxm_u' ),
-					array( 'name' => 'n', 'label' => 'Count', 'type' => 'number', 'integer' => true, 'min' => 0, 'meta' => '_minn_fxm_n' ),
-					array( 'name' => 'on', 'label' => 'On', 'type' => 'checkbox', 'meta' => '_minn_fxm_on', 'store' => 'on' ),
-					array( 'name' => 'int', 'label' => 'Int', 'type' => 'checkbox', 'meta' => '_minn_fxm_int', 'store' => 'int' ),
-					array( 'name' => 'flag', 'label' => 'Flag', 'type' => 'checkbox', 'meta' => '_minn_fxm_flag' ),
-					array( 'name' => 'up', 'label' => 'Upper', 'type' => 'text', 'meta' => '_minn_fxm_up', 'sanitize' => static function ( $v ) {
+					array( 'name' => 'a', 'label' => 'Text', 'type' => 'text', 'meta' => 'minn_fxm_a' ),
+					array( 'name' => 'u', 'label' => 'Link', 'type' => 'url', 'meta' => 'minn_fxm_u' ),
+					array( 'name' => 'n', 'label' => 'Count', 'type' => 'number', 'integer' => true, 'min' => 0, 'meta' => 'minn_fxm_n' ),
+					array( 'name' => 'on', 'label' => 'On', 'type' => 'checkbox', 'meta' => 'minn_fxm_on', 'store' => 'on' ),
+					array( 'name' => 'int', 'label' => 'Int', 'type' => 'checkbox', 'meta' => 'minn_fxm_int', 'store' => 'int' ),
+					array( 'name' => 'flag', 'label' => 'Flag', 'type' => 'checkbox', 'meta' => 'minn_fxm_flag' ),
+					array( 'name' => 'up', 'label' => 'Upper', 'type' => 'text', 'meta' => 'minn_fxm_up', 'sanitize' => static function ( $v ) {
 						if ( 'throw' === $v ) {
 							throw new RuntimeException( 'vendor sanitizer threw' );
 						}
 						return 'gone' === $v ? '' : strtoupper( $v );
 					} ),
-					array( 'name' => 'rows', 'label' => 'Rows', 'type' => 'repeater', 'meta' => '_minn_fxm_rows' ),
+					array( 'name' => 'rows', 'label' => 'Rows', 'type' => 'repeater', 'meta' => 'minn_fxm_rows' ),
+					array( 'name' => 'prot', 'label' => 'Protected', 'type' => 'text', 'meta' => '_minn_fxm_prot' ),
+					array( 'name' => 'b', 'label' => 'Beside', 'type' => 'text', 'meta' => 'minn_fxm_b' ),
 				),
 			),
 		);
@@ -619,17 +655,17 @@ $run = static function ( $T ) use ( $check, $skip, $as, $fx_def, $fx_reset, &$fx
 		wp_cache_delete( $m, 'post_meta' );
 		return metadata_exists( 'post', $m, $k ) ? get_post_meta( $m, $k, true ) : null;
 	};
-	update_post_meta( $m, '_minn_fxm_a', wp_slash( 'Save 50%AB <3 C:\new' ) );
-	update_post_meta( $m, '_minn_fxm_u', 'https://example.com/kept' );
-	update_post_meta( $m, '_minn_fxm_on', 'on' );
-	update_post_meta( $m, '_minn_fxm_int', 1 );
-	update_post_meta( $m, '_minn_fxm_rows', 'locked rows' );
+	update_post_meta( $m, 'minn_fxm_a', wp_slash( 'Save 50%AB <3 C:\new' ) );
+	update_post_meta( $m, 'minn_fxm_u', 'https://example.com/kept' );
+	update_post_meta( $m, 'minn_fxm_on', 'on' );
+	update_post_meta( $m, 'minn_fxm_int', 1 );
+	update_post_meta( $m, 'minn_fxm_rows', 'locked rows' );
 	$v = (array) $T::values( $mdef, $m );
 	$check( 'M R1 a meta field reads its post meta, in its store\'s shape, and only offered fields read', 'Save 50%AB <3 C:\new' === ( $v['a'] ?? null ) && true === ( $v['on'] ?? null ) && true === ( $v['int'] ?? null ) && false === ( $v['flag'] ?? null ) && ! isset( $v['rows'] ), wp_json_encode( $v ) );
-	update_post_meta( $m, '_minn_fxm_on', 'yes' );
+	update_post_meta( $m, 'minn_fxm_on', 'yes' );
 	$v = (array) $T::values( $mdef, $m );
 	$check( 'M R1 a checkbox reads by its store: only \'on\' is on for an on/\'\' store', false === ( $v['on'] ?? null ), wp_json_encode( $v ) );
-	update_post_meta( $m, '_minn_fxm_on', 'on' );
+	update_post_meta( $m, 'minn_fxm_on', 'on' );
 	$v = $as( $contrib, static function () use ( $T, $mdef, $m ) {
 		return $T::values( $mdef, $m );
 	} );
@@ -637,7 +673,7 @@ $run = static function ( $T ) use ( $check, $skip, $as, $fx_def, $fx_reset, &$fx
 	$rows = $as( $contrib, static function () use ( $T, $mdef, $mpost ) {
 		return $T::save( $mdef, $mpost, array( 'a' => 'theirs' ) );
 	} );
-	$check( 'M R1 a meta field is not written by someone who cannot edit the post', 'Save 50%AB <3 C:\new' === $meta( '_minn_fxm_a' ) && $rows, wp_json_encode( $rows ) );
+	$check( 'M R1 a meta field is not written by someone who cannot edit the post', 'Save 50%AB <3 C:\new' === $meta( 'minn_fxm_a' ) && $rows, wp_json_encode( $rows ) );
 	$writes = 0;
 	$count  = static function ( $check ) use ( &$writes ) {
 		$writes++;
@@ -646,36 +682,54 @@ $run = static function ( $T ) use ( $check, $skip, $as, $fx_def, $fx_reset, &$fx
 	add_filter( 'update_post_metadata', $count );
 	$rows = $T::save( $mdef, $mpost, array( 'a' => 'Save 50%AB <3 C:\new', 'on' => 'true', 'int' => 1 ) );
 	remove_filter( 'update_post_metadata', $count );
-	$check( 'M U a meta value sent back as read is not written at all', 0 === $writes && ! $rows && 'Save 50%AB <3 C:\new' === $meta( '_minn_fxm_a' ), $writes . ' ' . wp_json_encode( $rows ) );
+	$check( 'M U a meta value sent back as read is not written at all', 0 === $writes && ! $rows && 'Save 50%AB <3 C:\new' === $meta( 'minn_fxm_a' ), $writes . ' ' . wp_json_encode( $rows ) );
 	$r   = new WP_REST_Request( 'POST', '/wp/v2/posts/' . $m );
 	$out = $T::update( $mdef, array( 'u' => 'javascript:alert(1)', 'a' => 'Typed C:\path 100%Sure' ), $mpost, $r );
 	$held = $T::held( $r );
 	$check( 'M R2 a meta panel\'s refused save answers no error and holds the refusal', null === $out && $held, wp_json_encode( array( $out, $held ) ) );
-	$check( 'M R3 a refused meta value keeps what is stored; the value beside it is stored slashed as core expects', 'https://example.com/kept' === $meta( '_minn_fxm_u' ) && 'Typed C:\path 100%Sure' === $meta( '_minn_fxm_a' ), wp_json_encode( array( $meta( '_minn_fxm_u' ), $meta( '_minn_fxm_a' ) ) ) );
+	$check( 'M R3 a refused meta value keeps what is stored; the value beside it is stored slashed as core expects', 'https://example.com/kept' === $meta( 'minn_fxm_u' ) && 'Typed C:\path 100%Sure' === $meta( 'minn_fxm_a' ), wp_json_encode( array( $meta( 'minn_fxm_u' ), $meta( 'minn_fxm_a' ) ) ) );
 	$rows = $T::save( $mdef, $mpost, array( 'a' => '<p></p>' ) );
-	$check( 'M R4 a meta value its cleaner empties is refused and the meta kept', $refused( $rows, 'a' ) && 'Typed C:\path 100%Sure' === $meta( '_minn_fxm_a' ), wp_json_encode( $rows ) );
+	$check( 'M R4 a meta value its cleaner empties is refused and the meta kept', $refused( $rows, 'a' ) && 'Typed C:\path 100%Sure' === $meta( 'minn_fxm_a' ), wp_json_encode( $rows ) );
 	$rows = $T::save( $mdef, $mpost, array( 'a' => '', 'u' => null ) );
-	$check( 'M R4 an emptied box deletes its meta', ! $rows && null === $meta( '_minn_fxm_a' ) && null === $meta( '_minn_fxm_u' ), wp_json_encode( array( $rows, $meta( '_minn_fxm_a' ) ) ) );
+	$check( 'M R4 an emptied box clears its meta and keeps the row (\'\' stored, as the vendors\' own metaboxes do)', ! $rows && '' === $meta( 'minn_fxm_a' ) && '' === $meta( 'minn_fxm_u' ), wp_json_encode( array( $rows, $meta( 'minn_fxm_a' ), $meta( 'minn_fxm_u' ) ) ) );
 	$rows = $T::save( $mdef, $mpost, array( 'on' => false, 'int' => false, 'flag' => true, 'n' => '007' ) );
-	$check( 'M T checkbox: each store keeps its off and on shape', ! $rows && '' === $meta( '_minn_fxm_on' ) && '0' === (string) $meta( '_minn_fxm_int' ) && '1' === $meta( '_minn_fxm_flag' ), wp_json_encode( array( $rows, $meta( '_minn_fxm_on' ), $meta( '_minn_fxm_int' ), $meta( '_minn_fxm_flag' ) ) ) );
-	$check( 'M T number: a whole number is stored without its leading zeros', '7' === $meta( '_minn_fxm_n' ), wp_json_encode( $meta( '_minn_fxm_n' ) ) );
+	$check( 'M T checkbox: each store keeps its off and on shape', ! $rows && '' === $meta( 'minn_fxm_on' ) && '0' === (string) $meta( 'minn_fxm_int' ) && '1' === $meta( 'minn_fxm_flag' ), wp_json_encode( array( $rows, $meta( 'minn_fxm_on' ), $meta( 'minn_fxm_int' ), $meta( 'minn_fxm_flag' ) ) ) );
+	$check( 'M T number: a whole number is stored without its leading zeros', '7' === $meta( 'minn_fxm_n' ), wp_json_encode( $meta( 'minn_fxm_n' ) ) );
 	$rows = $T::save( $mdef, $mpost, array( 'flag' => false ) );
-	$check( 'M T checkbox: a plain flag turned off is deleted', ! $rows && null === $meta( '_minn_fxm_flag' ), wp_json_encode( $rows ) );
+	$check( 'M T checkbox: a plain flag turned off is stored off (\'\')', ! $rows && '' === $meta( 'minn_fxm_flag' ), wp_json_encode( array( $rows, $meta( 'minn_fxm_flag' ) ) ) );
 	$rows = $T::save( $mdef, $mpost, array( 'up' => 'shout' ) );
-	$check( 'M T sanitize: the plugin\'s own cleaner has the last word', ! $rows && 'SHOUT' === $meta( '_minn_fxm_up' ), wp_json_encode( array( $rows, $meta( '_minn_fxm_up' ) ) ) );
+	$check( 'M T sanitize: the plugin\'s own cleaner has the last word', ! $rows && 'SHOUT' === $meta( 'minn_fxm_up' ), wp_json_encode( array( $rows, $meta( 'minn_fxm_up' ) ) ) );
 	$rows = $T::save( $mdef, $mpost, array( 'up' => 'gone' ) );
-	$check( 'M R4 a value the plugin\'s cleaner empties is refused and the meta kept', $refused( $rows, 'up' ) && 'SHOUT' === $meta( '_minn_fxm_up' ), wp_json_encode( $rows ) );
+	$check( 'M R4 a value the plugin\'s cleaner empties is refused and the meta kept', $refused( $rows, 'up' ) && 'SHOUT' === $meta( 'minn_fxm_up' ), wp_json_encode( $rows ) );
 	$rows = $T::save( $mdef, $mpost, array( 'up' => 'throw' ) );
-	$check( 'M R2 a plugin cleaner that throws refuses its field', $refused( $rows, 'up' ) && 'SHOUT' === $meta( '_minn_fxm_up' ), wp_json_encode( $rows ) );
+	$check( 'M R2 a plugin cleaner that throws refuses its field', $refused( $rows, 'up' ) && 'SHOUT' === $meta( 'minn_fxm_up' ), wp_json_encode( $rows ) );
 	$rows = $T::save( $mdef, $mpost, array( 'rows' => 'x' ) );
-	$check( 'M R3 a locked field\'s meta is never written', $refused( $rows, 'rows' ) && 'locked rows' === $meta( '_minn_fxm_rows' ), wp_json_encode( $rows ) );
+	$check( 'M R3 a locked field\'s meta is never written', $refused( $rows, 'rows' ) && 'locked rows' === $meta( 'minn_fxm_rows' ), wp_json_encode( $rows ) );
+	$rows = $T::save( $mdef, $mpost, array( 'prot' => 'Mine' ) );
+	$check( 'M I2 a meta key the caller may not edit (protected, no auth) is refused and not written', $refused( $rows, 'prot' ) && null === $meta( '_minn_fxm_prot' ), wp_json_encode( $rows ) );
+	$meta_boom = static function ( $check, $object_id, $key ) {
+		if ( 'minn_fxm_a' === $key ) {
+			throw new RuntimeException( 'a meta filter threw' );
+		}
+		return $check;
+	};
+	add_filter( 'update_post_metadata', $meta_boom, 10, 3 );
+	$threw = false;
+	try {
+		$rows = $T::save( $mdef, $mpost, array( 'a' => 'Throws here', 'b' => 'Stored beside it' ) );
+	} catch ( \Throwable $e ) {
+		$threw = true;
+	} finally {
+		remove_filter( 'update_post_metadata', $meta_boom, 10 );
+	}
+	$check( 'M L1 a meta write that throws names only its own field; the one beside it is stored and not named', ! $threw && $refused( $rows, 'a' ) && ! $refused( $rows, 'b' ) && 'Stored beside it' === $meta( 'minn_fxm_b' ), $threw ? 'threw' : wp_json_encode( array( $rows, $meta( 'minn_fxm_b' ) ) ) );
 	$fx_reset();
 	$rows = $T::save( $def, $post, array( 'mt' => 'Mine', 't' => 'Theirs' ) );
 	wp_cache_delete( $draft, 'post_meta' );
-	$check( 'M a panel may mix: a meta field is stored by the tier, the rest go to the plugin\'s write', 'Mine' === get_post_meta( $draft, '_minn_fx_mt', true ) && array( 't' => 'Theirs' ) === $wrote() && ! $rows, wp_json_encode( array( $wrote(), $rows ) ) );
+	$check( 'M a panel may mix: a meta field is stored by the tier, the rest go to the plugin\'s write', 'Mine' === get_post_meta( $draft, 'minn_fx_mt', true ) && array( 't' => 'Theirs' ) === $wrote() && ! $rows, wp_json_encode( array( $wrote(), $rows ) ) );
 	$v = (array) $T::values( $def, $draft );
 	$check( 'M a mixed panel reads its meta field beside the plugin\'s read', 'Mine' === ( $v['mt'] ?? null ), wp_json_encode( $v ) );
-	delete_post_meta( $draft, '_minn_fx_mt' );
+	delete_post_meta( $draft, 'minn_fx_mt' );
 
 	// ------------------------------------------------- declared panels
 	foreach ( Minn_Admin_Kernel_Panels::ids() as $id ) {
@@ -734,6 +788,21 @@ $run = static function ( $T ) use ( $check, $skip, $as, $fx_def, $fx_reset, &$fx
 		$T::held( $r );
 		$check( "panel {$id} R2: a refused save answers no error", null === $out, wp_json_encode( $out ) );
 		if ( 'tec' === $id ) {
+			// MINN_FIELDS_TEC=<copy of the TEC adapter>: its store is the one
+			// tried here (a broken copy must fail this check).
+			$tec_copy = (string) getenv( 'MINN_FIELDS_TEC' );
+			if ( '' !== $tec_copy && ! function_exists( 'minn_admin_tec_store_probe' ) ) {
+				$src = (string) file_get_contents( $tec_copy );
+				$a   = strpos( $src, 'function minn_admin_tec_store(' );
+				$b   = strpos( $src, "\nminn_admin_fields( 'tec'" );
+				$tmp = wp_tempnam( 'minn-tec-store' );
+				file_put_contents( $tmp, "<?php\n" . str_replace( 'function minn_admin_tec_store(', 'function minn_admin_tec_store_probe(', substr( $src, $a, $b - $a ) ) );
+				require $tmp;
+				unlink( $tmp );
+			}
+			if ( function_exists( 'minn_admin_tec_store_probe' ) ) {
+				$real['write'] = 'minn_admin_tec_store_probe';
+			}
 			$tz_was = date_default_timezone_get();
 			date_default_timezone_set( 'Europe/Berlin' );
 			try {

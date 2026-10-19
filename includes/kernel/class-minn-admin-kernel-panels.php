@@ -62,9 +62,10 @@
  *     'required'    => true,       // an emptied box is refused, not a clear
  *     'post_type'   => 'tribe_venue',   // suggest (required): what a pick must be
  *     'image'       => true,       // media: the attachment must be an image
- *     'meta'        => '_key',     // stored as this post meta (one value): read with
- *                                  // get_post_meta(), written slashed, deleted to clear
- *     'store'       => 'on' | 'int',   // checkbox in meta: 'on'/'' or 1/0 (default '1', deleted when off)
+ *     'meta'        => 'key',      // stored as this post meta (one value): read with
+ *                                  // get_post_meta(), written slashed where the caller
+ *                                  // may edit that key (edit_post_meta), '' to clear
+ *     'store'       => 'on' | 'int',   // checkbox in meta: 'on'/'' or 1/0 (default '1'/'')
  *     'sanitize'    => callable( mixed $clean, string $name ): mixed,
  *                                  // the plugin's own cleaner, after the type's; a
  *                                  // value it empties, or a throw, is refused
@@ -553,29 +554,35 @@ final class Minn_Admin_Kernel_Panels {
 
 	/**
 	 * Store cleaned values in the post meta their fields name: slashed, as
-	 * update_post_meta() unslashes; a clear deletes, except a checkbox whose
-	 * store keeps its off state.
+	 * update_post_meta() unslashes. A clear stores '' and keeps the row, as
+	 * the vendors' own metaboxes do: a plugin that acts on a change listens
+	 * for an update (WP Job Manager geocodes a location on one), and a
+	 * deleted row is never updated again, only added.
+	 *
+	 * @return string[] The fields that were not stored (a key the caller may
+	 *                  not edit, or a write that threw); the rest are.
 	 */
 	private static function store( $post_id, array $changes, array $fields ) {
+		$failed = array();
 		foreach ( $changes as $name => $value ) {
 			$f     = $fields[ $name ];
 			$store = $f['store'] ?? '';
 			if ( 'checkbox' === $f['type'] ) {
-				if ( 'on' === $store ) {
-					update_post_meta( $post_id, $f['meta'], $value ? 'on' : '' );
-				} elseif ( 'int' === $store ) {
-					update_post_meta( $post_id, $f['meta'], $value ? 1 : 0 );
-				} elseif ( $value ) {
-					update_post_meta( $post_id, $f['meta'], '1' );
-				} else {
-					delete_post_meta( $post_id, $f['meta'] );
+				$value = 'on' === $store ? ( $value ? 'on' : '' ) : ( 'int' === $store ? ( $value ? 1 : 0 ) : ( $value ? '1' : '' ) );
+			}
+			try {
+				// Core's own question for this key (a protected key with no
+				// auth callback is no one's to write through here).
+				if ( ! current_user_can( 'edit_post_meta', $post_id, $f['meta'] ) ) {
+					$failed[] = $name;
+					continue;
 				}
-			} elseif ( null === $value ) {
-				delete_post_meta( $post_id, $f['meta'] );
-			} else {
-				update_post_meta( $post_id, $f['meta'], wp_slash( $value ) );
+				update_post_meta( $post_id, $f['meta'], null === $value ? '' : wp_slash( $value ) );
+			} catch ( \Throwable $e ) {
+				$failed[] = $name;
 			}
 		}
+		return $failed;
 	}
 
 	/**
@@ -681,14 +688,8 @@ final class Minn_Admin_Kernel_Panels {
 		} );
 		$mine    = array_intersect_key( $changes, $own );
 		$changes = array_diff_key( $changes, $own );
-		if ( $mine ) {
-			try {
-				self::store( (int) $post->ID, $mine, $fields );
-			} catch ( \Throwable $e ) {
-				foreach ( array_keys( $mine ) as $key ) {
-					$refuse( $key, $fields[ $key ]['label'], __( 'That did not work. Nothing was reported as done.', 'minn-admin' ), 500 );
-				}
-			}
+		foreach ( $mine ? self::store( (int) $post->ID, $mine, $fields ) : array() as $key ) {
+			$refuse( $key, $fields[ $key ]['label'], __( 'That did not work. Nothing was reported as done.', 'minn-admin' ), 500 );
 		}
 		if ( ! $changes ) {
 			return array_values( $refused );
@@ -867,7 +868,9 @@ final class Minn_Admin_Kernel_Panels {
 			case 'datetime':
 				// Read and written as a wall time on one clock (UTC), so the
 				// value typed is the value stored whatever PHP's default zone.
-				$d = date_create_immutable( trim( $s ), new DateTimeZone( 'UTC' ) );
+				// An absolute date only: 'tomorrow' resolves against the
+				// server's now, not the person's.
+				$d = preg_match( '/^\d{4}-\d{1,2}-\d{1,2}(?:[ T]\d{1,2}:\d{2}(?::\d{2})?)?$/', trim( $s ) ) ? date_create_immutable( trim( $s ), new DateTimeZone( 'UTC' ) ) : false;
 				$e = DateTimeImmutable::getLastErrors();
 				$v = $d && ! ( $e && $e['warning_count'] ) ? $d->format( 'date' === $type ? 'Y-m-d' : 'Y-m-d H:i:s' ) : '';
 				break;

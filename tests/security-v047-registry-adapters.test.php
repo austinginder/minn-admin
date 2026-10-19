@@ -955,6 +955,55 @@ $r4_bad = 'javascript:alert(1)';
 	}
 } )();
 
+/*
+ * Review round 2, M1 (WP Job Manager). WPJM geocodes a listing's location
+ * from its update_post_meta and add_post_meta hooks, never a delete: an
+ * emptied location deleted the row, so the old geolocation stayed on the
+ * public listing, its search and its JobPosting data. A clear now stores ''
+ * and keeps the row.
+ */
+( function () use ( $check, $skip, $call, $once, $field_err, $admin, $tag ) {
+	if ( ! function_exists( 'minn_admin_wpjm_active' ) || ! minn_admin_wpjm_active() ) {
+		$skip( 'M1 WPJM: WP Job Manager is not active' );
+		return;
+	}
+	$ids   = array();
+	$clean = $once( static function () use ( &$ids ) {
+		foreach ( $ids as $pid ) {
+			wp_delete_post( $pid, true );
+		}
+	} );
+	$edited = array();
+	$spy    = static function ( $post_id, $location ) use ( &$edited ) {
+		$edited[] = array( (int) $post_id, (string) $location );
+	};
+	add_action( 'job_manager_job_location_edited', $spy, 1, 2 );
+	try {
+		$a     = (int) wp_insert_post( array( 'post_type' => 'job_listing', 'post_title' => 'Minn v047 geo ' . $tag, 'post_status' => 'publish', 'post_author' => $admin ) );
+		$ids[] = $a;
+		update_post_meta( $a, '_job_location', 'Berlin' );
+		$edited = array();
+		list( $st, $d ) = $call( 'POST', '/wp/v2/job-listings/' . $a, array( 'minn_wpjm' => array( '_job_location' => '' ) ) );
+		wp_cache_delete( $a, 'post_meta' );
+		$check( 'M1 WPJM: an emptied location keeps its row, stored empty', 200 === $st && metadata_exists( 'post', $a, '_job_location' ) && '' === get_post_meta( $a, '_job_location', true ) && empty( $d['minn_field_errors'] ), $st . ' ' . wp_json_encode( get_post_meta( $a, '_job_location' ) ) );
+		$check( 'M1 WPJM: and WPJM is told the location changed (its geocoder clears)', in_array( array( $a, '' ), $edited, true ), wp_json_encode( $edited ) );
+		$edited = array();
+		list( $st ) = $call( 'POST', '/wp/v2/job-listings/' . $a, array( 'minn_wpjm' => array( '_job_location' => 'Paris' ) ) );
+		$check( 'M1 WPJM: the next location is told to WPJM too', 200 === $st && in_array( array( $a, 'Paris' ), $edited, true ), wp_json_encode( $edited ) );
+		$b     = (int) wp_insert_post( array( 'post_type' => 'job_listing', 'post_title' => 'Minn v047 geo new ' . $tag, 'post_status' => 'publish', 'post_author' => $admin ) );
+		$ids[] = $b;
+		delete_post_meta( $b, '_job_location' );
+		$edited = array();
+		list( $st ) = $call( 'POST', '/wp/v2/job-listings/' . $b, array( 'minn_wpjm' => array( '_job_location' => 'Lyon' ) ) );
+		$check( 'M1 WPJM: a listing\'s first location is told to WPJM once', 200 === $st && array( array( $b, 'Lyon' ) ) === array_values( array_filter( $edited, static function ( $e ) use ( $b ) {
+			return $e[0] === $b;
+		} ) ), wp_json_encode( $edited ) );
+	} finally {
+		remove_action( 'job_manager_job_location_edited', $spy, 1 );
+		$clean();
+	}
+} )();
+
 $failed = count( array_filter( $results, static function ( $ok ) {
 	return ! $ok;
 } ) );

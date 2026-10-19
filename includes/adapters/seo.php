@@ -2104,6 +2104,7 @@ minn_admin_fields( 'seo', function () {
 		},
 		'read'        => $plugin ? $plugin['read'] : '__return_empty_array',
 		'write'       => function ( $post_id, $changes, $fields ) use ( $plugin ) {
+			$failed = array();
 			foreach ( $changes as $field => $value ) {
 				switch ( $fields[ $field ]['type'] ) {
 					case 'media':
@@ -2118,9 +2119,15 @@ minn_admin_fields( 'seo', function () {
 						// '' clears or inherits, for every provider.
 						$value = null === $value ? '' : (string) $value;
 				}
-				call_user_func( $plugin['write'], $post_id, $field, $value );
+				// One field a provider throws on is not saved; the fields it
+				// wrote before are.
+				try {
+					call_user_func( $plugin['write'], $post_id, $field, $value );
+				} catch ( \Throwable $e ) {
+					$failed[ $field ] = __( 'That did not work. Nothing was reported as done.', 'minn-admin' );
+				}
 			}
-			return null;
+			return $failed;
 		},
 		// The search-result preview quotes the post's resolved title and
 		// excerpt, so it is offered only once the post's own gate passed.
