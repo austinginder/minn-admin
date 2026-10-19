@@ -64,8 +64,6 @@ class Minn_Admin_Egress {
 	/** The object cache generation of the list, read once per request. */
 	private static $generation = null;
 
-	/** The row recording whether the list needs the wider scan rule (wide()). */
-	const LOOSE = 'minn_admin_egress_loose';
 
 	/** Values a route hands out on purpose, for the response being built. */
 	private static $intended = array();
@@ -90,6 +88,15 @@ class Minn_Admin_Egress {
 		foreach ( array( 'added_option', 'updated_option', 'deleted_option', 'add_site_option', 'update_site_option', 'delete_site_option' ) as $hook ) {
 			add_action( $hook, array( __CLASS__, 'changed' ), PHP_INT_MAX, 1 );
 		}
+		// An earlier build kept the scan rule in a stored record; it is read
+		// no more, and is removed where it was left (it was autoloaded, so
+		// asking costs nothing).
+		add_action( 'init', function () {
+			$all = wp_load_alloptions();
+			if ( isset( $all['minn_admin_egress_loose'] ) ) {
+				delete_option( 'minn_admin_egress_loose' );
+			}
+		} );
 		// Network rows: core has no filter for every site option, only one per name.
 		add_action( 'init', function () {
 			if ( is_multisite() && method_exists( 'Minn_Admin_DB', 'credential_option_names' ) ) {
@@ -192,29 +199,15 @@ class Minn_Admin_Egress {
 	/**
 	 * Whether a response is scanned on the wider shape rule
 	 * (Minn_Admin_DB::key_shaped()) rather than three digits and three
-	 * letters. Only a list holding a credential the narrower rule would miss
-	 * needs it, and the list costs tens of milliseconds to build without an
-	 * object cache, so its build records the answer (with its stamp) in one
-	 * autoloaded row. A record from another build, or none, reads as wide:
-	 * the next scan builds the list and records it again. A credential row
-	 * that changes drops the record (changed()).
+	 * letters: only when a row an adapter declares holds a key the narrower
+	 * rule would miss, the one place such a needle comes from. Asked of the
+	 * rows as stored now (Minn_Admin_DB::declared_loose()), never of a
+	 * record, so a row written with SQL, by an import or on another site of
+	 * the network is seen at once. It is asked only when the narrower rule
+	 * found nothing and some run passes the wider one.
 	 */
 	private static function wide() {
-		$rec = get_option( self::LOOSE, '' );
-		return ! ( is_string( $rec ) && self::stamp() . ':0' === $rec );
-	}
-
-	/**
-	 * Record whether the list just built holds a credential the narrower
-	 * rule would miss (Minn_Admin_DB calls this after each build).
-	 *
-	 * @param bool $loose Whether one does.
-	 */
-	public static function record_shapes( $loose ) {
-		$rec = self::stamp() . ':' . ( $loose ? '1' : '0' );
-		if ( get_option( self::LOOSE, '' ) !== $rec ) {
-			update_option( self::LOOSE, $rec, true );
-		}
+		return method_exists( 'Minn_Admin_DB', 'declared_loose' ) && Minn_Admin_DB::declared_loose();
 	}
 
 	/** Read the credentials again when next needed. */
@@ -244,15 +237,6 @@ class Minn_Admin_Egress {
 	 * @param string $option Option name.
 	 */
 	public static function changed( $option ) {
-		if ( self::LOOSE === $option ) {
-			return;
-		}
-		// A credential row the lists name changed: the wide() record may no
-		// longer hold. Asked of the fixed and declared names only (no
-		// gateway or licence reader starts here), on every option write.
-		if ( false !== get_option( self::LOOSE, false ) && method_exists( 'Minn_Admin_DB', 'is_listed_option' ) && Minn_Admin_DB::is_listed_option( (string) $option ) ) {
-			delete_option( self::LOOSE );
-		}
 		if ( null === self::$credentials && ( ! wp_using_ext_object_cache() || false === wp_cache_get( self::cache_key(), 'minn_admin' ) ) ) {
 			return;
 		}
@@ -369,8 +353,8 @@ class Minn_Admin_Egress {
 
 	/**
 	 * Whether JSON text holds anything shaped like a key: a run of 16 or more
-	 * token characters with three digits and three letters or, while the
-	 * list holds a credential that rule would miss (wide()), one that
+	 * token characters with three digits and three letters or, while a
+	 * declared row holds a key that rule would miss (wide()), one that
 	 * Minn_Admin_DB::key_shaped() calls a key (the rule a declared value is
 	 * held to, so no needle is one the scan skips), read
 	 * with escaped slashes (at any depth) and URL-encoded slashes, pluses

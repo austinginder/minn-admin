@@ -1452,56 +1452,10 @@ class Minn_Admin_DB {
 		}
 		// Leaves an adapter names inside a row, whatever they are called (a
 		// secret keyed by its public site key), and anything below them, to
-		// any depth: each counts when it is shaped like a key (key_shaped(),
-		// the egress fence's own gate), whatever its length. So does a row an
-		// adapter declares whose whole value is one bare key (a 42-character
-		// connect token can hold fewer than three digits).
-		$leafy = array_change_key_case( Minn_Admin_Kernel_Secrets::option_leaves(), CASE_LOWER );
-		$bare  = array_map( 'strtolower', Minn_Admin_Kernel_Secrets::option_names() );
-		$ask   = array_values( array_unique( array_merge( array_keys( $leafy ), $bare ) ) );
-		if ( $ask ) {
-			$in   = implode( ',', array_fill( 0, count( $ask ), '%s' ) );
-			$rows = array();
-			foreach ( $stores as $store ) {
-				list( $table, $kcol, $vcol ) = $store;
-				if ( $wpdb->usermeta === $table ) {
-					continue;
-				}
-				// phpcs:ignore WordPress.DB.PreparedSQL -- identifiers are this class's own; values prepared.
-				$rows = array_merge( $rows, (array) $wpdb->get_results( $wpdb->prepare( "SELECT `{$kcol}` AS k, `{$vcol}` AS v FROM `{$table}` WHERE `{$kcol}` IN ({$in})", $ask ), ARRAY_A ) );
-			}
-			foreach ( $rows as $row ) {
-				$t = rtrim( trim( (string) $row['v'] ), '=' );
-				if ( in_array( strtolower( (string) $row['k'] ), $bare, true ) && preg_match( '#^[A-Za-z0-9_\-+/]{16,}$#', $t ) && self::key_shaped( $t ) ) {
-					$credentials[ $t ] = '';
-				}
-				if ( ! isset( $leafy[ strtolower( (string) $row['k'] ) ] ) ) {
-					continue;
-				}
-				foreach ( self::credential_leaves( (string) $row['v'], '', 0, 32 ) as $leaf ) {
-					foreach ( $leafy[ strtolower( (string) $row['k'] ) ] ?? array() as $re ) {
-						$v = rtrim( $leaf[1], '=' );
-						if ( preg_match( $re, $leaf[0] ) && preg_match( '#^[A-Za-z0-9_\-+/]{16,}$#', $v ) && self::key_shaped( $v ) ) {
-							$credentials[ $v ] = $leaf[0];
-							break;
-						}
-					}
-				}
-			}
-		}
+		// any depth, and a row an adapter declares whose whole value is one
+		// bare key (declared_credentials()).
+		$credentials += self::declared_credentials();
 		self::$credentials = array_map( 'strval', array_keys( $credentials ) );
-		// Whether the egress fence must scan on the wider shape rule: only
-		// when a credential would slip its three-digit, three-letter rule.
-		if ( method_exists( 'Minn_Admin_Egress', 'record_shapes' ) ) {
-			$loose = false;
-			foreach ( self::$credentials as $c ) {
-				if ( preg_match_all( '/\d/', $c ) < 3 || preg_match_all( '/[A-Za-z]/', $c ) < 3 ) {
-					$loose = true;
-					break;
-				}
-			}
-			Minn_Admin_Egress::record_shapes( $loose );
-		}
 		foreach ( array_keys( $credentials ) as $v ) {
 			$v    = (string) $v;
 			$mine = array( $v => true );
@@ -1579,24 +1533,75 @@ class Minn_Admin_DB {
 	}
 
 	/**
-	 * Whether an option row is a credential row by the fixed lists alone:
-	 * the central names and shapes, the adapters' declarations and the
-	 * licences screen's rows. No gateway or connector registry is started,
-	 * so the egress fence can ask it on every option write.
+	 * The credentials the adapters' declared rows hold beyond their names:
+	 * each value at or below a declared leaf (whatever it is called: a
+	 * secret keyed by its public site key) and a declared row's whole value
+	 * when it is one bare key (a 42-character connect token can hold fewer
+	 * than three digits). Each counts when it is shaped like a key
+	 * (key_shaped(), the egress fence's own gate), whatever its length.
+	 * Read from this site's options and, on a network, the main site's and
+	 * the network's, as credential_needles() reads its rows.
 	 *
-	 * @param string $name Option name.
+	 * @return array Credential => path.
+	 */
+	private static function declared_credentials() {
+		global $wpdb;
+		$leafy = array_change_key_case( Minn_Admin_Kernel_Secrets::option_leaves(), CASE_LOWER );
+		$bare  = array_map( 'strtolower', Minn_Admin_Kernel_Secrets::option_names() );
+		$ask   = array_values( array_unique( array_merge( array_keys( $leafy ), $bare ) ) );
+		if ( ! $ask ) {
+			return array();
+		}
+		$stores = array( array( $wpdb->options, 'option_name', 'option_value' ) );
+		if ( is_multisite() ) {
+			if ( $wpdb->base_prefix . 'options' !== $wpdb->options ) {
+				$stores[] = array( $wpdb->base_prefix . 'options', 'option_name', 'option_value' );
+			}
+			$stores[] = array( $wpdb->sitemeta, 'meta_key', 'meta_value' );
+		}
+		$in   = implode( ',', array_fill( 0, count( $ask ), '%s' ) );
+		$rows = array();
+		foreach ( $stores as $store ) {
+			list( $table, $kcol, $vcol ) = $store;
+			// phpcs:ignore WordPress.DB.PreparedSQL -- identifiers are this class's own; values prepared.
+			$rows = array_merge( $rows, (array) $wpdb->get_results( $wpdb->prepare( "SELECT `{$kcol}` AS k, `{$vcol}` AS v FROM `{$table}` WHERE `{$kcol}` IN ({$in})", $ask ), ARRAY_A ) );
+		}
+		$out = array();
+		foreach ( $rows as $row ) {
+			$k = strtolower( (string) $row['k'] );
+			$t = rtrim( trim( (string) $row['v'] ), '=' );
+			if ( in_array( $k, $bare, true ) && preg_match( '#^[A-Za-z0-9_\-+/]{16,}$#', $t ) && self::key_shaped( $t ) ) {
+				$out[ $t ] = '';
+			}
+			foreach ( isset( $leafy[ $k ] ) ? self::credential_leaves( (string) $row['v'], '', 0, 32 ) : array() as $leaf ) {
+				foreach ( $leafy[ $k ] as $re ) {
+					$v = rtrim( $leaf[1], '=' );
+					if ( preg_match( $re, $leaf[0] ) && preg_match( '#^[A-Za-z0-9_\-+/]{16,}$#', $v ) && self::key_shaped( $v ) ) {
+						$out[ $v ] = $leaf[0];
+						break;
+					}
+				}
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * Whether a declared row holds a key that three digits and three letters
+	 * would miss: the only needles the egress fence's narrower scan rule can
+	 * pass over (every other needle is held to that rule). Read from the
+	 * rows as stored, so nothing remembered can go stale: a row written with
+	 * SQL, by an import or from another site of a network counts at once.
+	 *
 	 * @return bool
 	 */
-	public static function is_listed_option( $name ) {
-		static $lists = null;
-		static $for   = '';
-		$stamp = Minn_Admin_Kernel_Secrets::hash();
-		if ( null === $lists || $for !== $stamp ) {
-			$licences = function_exists( 'minn_admin_license_secret_options' ) ? minn_admin_license_secret_options() : array( array(), array() );
-			$lists    = array( 'option_name', array_merge( self::SECRET_OPTION_KEYS, Minn_Admin_Kernel_Secrets::option_names(), $licences[0] ), array_merge( self::SECRET_OPTION_SHAPES, Minn_Admin_Kernel_Secrets::option_shapes(), $licences[1] ) );
-			$for      = $stamp;
+	public static function declared_loose() {
+		foreach ( array_keys( self::declared_credentials() ) as $c ) {
+			if ( preg_match_all( '/\d/', (string) $c ) < 3 || preg_match_all( '/[A-Za-z]/', (string) $c ) < 3 ) {
+				return true;
+			}
 		}
-		return self::keyed_match( (string) $name, $lists );
+		return false;
 	}
 
 	/**

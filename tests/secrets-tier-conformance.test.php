@@ -380,47 +380,77 @@ foreach ( $declared as $plugin => $d ) {
 // is replayed when the next run starts: a run killed outright (SIGKILL, a
 // crashed process) leaves no fake key in a vendor's live row. The file holds
 // the borrowed rows' stored bytes, so it lives in a directory only this user
-// can enter (0700, made under umask 077, refused when it is a link or
-// another user's), is created exclusively, and a file there that is a link
-// or another user's is never read. What a file asks is checked before it is
-// done: only option rows this suite seeds, only rows of the declared tables
-// by their declared column, only the fixture accounts it makes.
+// can enter (0700, made under umask 077, checked with lstat before each use:
+// never a link, never another user's). The file is opened once per use and
+// judged by its handle: this user's, a regular file with one link, and the
+// same file (device and inode) the path names without following a link.
+// It is created exclusively and read and written only through that handle.
+// What a file asks is checked before it is done: only option rows this
+// suite seeds, only rows of the declared tables by their declared column,
+// only the fixture accounts it makes.
 $restore_dir  = rtrim( get_temp_dir(), '/' ) . '/minn-secrets-tier-' . getmyuid();
 $restore_file = $restore_dir . '/restore-' . md5( ABSPATH . '|' . get_current_blog_id() ) . '.json';
-$owned        = static function ( $path, $dir ) {
-	clearstatcache( true, $path );
-	if ( is_link( $path ) || ! file_exists( $path ) || fileowner( $path ) !== getmyuid() ) {
+$dir_ok       = static function () use ( $restore_dir ) {
+	clearstatcache( true, $restore_dir );
+	$st = @lstat( $restore_dir ); // phpcs:ignore WordPress.PHP.NoSilencedErrors
+	return is_array( $st ) && 0040000 === ( $st['mode'] & 0170000 ) && getmyuid() === $st['uid'] && 0700 === ( $st['mode'] & 0777 );
+};
+// The restore file's handle, or null: false when one is there but is not
+// this user's own regular file (a link, another user's, a hard link).
+$open_restore = static function ( $mode ) use ( $restore_file, $dir_ok ) {
+	if ( ! $dir_ok() ) {
 		return false;
 	}
-	return $dir ? ( is_dir( $path ) && 0700 === ( fileperms( $path ) & 0777 ) ) : is_file( $path );
+	clearstatcache( true, $restore_file );
+	$ls = @lstat( $restore_file ); // phpcs:ignore WordPress.PHP.NoSilencedErrors
+	if ( 'x' === $mode ) {
+		if ( is_array( $ls ) ) {
+			$mode = 'r+';
+		} else {
+			$old = umask( 077 );
+			$fh  = @fopen( $restore_file, 'x+' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors,WordPress.WP.AlternativeFunctions
+			umask( $old );
+			$ls = false === $fh ? false : @lstat( $restore_file ); // phpcs:ignore WordPress.PHP.NoSilencedErrors
+		}
+	}
+	if ( ! isset( $fh ) ) {
+		if ( ! is_array( $ls ) ) {
+			return null;
+		}
+		$fh = @fopen( $restore_file, $mode ); // phpcs:ignore WordPress.PHP.NoSilencedErrors,WordPress.WP.AlternativeFunctions
+	}
+	if ( false === $fh ) {
+		return false;
+	}
+	$fs = fstat( $fh );
+	if ( ! is_array( $ls ) || 0120000 === ( $ls['mode'] & 0170000 ) || getmyuid() !== $fs['uid'] || 0100000 !== ( $fs['mode'] & 0170000 ) || 1 !== $fs['nlink'] || $fs['dev'] !== $ls['dev'] || $fs['ino'] !== $ls['ino'] ) {
+		fclose( $fh ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+		return false;
+	}
+	return $fh;
 };
 $old_umask = umask( 077 );
 if ( ! file_exists( $restore_dir ) && ! is_link( $restore_dir ) ) {
 	mkdir( $restore_dir, 0700 );
 }
 umask( $old_umask );
-if ( ! $owned( $restore_dir, true ) ) {
+if ( ! $dir_ok() ) {
 	$check( 'the restore directory is a private directory of this user', false, 'refusing to write fixtures without a safe restore file' );
 	return;
 }
 $journal      = array( 'options' => array(), 'rows' => array(), 'users' => array() );
-$save_journal = static function () use ( &$journal, $restore_file, $owned ) {
-	$old_umask = umask( 077 );
-	try {
-		if ( ! file_exists( $restore_file ) && ! is_link( $restore_file ) ) {
-			$fh = fopen( $restore_file, 'x' ); // phpcs:ignore WordPress.WP.AlternativeFunctions
-			if ( false === $fh ) {
-				throw new RuntimeException( 'restore file not created' );
-			}
-			fclose( $fh ); // phpcs:ignore WordPress.WP.AlternativeFunctions
-		}
-		if ( ! $owned( $restore_file, false ) ) {
-			throw new RuntimeException( 'restore file is not this user\'s own' );
-		}
-		file_put_contents( $restore_file, (string) wp_json_encode( $journal ), LOCK_EX ); // phpcs:ignore WordPress.WP.AlternativeFunctions
-	} finally {
-		umask( $old_umask );
+$save_journal = static function () use ( &$journal, $open_restore ) {
+	$fh = $open_restore( 'x' );
+	if ( ! $fh ) {
+		throw new RuntimeException( 'the restore file is not this user\'s own regular file' );
 	}
+	flock( $fh, LOCK_EX );
+	ftruncate( $fh, 0 );
+	rewind( $fh );
+	fwrite( $fh, (string) wp_json_encode( $journal ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+	fflush( $fh );
+	flock( $fh, LOCK_UN );
+	fclose( $fh ); // phpcs:ignore WordPress.WP.AlternativeFunctions
 };
 // What a restore file may ask: option rows the cases seed (a shape's row
 // carries the suite's six-character tag), declared tables by a declared
@@ -488,23 +518,26 @@ $replay = static function ( array $j ) use ( $wpdb, $allowed_option, $allowed_ro
 	wp_cache_delete( 'notoptions', 'options' );
 	return $refused;
 };
-if ( is_link( $restore_file ) || ( file_exists( $restore_file ) && ! $owned( $restore_file, false ) ) ) {
-	$check( 'a restore file that is a link or another user\'s is never replayed', true );
-	unlink( $restore_file );
-} elseif ( file_exists( $restore_file ) ) {
-	$left    = json_decode( (string) file_get_contents( $restore_file ), true ); // phpcs:ignore WordPress.WP.AlternativeFunctions
-	$refused = $replay( is_array( $left ) ? $left : array() );
-	unlink( $restore_file );
-	$check( 'an earlier run that ended without its cleanup is put back from its restore file', 0 === $refused, "{$refused} entries outside what this suite seeds were refused" );
-}
-$put_back = $once( static function () use ( &$journal, $replay, $restore_file, $forget ) {
-	$replay( $journal );
-	if ( file_exists( $restore_file ) && ! is_link( $restore_file ) ) {
+$left_fh = $open_restore( 'r' );
+if ( false === $left_fh ) {
+	$check( 'a restore file that is a link, a hard link or another user\'s is never replayed', true );
+	if ( $dir_ok() ) {
 		unlink( $restore_file );
 	}
-	// The scan-rule record was written for this run's lists (its probe
-	// declarations change the stamp): the next list build writes it again.
-	delete_option( 'minn_admin_egress_loose' );
+} elseif ( $left_fh ) {
+	$left = json_decode( (string) stream_get_contents( $left_fh ), true );
+	fclose( $left_fh ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+	$refused = $replay( is_array( $left ) ? $left : array() );
+	if ( $dir_ok() ) {
+		unlink( $restore_file );
+	}
+	$check( 'an earlier run that ended without its cleanup is put back from its restore file', 0 === $refused, "{$refused} entries outside what this suite seeds were refused" );
+}
+$put_back = $once( static function () use ( &$journal, $replay, $restore_file, $dir_ok, $forget ) {
+	$replay( $journal );
+	if ( $dir_ok() && file_exists( $restore_file ) ) {
+		unlink( $restore_file );
+	}
 	$forget();
 } );
 // A planted restore file asks nothing outside what the suite seeds.
@@ -683,7 +716,17 @@ try {
 	// (about one Disembark token in forty).
 	if ( isset( $cases['disembark']['options']['disembark_token'] ) ) {
 		$low = 'Lo' . strtoupper( preg_replace( '/\d/', '', $tag ) ) . 'qRsTuVwXyZaBcDeFgHiJkLmNoPqRsTu7';
+		// Written with SQL (no option hook runs) and probed before anything
+		// rebuilds the list: the scan rule is read from the rows as stored.
+		// Contact Form 7's row goes back to holding no loose key first, so
+		// this token is the only one that opens the wider rule.
+		$seed_option( 'wpcf7', array( 'version' => '6.2.2' ) );
 		$seed_option( 'disembark_token', $low );
+		$forget();
+		$echo           = array( 'command' => 'disembark connect https://example.test ' . $low );
+		list( $st, $b ) = $send( 'GET', $probe );
+		$echo           = '';
+		$check( "disembark option disembark_token: a single-digit key written with SQL is masked in the very next response, before any list rebuild ({$st})", 200 === $st && false === strpos( $b, $low ) && false !== strpos( $b, '[redacted:' ) );
 		$forget();
 		$check( "disembark option disembark_token: a bare key with a single digit is one of the fence's needles", in_array( $low, Minn_Admin_DB::egress_credentials(), true ) );
 		$echo           = array( 'command' => 'disembark connect https://example.test ' . $low );
