@@ -162,7 +162,14 @@ A few properties worth knowing before auditing (details in
   by their row's name only, so the fence's list stays bounded on a site
   with many users. Contact Form 7's reCAPTCHA and Turnstile secrets are
   stored under the public site key's name and are hidden with their row,
-  not searched for.
+  not searched for. Rows redacted whole for their plugin include Contact
+  Form 7's `wpcf7`, Yoast SEO's `wpseo`, Amelia's `amelia_settings`, and
+  UpdraftPlus' remote storage rows (`updraft_<destination>`, every
+  destination but email), its UpdraftCentral and Migrator keys, the sites
+  it sends backups to and its encryption phrase; the copies UpdraftPlus'
+  job rows take of the storage rows during a backup are redacted as
+  copies. Ninja Forms' settings are not: its own screen prints its
+  reCAPTCHA secret to the same administrator.
 - The database browser is read-only and redacts credentials three ways: by
   column name (a column named like a password, secret or token, in any
   table, which also cannot be sorted or filtered), by known vendor row
