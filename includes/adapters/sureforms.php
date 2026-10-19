@@ -153,7 +153,9 @@ function minn_admin_sureforms_metrics( $form_id ) {
 		if ( class_exists( '\\SRFM\\Inc\\Forms_Data' ) && method_exists( '\\SRFM\\Inc\\Forms_Data', 'get_instance' ) ) {
 			try {
 				$m = new ReflectionMethod( '\\SRFM\\Inc\\Forms_Data', 'calculate_form_metrics' );
-				$m->setAccessible( true );
+				if ( PHP_VERSION_ID < 80100 ) {
+					$m->setAccessible( true );
+				}
 				$method = $m;
 			} catch ( \Throwable $e ) {
 				$method = null;

@@ -2791,7 +2791,7 @@ class Minn_Admin_REST {
 			if ( is_array( $fn ) && isset( $fn[0], $fn[1] ) ) {
 				$ref = new ReflectionMethod( $fn[0], (string) $fn[1] );
 			} elseif ( is_string( $fn ) && false !== strpos( $fn, '::' ) ) {
-				$ref = new ReflectionMethod( $fn );
+				$ref = new ReflectionMethod( ...explode( '::', $fn, 2 ) );
 			} elseif ( $fn instanceof Closure || is_string( $fn ) ) {
 				$ref = new ReflectionFunction( $fn );
 			} elseif ( is_object( $fn ) && method_exists( $fn, '__invoke' ) ) {
@@ -6491,7 +6491,7 @@ class Minn_Admin_REST {
 						if ( is_array( $fn ) && isset( $fn[0], $fn[1] ) ) {
 							$ref = new ReflectionMethod( $fn[0], (string) $fn[1] );
 						} elseif ( is_string( $fn ) && false !== strpos( $fn, '::' ) ) {
-							$ref = new ReflectionMethod( $fn );
+							$ref = new ReflectionMethod( ...explode( '::', $fn, 2 ) );
 						} elseif ( $fn instanceof Closure || is_string( $fn ) ) {
 							$ref = new ReflectionFunction( $fn );
 						} elseif ( is_object( $fn ) && method_exists( $fn, '__invoke' ) ) {

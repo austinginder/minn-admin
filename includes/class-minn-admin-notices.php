@@ -1113,7 +1113,7 @@ class Minn_Admin_Notices {
 		try {
 			if ( is_string( $cb ) ) {
 				return false !== strpos( $cb, '::' )
-					? new ReflectionMethod( $cb )
+					? new ReflectionMethod( ...explode( '::', $cb, 2 ) )
 					: new ReflectionFunction( $cb );
 			}
 			if ( is_array( $cb ) && 2 === count( $cb ) ) {

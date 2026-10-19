@@ -1994,9 +1994,11 @@ function minn_admin_seo_shows_for_type( $plugin, $post_type ) {
 		}
 		if ( 'AIOSEO' === $name && function_exists( 'aioseo' ) ) {
 			$types = aioseo()->dynamicOptions->searchAppearance->postTypes;
-			if ( $types && isset( $types->{$post_type} ) ) {
-				$adv = $types->{$post_type}->advanced;
-				if ( $adv && isset( $adv->showMetaBox ) ) {
+			// A type AIOSEO has no settings for reads as set but null.
+			$type = $types && isset( $types->{$post_type} ) ? $types->{$post_type} : null;
+			if ( is_object( $type ) ) {
+				$adv = $type->advanced;
+				if ( is_object( $adv ) && isset( $adv->showMetaBox ) ) {
 					return (bool) $adv->showMetaBox;
 				}
 			}

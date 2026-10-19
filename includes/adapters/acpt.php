@@ -886,7 +886,7 @@ function minn_admin_panel_held( $request, $error = null, $panel = '' ) {
 		$held = new SplObjectStorage();
 	}
 	if ( null !== $error ) {
-		$list             = $held->contains( $request ) ? $held[ $request ] : array();
+		$list             = isset( $held[ $request ] ) ? $held[ $request ] : array();
 		$list[]           = array(
 			'panel' => (string) $panel,
 			'error' => $error,
@@ -894,11 +894,11 @@ function minn_admin_panel_held( $request, $error = null, $panel = '' ) {
 		$held[ $request ] = $list;
 		return $list;
 	}
-	if ( ! $held->contains( $request ) ) {
+	if ( ! isset( $held[ $request ] ) ) {
 		return array();
 	}
 	$list = $held[ $request ];
-	$held->detach( $request );
+	unset( $held[ $request ] );
 	return $list;
 }
 
