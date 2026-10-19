@@ -5426,7 +5426,14 @@
 				} );
 				// A newer click superseded this write — don't clobber state.
 				if ( seq !== appearanceSaveSeq ) return;
-				if ( B.user ) B.user.appearance = appearanceOf( saved );
+				const fresh = appearanceOf( saved );
+				if ( B.user ) B.user.appearance = fresh;
+				// A Custom pick sends no palette, so the colors painted were
+				// this page's copy; show the stored ones when they differ.
+				if ( fresh.scheme === 'custom' && ! ( 'custom' in body ) && JSON.stringify( fresh.custom ) !== JSON.stringify( norm.custom ) ) {
+					applyAppearance( fresh );
+					if ( 'profile' === state.route ) renderProfile();
+				}
 			} catch ( e ) {
 				// What did not save goes with the next save.
 				sent.forEach( ( k ) => appearancePending.add( k ) );
@@ -5618,11 +5625,14 @@
 				const willCustom = id === 'custom';
 				// Paint first; meta save is background. Only rebuild when the
 				// custom slot editors need to appear/disappear.
-				// A preset pick sends the scheme alone; the custom palette rides
-				// along only when it is the one being picked.
+				// A pick sends the scheme alone: the route keeps the stored
+				// palette, and this page's copy of it may be older than a color
+				// changed since in another session or by an administrator.
+				// Leaving the site default is the exception: the palette starts
+				// as the site's colors on screen, not the one stored.
 				commitAppearance(
-					willCustom
-						? { scheme: id, custom: prev.scheme === 'site' ? resolvedAppearance( prev ).custom : prev.custom }
+					willCustom && prev.scheme === 'site'
+						? { scheme: id, custom: resolvedAppearance( prev ).custom }
 						: { scheme: id },
 					{ rebuild: wasCustom !== willCustom }
 				);
@@ -54059,7 +54069,10 @@
 				const flips = ( prev.scheme === 'custom' ) !== ( id === 'custom' );
 				ue.appearance = appearanceOf( { ...prev, scheme: id } );
 				if ( ! flips ) markSchemeSwatchSelected( wrap, id );
-				save( id === 'custom' ? [ 'scheme', 'custom' ] : [ 'scheme' ], flips );
+				// The scheme alone, Custom included: the route keeps the stored
+				// palette, and the copy this page loaded may be older than a
+				// color the person changed since. The answer redraws the slots.
+				save( [ 'scheme' ], flips );
 			} );
 		} );
 		// A slot edit sends the colors changed, by mode and slot; the route
