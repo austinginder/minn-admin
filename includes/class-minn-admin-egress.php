@@ -61,6 +61,12 @@ class Minn_Admin_Egress {
 	/** Credential => fingerprint, null until first needed. */
 	private static $credentials = null;
 
+	/** The object cache generation of the list, read once per request. */
+	private static $generation = null;
+
+	/** The row recording whether the list needs the wider scan rule (wide()). */
+	const LOOSE = 'minn_admin_egress_loose';
+
 	/** Values a route hands out on purpose, for the response being built. */
 	private static $intended = array();
 
@@ -156,24 +162,69 @@ class Minn_Admin_Egress {
 	}
 
 	/**
-	 * The object cache key for the list: named by the adapters'
-	 * declarations, so a process whose adapters declare other stores (a
-	 * newer copy of the plugin, a declaration added at run time) never
-	 * reads a list built without them.
+	 * The build the list belongs to: Minn's version (its central lists) and
+	 * the adapters' declarations, so a process running other code never
+	 * reads a list or a shape record built without its stores.
 	 */
-	private static function cache_key() {
-		return 'egress_credentials' . ( class_exists( 'Minn_Admin_Kernel_Secrets', false ) ? '_' . Minn_Admin_Kernel_Secrets::hash() : '' );
+	public static function stamp() {
+		return ( defined( 'MINN_ADMIN_VERSION' ) ? MINN_ADMIN_VERSION : '' ) . '_' . ( class_exists( 'Minn_Admin_Kernel_Secrets', false ) ? Minn_Admin_Kernel_Secrets::hash() : '' );
 	}
 
-	/** An adapter declared credential stores: read the list again when next needed. */
+	/**
+	 * The object cache key for the list: the build, and a generation every
+	 * forget() moves on, so dropping the list reaches every process's copy
+	 * whatever build it runs.
+	 */
+	public static function cache_key() {
+		if ( null === self::$generation ) {
+			$g                = wp_cache_get( 'egress_generation', 'minn_admin' );
+			self::$generation = false === $g ? 0 : (int) $g;
+		}
+		return 'egress_credentials_' . self::stamp() . '_' . self::$generation;
+	}
+
+	/** An adapter declared credential stores: read the list, and name rows, again when next needed. */
 	public static function declarations_changed() {
 		self::$credentials = null;
+		self::$named       = array();
+	}
+
+	/**
+	 * Whether a response is scanned on the wider shape rule
+	 * (Minn_Admin_DB::key_shaped()) rather than three digits and three
+	 * letters. Only a list holding a credential the narrower rule would miss
+	 * needs it, and the list costs tens of milliseconds to build without an
+	 * object cache, so its build records the answer (with its stamp) in one
+	 * autoloaded row. A record from another build, or none, reads as wide:
+	 * the next scan builds the list and records it again. A credential row
+	 * that changes drops the record (changed()).
+	 */
+	private static function wide() {
+		$rec = get_option( self::LOOSE, '' );
+		return ! ( is_string( $rec ) && self::stamp() . ':0' === $rec );
+	}
+
+	/**
+	 * Record whether the list just built holds a credential the narrower
+	 * rule would miss (Minn_Admin_DB calls this after each build).
+	 *
+	 * @param bool $loose Whether one does.
+	 */
+	public static function record_shapes( $loose ) {
+		$rec = self::stamp() . ':' . ( $loose ? '1' : '0' );
+		if ( get_option( self::LOOSE, '' ) !== $rec ) {
+			update_option( self::LOOSE, $rec, true );
+		}
 	}
 
 	/** Read the credentials again when next needed. */
 	private static function forget() {
 		self::$credentials = null;
 		wp_cache_delete( self::cache_key(), 'minn_admin' );
+		if ( false === wp_cache_incr( 'egress_generation', 1, 'minn_admin' ) ) {
+			wp_cache_set( 'egress_generation', self::$generation + 1, 'minn_admin' );
+		}
+		self::$generation = null;
 		if ( method_exists( 'Minn_Admin_DB', 'forget_credentials' ) ) {
 			Minn_Admin_DB::forget_credentials();
 		}
@@ -193,6 +244,15 @@ class Minn_Admin_Egress {
 	 * @param string $option Option name.
 	 */
 	public static function changed( $option ) {
+		if ( self::LOOSE === $option ) {
+			return;
+		}
+		// A credential row the lists name changed: the wide() record may no
+		// longer hold. Asked of the fixed and declared names only (no
+		// gateway or licence reader starts here), on every option write.
+		if ( false !== get_option( self::LOOSE, false ) && method_exists( 'Minn_Admin_DB', 'is_listed_option' ) && Minn_Admin_DB::is_listed_option( (string) $option ) ) {
+			delete_option( self::LOOSE );
+		}
 		if ( null === self::$credentials && ( ! wp_using_ext_object_cache() || false === wp_cache_get( self::cache_key(), 'minn_admin' ) ) ) {
 			return;
 		}
@@ -309,9 +369,10 @@ class Minn_Admin_Egress {
 
 	/**
 	 * Whether JSON text holds anything shaped like a key: a run of 16 or more
-	 * token characters that Minn_Admin_DB::key_shaped() calls a key (the
-	 * same rule a declared leaf's value is held to, so no needle is one the
-	 * scan skips), read
+	 * token characters with three digits and three letters or, while the
+	 * list holds a credential that rule would miss (wide()), one that
+	 * Minn_Admin_DB::key_shaped() calls a key (the rule a declared value is
+	 * held to, so no needle is one the scan skips), read
 	 * with escaped slashes (at any depth) and URL-encoded slashes, pluses
 	 * and equals decoded, and broken at query separators so
 	 * "_wpnonce=<nonce>" is two short runs.
@@ -322,7 +383,15 @@ class Minn_Admin_Egress {
 			return false;
 		}
 		foreach ( $m[0] as $run ) {
-			if ( method_exists( 'Minn_Admin_DB', 'key_shaped' ) ? Minn_Admin_DB::key_shaped( $run ) : ( preg_match_all( '/\d/', $run ) >= 3 && preg_match_all( '/[A-Za-z]/', $run ) >= 3 ) ) {
+			if ( preg_match_all( '/\d/', $run ) >= 3 && preg_match_all( '/[A-Za-z]/', $run ) >= 3 ) {
+				return true;
+			}
+		}
+		if ( ! method_exists( 'Minn_Admin_DB', 'key_shaped' ) || ! self::wide() ) {
+			return false;
+		}
+		foreach ( $m[0] as $run ) {
+			if ( Minn_Admin_DB::key_shaped( $run ) ) {
 				return true;
 			}
 		}

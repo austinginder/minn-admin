@@ -1453,10 +1453,14 @@ class Minn_Admin_DB {
 		// Leaves an adapter names inside a row, whatever they are called (a
 		// secret keyed by its public site key), and anything below them, to
 		// any depth: each counts when it is shaped like a key (key_shaped(),
-		// the egress fence's own gate), whatever its length.
+		// the egress fence's own gate), whatever its length. So does a row an
+		// adapter declares whose whole value is one bare key (a 42-character
+		// connect token can hold fewer than three digits).
 		$leafy = array_change_key_case( Minn_Admin_Kernel_Secrets::option_leaves(), CASE_LOWER );
-		if ( $leafy ) {
-			$in   = implode( ',', array_fill( 0, count( $leafy ), '%s' ) );
+		$bare  = array_map( 'strtolower', Minn_Admin_Kernel_Secrets::option_names() );
+		$ask   = array_values( array_unique( array_merge( array_keys( $leafy ), $bare ) ) );
+		if ( $ask ) {
+			$in   = implode( ',', array_fill( 0, count( $ask ), '%s' ) );
 			$rows = array();
 			foreach ( $stores as $store ) {
 				list( $table, $kcol, $vcol ) = $store;
@@ -1464,9 +1468,16 @@ class Minn_Admin_DB {
 					continue;
 				}
 				// phpcs:ignore WordPress.DB.PreparedSQL -- identifiers are this class's own; values prepared.
-				$rows = array_merge( $rows, (array) $wpdb->get_results( $wpdb->prepare( "SELECT `{$kcol}` AS k, `{$vcol}` AS v FROM `{$table}` WHERE `{$kcol}` IN ({$in})", array_keys( $leafy ) ), ARRAY_A ) );
+				$rows = array_merge( $rows, (array) $wpdb->get_results( $wpdb->prepare( "SELECT `{$kcol}` AS k, `{$vcol}` AS v FROM `{$table}` WHERE `{$kcol}` IN ({$in})", $ask ), ARRAY_A ) );
 			}
 			foreach ( $rows as $row ) {
+				$t = rtrim( trim( (string) $row['v'] ), '=' );
+				if ( in_array( strtolower( (string) $row['k'] ), $bare, true ) && preg_match( '#^[A-Za-z0-9_\-+/]{16,}$#', $t ) && self::key_shaped( $t ) ) {
+					$credentials[ $t ] = '';
+				}
+				if ( ! isset( $leafy[ strtolower( (string) $row['k'] ) ] ) ) {
+					continue;
+				}
 				foreach ( self::credential_leaves( (string) $row['v'], '', 0, 32 ) as $leaf ) {
 					foreach ( $leafy[ strtolower( (string) $row['k'] ) ] ?? array() as $re ) {
 						$v = rtrim( $leaf[1], '=' );
@@ -1479,6 +1490,18 @@ class Minn_Admin_DB {
 			}
 		}
 		self::$credentials = array_map( 'strval', array_keys( $credentials ) );
+		// Whether the egress fence must scan on the wider shape rule: only
+		// when a credential would slip its three-digit, three-letter rule.
+		if ( method_exists( 'Minn_Admin_Egress', 'record_shapes' ) ) {
+			$loose = false;
+			foreach ( self::$credentials as $c ) {
+				if ( preg_match_all( '/\d/', $c ) < 3 || preg_match_all( '/[A-Za-z]/', $c ) < 3 ) {
+					$loose = true;
+					break;
+				}
+			}
+			Minn_Admin_Egress::record_shapes( $loose );
+		}
 		foreach ( array_keys( $credentials ) as $v ) {
 			$v    = (string) $v;
 			$mine = array( $v => true );
@@ -1553,6 +1576,27 @@ class Minn_Admin_DB {
 	 */
 	public static function is_credential_option( $name ) {
 		return self::keyed_match( (string) $name, array( 'option_name', self::secret_option_names(), self::secret_option_shapes() ) );
+	}
+
+	/**
+	 * Whether an option row is a credential row by the fixed lists alone:
+	 * the central names and shapes, the adapters' declarations and the
+	 * licences screen's rows. No gateway or connector registry is started,
+	 * so the egress fence can ask it on every option write.
+	 *
+	 * @param string $name Option name.
+	 * @return bool
+	 */
+	public static function is_listed_option( $name ) {
+		static $lists = null;
+		static $for   = '';
+		$stamp = Minn_Admin_Kernel_Secrets::hash();
+		if ( null === $lists || $for !== $stamp ) {
+			$licences = function_exists( 'minn_admin_license_secret_options' ) ? minn_admin_license_secret_options() : array( array(), array() );
+			$lists    = array( 'option_name', array_merge( self::SECRET_OPTION_KEYS, Minn_Admin_Kernel_Secrets::option_names(), $licences[0] ), array_merge( self::SECRET_OPTION_SHAPES, Minn_Admin_Kernel_Secrets::option_shapes(), $licences[1] ) );
+			$for      = $stamp;
+		}
+		return self::keyed_match( (string) $name, $lists );
 	}
 
 	/**

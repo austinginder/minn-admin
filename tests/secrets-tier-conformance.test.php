@@ -249,10 +249,10 @@ minn_admin_secrets(
 		'usermeta'      => array( '*' . $pt . '_um' ),
 	)
 );
-minn_admin_secrets( $pt . '2', array( 'options' => array( $pt . '_a_*_b_*', '*', $pt . '_leafy' => array( 'ok', 7 ) ) ) );
+minn_admin_secrets( $pt . '2', array( 'options' => array( $pt . '_a_*_b_*', '*', $pt . '_leafy' => array( 'ok', 7 ), '*_' . $pt, $pt . '%x', $pt . '_all' => array( '*' ) ) ) );
 remove_filter( 'doing_it_wrong_trigger_error', '__return_false' );
 $grew = count( Minn_Admin_Kernel_Secrets::problems() ) - $before;
-$check( "a malformed declaration reports every item it drops or widens ({$grew} of 7)", 7 === $grew, implode( '; ', array_slice( Minn_Admin_Kernel_Secrets::problems(), $before ) ) );
+$check( "a malformed declaration reports every item it drops or widens ({$grew} of 10)", 10 === $grew, implode( '; ', array_slice( Minn_Admin_Kernel_Secrets::problems(), $before ) ) );
 $check(
 	'a malformed declaration still registers its readable form: a lone name, the widest shape, a lone column, a suffix-only user meta shape, a named row beside a bad leaf',
 	Minn_Admin_DB::is_credential_option( $pt . '_lone' ) && Minn_Admin_DB::is_credential_option( $pt . '_a_x_b_y' ) && Minn_Admin_DB::is_credential_option( $pt . '_leafy' )
@@ -357,72 +357,6 @@ $fixture = static function ( $name, array $leaves ) use ( $fake ) {
 	return array( $value, $fakes );
 };
 
-// Every fixture is written to a restore file before it is made, and the file
-// is replayed when the next run starts: a run killed outright (SIGKILL, a
-// crashed process) leaves no fake key in a vendor's live row. The file holds
-// the borrowed rows' stored bytes, so it is the owner's alone (0600) and is
-// removed once replayed.
-$restore_file = get_temp_dir() . 'minn-secrets-tier-restore-' . md5( ABSPATH . '|' . get_current_blog_id() ) . '.json';
-$journal      = array( 'options' => array(), 'rows' => array(), 'users' => array() );
-$save_journal = static function () use ( &$journal, $restore_file ) {
-	file_put_contents( $restore_file, (string) wp_json_encode( $journal ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions
-	chmod( $restore_file, 0600 );
-};
-$replay = static function ( array $j ) use ( $wpdb ) {
-	foreach ( (array) ( $j['options'] ?? array() ) as $name => $was ) {
-		if ( null === $was ) {
-			$wpdb->delete( $wpdb->options, array( 'option_name' => $name ) );
-		} else {
-			$wpdb->update( $wpdb->options, array( 'option_value' => base64_decode( $was['v'] ), 'autoload' => $was['a'] ), array( 'option_name' => $name ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions
-		}
-		wp_cache_delete( $name, 'options' );
-	}
-	foreach ( (array) ( $j['rows'] ?? array() ) as $r ) {
-		$wpdb->delete( $r[0], array( $r[1] => $r[2] ) );
-	}
-	foreach ( (array) ( $j['users'] ?? array() ) as $login ) {
-		$u = get_user_by( 'login', $login );
-		if ( $u ) {
-			if ( is_multisite() ) {
-				require_once ABSPATH . 'wp-admin/includes/ms.php';
-				wpmu_delete_user( $u->ID );
-			} else {
-				wp_delete_user( $u->ID );
-			}
-		}
-	}
-	wp_cache_delete( 'alloptions', 'options' );
-	wp_cache_delete( 'notoptions', 'options' );
-};
-if ( file_exists( $restore_file ) ) {
-	$left = json_decode( (string) file_get_contents( $restore_file ), true );
-	$replay( is_array( $left ) ? $left : array() );
-	unlink( $restore_file );
-	$check( 'an earlier run that ended without its cleanup is put back from its restore file', true );
-}
-$put_back = $once( static function () use ( &$journal, $replay, $restore_file, $forget ) {
-	$replay( $journal );
-	if ( file_exists( $restore_file ) ) {
-		unlink( $restore_file );
-	}
-	$forget();
-} );
-$seed_option = static function ( $name, $value ) use ( &$journal, $save_journal, $wpdb ) {
-	$raw = maybe_serialize( $value );
-	$was = $wpdb->get_row( $wpdb->prepare( "SELECT option_value, autoload FROM {$wpdb->options} WHERE option_name = %s", $name ), ARRAY_A );
-	if ( ! array_key_exists( $name, $journal['options'] ) ) {
-		$journal['options'][ $name ] = $was ? array( 'v' => base64_encode( $was['option_value'] ), 'a' => $was['autoload'] ) : null; // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions
-		$save_journal();
-	}
-	if ( $was ) {
-		$wpdb->update( $wpdb->options, array( 'option_value' => $raw ), array( 'option_name' => $name ) );
-	} else {
-		$wpdb->insert( $wpdb->options, array( 'option_name' => $name, 'option_value' => $raw, 'autoload' => 'off' ) );
-	}
-	wp_cache_delete( $name, 'options' );
-	return (int) $wpdb->get_var( $wpdb->prepare( "SELECT option_id FROM {$wpdb->options} WHERE option_name = %s", $name ) );
-};
-
 // The cases: every declaration, and every entry of the manifest whether or
 // not it is still declared, so a declaration deleted from its adapter is
 // still seeded here and fails.
@@ -440,6 +374,173 @@ foreach ( $declared as $plugin => $d ) {
 		}
 	}
 }
+
+
+// Every fixture is written to a restore file before it is made, and the file
+// is replayed when the next run starts: a run killed outright (SIGKILL, a
+// crashed process) leaves no fake key in a vendor's live row. The file holds
+// the borrowed rows' stored bytes, so it lives in a directory only this user
+// can enter (0700, made under umask 077, refused when it is a link or
+// another user's), is created exclusively, and a file there that is a link
+// or another user's is never read. What a file asks is checked before it is
+// done: only option rows this suite seeds, only rows of the declared tables
+// by their declared column, only the fixture accounts it makes.
+$restore_dir  = rtrim( get_temp_dir(), '/' ) . '/minn-secrets-tier-' . getmyuid();
+$restore_file = $restore_dir . '/restore-' . md5( ABSPATH . '|' . get_current_blog_id() ) . '.json';
+$owned        = static function ( $path, $dir ) {
+	clearstatcache( true, $path );
+	if ( is_link( $path ) || ! file_exists( $path ) || fileowner( $path ) !== getmyuid() ) {
+		return false;
+	}
+	return $dir ? ( is_dir( $path ) && 0700 === ( fileperms( $path ) & 0777 ) ) : is_file( $path );
+};
+$old_umask = umask( 077 );
+if ( ! file_exists( $restore_dir ) && ! is_link( $restore_dir ) ) {
+	mkdir( $restore_dir, 0700 );
+}
+umask( $old_umask );
+if ( ! $owned( $restore_dir, true ) ) {
+	$check( 'the restore directory is a private directory of this user', false, 'refusing to write fixtures without a safe restore file' );
+	return;
+}
+$journal      = array( 'options' => array(), 'rows' => array(), 'users' => array() );
+$save_journal = static function () use ( &$journal, $restore_file, $owned ) {
+	$old_umask = umask( 077 );
+	try {
+		if ( ! file_exists( $restore_file ) && ! is_link( $restore_file ) ) {
+			$fh = fopen( $restore_file, 'x' ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+			if ( false === $fh ) {
+				throw new RuntimeException( 'restore file not created' );
+			}
+			fclose( $fh ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+		}
+		if ( ! $owned( $restore_file, false ) ) {
+			throw new RuntimeException( 'restore file is not this user\'s own' );
+		}
+		file_put_contents( $restore_file, (string) wp_json_encode( $journal ), LOCK_EX ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+	} finally {
+		umask( $old_umask );
+	}
+};
+// What a restore file may ask: option rows the cases seed (a shape's row
+// carries the suite's six-character tag), declared tables by a declared
+// column, fixture logins.
+$allowed_option = static function ( $name ) use ( $cases ) {
+	foreach ( $cases as $d ) {
+		foreach ( array_keys( $d['options'] ?? array() ) as $n ) {
+			$at = strpos( $n, '*' );
+			if ( false === $at ? $n === $name : preg_match( '/^' . preg_quote( substr( $n, 0, $at ), '/' ) . 'minn[a-z0-9]{6}' . preg_quote( substr( $n, $at + 1 ), '/' ) . '$/', $name ) ) {
+				return true;
+			}
+		}
+	}
+	return false;
+};
+$allowed_row = static function ( $table, $col ) use ( $cases, $wpdb ) {
+	foreach ( $cases as $d ) {
+		foreach ( array( 'columns', 'column_tokens' ) as $kind ) {
+			foreach ( $d[ $kind ] ?? array() as $t => $cols ) {
+				if ( $wpdb->prefix . $t === $table && in_array( $col, $cols, true ) ) {
+					return true;
+				}
+			}
+		}
+	}
+	return false;
+};
+$replay = static function ( array $j ) use ( $wpdb, $allowed_option, $allowed_row ) {
+	$refused = 0;
+	foreach ( (array) ( $j['options'] ?? array() ) as $name => $was ) {
+		if ( ! is_string( $name ) || ! $allowed_option( $name ) || ( null !== $was && ( ! isset( $was['v'], $was['a'] ) || ! is_string( $was['v'] ) || ! is_string( $was['a'] ) ) ) ) {
+			++$refused;
+			continue;
+		}
+		if ( null === $was ) {
+			$wpdb->delete( $wpdb->options, array( 'option_name' => $name ) );
+		} else {
+			$wpdb->update( $wpdb->options, array( 'option_value' => base64_decode( $was['v'] ), 'autoload' => $was['a'] ), array( 'option_name' => $name ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions
+		}
+		wp_cache_delete( $name, 'options' );
+	}
+	foreach ( (array) ( $j['rows'] ?? array() ) as $r ) {
+		if ( ! is_array( $r ) || 3 !== count( $r ) || ! is_string( $r[0] ) || ! is_string( $r[1] ) || ! is_string( $r[2] ) || ! $allowed_row( $r[0], $r[1] ) ) {
+			++$refused;
+			continue;
+		}
+		$wpdb->delete( $r[0], array( $r[1] => $r[2] ) );
+	}
+	foreach ( (array) ( $j['users'] ?? array() ) as $login ) {
+		if ( ! is_string( $login ) || ! preg_match( '/^minnsecrets_[a-z0-9]{6}$/', $login ) ) {
+			++$refused;
+			continue;
+		}
+		$u = get_user_by( 'login', $login );
+		if ( $u ) {
+			if ( is_multisite() ) {
+				require_once ABSPATH . 'wp-admin/includes/ms.php';
+				wpmu_delete_user( $u->ID );
+			} else {
+				wp_delete_user( $u->ID );
+			}
+		}
+	}
+	wp_cache_delete( 'alloptions', 'options' );
+	wp_cache_delete( 'notoptions', 'options' );
+	return $refused;
+};
+if ( is_link( $restore_file ) || ( file_exists( $restore_file ) && ! $owned( $restore_file, false ) ) ) {
+	$check( 'a restore file that is a link or another user\'s is never replayed', true );
+	unlink( $restore_file );
+} elseif ( file_exists( $restore_file ) ) {
+	$left    = json_decode( (string) file_get_contents( $restore_file ), true ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+	$refused = $replay( is_array( $left ) ? $left : array() );
+	unlink( $restore_file );
+	$check( 'an earlier run that ended without its cleanup is put back from its restore file', 0 === $refused, "{$refused} entries outside what this suite seeds were refused" );
+}
+$put_back = $once( static function () use ( &$journal, $replay, $restore_file, $forget ) {
+	$replay( $journal );
+	if ( file_exists( $restore_file ) && ! is_link( $restore_file ) ) {
+		unlink( $restore_file );
+	}
+	// The scan-rule record was written for this run's lists (its probe
+	// declarations change the stamp): the next list build writes it again.
+	delete_option( 'minn_admin_egress_loose' );
+	$forget();
+} );
+// A planted restore file asks nothing outside what the suite seeds.
+$planted = array(
+	'options' => array( 'siteurl' => null, 'blogname' => array( 'v' => base64_encode( 'x' ), 'a' => 'on' ) ),
+	'rows'    => array( array( $wpdb->users, 'ID', '1' ), array( $wpdb->prefix . 'amelia_providers_to_google_calendar', 'id', '1' ) ),
+	'users'   => array( 'admin', 'minnsecrets_' . $tag . 'x' ),
+);
+$rejected = 0;
+foreach ( $planted['options'] as $name => $unused ) {
+	$rejected += $allowed_option( $name ) ? 0 : 1;
+}
+foreach ( $planted['rows'] as $r ) {
+	$rejected += $allowed_row( $r[0], $r[1] ) ? 0 : 1;
+}
+foreach ( $planted['users'] as $login ) {
+	$rejected += preg_match( '/^minnsecrets_[a-z0-9]{6}$/', $login ) ? 0 : 1;
+}
+$check( "a restore file is held to what the suite seeds: no other option, table, column or account ({$rejected} of 6 planted entries refused)", 6 === $rejected );
+
+$seed_option = static function ( $name, $value ) use ( &$journal, $save_journal, $wpdb ) {
+	$raw = maybe_serialize( $value );
+	$was = $wpdb->get_row( $wpdb->prepare( "SELECT option_value, autoload FROM {$wpdb->options} WHERE option_name = %s", $name ), ARRAY_A );
+	if ( ! array_key_exists( $name, $journal['options'] ) ) {
+		$journal['options'][ $name ] = $was ? array( 'v' => base64_encode( $was['option_value'] ), 'a' => $was['autoload'] ) : null; // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions
+		$save_journal();
+	}
+	if ( $was ) {
+		$wpdb->update( $wpdb->options, array( 'option_value' => $raw ), array( 'option_name' => $name ) );
+	} else {
+		$wpdb->insert( $wpdb->options, array( 'option_name' => $name, 'option_value' => $raw, 'autoload' => 'off' ) );
+	}
+	wp_cache_delete( $name, 'options' );
+	return (int) $wpdb->get_var( $wpdb->prepare( "SELECT option_id FROM {$wpdb->options} WHERE option_name = %s", $name ) );
+};
+
 
 try {
 	// Seed every option row and shape first, then read them all: the
@@ -467,7 +568,7 @@ try {
 				'case'  => $fake( 'case' ),
 				'deep'  => $fake( 'deep' ),
 				'long'  => str_repeat( $fake( 'long' ), 20 ),
-				'digit' => 'Lo' . ucfirst( $tag ) . 'XyZwAbCdEfGh-1',
+				'digit' => 'Lo' . ucfirst( preg_replace( '/\d/', '', $tag ) ) . 'XyZwAbCdEfGh-1',
 			);
 			$hard     = array( $hf, array(
 				'recaptcha' => array(
@@ -577,6 +678,18 @@ try {
 		list( $st, $b ) = $send( 'GET', $probe );
 		$echo           = '';
 		$check( "contact-form-7 leaves: a response holding only the single-digit secret is scanned and masked ({$st})", 200 === $st && false === strpos( $b, $hf['digit'] ) && false !== strpos( $b, '[redacted:' ) );
+	}
+	// A row declared whole whose value is one bare key with a single digit
+	// (about one Disembark token in forty).
+	if ( isset( $cases['disembark']['options']['disembark_token'] ) ) {
+		$low = 'Lo' . strtoupper( preg_replace( '/\d/', '', $tag ) ) . 'qRsTuVwXyZaBcDeFgHiJkLmNoPqRsTu7';
+		$seed_option( 'disembark_token', $low );
+		$forget();
+		$check( "disembark option disembark_token: a bare key with a single digit is one of the fence's needles", in_array( $low, Minn_Admin_DB::egress_credentials(), true ) );
+		$echo           = array( 'command' => 'disembark connect https://example.test ' . $low );
+		list( $st, $b ) = $send( 'GET', $probe );
+		$echo           = '';
+		$check( "disembark option disembark_token: a response holding only that key is scanned and masked ({$st})", 200 === $st && false === strpos( $b, $low ) && false !== strpos( $b, '[redacted:' ) );
 	}
 	foreach ( $col_cases as $c ) {
 		list( $what, $t, $pkc, $id, $fakes, $row, $searched ) = $c;

@@ -142,7 +142,10 @@ class Minn_Admin_Kernel_Secrets {
 				}
 				$kept = array();
 				foreach ( $leaves as $leaf ) {
-					if ( is_string( $leaf ) && '' !== trim( $leaf, '/' ) ) {
+					if ( is_string( $leaf ) && '*' === trim( $leaf, '/' ) ) {
+						self::problem( "{$plugin}: the leaf '*' of {$name} names every value in the row; declare the row whole" );
+						$kept[] = $leaf;
+					} elseif ( is_string( $leaf ) && '' !== trim( $leaf, '/' ) ) {
 						$kept[] = $leaf;
 					} else {
 						self::problem( "{$plugin}: a leaf of {$name} is not a path: " . wp_json_encode( $leaf ) );
@@ -182,6 +185,12 @@ class Minn_Admin_Kernel_Secrets {
 		if ( '*' === $name ) {
 			self::problem( "{$plugin}: {$key} '*' would name every row; refused" );
 			return null;
+		}
+		if ( false !== strpos( $name, '%' ) ) {
+			self::problem( "{$plugin}: {$key} {$name} holds a '%', which a value search's LIKE reads as a wildcard" );
+		}
+		if ( 'options' === $key && 0 === strpos( $name, '*' ) ) {
+			self::problem( "{$plugin}: options {$name} has no prefix: every row ending so is redacted, and the value search scans every row for it" );
 		}
 		return $name;
 	}

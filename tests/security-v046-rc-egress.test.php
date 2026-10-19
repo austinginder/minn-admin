@@ -808,8 +808,8 @@ try {
 	// run in one.
 	register_rest_route( 'minn-admin/v1', '/minn-rc-egress-test/write', array( 'methods' => 'POST', 'permission_callback' => '__return_true', 'callback' => function () use ( $held, $plain, $row4, $key3, $t1, $key ) {
 		Minn_Admin::unchanged( 'x ' . $t1, 'x ' . $key );
-		// The fence names its cache by the adapters' declarations.
-		$ck = 'egress_credentials' . ( class_exists( 'Minn_Admin_Kernel_Secrets' ) ? '_' . Minn_Admin_Kernel_Secrets::hash() : '' );
+		// The fence names its cache by its build and generation.
+		$ck = method_exists( 'Minn_Admin_Egress', 'cache_key' ) ? Minn_Admin_Egress::cache_key() : 'egress_credentials';
 		wp_cache_set( $ck, array( 'stale' ), 'minn_admin', 60 );
 		add_option( $plain, 'plain value', '', 'no' );
 		$kept = $held();
