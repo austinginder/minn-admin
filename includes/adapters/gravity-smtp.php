@@ -1100,21 +1100,25 @@ minn_admin_endpoint( 'gravity-smtp/send-test', array(
 	},
 ) );
 
-// Each settings tab answers to its own capabilities: Sending to their
-// integrations caps, General to their general-settings caps.
+// Each settings tab is its own screen with its own capabilities, viewing and
+// editing apart: Sending their integrations caps, General their general ones.
+// The values live in Gravity SMTP's own stores, read and written here.
 foreach ( array( 'sending' => 'INTEGRATIONS', 'general' => 'GENERAL_SETTINGS' ) as $minn_gsmtp_tab => $minn_gsmtp_caps ) {
-	minn_admin_endpoint( "gravity-smtp/settings/(?P<tab>{$minn_gsmtp_tab})", array(
-		'active' => 'minn_admin_gravity_smtp_active',
-		'gate'   => minn_admin_gsmtp_gate( 'VIEW_' . $minn_gsmtp_caps ),
-		'run'    => function () use ( $minn_gsmtp_tab ) {
-			return minn_admin_gsmtp_settings_shape( $minn_gsmtp_tab );
+	minn_admin_settings( 'gravity-smtp-' . $minn_gsmtp_tab, array(
+		'route'    => "gravity-smtp/settings/(?P<tab>{$minn_gsmtp_tab})",
+		'active'   => 'minn_admin_gravity_smtp_active',
+		'gate'     => function ( WP_REST_Request $r ) use ( $minn_gsmtp_caps ) {
+			return call_user_func( minn_admin_gsmtp_gate( ( 'POST' === $r->get_method() ? 'EDIT_' : 'VIEW_' ) . $minn_gsmtp_caps ) );
 		},
-	) );
-	minn_admin_endpoint( "gravity-smtp/settings/(?P<tab>{$minn_gsmtp_tab})", array(
-		'methods' => 'POST',
-		'active'  => 'minn_admin_gravity_smtp_active',
-		'gate'    => minn_admin_gsmtp_gate( 'EDIT_' . $minn_gsmtp_caps ),
-		'run'     => 'minn_admin_gsmtp_settings_save',
+		'layout'   => function ( $ctx ) use ( $minn_gsmtp_tab ) {
+			$ctx['memo']['shape'] = minn_admin_gsmtp_settings_shape( $minn_gsmtp_tab );
+			return $ctx['memo']['shape'];
+		},
+		'read'     => function ( $f, $ctx ) {
+			return $ctx['memo']['shape']['values'][ $f['key'] ] ?? '';
+		},
+		'validate' => 'minn_admin_gsmtp_settings_prepare',
+		'write'    => 'minn_admin_gsmtp_settings_write',
 	) );
 }
 unset( $minn_gsmtp_tab, $minn_gsmtp_caps );
@@ -1249,65 +1253,60 @@ function minn_admin_gsmtp_settings_shape( $tab ) {
 	);
 }
 
-/** POST: write one tab's changed values through their own stores. */
-function minn_admin_gsmtp_settings_save( WP_REST_Request $request ) {
-	$tab  = (string) Minn_Admin::path_param( $request, 'tab' );
-	$body = $request->get_json_params();
-	$vals = isset( $body['values'] ) && is_array( $body['values'] ) ? $body['values'] : array();
-	if ( 'sending' === $tab ) {
-		$opts    = new Gravity_Forms\Gravity_SMTP\Data_Store\Opts_Data_Store();
-		$plugin  = new Gravity_Forms\Gravity_SMTP\Data_Store\Plugin_Opts_Data_Store();
-		$current = minn_admin_gsmtp_primary();
-		$target  = $current;
-		if ( isset( $vals['primary_connector'] ) ) {
-			$next = sanitize_key( (string) $vals['primary_connector'] );
-			unset( $vals['primary_connector'] );
-			// Only a registered connector: the name keys their per-connector
-			// option stores, and 'config' is the plugin-level store itself.
-			if ( $next && $next !== $current && ! in_array( $next, array_column( minn_admin_gsmtp_connector_options(), 0 ), true ) ) {
-				return new WP_Error( 'minn_gsmtp_bad_connector', __( 'Unknown sending service.', 'minn-admin' ), array( 'status' => 400 ) );
-			}
-			// The fields on the tab belong to the service it showed. Saved
-			// alongside a switch they would land in the newly picked one
-			// (services share keys such as api_key and from_email), so a
-			// switch goes on its own and the tab reloads with that service.
-			if ( $next && $next !== $current && $vals ) {
-				return new WP_Error( 'minn_gsmtp_switch_alone', __( 'Switch the sending service on its own first, then edit its settings.', 'minn-admin' ), array( 'status' => 400 ) );
-			}
-			if ( $next && $next !== $current ) {
-				// Mirror their Save_Connector_Settings_Endpoint semantics:
-				// the config maps hold ONE truthy primary/enabled entry and
-				// the connector's own option mirrors the flags.
-				$plugin->save( 'primary_connector', array( $next => true ) );
-				$plugin->save( 'enabled_connector', array( $next => true ) );
-				$opts->save( 'is_primary', true, $next );
-				$opts->save( 'enabled', true, $next );
-				$opts->save( 'is_primary', false, $current );
-				$target = $next;
-			}
-		}
-		if ( $vals ) {
+/**
+ * The Sending tab's changes as its store takes them. A service switch goes
+ * alone: the tab's fields belong to the service it showed, and services share
+ * keys such as api_key and from_email, so they would land in the new one.
+ */
+function minn_admin_gsmtp_settings_prepare( $changes ) {
+	if ( ! array_key_exists( 'primary_connector', $changes ) ) {
+		return null;
+	}
+	$next = sanitize_key( is_scalar( $changes['primary_connector'] ) ? (string) $changes['primary_connector'] : '' );
+	unset( $changes['primary_connector'] );
+	if ( '' === $next || minn_admin_gsmtp_primary() === $next ) {
+		return $changes;
+	}
+	// Only a registered connector: the name keys their per-connector option
+	// stores, and 'config' is the plugin-level store itself.
+	if ( ! in_array( $next, array_column( minn_admin_gsmtp_connector_options(), 0 ), true ) ) {
+		return new WP_Error( 'minn_gsmtp_bad_connector', __( 'Unknown sending service.', 'minn-admin' ), array( 'status' => 400, 'field' => 'primary_connector' ) );
+	}
+	if ( $changes ) {
+		return new WP_Error( 'minn_gsmtp_switch_alone', __( 'Switch the sending service on its own first, then edit its settings.', 'minn-admin' ), array( 'status' => 400 ) );
+	}
+	return array( 'primary_connector' => $next );
+}
+
+/** Write one tab's changed values through their own stores. */
+function minn_admin_gsmtp_settings_write( array $vals, array $fields, array $ctx ) {
+	$plugin = new Gravity_Forms\Gravity_SMTP\Data_Store\Plugin_Opts_Data_Store();
+	if ( 'sending' === $ctx['tab'] ) {
+		$opts   = new Gravity_Forms\Gravity_SMTP\Data_Store\Opts_Data_Store();
+		$was    = minn_admin_gsmtp_primary();
+		$target = $vals['primary_connector'] ?? $was;
+		if ( $target !== $was ) {
+			// Mirror their Save_Connector_Settings_Endpoint semantics:
+			// the config maps hold ONE truthy primary/enabled entry and
+			// the connector's own option mirrors the flags.
+			$plugin->save( 'primary_connector', array( $target => true ) );
+			$plugin->save( 'enabled_connector', array( $target => true ) );
+			$opts->save( 'is_primary', true, $target );
+			$opts->save( 'enabled', true, $target );
+			$opts->save( 'is_primary', false, $was );
+		} elseif ( $vals ) {
 			// Their store: skips the '****************' sentinel, coerces
 			// 'true'/'false' strings — the masked-secret contract for free.
 			$opts->save_all( $vals, $target );
 		}
 		delete_transient( 'gsmtp_connector_configured_' . $target );
-		return minn_admin_gsmtp_settings_shape( 'sending' );
+		return true;
 	}
-	$allowed = array( 'test_mode', 'event_log_enabled', 'save_email_body_enabled', 'save_attachments_enabled', 'event_log_retention', 'debug_log_enabled', 'debug_log_retention' );
-	$plugin  = new Gravity_Forms\Gravity_SMTP\Data_Store\Plugin_Opts_Data_Store();
 	foreach ( $vals as $k => $v ) {
-		if ( ! in_array( $k, $allowed, true ) ) {
-			continue;
-		}
-		if ( in_array( $k, array( 'event_log_retention', 'debug_log_retention' ), true ) ) {
-			$v = max( 0, (int) $v );
-		} elseif ( is_bool( $v ) ) {
-			$v = $v ? 'true' : 'false'; // their stored convention
-		}
-		$plugin->save( $k, $v );
+		// Retention is whole days; a switch is stored as their 'true' or 'false'.
+		$plugin->save( $k, in_array( $k, array( 'event_log_retention', 'debug_log_retention' ), true ) ? max( 0, (int) $v ) : ( Minn_Admin_Kernel_Settings::on( $v ) ? 'true' : 'false' ) );
 	}
-	return minn_admin_gsmtp_settings_shape( 'general' );
+	return true;
 }
 
 /**

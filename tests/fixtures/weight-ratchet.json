@@ -1,6 +1,6 @@
 {
-	"code_lines": 60858,
-	"adapter_kernel_lines": 65161,
+	"code_lines": 60853,
+	"adapter_kernel_lines": 65156,
 	"vendor_guards": 1764,
 	"hand_errors": 771,
 	"cap_checks": 399,
@@ -58,7 +58,7 @@
 		"gravity-forms-entry-edit": 277,
 		"gravity-forms-notifications": 743,
 		"gravity-forms": 1324,
-		"gravity-smtp": 1255,
+		"gravity-smtp": 1250,
 		"hfcm": 322,
 		"independent-analytics": 420,
 		"jet-appointments": 327,
