@@ -2018,6 +2018,18 @@ class Minn_Admin {
 		header( "Content-Security-Policy: frame-ancestors 'self'" );
 		header( 'Referrer-Policy: strict-origin-when-cross-origin' );
 
+		// LiteSpeed Cache with ESI on swaps the nonces it knows (wp_rest among
+		// them) for an <esi:include> tag that the LiteSpeed server fills from
+		// a sub-request. In the boot payload that tag lands inside a JSON
+		// string in an inline script: when the sub-request answers with
+		// anything but the bare nonce, its markup closes the script early and
+		// the rest of the payload prints on the page. This document is never
+		// cached, so it has no use for ESI; the constant is LiteSpeed's own
+		// switch, read each time a nonce is made.
+		if ( ! defined( 'LITESPEED_ESI_OFF' ) ) {
+			define( 'LITESPEED_ESI_OFF', true );
+		}
+
 		$boot = self::boot_payload();
 
 		include MINN_ADMIN_DIR . 'includes/template.php';
