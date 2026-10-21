@@ -1108,7 +1108,7 @@ foreach ( array( 'sending' => 'INTEGRATIONS', 'general' => 'GENERAL_SETTINGS' ) 
 		'route'    => "gravity-smtp/settings/(?P<tab>{$minn_gsmtp_tab})",
 		'active'   => 'minn_admin_gravity_smtp_active',
 		'gate'     => function ( WP_REST_Request $r ) use ( $minn_gsmtp_caps ) {
-			return call_user_func( minn_admin_gsmtp_gate( ( 'POST' === $r->get_method() ? 'EDIT_' : 'VIEW_' ) . $minn_gsmtp_caps ) );
+			return call_user_func( minn_admin_gsmtp_gate( ( in_array( $r->get_method(), array( 'GET', 'HEAD' ), true ) ? 'VIEW_' : 'EDIT_' ) . $minn_gsmtp_caps ) );
 		},
 		'layout'   => function ( $ctx ) use ( $minn_gsmtp_tab ) {
 			$ctx['memo']['shape'] = minn_admin_gsmtp_settings_shape( $minn_gsmtp_tab );
@@ -1118,7 +1118,9 @@ foreach ( array( 'sending' => 'INTEGRATIONS', 'general' => 'GENERAL_SETTINGS' ) 
 			return $ctx['memo']['shape']['values'][ $f['key'] ] ?? '';
 		},
 		'validate' => 'minn_admin_gsmtp_settings_prepare',
-		'write'    => 'minn_admin_gsmtp_settings_write',
+		'write'    => function ( $vals ) use ( $minn_gsmtp_tab ) {
+			return minn_admin_gsmtp_settings_write( $minn_gsmtp_tab, $vals );
+		},
 	) );
 }
 unset( $minn_gsmtp_tab, $minn_gsmtp_caps );
@@ -1211,6 +1213,9 @@ function minn_admin_gsmtp_settings_shape( $tab ) {
 			'groups'   => $groups,
 			'values'   => $values,
 			'adminUrl' => admin_url( 'admin.php?page=gravitysmtp-settings' ),
+			// The fields on the tab are the shown service's: a save made after
+			// another tab switched services is a stale copy.
+			'baseKeys' => array( 'primary_connector' ),
 		);
 	}
 	// General: their plugin-level keys (option gravitysmtp_config), read
@@ -1279,9 +1284,9 @@ function minn_admin_gsmtp_settings_prepare( $changes ) {
 }
 
 /** Write one tab's changed values through their own stores. */
-function minn_admin_gsmtp_settings_write( array $vals, array $fields, array $ctx ) {
+function minn_admin_gsmtp_settings_write( $tab, array $vals ) {
 	$plugin = new Gravity_Forms\Gravity_SMTP\Data_Store\Plugin_Opts_Data_Store();
-	if ( 'sending' === $ctx['tab'] ) {
+	if ( 'sending' === $tab ) {
 		$opts   = new Gravity_Forms\Gravity_SMTP\Data_Store\Opts_Data_Store();
 		$was    = minn_admin_gsmtp_primary();
 		$target = $vals['primary_connector'] ?? $was;

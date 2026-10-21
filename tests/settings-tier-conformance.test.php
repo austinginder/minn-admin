@@ -32,7 +32,9 @@
  *
  * A third fixture screen keeps its values in options through the tier's own
  * storage (no read or write), and runs the same rules plus its own checks,
- * among them a switch with its own word for on and a screen shown closed.
+ * among them a switch with its own word for on, a screen shown closed, a
+ * network option, a list of tags and a stored shape it must not replace.
+ * A fourth, on the same storage without a validator, offers no rows field.
  *
  * Live screens run with the tier stopped where it would write
  * (Minn_Admin_Kernel_Settings::dry()), so nothing on the lab changes; the
@@ -113,6 +115,7 @@ $clean = $once( static function () use ( $cred, $filter ) {
 	delete_option( $cred . 'sl' );
 	delete_option( 'minn_st_opt_' . $GLOBALS['minn_st_tag'] );
 	delete_option( 'minn_st_opt2_' . $GLOBALS['minn_st_tag'] );
+	delete_site_option( 'minn_st_net_' . $GLOBALS['minn_st_tag'] );
 	Minn_Admin_Egress::reset();
 } );
 
@@ -239,6 +242,7 @@ $declared = minn_admin_settings( 'minn-st-options', array_merge( $fixture, array
 $GLOBALS['minn_st_tag'] = $tag;
 $opt1                   = 'minn_st_opt_' . $tag;
 $opt2                   = 'minn_st_opt2_' . $tag;
+$opt3                   = 'minn_st_net_' . $tag;
 $opt_seed               = array(
 	'plain'  => 'One',
 	'flags'  => array( 'on' => '1' ),
@@ -249,9 +253,10 @@ $opt_seed               = array(
 	'lines'  => array( 'one', 'two' ),
 	'hidden' => 'never offered',
 );
-$reset_opts = static function () use ( $opt1, $opt2, $opt_seed ) {
+$reset_opts = static function () use ( $opt1, $opt2, $opt3, $opt_seed ) {
 	update_option( $opt1, $opt_seed, false );
 	update_option( $opt2, array( 'note' => 'n' ), false );
+	update_site_option( $opt3, array( 'note' => 'net' ) );
 	wp_cache_delete( 'alloptions', 'options' );
 	$GLOBALS['minn_st']['log'] = array();
 };
@@ -260,7 +265,7 @@ $declared = minn_admin_settings( 'minn-st-stored', array(
 	'route'    => 'minn-st-stored/(?P<tab>[a-z]+)',
 	'gate'     => $fixture['gate'],
 	'option'   => $opt1,
-	'layout'   => function ( $ctx ) use ( $opt2 ) {
+	'layout'   => function ( $ctx ) use ( $opt2, $opt3 ) {
 		if ( null !== $ctx['tab'] && 'main' !== $ctx['tab'] ) {
 			return null;
 		}
@@ -278,10 +283,24 @@ $declared = minn_admin_settings( 'minn-st-stored', array(
 			array( 'key' => 'lines', 'label' => 'Lines', 'type' => 'textarea' ),
 			array( 'key' => 'note', 'label' => 'Note', 'type' => 'text', '_option' => $opt2, '_path' => 'note' ),
 			array( 'key' => 'orphan', 'label' => 'Orphan', 'type' => 'text', '_option' => '' ),
+			array( 'key' => 'net', 'label' => 'Network note', 'type' => 'text', '_option' => $opt3, '_network' => true, '_path' => 'note' ),
+			array( 'key' => 'tags', 'label' => 'Tags', 'type' => 'tags', '_path' => 'tags' ),
 		) ) ) );
 	},
 	'may'      => $fixture['may'],
 	'validate' => $fixture['validate'],
+) ) && $declared;
+// The same storage without a validator: rows it cannot judge are not offered.
+$declared = minn_admin_settings( 'minn-st-novalidate', array(
+	'route'  => 'minn-st-novalidate/(?P<tab>[a-z]+)',
+	'gate'   => $fixture['gate'],
+	'option' => $opt1,
+	'layout' => function ( $ctx ) {
+		return null !== $ctx['tab'] && 'main' !== $ctx['tab'] ? null : array( 'groups' => array( array( 'title' => 'Bare', 'fields' => array(
+			array( 'key' => 'plain', 'label' => 'Plain', 'type' => 'text' ),
+			array( 'key' => 'rows', 'label' => 'Integrations', 'type' => 'rows' ),
+		) ) ) );
+	},
 ) ) && $declared;
 
 // What a browser receives: dispatch, the server's response filters, the
@@ -555,6 +574,56 @@ try {
 	$GLOBALS['minn_st']['closed'] = false;
 	$check( 'Closed: a screen shown closed answers every save with its own reason and writes nothing, from a POST and from PHP', 409 === $st && 'minn_st_closed' === ( $d['code'] ?? '' ) && is_wp_error( $saved_closed ) && 'minn_st_closed' === $saved_closed->get_error_code() && ! $writes && 'One' === ( maybe_unserialize( $raw_opt( $opt1 ) )['plain'] ?? null ), $st . ' ' . wp_json_encode( array( $d['code'] ?? null, $writes ) ) );
 	$check( 'Closed: and its page is still shown, locked, with no trace of the reason object', 200 === $gst && ! array_key_exists( 'closed', (array) $g ) && 2 === ( $g['groups'][0]['locked'] ?? null ), $gst . ' ' . wp_json_encode( $g ) );
+
+	// A list of tags keeps only plain values.
+	$reset_opts();
+	list( $st ) = $send( 'POST', $sx, array( 'values' => array( 'tags' => array( array( 'a' => 'b' ), 'c', 3 ) ) ) );
+	$check( 'Storage: a list of tags is stored as a list of plain values', 200 === $st && array( 'c', 3 ) === ( maybe_unserialize( $raw_opt( $opt1 ) )['tags'] ?? null ), $st . ' ' . wp_json_encode( maybe_unserialize( $raw_opt( $opt1 ) )['tags'] ?? null ) );
+	$bare = Minn_Admin_Kernel_Settings::served( 'minn-st-novalidate', new WP_REST_Request( 'GET', '/minn-admin/v1/minn-st-novalidate/main' ) );
+	$check( 'Storage: rows on the tier\'s storage are offered only to a screen with a validator', ! is_wp_error( $bare ) && isset( $bare['fields']['plain'] ) && ! isset( $bare['fields']['rows'] ), wp_json_encode( is_wp_error( $bare ) ? $bare->get_error_code() : array_keys( $bare['fields'] ) ) );
+
+	// A stored shape a write would replace: nothing is written, anywhere.
+	$reset_opts();
+	$shaped          = $opt_seed;
+	$shaped['flags'] = 'SCALAR-WAS-HERE';
+	update_option( $opt1, $shaped, false );
+	$writes         = array();
+	list( $st, $d ) = $send( 'POST', $sx, array( 'values' => array( 'on' => true, 'note' => 'm' ) ) );
+	$check( 'Storage: a path through a stored value that is not an array answers 500 by name and writes no option, the other option in the save included', 500 === $st && 'minn_settings_store_shape' === ( $d['code'] ?? '' ) && $names_ok( $d, array( 'on' ) ) && ! $writes && 'SCALAR-WAS-HERE' === ( maybe_unserialize( $raw_opt( $opt1 ) )['flags'] ?? null ) && 'n' === ( maybe_unserialize( $raw_opt( $opt2 ) )['note'] ?? null ), $st . ' ' . wp_json_encode( array( $d['code'] ?? null, $writes ) ) );
+	$reset_opts();
+	update_option( $opt2, '{"note":"json row"}', false );
+	$writes         = array();
+	list( $st, $d ) = $send( 'POST', $sx, array( 'values' => array( 'plain' => 'Two', 'note' => 'm' ) ) );
+	$check( 'Storage: and so does an option stored as a string', 500 === $st && $names_ok( $d, array( 'note' ) ) && ! $writes && '{"note":"json row"}' === $raw_opt( $opt2 ) && 'One' === ( maybe_unserialize( $raw_opt( $opt1 ) )['plain'] ?? null ), $st . ' ' . wp_json_encode( array( $d['code'] ?? null, $writes ) ) );
+
+	// A field the page loaded but did not send, in the base: still asked.
+	$reset_opts();
+	list( $st, $d ) = $send( 'POST', $sx, array( 'values' => array( 'plain' => 'Two' ), 'base' => array( 'plain' => 'One', 'note' => 'moved since' ) ) );
+	$check( 'R8 stale copy: a field in the base that was not sent is still compared (409 by name)', 409 === $st && $names_ok( $d, array( 'note' ) ) && 'One' === ( maybe_unserialize( $raw_opt( $opt1 ) )['plain'] ?? null ), $st . ' ' . wp_json_encode( $d['data'] ?? null ) );
+	list( $st )     = $send( 'POST', $sx, array( 'values' => array( 'plain' => 'Two' ), 'base' => array( 'plain' => 'One', 'note' => 'n' ) ) );
+	$check( 'R8 stale copy control: that field as loaded lets the save through', 200 === $st && 'Two' === ( maybe_unserialize( $raw_opt( $opt1 ) )['plain'] ?? null ), (string) $st );
+
+	// A network option, whoever the screen's own gate lets in.
+	$reset_opts();
+	$net_now = static function () use ( $opt3 ) {
+		wp_cache_delete( ( is_multisite() ? get_current_network_id() . ':' : '' ) . $opt3, is_multisite() ? 'site-options' : 'options' );
+		return get_site_option( $opt3 )['note'] ?? null;
+	};
+	if ( is_multisite() ) {
+		$sub_admin = wp_insert_user( array( 'user_login' => 'minn-st-sub-' . $tag, 'user_email' => 'minn-st-sub-' . $tag . '@example.com', 'user_pass' => wp_generate_password( 24 ), 'role' => 'administrator' ) );
+		$me        = get_current_user_id();
+		wp_set_current_user( $sub_admin );
+		$writes         = array();
+		list( $st, $d ) = $send( 'POST', $sx, array( 'values' => array( 'plain' => 'Two', 'net' => 'subsite' ) ) );
+		wp_set_current_user( $me );
+		require_once ABSPATH . 'wp-admin/includes/ms.php';
+		wpmu_delete_user( $sub_admin );
+		$check( 'Network: a site administrator the screen lets in cannot change a network option (403 by name, nothing written)', 403 === $st && $names_ok( $d, array( 'net' ) ) && 'net' === $net_now() && 'One' === ( maybe_unserialize( $raw_opt( $opt1 ) )['plain'] ?? null ), $st . ' ' . wp_json_encode( $d['data'] ?? null ) );
+	} else {
+		$skip( 'Network: a single site has no network to refuse (run on a subsite of a network for the refusal)' );
+	}
+	list( $st ) = $send( 'POST', $sx, array( 'values' => array( 'net' => 'owner' ) ) );
+	$check( 'Network control: the network\'s owner changes it', 200 === $st && 'owner' === $net_now(), $st . ' ' . wp_json_encode( $net_now() ) );
 	$reset_opts();
 	list( $st, $d ) = $send( 'POST', $sx, array( 'values' => array( 'secret' => ( $sv['secret'] ?? '' ) . ' v2' ) ) );
 	$after          = maybe_unserialize( $raw_opt( $opt1 ) );
@@ -596,6 +665,7 @@ try {
 	$candidates[] = $fx;
 	$candidates[] = $ox;
 	$candidates[] = $sx;
+	$candidates[] = '/minn-admin/v1/minn-st-novalidate/main';
 	// A screen whose body is its own shape: how flat values go into it.
 	$bodies = array(
 		'fluent-forms-emails' => static function ( array $flat ) {
@@ -735,7 +805,9 @@ try {
 
 	// The shared Site options route hands a save to the page that owns the
 	// tab; a body that is not JSON would reach it as no change.
-	if ( isset( $routes['/minn-admin/v1/options/(?P<tab>tab-\d+)'] ) ) {
+	if ( isset( $routes['/minn-admin/v1/options/(?P<tab>tab-\d+)'] ) && 200 !== $send( 'GET', '/minn-admin/v1/options/tab-0' )[0] ) {
+		$skip( 'R1 declared whole: Site options has no options page here to send a body to' );
+	} elseif ( isset( $routes['/minn-admin/v1/options/(?P<tab>tab-\d+)'] ) ) {
 		list( $st, $d ) = $send( 'POST', '/minn-admin/v1/options/tab-0' );
 		$check( 'R1 declared whole: Site options refuses a save that is not JSON (400)', 400 === $st && 'invalid_body' === ( $d['code'] ?? '' ), $st . ' ' . wp_json_encode( $d['code'] ?? null ) );
 	}

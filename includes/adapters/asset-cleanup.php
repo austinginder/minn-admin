@@ -177,7 +177,7 @@ function minn_admin_asset_cleanup_layout( $tab_id ) {
 	// differs every field is locked, with the reason and the way to its
 	// Settings page, and a save answers that reason.
 	$unknown = null === minn_admin_asset_cleanup_stored_settings();
-	$why     = __( 'Asset CleanUp stores no settings while every one is at its default, and Minn cannot tell its defaults from your choices. Change one on its Settings page, then edit them here.', 'minn-admin' );
+	$why     = minn_admin_asset_cleanup_unknown()->get_error_message();
 	foreach ( null === $tab_id ? array_merge( ...array_values( wp_list_pluck( $schema, 'groups' ) ) ) : $schema[ $tab_id ]['groups'] as $group ) {
 		if ( $unknown ) {
 			$groups[] = array(
@@ -196,8 +196,13 @@ function minn_admin_asset_cleanup_layout( $tab_id ) {
 	return array(
 		'groups'   => $groups,
 		'adminUrl' => admin_url( 'admin.php?page=wpassetcleanup_settings' ),
-		'closed'   => $unknown ? new WP_Error( 'minn_acu_unknown', $why, array( 'status' => 409 ) ) : null,
+		'closed'   => $unknown ? minn_admin_asset_cleanup_unknown() : null,
 	);
+}
+
+/** The answer while Asset CleanUp has stored no settings. */
+function minn_admin_asset_cleanup_unknown() {
+	return new WP_Error( 'minn_acu_unknown', __( 'Asset CleanUp stores no settings while every one is at its default, and Minn cannot tell its defaults from your choices. Change one on its Settings page, then edit them here.', 'minn-admin' ), array( 'status' => 409 ) );
 }
 
 /**
@@ -319,7 +324,12 @@ minn_admin_settings( 'asset-cleanup', array(
 	// off is kept as '' for predictable round trips (getAll fills a missing
 	// key as '' too).
 	'write'  => function ( $changes, $fields ) {
-		$settings = (array) minn_admin_asset_cleanup_stored_settings();
+		// Read again: a row deleted since the layout read it would start the
+		// write from nothing.
+		$settings = minn_admin_asset_cleanup_stored_settings();
+		if ( null === $settings ) {
+			return minn_admin_asset_cleanup_unknown();
+		}
 		foreach ( $changes as $key => $v ) {
 			$settings[ $key ] = 'toggle' === $fields[ $key ]['type'] ? ( Minn_Admin_Kernel_Settings::on( $v ) ? '1' : '' ) : ( is_scalar( $v ) ? (string) $v : '' );
 		}

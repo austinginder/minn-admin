@@ -144,6 +144,7 @@ MINN_SWAP_ADD=wp-mail-smtp/wp_mail_smtp.php run security-v047-registry-egress si
 # A network, from a site that is not the main one.
 run route-gates subsite --user=admin
 run kernel-conformance subsite --user=admin
+run settings-tier-conformance subsite --user=admin
 run egress-redaction subsite --user=admin
 run write-fences subsite --user=admin
 run multisite-db-redaction subsite --user=admin

@@ -24,7 +24,9 @@
  *                   // $ctx['tab'] is the tab the URL names (null for a screen without
  *                   // tabs, or for the whole screen when PHP saves it); null for a tab
  *                   // that does not exist; 'closed' => WP_Error: the screen is shown but
- *                   // takes no save (its fields locked), and every save answers it
+ *                   // takes no save (its fields locked), and every save answers it;
+ *                   // 'baseKeys' => string[]: fields the page puts in every save's base
+ *                   // (one whose change reshapes the screen), so a stale copy is caught
  *     'option'   => 'option_name',   // optional: where a field with no storage of its own
  *     'network'  => true,            // lives (a site option with 'network'); see Storage
  *     'read'     => callable( array $field, array $ctx ): mixed,   // the stored value as the page
@@ -63,6 +65,11 @@
  * for on) and '' when off; '_store' => 'flag' stores no key when off, the
  * shape a plugin reading !empty() keeps. Declared read and write cover the
  * fields without their own '_option'; a field with neither is not offered.
+ * A list of choices or ids is stored as a list of plain values; rows and
+ * flexible content, whose cells the tier cannot judge, are offered on its
+ * storage only to a screen with a validator. A stored value the path runs
+ * through that is not an array (a JSON string, a number) is never replaced:
+ * the save answers 500 and writes nothing.
  *
  * read() must serve each value from the place write() writes it: the
  * compare, the stale check and the restore all take the stored value from
@@ -81,10 +88,12 @@
  *   2. a value equal to what read() serves for it is dropped: an untouched
  *      value, and a credential sent back as its [redacted:…] placeholder
  *      (Minn_Admin::unchanged() against the stored value);
- *   3. the per-field gates ('_raw' and 'may') answer 403;
+ *   3. the per-field gates ('_raw', a network option for a caller who
+ *      does not own the network, and 'may') answer 403;
  *   4. when the body carries the values the page loaded ('base'), a field
- *      whose value as served (credentials masked, so a base can never test
- *      a guess at one) moved since answers 409, so the person reloads; a
+ *      in it whose value as served (credentials masked, so a base can never
+ *      test a guess at one) moved since answers 409, so the person reloads,
+ *      sent or not (a page sends the field its other fields depend on); a
  *      body without one (an app cached from before) is saved as before;
  *   5. a placeholder left in an edited value: on a 'restore' screen, or in
  *      a field the tier stores, it
@@ -353,7 +362,8 @@ class Minn_Admin_Kernel_Settings {
 				}
 				// Nor is one with nowhere to live: no storage of its own and
 				// no read and write declared.
-				if ( null === self::storage( $def, $f ) && ! isset( $def['read'] ) ) {
+				$s = self::storage( $def, $f );
+				if ( ( null === $s && ! isset( $def['read'] ) ) || ( $s && ! isset( $def['validate'] ) && in_array( $f['type'] ?? '', array( 'rows', 'flex' ), true ) ) ) {
 					continue;
 				}
 				$fields[ (string) $fkey ] = $f;
@@ -635,9 +645,12 @@ class Minn_Admin_Kernel_Settings {
 		$raw    = array();
 		$denied = array();
 		foreach ( array_keys( $changes ) as $key ) {
+			$s = self::storage( $def, $fields[ $key ] );
 			if ( ! empty( $fields[ $key ]['_raw'] ) && ! self::may_raw() ) {
 				$raw[] = $key;
-			} elseif ( isset( $def['may'] ) && ! Minn_Admin_Kernel::yes( $def['may'], $fields[ $key ], $ctx ) ) {
+			} elseif ( ( $s && $s['network'] && ! Minn_Admin::network_owner() ) || ( isset( $def['may'] ) && ! Minn_Admin_Kernel::yes( $def['may'], $fields[ $key ], $ctx ) ) ) {
+				// A network option is the whole network's, whoever the
+				// screen's own gate lets in.
 				$denied[] = $key;
 			}
 		}
@@ -683,13 +696,14 @@ class Minn_Admin_Kernel_Settings {
 			if ( is_wp_error( $base ) ) {
 				return self::named( $base, array(), $fields );
 			}
-			// Every key sent with a base, changed or not: asked only of the
-			// changes, a value sent equal to the stored one would skip the
-			// check that a different value meets, and the answer would tell
-			// which value is stored.
+			// Every offered key in the base, changed, unchanged or not sent:
+			// asked only of the changes, a value sent equal to the stored one
+			// would skip the check that a different value meets, and the
+			// answer would tell which value is stored.
 			$moved = array();
-			foreach ( $served as $key => $was ) {
-				if ( array_key_exists( $key, $base ) && ! self::same( $def, $fields[ $key ], $base[ $key ], self::shown( $was ), $ctx ) ) {
+			foreach ( array_intersect_key( $base, $fields ) as $key => $loaded ) {
+				$was = array_key_exists( $key, $served ) ? $served[ $key ] : self::fetch( $def, $fields[ $key ], $ctx );
+				if ( ! self::same( $def, $fields[ $key ], $loaded, self::shown( $was ), $ctx ) ) {
 					$moved[] = $key;
 				}
 			}
@@ -758,8 +772,9 @@ class Minn_Admin_Kernel_Settings {
 		$own = array_diff_key( $changes, array_filter( $fields, function ( $f ) use ( $def ) {
 			return null !== self::storage( $def, $f );
 		} ) );
-		if ( $stored ) {
-			self::store( $stored, $fields, $def );
+		$shape = $stored ? self::store( $stored, $fields, $def ) : null;
+		if ( $shape ) {
+			return self::named( new WP_Error( 'minn_settings_store_shape', __( 'Nothing was saved: this setting is stored in a shape Minn cannot change without losing what is there.', 'minn-admin' ), array( 'status' => 500 ) ), $shape, $fields );
 		}
 		if ( $own && isset( $def['write'] ) ) {
 			$wrote = call_user_func( $def['write'], $stored ? array_diff_key( $prepared, $stored ) : $prepared, array_intersect_key( $fields, $own ), $ctx );
@@ -824,9 +839,16 @@ class Minn_Admin_Kernel_Settings {
 		return is_scalar( $v ) ? (string) $v : '';
 	}
 
-	/** Every stored change, one update per option: read fresh, changed only at the leaves sent. */
+	/**
+	 * Every stored change, one update per option: read fresh, changed only at
+	 * the leaves sent. Nothing is written when a step on a path holds a value
+	 * that is not an array (other than nothing), which a write would replace.
+	 *
+	 * @return string[] The keys refused for that, or none when all is written.
+	 */
 	private static function store( array $values, array $fields, array $def ) {
-		$by = array();
+		$by    = array();
+		$shape = array();
 		foreach ( $values as $key => $v ) {
 			$f  = $fields[ $key ];
 			$s  = self::storage( $def, $f );
@@ -839,22 +861,25 @@ class Minn_Admin_Kernel_Settings {
 				$v = self::on( $v ) ? (string) ( $f['_on'] ?? '1' ) : ( $s['flag'] ? null : '' );
 			} elseif ( ! in_array( $t, self::LISTS, true ) ) {
 				$v = is_scalar( $v ) ? (string) $v : '';
+			} elseif ( ! in_array( $t, array( 'rows', 'flex' ), true ) ) {
+				$v = array_values( array_filter( is_array( $v ) ? $v : array(), 'is_scalar' ) );
 			}
 			if ( '' === $s['path'] ) {
 				$by[ $at ][1] = null === $v ? '' : $v;
 				continue;
 			}
-			if ( ! is_array( $by[ $at ][1] ) ) {
-				$by[ $at ][1] = array();
-			}
 			$ref   = &$by[ $at ][1];
 			$steps = explode( '/', $s['path'] );
 			$last  = array_pop( $steps );
-			foreach ( $steps as $step ) {
-				if ( ! isset( $ref[ $step ] ) || ! is_array( $ref[ $step ] ) ) {
-					$ref[ $step ] = array();
+			foreach ( array_merge( array( null ), $steps ) as $step ) {
+				if ( null !== $step ) {
+					$ref = &$ref[ $step ];
 				}
-				$ref = &$ref[ $step ];
+				if ( ! is_array( $ref ) && null !== $ref && '' !== $ref ) {
+					$shape[] = $key;
+					continue 2;
+				}
+				$ref = is_array( $ref ) ? $ref : array();
 			}
 			if ( null === $v ) {
 				unset( $ref[ $last ] );
@@ -863,6 +888,9 @@ class Minn_Admin_Kernel_Settings {
 			}
 			unset( $ref );
 		}
+		if ( $shape ) {
+			return $shape;
+		}
 		foreach ( $by as list( $s, $data ) ) {
 			if ( $s['network'] ) {
 				update_site_option( $s['option'], $data );
@@ -870,6 +898,7 @@ class Minn_Admin_Kernel_Settings {
 				update_option( $s['option'], $data );
 			}
 		}
+		return array();
 	}
 }
 

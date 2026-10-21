@@ -21132,11 +21132,12 @@
 		<div class="minn-card minn-surface-settings">${ form.html }</div>`;
 		bindChrome();
 		bindSettingsForm( view, data, form.fields, async ( payload ) => {
-			// Beside the changes, what the page loaded for each: the server
-			// answers 409 when one of them changed since, instead of writing
-			// over it.
+			// Beside the changes, what the page loaded for each, and for the
+			// fields the screen names in baseKeys (one whose change reshapes
+			// it): the server answers 409 when one of them changed since,
+			// instead of writing over it.
 			const base = {};
-			Object.keys( payload ).forEach( ( k ) => { base[ k ] = ( data.values || {} )[ k ] ?? null; } );
+			Object.keys( payload ).concat( data.baseKeys || [] ).forEach( ( k ) => { base[ k ] = ( data.values || {} )[ k ] ?? null; } );
 			const r = await api( routeFor( tab ), { method: 'POST', body: JSON.stringify( { values: payload, base } ) } );
 			ss.settingsCache[ cacheKey ] = r || { groups: [] };
 			toast( __( 'Settings saved' ) );
