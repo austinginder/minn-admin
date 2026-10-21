@@ -130,14 +130,40 @@ A few properties worth knowing before auditing (details in
   objects and links count too: every copy of a credential, raw,
   JSON-escaped, URL-encoded or inside a base64 token, becomes
   `[redacted:<fingerprint>]`, and the response logs one line,
-  `minn_egress_redacted route= count=`. A route that hands a credential to its
+  `minn_egress_redacted route= count=`. A response is searched only when
+  some run of text in it is shaped like a key (letters and digits mixed),
+  so a base64 copy whose encoded form is not (about one in eight 32-digit
+  hex keys) can pass in a response that holds nothing else key-shaped. A route that hands a credential to its
   owner on purpose (the WP Migrate connection key, the Disembark command,
   a one-time login link) names that exact value, which passes in that
   response only. A save that sends a redacted value back gets the real one
   restored, but only into the place in the option that held it (the same
   keys down to it) and only where the browser still counts it as a
   credential, so a screen that showed it cannot overwrite it; a token
-  anywhere else refuses the save (400) and the stored value stays. Every
+  anywhere else refuses the save (400) and the stored value stays. A
+  settings screen declared through `minn_admin_settings()` holds its save
+  to the same rule itself, before anything is written: on a screen over
+  the options API (Perfmatters, Autoptimize, ACF options pages, JetEngine
+  options pages, and any field the tier stores itself) each placeholder goes back through the same restore an option write
+  runs (`Minn_Admin_Egress::restore_value()`): to the credential the page
+  was shown for it, only at the same place in the value, and
+  a placeholder anywhere else, or one whose credential would no longer read
+  as a key after the edit, refuses the save (400). A screen over another
+  store (Fluent Forms emails, Asset CleanUp's settings row, FluentSMTP and
+  Gravity SMTP through their own settings APIs) refuses any placeholder
+  left in an edit. A field the tier stores itself writes only the option
+  leaf it declares, one update per option so the plugin's own sanitizer
+  runs, and a screen that cannot take a save (its settings are the
+  network's, or the plugin has stored none yet) answers every save with its
+  reason before reading the body. A
+  value sent back as the page was served it counts as unchanged, a field
+  the caller may not change answers 403, the plugin's own validator runs on
+  every change, and a refusal names its fields and writes nothing. The page
+  sends what it loaded beside each edited value, so a value changed since
+  answers 409 instead of being overwritten; that base is compared with the
+  value as served, credentials masked, and only after the field gates, so it
+  cannot test a guess at a key. `tests/settings-tier-conformance.test.php`
+  holds every declared screen to these rules. Every
   other store (snippet code, posts, table rows, files) has no restore: its
   routes treat a field sent back exactly as the read served it as
   unchanged, and refuse a write that would store a token, with two
@@ -162,15 +188,31 @@ A few properties worth knowing before auditing (details in
   since a needle that short would match ordinary text. Per-user tokens
   (Yoast SEO's AI tokens, two-factor seeds, sessions) are likewise hidden
   by their row's name only, so the fence's list stays bounded on a site
-  with many users. Contact Form 7's reCAPTCHA and Turnstile secrets are
-  stored under the public site key's name and are hidden with their row,
-  not searched for. Rows redacted whole for their plugin include Contact
-  Form 7's `wpcf7`, Yoast SEO's `wpseo`, Amelia's `amelia_settings`, and
-  UpdraftPlus' remote storage rows (`updraft_<destination>`, every
-  destination but email), its UpdraftCentral and Migrator keys, the sites
-  it sends backups to, its encryption phrase, settings lock password, extra
-  database logins, UpdraftPlus.com account login and the single-value
-  secret rows older versions kept. UpdraftPlus' running-job rows
+  with many users. Each bundled integration declares where its plugin
+  keeps its keys with `minn_admin_secrets()`, beside the code that detects
+  the plugin: option and network option rows (by name, by a `prefix*`
+  shape, or by the leaves inside a row whose names do not say secret, such
+  as Contact Form 7's reCAPTCHA and Turnstile secrets, filed under the
+  public site key), user meta, per-user tokens and table columns. The
+  browser and the fence read the declarations together with the central
+  lists, which stay for plugins no integration covers. A declaration is
+  made when its file loads, so a deactivated plugin's keys stay hidden.
+  Columns holding one token per row (Amelia's employee calendar tokens)
+  are declared as `column_tokens`: hidden by name only, like per-user
+  tokens, so the list stays bounded on a site with many staff. Declared
+  today: Contact Form 7, Yoast SEO, Amelia (its settings row and its
+  employees' calendar tokens), Disembark's connection token, UpdraftPlus (its remote storage rows,
+  every destination but email, its UpdraftCentral and Migrator keys, the
+  sites it sends backups to, its encryption phrase, settings lock password,
+  extra database logins, UpdraftPlus.com account login and the single-value
+  secret rows older versions kept), Jetpack's connection tokens, Solid
+  Security's Network Brute Force key, OttoKit's signing secret, WP
+  Statistics' settings row, add-on licences and cipher key, CleanTalk's
+  self-call tokens and WP Migrate's per-user licence key.
+  `tests/secrets-tier-conformance.test.php` seeds a key into every declared
+  store and reads it back through the browser and a minn-admin/v1 response,
+  and fails on any settings row an integration touches that holds a key
+  nothing declares. UpdraftPlus' running-job rows
   (`updraft_jobdata_*`, in options or the network's sitemeta) copy every
   storage destination's settings, typed passwords included, and are
   redacted whole by name, since a copy is recognised only when its value
@@ -236,8 +278,12 @@ A few properties worth knowing before auditing (details in
   keeps the stored address; only an empty box clears) and is named in
   `minn_field_errors`, except where a panel still keeps the stored value
   without naming it: a refused value inside an ACF repeater or flexible
-  row, a relation id ACF's panel will not accept, and an SEO number or
-  choice it cannot read. A settings
+  row, and a relation id ACF's panel will not accept. Panels declared
+  through the fields tier (`includes/kernel/class-minn-admin-kernel-panels.php`:
+  SEO, Meta Box, Pods, The Events Calendar, PowerPress, Seriously Simple
+  Podcasting, WP Job Manager) keep these rules by construction, and
+  `tests/fields-tier-conformance.test.php` holds every declared panel to
+  them; a value sent back as the panel served it is left as stored. A settings
   save carrying a value the plugin refuses (Perfmatters' raw-code fields
   without `unfiltered_html`, an ACF options page) is refused whole before
   anything is written. A preview made from a real entry fills the

@@ -125,8 +125,10 @@ code shows as unclassified):
    escape hatch: nothing becomes impossible, and these routes count as
    kernel-owned for the ratchet.
 3. **Left as it is.** Shapes the kernel does not fit stay untouched until a
-   primitive exists: the licence manager, the editor field panels, the
-   settings mappers and the Gravity Forms builder. No port is forced.
+   primitive exists: the licence manager, the editor field panels and
+   settings screens not yet on their tiers, and the Gravity Forms builder.
+   No port is forced. Editor panels and settings screens have tiers of their
+   own (below), which replace the hand-written save, not the route.
 
 ### Sources, vendor first
 
@@ -150,8 +152,9 @@ In order of preference:
   not hand-written into each query.
 - **Parameters.** Ids come from the URL only and are typed by the key; page
   sizes are capped; every sort breaks ties by id.
-- **Output.** Only declared fields leave the server. A `secret` field is never
-  serialized, and value redaction runs on every response.
+- **Output.** Only declared fields leave the server, so a value the client
+  must never see is simply not declared, and value redaction runs on every
+  response.
 - **Writes, through one path.** Every action and create declares what must
   hold after it runs, and a write whose effect is not there answers 500, never
   success. The vendor's own save function and capability are used where they
@@ -162,14 +165,14 @@ In order of preference:
   fields only, a base stamp, a stale copy answering 409).
 - **Field types** (`class-minn-admin-kernel-fields.php`). Each type turns a
   stored value into one shape for the client:
-  - `int`, `float` and `bool`, cast;
+  - `int` and `bool`, cast;
   - `text`, a string, with `'decode' => true` for a vendor that stores
     entities, so the client (which escapes what it prints) gets text;
   - `enum`, one of its `values`, or empty for anything else;
   - `datetime`, with the clock it is stored on (`'stored' => utc | site | db |
     epoch | local-epoch`) and the shape it leaves in (`'wire' => naked | sql |
     iso | iso-utc | z`);
-  - `raw`, as built (nested sections, an edit block), and `secret`, never sent.
+  - `raw`, as built (nested sections, an edit block).
 
   A field of any other type never leaves, and a declaration naming one
   registers nothing. Planned and not built: references, money and byte
@@ -194,7 +197,7 @@ registered resource and checks:
 
 - each role against its gate, and the gate against the vendor's own
   capability (the route-gates snapshot, folded in);
-- a secret seeded into every `secret` field never appears in any response;
+- a secret seeded into a column no field declares never appears in any response;
 - each field type round-trips the awkward shapes vendors really store
   (seconds, old link formats, entities, a change made in another tab);
 - an unchanged save leaves storage byte-identical, one changed field changes
@@ -240,6 +243,88 @@ should reach zero outside the kernel as the tiers absorb it. Raising a
 ceiling is a decision the commit explains, not a fix. The inventory also
 counts the credential rows only the database browser's central lists know,
 until adapters declare their own stores.
+
+The kernel's aim is lean adapters as much as safe ones, so the inventory also weighs them:
+adapter code lines, adapter plus kernel lines, vendor guards (existence checks and `catch`
+blocks), errors built by hand, capability checks and small detect helpers.
+`tests/weight-ratchet.test.js` holds each total to the same rule, and prints the adapters that
+grew most. A new adapter or feature is a fair reason to raise a ceiling; a port that grew is
+not.
+
+### The fields tier
+
+An editor panel (a plugin's per-post fields beside the editor) declares through
+`minn_admin_fields()` in `includes/kernel/class-minn-admin-kernel-panels.php`, whose header
+lists every key. The adapter says what is its plugin's: the post types, the plugin's own edit
+check, the groups of fields in shared types (text, textarea, number, select, checkbox, email,
+url, date, datetime, a post pick, media, a note), and how values read and write. A field that
+names its post meta (`'meta' => '_job_location'`) needs no read or write at all: the tier reads
+it, writes it slashed where the caller may edit that key (or where the field's own `gate` says
+so), and clears it to `''` as the plugins' own boxes do. Read and write stay for stores a plugin
+saves whole (The Events Calendar's event save, PowerPress's enclosure, Pods, each SEO plugin's
+own writer). The kernel owns the fields route and its gate, the REST field on each type, and
+the save, held to four rules:
+
+1. Only the fields the plugin's own check allows are offered, read or written.
+2. A save never answers an error: the post is already stored, so a refusal rides on the post's
+   own answer (`minn_field_errors`, `minn_field_message`).
+3. A refused value keeps the stored one and is named.
+4. Only an empty box clears; a value its cleaner empties is a refusal.
+
+A value sent back as served is left as stored, and dates are absolute and on one clock.
+`includes/adapters/seriously-simple-podcasting.php` is the smallest example (meta fields only),
+`the-events-calendar.php` one with a whole-form store. `tests/fields-tier-conformance.test.php`
+holds every declared panel to the rules.
+
+### The settings tier
+
+A settings screen (a plugin's settings tabs, an options page, a form's emails) declares
+through `minn_admin_settings()` in `includes/kernel/class-minn-admin-kernel-settings.php`,
+whose header lists every key. The adapter says what is its vendor's: the route, the gate,
+the screen's layout in the shared form's field types, where each value lives (a field that
+names its option, `'_option' => 'autoptimize_js'`, with `'_path'` for a leaf inside an array
+option, needs no read or write; a screen behind a plugin's API declares them), an optional per-field gate and validator, and one `write()` for every change. The
+tier owns the order every hand-written save had to remember: only fields the layout offers
+are read; a value sent back as served, a key's `[redacted:…]` placeholder included, is left
+as stored; the per-field gates answer before anything else (a `_raw` field, one the plugin
+prints unescaped, takes `unfiltered_html` and code edits left on); a field the page loaded
+and someone else changed since answers 409; a placeholder left in an edit goes back only
+where its credential was (`'restore' => true`, a screen over the options API) or refuses the
+save; the plugin's validator runs on every change; and a refusal names its fields and writes
+nothing. A screen that cannot take a save (its settings are the network's, or the plugin has
+stored none yet) answers `'closed'` with its reason. `read()` must serve each value from the
+place `write()` writes it.
+`includes/adapters/perfmatters.php` is the worked example, and `fluent-forms-emails.php`
+the one with a body of its own (`view`, `sent`). `tests/settings-tier-conformance.test.php`
+holds every declared screen to these rules.
+
+### Credential declarations
+
+An adapter declares where its plugin keeps keys, beside the code that detects the plugin,
+at the top level of its file, never inside a function or a condition: a deactivated
+plugin's keys stay in the database, so its declaration must stand while it is off.
+
+```php
+minn_admin_secrets( 'updraftplus', array(
+	'options'  => array( 'updraft_s3', 'updraft_jobdata_*' ),
+	'usermeta' => array( 'updraftcentral_login_key' ),
+) );
+minn_admin_secrets( 'contact-form-7', array(
+	'options' => array( 'wpcf7' => array( 'recaptcha/*', 'turnstile/*' ) ),
+) );
+```
+
+`options` takes a row name, a name with one `*`, or a row with the leaf paths inside it
+that hold a key under a name that does not say so. `usermeta` and `columns` (a table
+without its prefix, mapped to its columns; copies of the table count) are searched for by
+the egress fence as well as hidden. `user_tokens` and `column_tokens` hold one token per
+user or per row, so they are hidden by name only and the fence's list stays bounded. The
+database browser and the fence read the declarations together with the central lists,
+which stay for plugins no adapter covers. A declaration the kernel cannot read whole
+registers the part it can and is reported, and `tests/secrets-tier-conformance.test.php`
+fails on it, on a declared store that shows a key anywhere, on a store that was declared
+and no longer is, and on a settings row an adapter touches that holds a key nothing
+declares.
 
 ## v0.46 scope
 
@@ -301,7 +386,9 @@ activity-log one. A port, one adapter at a time:
    (the gate callables are called with no arguments, so wrap a parameterised one in a
    closure), the same row-level check through `item_gate`, the same response keys and
    string formats (`'wire' => 'naked'` keeps a column's clock as it was sent), the same
-   descriptor values. A status card's counts go through `Minn_Admin_Kernel::inbox_counts()`.
+   descriptor values. A status card's counts go through `Minn_Admin_Kernel::inbox_counts()`
+   with `'resource' => <its id>`, so they hold the list's scope and fixed conditions;
+   `'table'` is only for a table no resource lists.
 3. **Every action declares** a gate, the state it accepts (`when`), what must hold after
    it runs (`expect`), and its messages. The kernel then answers not found, forbidden and
    wrong state in that order, and never reports success when the expectation fails.
@@ -398,14 +485,27 @@ declares a sort applies the pick it reads in `$q['sort']`. `collection()` hands 
 the matching `sortQuery`, and a sort the kernel cannot apply is dropped with a notice
 that says why.
 
+A page is never longer than 100 rows, a list always answers `items` and `total`, and a
+person's sort is always `?orderby=&order=`. Every reader of a resource (the list, an item
+and its actions, a callable source's rows, the status card readers, a tab list, a reader of
+the whole table) is held to one rule, `rules()`: the source's fixed conditions and the
+list's scope. Two condition arrays on the same columns join with
+`Minn_Admin_Kernel_SQL::tag( $where, 'why' )`, which keys each rule apart so neither replaces
+the other, and the rule's own keys always win. A clock passed in code (`at()`, `since()`,
+`ago()`, a chart's `clock`) that is not one of `Minn_Admin_Kernel::CLOCKS` narrows to
+nothing, and so does a comparison whose value is null (a moment the database could not
+read), inside `none` as much as outside it. Route claims compare the URLs a route serves,
+ignoring case as WordPress does: each captured part is one placeholder unless it captures
+one literal word, so `\d+` and `[0-9]+` for the same place collide.
+
 OR between condition sets on different columns is `'#any'` (a group per state), and a
 family's repeated surface, card and detail code lives in its kit (`mail-kit.php`,
 `forms-kit.php`, `bookings-kit.php`, `activity-log-kit.php` and the others in
 `includes/adapters/`), which builds them from what each vendor alone says.
 
-What the kernel does not have yet: the save path for edit forms (changed fields only,
-a base stamp and a 409 on a stale copy), which the entry-edit adapters will need when
-they port (the post type and taxonomy definitions use the same stamp and partial save
+What the kernel does not have yet: the save path for edit forms as an item action
+(changed fields only, a base stamp and a 409 on a stale copy, as the settings tier does
+for a screen), which the entry-edit adapters will need when they port (the post type and taxonomy definitions use the same stamp and partial save
 in `class-minn-admin-cpt.php`), SQL expressions in a column list or a count (LatePoint's
 detail reads its order's comment with a second read instead, and JetSearch's duplicate
 count keeps its own `COUNT(DISTINCT TRIM(name))`), and tables of another site in a
