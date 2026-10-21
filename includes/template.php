@@ -50,12 +50,25 @@ $minn_asset_ver = function ( $rel ) {
 // version query keeps it the exact URL the tag at the bottom asks for.
 ?>
 <link rel="preload" href="<?php echo esc_url( MINN_ADMIN_URL . 'assets/js/app.js?ver=' . $minn_asset_ver( 'assets/js/app.js' ) ); ?>" as="script">
-<script>
+<?php
+// The inline script carries no JS comments: an HTML minifier that collapses
+// whitespace (a cache plugin, a "minify HTML" snippet, a host's optimizer)
+// would turn each // line into one that comments out everything after it,
+// window.MINN included, and the app would boot to a blank page. Its notes
+// live here instead, in PHP, where they never reach the browser.
+//
 // Apply the theme before first paint to avoid a flash. A device with no saved
 // choice starts in the site's default mode (Settings → Appearance), which is
 // System (follow the OS live) unless the site picked one. Nothing is saved
 // until the person picks, so a later site default still reaches the device.
 // Explicit light/dark wins when the user locked one.
+//
+// Then the color scheme from user meta (boot.user.appearance), also before
+// paint. A scheme of 'site' follows the site default's palette, a legacy
+// { accent } becomes a scheme id, and a legacy custom hex string becomes the
+// accent pair.
+?>
+<script>
 try {
 	var siteMode = <?php echo wp_json_encode( isset( $boot['siteAppearance']['mode'] ) ? (string) $boot['siteAppearance']['mode'] : 'system' ); ?>;
 	var stored = localStorage.getItem( 'minn-theme' ) || siteMode;
@@ -83,17 +96,14 @@ try {
 $minn_boot_json = wp_json_encode( $boot, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT );
 ?>
 window.MINN = <?php echo false === $minn_boot_json ? '{}' : $minn_boot_json; ?>;
-// Color scheme from user meta (boot.user.appearance) — apply before paint.
 (function () {
 	try {
 		var ap = ( window.MINN && window.MINN.user && window.MINN.user.appearance ) || { scheme: 'site' };
-		// 'site' follows the site default's palette.
 		if ( ap.scheme === 'site' ) {
 			var site = ( window.MINN && window.MINN.siteAppearance ) || {};
 			ap = { scheme: site.scheme || 'minn', custom: site.custom, font: ap.font };
 		}
 		var root = document.documentElement;
-		// Legacy { accent } → scheme id.
 		var scheme = ap.scheme || ( ap.accent && ap.accent !== 'custom' ? ap.accent : ( ap.accent === 'custom' ? 'custom' : 'minn' ) );
 		root.setAttribute( 'data-scheme', scheme );
 		root.setAttribute( 'data-font', ap.font === 'wordpress' ? 'wordpress' : 'minn' );
@@ -110,7 +120,6 @@ window.MINN = <?php echo false === $minn_boot_json ? '{}' : $minn_boot_json; ?>;
 		}
 		var mode = root.getAttribute( 'data-theme' ) || 'dark';
 		var tokens = ( ap.custom && ap.custom[ mode ] ) || {};
-		// Legacy custom hex string.
 		if ( typeof ap.custom === 'string' && /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test( ap.custom ) ) {
 			tokens = { accent: ap.custom, accent2: ap.custom };
 		}
