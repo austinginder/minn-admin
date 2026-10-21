@@ -137,6 +137,7 @@ run security-v047-registry-forms single --user=admin
 MINN_SWAP_ADD=powerpress/powerpress.php run security-v047-registry-adapters single --user=admin --require=tests/lib/plugin-swap.php
 run secrets-tier-conformance single --user=admin
 run settings-tier-conformance single --user=admin
+run write-surface single --user=admin
 MINN_SWAP_ADD=powerpress/powerpress.php run fields-tier-conformance single --user=admin --require=tests/lib/plugin-swap.php
 # WP Mail SMTP stays inactive on the lab; the swap loads it for this process only.
 MINN_SWAP_ADD=wp-mail-smtp/wp_mail_smtp.php run security-v047-registry-egress single --user=admin --require=tests/lib/plugin-swap.php
@@ -145,6 +146,7 @@ MINN_SWAP_ADD=wp-mail-smtp/wp_mail_smtp.php run security-v047-registry-egress si
 run route-gates subsite --user=admin
 run kernel-conformance subsite --user=admin
 run settings-tier-conformance subsite --user=admin
+run write-surface subsite --user=admin
 run egress-redaction subsite --user=admin
 run write-fences subsite --user=admin
 run multisite-db-redaction subsite --user=admin
