@@ -517,7 +517,7 @@ function minn_admin_fluent_smtp_resend( $id, array $row, WP_REST_Request $reques
 	// A reset link goes back only to whom it was for: sent anywhere else, its
 	// key would reach someone the log hides it from.
 	if ( $override && minn_admin_mail_mask_reset_keys( (string) $row['body'] ) !== (string) $row['body'] ) {
-		return new WP_Error( 'minn_mail_reset_link', __( 'This email holds a password reset link, so it can only be resent to whom it was sent.', 'minn-admin' ), array( 'status' => 403 ) );
+		return new WP_Error( 'minn_mail_reset_link', __( 'This email holds a link whose key is hidden from you (a password reset link), so it can only be resent to whom it was sent.', 'minn-admin' ), array( 'status' => 403 ) );
 	}
 	$original = array_filter( minn_admin_fluent_smtp_recipients( $row['to'], true ), 'is_email' );
 	if ( ! $override && ! $original ) {
