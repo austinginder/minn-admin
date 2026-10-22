@@ -296,11 +296,23 @@
             "kind": "action",
             "why": "A one-shot action: it carries no loaded values back."
         },
+        "POST /minn-admin/v1/breakwater/log/(?P<id>\\d+)/release": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/breakwater/log/(?P<id>\\d+)/spam": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
         "POST /minn-admin/v1/builders/new": {
             "kind": "create",
             "why": "Makes a new item: there is no stored value it could rewrite."
         },
         "POST /minn-admin/v1/cache/purge": {
+            "kind": "action",
+            "why": "A one-shot action: it carries no loaded values back."
+        },
+        "POST /minn-admin/v1/cf7/forms/(?P<id>\\d+)/mail/preview": {
             "kind": "action",
             "why": "A one-shot action: it carries no loaded values back."
         },
