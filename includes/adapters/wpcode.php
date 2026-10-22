@@ -342,9 +342,10 @@ function minn_admin_wpcode_guard_type( $code_type, $snippet_id = 0, $writes_code
 	// WPCode's own capability label treats them as one tier: "Edit HTML,
 	// JavaScript & CSS Snippets". kses cannot repair a JavaScript body, so
 	// these are refused rather than filtered; `text` is filtered instead, in
-	// minn_admin_wpcode_clean_code(). None of them answers to
-	// code_edits_allowed() below: they are not file editing, they are code
-	// going into the page, and the capability for that is unfiltered_html.
+	// minn_admin_wpcode_clean_code(). Code going into every page answers to
+	// the rule every code-authoring surface here keeps (the settings tier's
+	// raw fields, HFCM, custom-css-js): unfiltered_html, and code edits left
+	// on (DISALLOW_FILE_EDIT / DISALLOW_FILE_MODS refuse it).
 	//
 	// This is deliberately STRICTER than WPCode 2.3.x, whose own save
 	// listener gates only on wpcode_edit_snippets. Authoring rights there
@@ -356,6 +357,13 @@ function minn_admin_wpcode_guard_type( $code_type, $snippet_id = 0, $writes_code
 	// relocating, deleting or DEACTIVATING an existing snippet stays open:
 	// telling someone a snippet is too dangerous for them to edit and then
 	// refusing to let them switch it off is not hardening.
+	if ( $writes_code && minn_admin_wpcode_type_needs_raw( $code_type ) && class_exists( 'Minn_Admin' ) && ! Minn_Admin::code_edits_allowed() ) {
+		return new WP_Error(
+			'forbidden',
+			__( 'This site disallows editing code from the dashboard, so snippets emitted as raw code cannot be created or changed here.', 'minn-admin' ),
+			array( 'status' => 403 )
+		);
+	}
 	if ( $writes_code
 		&& minn_admin_wpcode_type_needs_raw( $code_type )
 		&& ! current_user_can( 'unfiltered_html' ) ) {

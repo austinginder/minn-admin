@@ -17,6 +17,10 @@
  *
  * Run: wp eval-file tests/security-v047-rc-adapters.test.php --user=admin --path=<site>
  *      (on a network: --url=<a site other than the main one>)
+ * The WPCode section needs WPCode, which the dev site keeps off: add
+ *   MINN_SWAP_ADD=insert-headers-and-footers/ihaf.php ... --require=tests/lib/plugin-swap.php
+ * The last section defines DISALLOW_FILE_EDIT, which cannot be undone in the
+ * process, so it runs last.
  *
  * @package minn-admin
  */
@@ -204,6 +208,43 @@ rest_get_server();
 		$check( 'credential rows: WP 2FA\'s authenticator seed prints redacted', is_array( $c ) && ! empty( $c['redacted'] ), is_array( $c ) ? 'not redacted' : (string) $c );
 	} finally {
 		$clean();
+	}
+} )();
+
+/*
+ * 07-L1, 09-L2: code that goes into every page answers to the code-edits
+ * directive. This defines DISALLOW_FILE_EDIT, which cannot be undone in
+ * this process, so it runs last.
+ */
+( function () use ( $check, $skip, $admin ) {
+	wp_set_current_user( $admin );
+	if ( ! Minn_Admin::code_edits_allowed() ) {
+		$skip( 'code edits: this site already disallows them, so there is no before' );
+		return;
+	}
+	$ccj_inline = array( 'language' => 'css', 'side' => 'frontend', 'linking' => 'internal' );
+	$ccj_linked = array( 'language' => 'css', 'side' => 'frontend', 'linking' => 'external' );
+	$has_ccj    = function_exists( 'minn_admin_ccj_can_write_code' );
+	$has_wpcode = function_exists( 'minn_admin_wpcode_guard_type' ) && function_exists( 'wpcode' );
+	$wpcode_ok  = function ( $type ) {
+		$g = minn_admin_wpcode_guard_type( $type );
+		return ! is_wp_error( $g );
+	};
+	$before_ccj    = $has_ccj ? minn_admin_ccj_can_write_code( $ccj_inline ) : null;
+	$before_wpcode = $has_wpcode ? $wpcode_ok( 'html' ) : null;
+	define( 'DISALLOW_FILE_EDIT', true );
+	if ( $has_ccj ) {
+		$check( 'code edits: inline CSS (which can close its <style>) is refused when code edits are off', true === $before_ccj && false === minn_admin_ccj_can_write_code( $ccj_inline ) );
+		$check( 'code edits: control: linked front end CSS stays open', true === minn_admin_ccj_can_write_code( $ccj_linked ) );
+	} else {
+		$skip( 'code edits: custom-css-js adapter not loaded' );
+	}
+	if ( $has_wpcode ) {
+		$after = minn_admin_wpcode_guard_type( 'html' );
+		$check( 'code edits: a WPCode HTML snippet is refused when code edits are off', true === $before_wpcode && is_wp_error( $after ) && false !== strpos( $after->get_error_message(), 'disallows editing code' ), is_wp_error( $after ) ? $after->get_error_message() : 'allowed' );
+		$check( 'code edits: control: a WPCode text snippet is still filtered, not refused', $wpcode_ok( 'text' ) );
+	} else {
+		$skip( 'code edits: WPCode inactive' );
 	}
 } )();
 
