@@ -216,7 +216,7 @@ $drop_users = $once( function () use ( &$made, $admin ) {
 		$check( 'order emails: "Customer note" for an order with no note to the customer is refused (400)', 400 === $st && 'minn_no_customer_note' === ( $d['code'] ?? '' ), $st . ' ' . wp_json_encode( $d ) );
 		$check( 'order emails: and sends nothing and records no resend', ! $mail && 0 === $resent( $o2->get_id() ), count( $mail ) . ' mails, ' . $resent( $o2->get_id() ) . ' notes' );
 
-		list( $st, $d ) = $send( $shop, $o3->get_id(), 'customer_processing_order' );
+		list( $st, $d ) = $send( $shop, $o3->get_id(), 'customer_invoice' );
 		$check( 'order emails: an email for an order with no address answers 409, not "sent"', 409 === $st && 'minn_email_not_sent' === ( $d['code'] ?? '' ), $st . ' ' . wp_json_encode( $d ) );
 		$check( 'order emails: and records no resend', 0 === $resent( $o3->get_id() ), (string) $resent( $o3->get_id() ) );
 

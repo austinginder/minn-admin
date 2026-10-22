@@ -2810,10 +2810,12 @@ class Minn_Admin_REST {
 				// while it drives this route in-process from `wp eval-file`:
 				// the operator's own code, trusted like Minn. A plugin that
 				// eval()s a render hook keeps its own file as the host, which
-				// the root check below still judges.
+				// the root check below still judges. Only under WP-CLI: on a
+				// web request a phar or a path that merely says wp-cli is no
+				// operator.
 				if ( preg_match( "#^(.*)\(\d+\) : eval\(\)'d code$#", $file, $m ) ) {
 					$host = $m[1];
-					if ( 0 === strpos( $host, 'phar://' ) || false !== strpos( $host, '/wp-cli/' ) || false !== strpos( $host, '/wp-cli-bundle/' ) ) {
+					if ( defined( 'WP_CLI' ) && WP_CLI && ( 0 === strpos( $host, 'phar://' ) || false !== strpos( $host, '/wp-cli/' ) || false !== strpos( $host, '/wp-cli-bundle/' ) ) ) {
 						$trusted = true;
 					} else {
 						$file = $host;
@@ -6771,9 +6773,10 @@ class Minn_Admin_REST {
 				if ( $locale !== self::locale_of_file( $name, $known ) ) {
 					continue;
 				}
-				// Never follow a path outside WP_LANG_DIR.
+				// Never follow a path outside WP_LANG_DIR, a sibling folder
+				// that only starts with its name (languages-old) included.
 				$real = realpath( $file );
-				if ( ! $real || 0 !== strpos( $real, $real_dir ) ) {
+				if ( ! $real || ! $real_dir || 0 !== strpos( $real, trailingslashit( $real_dir ) ) ) {
 					continue;
 				}
 				if ( @unlink( $file ) ) {
@@ -8816,6 +8819,40 @@ Please click the following link to confirm the invite:
 		);
 	}
 
+	/**
+	 * Whether an order email fits the order as it stands, by WooCommerce's
+	 * own rule for sending one from an order (OrderActionsRestController):
+	 * the invoice for any order, a status email only while the order is in
+	 * that status, the refund email only once something was refunded. The
+	 * admin "new order" email is its own order action, and a customer note
+	 * resends a note the customer was already sent. Anything else would tell
+	 * a customer their order was completed, cancelled or refunded when it
+	 * was not.
+	 *
+	 * @param WC_Order $order    Order.
+	 * @param string   $email_id WC_Email id.
+	 * @return bool
+	 */
+	private static function order_email_fits( $order, $email_id ) {
+		$status = (string) $order->get_status();
+		$map    = array(
+			'cancelled_order'           => 'cancelled',
+			'failed_order'              => 'failed',
+			'customer_on_hold_order'    => 'on-hold',
+			'customer_processing_order' => 'processing',
+			'customer_completed_order'  => 'completed',
+			'customer_failed_order'     => 'failed',
+			'customer_cancelled_order'  => 'cancelled',
+		);
+		if ( isset( $map[ $email_id ] ) ) {
+			return $map[ $email_id ] === $status;
+		}
+		if ( 'customer_refunded_order' === $email_id ) {
+			return 'refunded' === $status || (float) $order->get_total_refunded() > 0;
+		}
+		return in_array( $email_id, array( 'new_order', 'customer_invoice', 'customer_note' ), true );
+	}
+
 	public static function order_list_emails( WP_REST_Request $request ) {
 		if ( ! function_exists( 'WC' ) || ! function_exists( 'wc_get_order' ) ) {
 			return new WP_Error( 'no_wc', __( 'WooCommerce is not available.', 'minn-admin' ), array( 'status' => 400 ) );
@@ -8827,7 +8864,7 @@ Please click the following link to confirm the invite:
 		$allow = self::order_email_allowlist();
 		$out = array();
 		foreach ( WC()->mailer()->get_emails() as $email ) {
-			if ( ! is_object( $email ) || empty( $email->id ) || ! in_array( $email->id, $allow, true ) ) {
+			if ( ! is_object( $email ) || empty( $email->id ) || ! in_array( $email->id, $allow, true ) || ! self::order_email_fits( $order, $email->id ) ) {
 				continue;
 			}
 			$out[] = array(
@@ -8864,6 +8901,9 @@ Please click the following link to confirm the invite:
 		if ( ! in_array( $email_id, self::order_email_allowlist(), true ) ) {
 			return new WP_Error( 'unknown_email', __( 'That email type is not available.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
+		if ( ! self::order_email_fits( $order, $email_id ) ) {
+			return new WP_Error( 'minn_email_not_for_order', __( 'That email does not fit this order as it stands. WooCommerce sends it when an order reaches that status.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
 		$found    = null;
 		foreach ( WC()->mailer()->get_emails() as $email ) {
 			if ( is_object( $email ) && ! empty( $email->id ) && $email->id === $email_id ) {
@@ -8887,12 +8927,16 @@ Please click the following link to confirm the invite:
 				return new WP_Error( 'minn_no_customer_note', __( 'This order has no note to the customer, so there is nothing to resend.', 'minn-admin' ), array( 'status' => 400 ) );
 			}
 		}
-		// Force-send even if the email is disabled in settings (admin intent).
-		// WC_Email::trigger checks is_enabled(); temporarily enable via filter.
-		$force = function ( $enabled, $email_obj ) use ( $found ) {
+		// Send it even if it is switched off in settings, for someone who could
+		// switch it back on (WC_Email::trigger checks is_enabled()). Anyone else
+		// sends what the store sends, as WooCommerce's own order actions do.
+		// The filter passes ( enabled, the order, the email ).
+		$force = function ( $enabled, $object = null, $email_obj = null ) use ( $found ) {
 			return ( $email_obj === $found ) ? true : $enabled;
 		};
-		add_filter( 'woocommerce_email_enabled_' . $found->id, $force, 100, 2 );
+		if ( current_user_can( 'manage_woocommerce' ) ) {
+			add_filter( 'woocommerce_email_enabled_' . $found->id, $force, 100, 3 );
+		}
 		// The new order email goes out once per order unless this filter
 		// allows it again, as WooCommerce's own "Resend new order
 		// notification" order action does.
@@ -11258,11 +11302,13 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		if ( ! $stylesheet || false !== strpos( $stylesheet, '..' ) ) {
 			return new WP_Error( 'bad_theme', __( 'Theme is required.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
-		$theme = wp_get_theme( $stylesheet );
+		// An installed theme only, as activate and delete take it: a folder
+		// inside one (twentytwentyfive/assets) is not a theme to read about.
+		$theme = self::get_valid_theme( $stylesheet );
 		// On multisite a subsite admin only sees themes the network allows
 		// for their site (core's themes.php, list_themes, theme_activate);
 		// anything else answers exactly like a theme that is not there.
-		if ( ! $theme->exists() || ( ! Minn_Admin::network_owner() && ! $theme->is_allowed() ) ) {
+		if ( ! $theme || ( ! Minn_Admin::network_owner() && ! $theme->is_allowed() ) ) {
 			return new WP_Error( 'not_installed', __( 'That theme is not installed.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
 		$tr    = get_site_transient( 'update_themes' );
@@ -12792,10 +12838,11 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			if ( in_array( $key, $skip_meta, true ) ) {
 				continue;
 			}
-			// Protected meta (a _-prefixed key: page template, builder data,
-			// SEO flags) copies only when the caller could set it on the new
-			// post themselves; core's own meta writes run the same check.
-			if ( is_protected_meta( $key, 'post' ) && ! current_user_can( 'edit_post_meta', $new_id, $key ) ) {
+			// Every key copies only when the caller could add it to the new
+			// post themselves: protected meta (a _-prefixed key: page template,
+			// builder data, SEO flags) and a key a plugin registered with an
+			// auth_callback alike. core's own meta writes run the same check.
+			if ( ! current_user_can( 'add_post_meta', $new_id, $key ) ) {
 				continue;
 			}
 			foreach ( $values as $value ) {
