@@ -100,7 +100,10 @@ function minn_admin_bricks_template_types() {
  * which is what the vendor's filter does when it runs at all.
  */
 function minn_admin_bricks_strip_unfiltered_html( $settings, $post_id = 0 ) {
-	if ( ! is_array( $settings ) || current_user_can( 'unfiltered_html' ) ) {
+	// These scripts go into every page, so they answer to the rule every
+	// code-authoring surface here keeps: unfiltered_html, and code edits on.
+	$code_ok = ! class_exists( 'Minn_Admin' ) || Minn_Admin::code_edits_allowed();
+	if ( ! is_array( $settings ) || ( current_user_can( 'unfiltered_html' ) && $code_ok ) ) {
 		return $settings;
 	}
 	$script_keys = array( 'customScriptsHeader', 'customScriptsBodyHeader', 'customScriptsBodyFooter' );

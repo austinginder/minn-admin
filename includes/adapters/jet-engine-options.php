@@ -97,7 +97,7 @@ function minn_admin_jet_options_layout( $page, $slug ) {
 		// A raw-format textarea stores what it is sent and prints it as
 		// stored (JetEngine's default format): the tier's rule for a value
 		// printed unescaped, unfiltered_html and code edits left on.
-		if ( 'textarea' === $f['type'] && 'raw' === ( $f['_jet']['value_format'] ?? 'raw' ) ) {
+		if ( 'textarea' === $f['type'] && ! in_array( $f['_jet']['value_format'] ?? 'raw', array( 'plain_text', 'safe_html' ), true ) ) {
 			$sf['_raw'] = true;
 		}
 		$sf['_jet'] = $f;

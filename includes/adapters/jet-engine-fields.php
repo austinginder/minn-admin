@@ -610,7 +610,8 @@ function minn_admin_jet_value_in( $f, $value, $stored = null ) {
 			// Raw stores what it is sent, and the field prints as stored. For
 			// someone WordPress does not trust with markup (a Contributor on
 			// their own post), the post's own rule: kses, as a post body gets.
-			if ( 'raw' === $field['value_format'] && ! current_user_can( 'unfiltered_html' ) ) {
+			// (JetEngine stores raw for any format but plain_text and safe_html.)
+			if ( ! in_array( $field['value_format'], array( 'plain_text', 'safe_html' ), true ) && ! current_user_can( 'unfiltered_html' ) ) {
 				$value = wp_kses_post( $value );
 			}
 			if ( function_exists( 'jet_engine_sanitize_textarea' ) ) {

@@ -238,7 +238,7 @@ minn_admin_resource( 'wpml/emails', function () {
 					'attachments' => trim( (string) $r['attachments'], "0 \n" ),
 					'host'        => minn_admin_wpml_displays( 'display-host' ) && '0' !== (string) $r['host'] ? (string) $r['host'] : '',
 					'timestamp'   => $r['timestamp'],
-					'message'     => (string) $r['message'],
+					'message'     => minn_admin_mail_mask_reset_keys( (string) $r['message'] ),
 				);
 			},
 			'fields' => array(

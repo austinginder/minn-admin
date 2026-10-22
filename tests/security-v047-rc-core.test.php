@@ -122,11 +122,15 @@ rest_get_server();
 		$id       = (int) $o->get_id();
 		$fresh    = function () {
 			// Each send is a request of its own: WooCommerce's email objects start
-			// it holding no order or recipient.
+			// it holding no order or recipient, and the refund email under its
+			// own id (sending a partial refund renames it for the request).
 			foreach ( WC()->mailer()->get_emails() as $e ) {
 				if ( is_object( $e ) ) {
 					$e->object    = null;
 					$e->recipient = null;
+					if ( $e instanceof WC_Email_Customer_Refunded_Order ) {
+						$e->id = 'customer_refunded_order';
+					}
 				}
 			}
 		};
@@ -163,6 +167,18 @@ rest_get_server();
 		remove_filter( 'woocommerce_email_enabled_customer_completed_order', $off, 10 );
 		list( $st, $d ) = $send( $shop, 'customer_completed_order' );
 		$check( 'order emails: control: switched on, the clerk sends the email that fits', 200 === $st && 1 === count( $mail ), $st . ' ' . wp_json_encode( $d ) );
+		// A partly refunded order gets the refund email in its partial wording.
+		$o = wc_get_order( $id );
+		$o->set_total( 50 );
+		$o->save();
+		$refund = wc_create_refund( array( 'order_id' => $id, 'amount' => 5, 'reason' => 'Minn RC partial' ) );
+		if ( is_wp_error( $refund ) ) {
+			$check( 'order emails: a partial refund for the test order', false, $refund->get_error_message() );
+		} else {
+			list( $st, $d ) = $send( $admin, 'customer_refunded_order' );
+			$subject = (string) ( $mail[0]['subject'] ?? '' );
+			$check( 'order emails: a partly refunded order\'s refund email says partially refunded', 200 === $st && false !== stripos( $subject, 'partial' ), $st . ' "' . $subject . '" ' . wp_json_encode( $d ) );
+		}
 	} finally {
 		$clean();
 	}

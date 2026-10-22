@@ -44,8 +44,9 @@ function minn_admin_wordfence_active() {
 	}
 	// Wordfence keeps ONE table set on base_prefix for the whole network
 	// (wfDB) and its own UI lives in Network Admin there — the login log
-	// holds every site's events, so on multisite it is super-admin data.
-	if ( ! Minn_Admin::network_owner() ) {
+	// holds every site's events, so on multisite it is super-admin data. On a
+	// multi-network install every network shares it: the install owner's.
+	if ( ! Minn_Admin::install_owner() ) {
 		return false;
 	}
 	// The kernel's check ignores case: on case-folding MySQL setups (macOS,
@@ -56,7 +57,7 @@ function minn_admin_wordfence_active() {
 
 /** Network-shared table (see minn_admin_wordfence_active), so network data. */
 function minn_admin_wordfence_can_read_log() {
-	return minn_admin_wordfence_can() && Minn_Admin::network_owner();
+	return minn_admin_wordfence_can() && Minn_Admin::install_owner();
 }
 
 /**
@@ -231,7 +232,7 @@ function minn_admin_wordfence_checks() {
 	// The System page reads this directly at manage_options, which is per
 	// site on multisite. Firewall mode, scan age and unresolved-issue counts
 	// describe the network, so gate here rather than at the call site.
-	if ( ! Minn_Admin::network_owner() ) {
+	if ( ! Minn_Admin::install_owner() ) {
 		return array();
 	}
 	// Ask the same question the surface and the routes ask. These rows carry

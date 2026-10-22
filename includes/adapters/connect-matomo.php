@@ -29,6 +29,9 @@
 
 defined( 'ABSPATH' ) || exit;
 
+// The Matomo API token the plugin reports with.
+minn_admin_secrets( 'wp-piwik', array( 'options' => array( 'wp-piwik_global-piwik_token' ) ) );
+
 /**
  * True when Connect Matomo is loaded and configured and the current user may
  * view its reports (their own `wp-piwik_read_stats` role capability).

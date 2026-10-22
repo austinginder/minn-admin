@@ -20,6 +20,9 @@
 
 defined( 'ABSPATH' ) || exit;
 
+// Limit Login Attempts Reloaded's cloud app config (its API key).
+minn_admin_secrets( 'limit-login-attempts-reloaded', array( 'options' => array( 'limit_login_app_config' ) ) );
+
 function minn_admin_llar_active() {
 	return class_exists( 'LLAR\\Core\\Config' );
 }

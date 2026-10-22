@@ -118,11 +118,16 @@ function minn_admin_mail_sections( array $delivery, $subject, $body = null, arra
  * keeps only a hash of the key, so the egress mask cannot know it. On a
  * single site the administrator can reset any password already.
  *
+ * Every way a body leaves goes through this or minn_admin_mail_bodies_open():
+ * the detail sections, each log's item route, a body search and a resend to
+ * another address.
+ *
  * @param string $body Logged body, text or HTML.
  * @return string
  */
 function minn_admin_mail_mask_reset_keys( $body ) {
-	if ( ! is_multisite() || Minn_Admin::network_owner() || false === stripos( $body, 'key=' ) ) {
+	$body = (string) $body;
+	if ( minn_admin_mail_bodies_open() || false === stripos( $body, 'key=' ) ) {
 		return $body;
 	}
 	return (string) preg_replace_callback(
@@ -135,6 +140,19 @@ function minn_admin_mail_mask_reset_keys( $body ) {
 		},
 		$body
 	);
+}
+
+/**
+ * Whether this user reads logged mail whole. On a single site, someone who
+ * can edit users (and so reset any password already); a log a plugin opens
+ * to other roles shows them reset links with the key hidden. On a network,
+ * the install's owner only (on a multi-network install a secondary
+ * network's super admin could otherwise read the main network's resets).
+ *
+ * @return bool
+ */
+function minn_admin_mail_bodies_open() {
+	return is_multisite() ? Minn_Admin::install_owner() : current_user_can( 'edit_users' );
 }
 
 /** The Failure section of a detail, the error as a code row and any rows after it. */

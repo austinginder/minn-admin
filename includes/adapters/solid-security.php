@@ -39,7 +39,7 @@ function minn_admin_solid_security_can() {
 	// lockout IPs and attempted usernames. Same class (and same fix) as the
 	// All-In-One Security scoping in v0.28.0, except here scoping is
 	// impossible: network data needs a network administrator.
-	if ( ! Minn_Admin::network_owner() ) {
+	if ( ! Minn_Admin::install_owner() ) {
 		return false;
 	}
 	try {
@@ -251,7 +251,7 @@ function minn_admin_solid_security_checks() {
 	// The System page reads this directly at manage_options, which is per
 	// site on multisite. Firewall mode, scan age and unresolved-issue counts
 	// describe the network, so gate here rather than at the call site.
-	if ( ! Minn_Admin::network_owner() ) {
+	if ( ! Minn_Admin::install_owner() ) {
 		return array();
 	}
 	// Ask the same question the surface and the routes ask: their required

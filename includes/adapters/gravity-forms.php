@@ -15,6 +15,9 @@
 
 defined( 'ABSPATH' ) || exit;
 
+// Gravity Forms' reCAPTCHA private key.
+minn_admin_secrets( 'gravityforms', array( 'options' => array( 'rg_gforms_captcha_private_key' ) ) );
+
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! class_exists( 'GFAPI' ) ) {
 		return $surfaces;

@@ -22,6 +22,9 @@
 
 defined( 'ABSPATH' ) || exit;
 
+// WP Job Manager's reCAPTCHA secret.
+minn_admin_secrets( 'wp-job-manager', array( 'options' => array( 'job_manager_recaptcha_secret_key' ) ) );
+
 function minn_admin_wpjm_active() {
 	return class_exists( 'WP_Job_Manager_Post_Types' )
 		&& method_exists( 'WP_Job_Manager_Post_Types', 'get_job_listing_fields' )

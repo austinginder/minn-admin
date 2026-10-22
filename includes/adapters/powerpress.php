@@ -31,7 +31,7 @@ defined( 'ABSPATH' ) || exit;
 
 // Blubrry's OAuth tokens and client secret, and the Blubrry account login
 // (base64 user:password) inside the general settings.
-minn_admin_secrets( 'powerpress', array( 'options' => array( 'powerpress_creds', 'powerpress_general' ) ) );
+minn_admin_secrets( 'powerpress', array( 'options' => array( 'powerpress_creds', 'powerpress_general', 'powerpress_podping_authkey', 'powerpress_temp_client' ) ) );
 
 function minn_admin_powerpress_active() {
 	return defined( 'POWERPRESS_VERSION' ) && function_exists( 'powerpress_get_contenttype' );

@@ -233,7 +233,7 @@ minn_admin_resource( 'post-smtp/emails', function () {
 					'solution'  => (string) $r['solution'],
 					'transport' => (string) $r['transport_uri'],
 					'date'      => $r['time'],
-					'message'   => $r['original_message'],
+					'message'   => minn_admin_mail_mask_reset_keys( (string) $r['original_message'] ),
 				);
 			},
 			'fields' => array(

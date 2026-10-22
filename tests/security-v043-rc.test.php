@@ -226,11 +226,12 @@ if ( class_exists( 'Minn_Admin_CPT' ) && function_exists( 'acf_get_setting' ) &&
 	list( $st ) = $call( 'POST', '/minn-admin/v1/post-types', array( 'slug' => $apt, 'singular' => 'Gadget', 'plural' => 'Gadgets', 'public' => true, 'show_in_rest' => true, 'supports' => array( 'title' ), 'taxonomies' => array(), 'backend' => 'acf' ) );
 	register_post_type( $apt, array( 'public' => true, 'label' => 'Gadgets' ) );
 	$lock = '__return_false';
+	$stamp = minn_test_def_stamp( 'post-types', $apt ); // read before the lock, as the page had it
 	add_filter( 'acf/settings/show_admin', $lock );
-	list( $st2 ) = $call( 'POST', "/minn-admin/v1/post-types/{$apt}", array( 'singular' => 'Gadget 2', 'plural' => 'Gadgets 2', 'public' => true, 'show_in_rest' => true, 'supports' => array( 'title' ), 'taxonomies' => array() ) );
+	list( $st2 ) = $call( 'POST', "/minn-admin/v1/post-types/{$apt}", array( 'base' => $stamp, 'singular' => 'Gadget 2', 'plural' => 'Gadgets 2', 'public' => true, 'show_in_rest' => true, 'supports' => array( 'title' ), 'taxonomies' => array() ) );
 	list( $st3 ) = $call( 'DELETE', "/minn-admin/v1/post-types/{$apt}" );
 	list( , $list ) = $call( 'GET', '/minn-admin/v1/post-types' );
-	$check( 'ACF locked away: its post type can\'t be edited or deleted in Minn', 200 !== $st2 && 200 !== $st3, "create {$st}, update {$st2}, delete {$st3}" );
+	$check( 'ACF locked away: its post type can\'t be edited or deleted in Minn', 403 === $st2 && 200 !== $st3, "create {$st}, update {$st2}, delete {$st3}" );
 	$check( 'ACF locked away: Minn won\'t create new ACF types', ! in_array( 'acf', (array) ( $list['backends'] ?? array() ), true ) );
 	remove_filter( 'acf/settings/show_admin', $lock );
 	list( $st4 ) = $call( 'DELETE', "/minn-admin/v1/post-types/{$apt}" );

@@ -668,7 +668,9 @@ minn_admin_resource( 'gravity-smtp/events', function () {
 			'search' => array(
 				'columns' => array( 'subject', 'extra', 'service' ),
 				'also'    => function ( $term ) {
-					return minn_admin_gsmtp_can_preview() ? array( 'message' => array( 'contains' => $term ) ) : null;
+					// Nor on a network for anyone but its owner: a body search finds a
+					// reset key the page hides.
+					return minn_admin_gsmtp_can_preview() && minn_admin_mail_bodies_open() ? array( 'message' => array( 'contains' => $term ) ) : null;
 				},
 			),
 			'range'  => array( 'column' => 'date_created', 'clock' => 'local' ),
@@ -726,7 +728,7 @@ minn_admin_resource( 'gravity-smtp/events', function () {
 					'can_resend'   => minn_admin_gsmtp_can_resend( minn_admin_gsmtp_events_model(), $r['id'] ),
 				);
 				if ( minn_admin_gsmtp_can_preview() ) {
-					$out['message'] = $r['message'];
+					$out['message'] = minn_admin_mail_mask_reset_keys( (string) $r['message'] );
 				}
 				return array_merge( $out, minn_admin_gsmtp_full_details( $r['id'] ) );
 			},
@@ -794,8 +796,14 @@ minn_admin_resource( 'gravity-smtp/debug', function () {
 		),
 		'list'   => array(
 			'facets' => array( array( 'param' => 'priority', 'column' => 'priority', 'type' => 'key' ) ),
-			'search' => array( 'columns' => array( 'line' ) ),
+			// A debug line can carry a message whole (a reset link's key): served
+			// through the mail mask, and searched only by who reads it whole.
+			'search' => array( 'columns' => minn_admin_mail_bodies_open() ? array( 'line' ) : array( 'priority' ) ),
 			'order'  => array( 'column' => 'id' ),
+			'row'    => function ( array $r ) {
+				$r['line'] = minn_admin_mail_mask_reset_keys( (string) $r['line'] );
+				return $r;
+			},
 			'fields' => array(
 				'id'           => 'int',
 				'line'         => 'text',

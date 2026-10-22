@@ -18,8 +18,9 @@
 
 defined( 'ABSPATH' ) || exit;
 
-// Plausible's Plugins API token and its shared-dashboard grants (?auth=).
-minn_admin_secrets( 'plausible-analytics', array( 'options' => array( 'plausible_analytics_settings' => array( 'api_token/*', 'shared_link/*', 'self_hosted_shared_link' ) ) ) );
+// Plausible's Plugins API token. (Its shared-dashboard grants are links,
+// which the row's redaction covers; a link is no key-shaped needle.)
+minn_admin_secrets( 'plausible-analytics', array( 'options' => array( 'plausible_analytics_settings' => array( 'api_token/*' ) ) ) );
 
 /**
  * Resolve the active plugin's dashboard grant into a safe query target.

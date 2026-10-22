@@ -128,6 +128,14 @@ rest_get_server();
 	if ( ! is_multisite() ) {
 		wp_set_current_user( $admin );
 		$check( 'mail logs: on a single site the administrator sees the body as logged', minn_admin_mail_mask_reset_keys( $body ) === $body );
+		// A log a plugin opens to other roles hides reset keys from them.
+		$ed = get_user_by( 'login', 'minn-editor' );
+		if ( $ed ) {
+			wp_set_current_user( $ed->ID );
+			$out = minn_admin_mail_mask_reset_keys( $body );
+			wp_set_current_user( $admin );
+			$check( 'mail logs: an Editor reading a mail log never sees a reset key', false === strpos( $out, 'AbCdEf123456' ) && false === strpos( $out, 'ZyXw987654' ), $out );
+		}
 		return;
 	}
 	$sub   = wp_insert_user( array( 'user_login' => "minn-rc-siteadmin-{$tag}", 'user_email' => "minn-rc-siteadmin-{$tag}@example.com", 'user_pass' => wp_generate_password( 24 ), 'role' => 'administrator' ) );
@@ -143,11 +151,45 @@ rest_get_server();
 		$out = minn_admin_mail_mask_reset_keys( $body );
 		$check( 'mail logs: a site administrator on a network never sees a reset key', false === strpos( $out, 'AbCdEf123456' ) && false === strpos( $out, 'ZyXw987654' ) && false === strpos( $out, 'Wc0011223344' ), $out );
 		$check( 'mail logs: control: other links keep their key', false !== strpos( $out, 'wc_order_keepme' ) );
+		// A resend to another address would carry the key out whole.
+		if ( function_exists( 'minn_admin_fluent_smtp_resend' ) ) {
+			$req = new WP_REST_Request( 'POST', '/minn-admin/v1/fluent-smtp/emails/1/resend' );
+			$req->set_param( 'to', "minn-rc-catch-{$tag}@example.com" );
+			$sent  = 0;
+			$catch = function () use ( &$sent ) {
+				++$sent;
+				return true;
+			};
+			add_filter( 'pre_wp_mail', $catch, PHP_INT_MAX );
+			$r = minn_admin_fluent_smtp_resend( 1, array( 'to' => 'root@example.com', 'subject' => 'Password Reset', 'body' => $body ), $req );
+			remove_filter( 'pre_wp_mail', $catch, PHP_INT_MAX );
+			$check( 'mail logs: a reset email cannot be resent to another address by a site administrator', is_wp_error( $r ) && 'minn_mail_reset_link' === $r->get_error_code() && 0 === $sent, is_wp_error( $r ) ? $r->get_error_code() : 'sent' );
+		}
 		wp_set_current_user( $admin );
-		$check( 'mail logs: control: the network owner sees the body as logged', ! Minn_Admin::network_owner() || minn_admin_mail_mask_reset_keys( $body ) === $body );
+		$check( 'mail logs: control: the install owner sees the body as logged', ! Minn_Admin::install_owner() || minn_admin_mail_mask_reset_keys( $body ) === $body );
 	} finally {
 		$clean();
 	}
+} )();
+
+/*
+ * 08-M2 (fix delta): every mail log's item route hands its body through the
+ * mask, not only the detail sections. A source check, run anywhere: a log
+ * whose item serves a 'message' must build it with the mask.
+ */
+( function () use ( $check ) {
+	$open = array();
+	foreach ( array( 'fluent-smtp', 'wp-mail-logging', 'post-smtp', 'gravity-smtp', 'suremails', 'site-mailer' ) as $a ) {
+		$src = (string) file_get_contents( MINN_ADMIN_DIR . "includes/adapters/{$a}.php" );
+		if ( preg_match_all( "/'message'\s*\]?\s*=\s*>?\s*(.+);?$/m", $src, $m ) ) {
+			foreach ( $m[1] as $rhs ) {
+				if ( preg_match( '/\$r\[/', $rhs ) && false === strpos( $rhs, 'minn_admin_mail_mask_reset_keys' ) ) {
+					$open[] = $a . ': ' . trim( $rhs );
+				}
+			}
+		}
+	}
+	$check( 'mail logs: every item route masks the body it serves', ! $open, implode( ' | ', $open ) );
 } )();
 
 /*
@@ -236,6 +278,9 @@ rest_get_server();
 	if ( $has_ccj ) {
 		$check( 'code edits: inline CSS (which can close its <style>) is refused when code edits are off', true === $before_ccj && false === minn_admin_ccj_can_write_code( $ccj_inline ) );
 		$check( 'code edits: control: linked front end CSS stays open', true === minn_admin_ccj_can_write_code( $ccj_linked ) );
+		$check( 'code edits: taking inline CSS out (a delete) stays open when code edits are off', true === minn_admin_ccj_can_write_code( $ccj_inline, false ) );
+		$err = minn_admin_ccj_code_error( $ccj_inline );
+		$check( 'code edits: the refusal names the setting, not a capability', false !== strpos( $err->get_error_message(), 'disallows editing code' ), $err->get_error_message() );
 	} else {
 		$skip( 'code edits: custom-css-js adapter not loaded' );
 	}
@@ -245,6 +290,30 @@ rest_get_server();
 		$check( 'code edits: control: a WPCode text snippet is still filtered, not refused', $wpcode_ok( 'text' ) );
 	} else {
 		$skip( 'code edits: WPCode inactive' );
+	}
+	if ( function_exists( 'minn_admin_bricks_strip_unfiltered_html' ) ) {
+		$kept = minn_admin_bricks_strip_unfiltered_html( array( 'customScriptsHeader' => '<script>x</script>', 'other' => 1 ), 0 );
+		$check( 'code edits: Bricks page scripts are dropped from a save when code edits are off', ! isset( $kept['customScriptsHeader'] ) && 1 === ( $kept['other'] ?? null ), wp_json_encode( $kept ) );
+	}
+} )();
+
+/*
+ * Fix delta: Ninja Forms passwords, JetEngine raw formats.
+ */
+( function () use ( $check, $admin ) {
+	if ( function_exists( 'minn_admin_ninja_forms_skip_types' ) ) {
+		$skip = minn_admin_ninja_forms_skip_types();
+		$check( 'Ninja Forms: password answers are never shown', in_array( 'password', $skip, true ) && in_array( 'passwordconfirm', $skip, true ) );
+	}
+	if ( function_exists( 'minn_admin_jet_value_in' ) ) {
+		$deny = function ( $caps, $cap ) {
+			return 'unfiltered_html' === $cap ? array( 'do_not_allow' ) : $caps;
+		};
+		wp_set_current_user( $admin );
+		add_filter( 'map_meta_cap', $deny, 99, 2 );
+		$in = minn_admin_jet_value_in( array( 'name' => 'x', 'type' => 'textarea', '_jet' => array( 'type' => 'textarea', 'value_format' => 'legacy' ) ), 'a <script>b</script>' );
+		remove_filter( 'map_meta_cap', $deny, 99 );
+		$check( 'JetEngine: any format JetEngine stores raw (not only "raw") is kses\'d', is_string( $in ) && false === stripos( $in, '<script' ), (string) $in );
 	}
 } )();
 

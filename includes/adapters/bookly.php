@@ -20,6 +20,9 @@
 
 defined( 'ABSPATH' ) || exit;
 
+// Bookly Cloud's account token.
+minn_admin_secrets( 'bookly-responsive-appointment-booking-tool', array( 'options' => array( 'bookly_cloud_token' ) ) );
+
 function minn_admin_bookly_active() {
 	return class_exists( '\Bookly\Lib\Entities\CustomerAppointment' )
 		&& class_exists( '\Bookly\Lib\Entities\Appointment' );

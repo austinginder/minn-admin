@@ -31,6 +31,10 @@
 
 defined( 'ABSPATH' ) || exit;
 
+// The secret that lets All-in-One WP Migration export and import the whole
+// site without a login (its nopriv controllers check it).
+minn_admin_secrets( 'all-in-one-wp-migration', array( 'options' => array( 'ai1wm_secret_key' ) ) );
+
 function minn_admin_ai1wm_active() {
 	// AI1WM_BACKUPS_PATH is ONE wp-content/ai1wm-backups directory for the
 	// whole network and those archives hold every tenant's database, so on

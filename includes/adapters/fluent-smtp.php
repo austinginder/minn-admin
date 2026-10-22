@@ -514,6 +514,11 @@ function minn_admin_fluent_smtp_resend( $id, array $row, WP_REST_Request $reques
 			return new WP_Error( 'too_many_recipients', sprintf( __( 'Please enter no more than %d email addresses.', 'minn-admin' ), $max ), array( 'status' => 422 ) );
 		}
 	}
+	// A reset link goes back only to whom it was for: sent anywhere else, its
+	// key would reach someone the log hides it from.
+	if ( $override && minn_admin_mail_mask_reset_keys( (string) $row['body'] ) !== (string) $row['body'] ) {
+		return new WP_Error( 'minn_mail_reset_link', __( 'This email holds a password reset link, so it can only be resent to whom it was sent.', 'minn-admin' ), array( 'status' => 403 ) );
+	}
 	$original = array_filter( minn_admin_fluent_smtp_recipients( $row['to'], true ), 'is_email' );
 	if ( ! $override && ! $original ) {
 		return new WP_Error( 'no_recipients', __( 'No recipient address on record for this email.', 'minn-admin' ), array( 'status' => 422 ) );
@@ -598,7 +603,7 @@ minn_admin_resource( 'fluent-smtp/emails', function () {
 					'source'     => $r['source'],
 					'retries'    => (int) $r['retries'],
 					'created_at' => $r['created_at'],
-					'message'    => $r['body'],
+					'message'    => minn_admin_mail_mask_reset_keys( $r['body'] ),
 				);
 			},
 			'fields' => array(

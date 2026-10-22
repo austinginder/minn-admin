@@ -74,10 +74,12 @@ function minn_admin_ccj_can() {
  * (only super admins hold unfiltered_html there), and any install using
  * DISALLOW_UNFILTERED_HTML.
  *
- * @param array $opts Normalized options (language + side).
+ * @param array $opts    Normalized options (language + side).
+ * @param bool  $writing Whether code goes in (a delete takes it out, which
+ *                       the code-edits directive does not forbid).
  * @return bool
  */
-function minn_admin_ccj_can_write_code( $opts ) {
+function minn_admin_ccj_can_write_code( $opts, $writing = true ) {
 	$language = isset( $opts['language'] ) ? (string) $opts['language'] : 'css';
 	$sides    = array_filter( array_map( 'trim', explode( ',', isset( $opts['side'] ) ? (string) $opts['side'] : '' ) ) );
 	$scripty  = in_array( $language, array( 'js', 'html' ), true );
@@ -99,7 +101,7 @@ function minn_admin_ccj_can_write_code( $opts ) {
 	// What reaches here can run script (JS, HTML, or CSS inlined into a
 	// <style> it can close), so a site that forbids dashboard code editing
 	// forbids it too. Plain linked front end CSS returned above already.
-	if ( class_exists( 'Minn_Admin' ) && ! Minn_Admin::code_edits_allowed() ) {
+	if ( $writing && class_exists( 'Minn_Admin' ) && ! Minn_Admin::code_edits_allowed() ) {
 		return false;
 	}
 	if ( defined( 'DISALLOW_UNFILTERED_HTML' ) && DISALLOW_UNFILTERED_HTML ) {
@@ -146,12 +148,15 @@ function minn_admin_ccj_obj_error() {
  * context this caller may not write to. Checked against the snippet's stored
  * options rather than anything in the request.
  */
-function minn_admin_ccj_can_activate( $post_id ) {
-	return minn_admin_ccj_can_write_code( minn_admin_ccj_get_options( (int) $post_id ) );
+function minn_admin_ccj_can_activate( $post_id, $writing = true ) {
+	return minn_admin_ccj_can_write_code( minn_admin_ccj_get_options( (int) $post_id ), $writing );
 }
 
 /** WP_Error explaining why a snippet write was refused. */
 function minn_admin_ccj_code_error( $opts ) {
+	if ( class_exists( 'Minn_Admin' ) && ! Minn_Admin::code_edits_allowed() ) {
+		return new WP_Error( 'forbidden', __( 'This site disallows editing code from the dashboard, so snippets that run in the page cannot be created or changed here.', 'minn-admin' ), array( 'status' => 403 ) );
+	}
 	$language = isset( $opts['language'] ) ? (string) $opts['language'] : 'css';
 	$message  = in_array( $language, array( 'js', 'html' ), true )
 		? 'JavaScript and HTML snippets run as code in the page, so editing them needs the unfiltered_html capability on this site.'
@@ -877,7 +882,9 @@ minn_admin_resource( 'ccj/snippets', function () {
 					$retargets = ( $opts['language'] !== ( isset( $stored['language'] ) ? (string) $stored['language'] : 'css' ) )
 						|| ( $opts['side'] !== ( isset( $stored['side'] ) ? (string) $stored['side'] : 'frontend' ) )
 						|| ( $opts['linking'] !== ( isset( $stored['linking'] ) ? (string) $stored['linking'] : 'internal' ) );
-					if ( ( array_key_exists( 'code', $body ) || $retargets ) && ! minn_admin_ccj_can_write_code( $opts ) ) {
+					// The form sends the code on every save, renames included: only a
+					// change to it is a code write.
+					if ( ( ( array_key_exists( 'code', $body ) && ! Minn_Admin::unchanged( $body['code'], $post->post_content ) ) || $retargets ) && ! minn_admin_ccj_can_write_code( $opts ) ) {
 						return minn_admin_ccj_code_error( $opts );
 					}
 					// The edit form sends code and active on every save, renames
@@ -961,8 +968,9 @@ minn_admin_resource( 'ccj/snippets', function () {
 					if ( ! minn_admin_ccj_obj_can( 'delete', $id ) ) {
 						return minn_admin_ccj_obj_error();
 					}
-					// Deleting is a write to the same store.
-					if ( ! minn_admin_ccj_can_activate( $id ) ) {
+					// Deleting is a write to the same store (it takes code out, which
+					// a site that disallows code editing still allows).
+					if ( ! minn_admin_ccj_can_activate( $id, false ) ) {
 						return minn_admin_ccj_code_error( minn_admin_ccj_get_options( $id ) );
 					}
 					// Take the bytes before the post goes, because their own

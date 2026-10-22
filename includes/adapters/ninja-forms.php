@@ -24,6 +24,9 @@
 
 defined( 'ABSPATH' ) || exit;
 
+// Ninja Forms keeps its reCAPTCHA secret inside its settings row.
+minn_admin_secrets( 'ninja-forms', array( 'options' => array( 'ninja_forms_settings' ) ) );
+
 function minn_admin_ninja_forms_active() {
 	return class_exists( 'Ninja_Forms' ) && Minn_Admin_Kernel_SQL::exists( 'nf3_forms' );
 }
@@ -46,7 +49,8 @@ function minn_admin_ninja_forms_can() {
 
 /** Field types that carry no answer (chrome, not data). */
 function minn_admin_ninja_forms_skip_types() {
-	return array( 'submit', 'html', 'hr', 'divider', 'recaptcha', 'recaptcha_v3', 'spam', 'note' );
+	// Passwords too: Ninja Forms hides them from its own screen and export.
+	return array( 'submit', 'html', 'hr', 'divider', 'recaptcha', 'recaptcha_v3', 'spam', 'note', 'password', 'passwordconfirm' );
 }
 
 /**

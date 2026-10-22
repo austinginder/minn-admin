@@ -6776,7 +6776,7 @@ class Minn_Admin_REST {
 				// Never follow a path outside WP_LANG_DIR, a sibling folder
 				// that only starts with its name (languages-old) included.
 				$real = realpath( $file );
-				if ( ! $real || ! $real_dir || 0 !== strpos( $real, trailingslashit( $real_dir ) ) ) {
+				if ( ! $real || ! $real_dir || 0 !== strpos( $real, rtrim( $real_dir, '/\\' ) . DIRECTORY_SEPARATOR ) ) {
 					continue;
 				}
 				if ( @unlink( $file ) ) {
@@ -8962,7 +8962,9 @@ Please click the following link to confirm the invite:
 		$thrown = null;
 		try {
 			if ( 'customer_refunded_order' === $found->id ) {
-				$found->trigger( $order->get_id(), false );
+				// Partial unless the order itself is refunded, so the email says
+				// what happened (WooCommerce's trigger_partial / trigger_full).
+				$found->trigger( $order->get_id(), 'refunded' !== $order->get_status() );
 			} elseif ( 'customer_note' === $found->id ) {
 				$found->trigger(
 					array(

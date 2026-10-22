@@ -124,12 +124,13 @@ minn_admin_resource( 'wp-mail-smtp/events', function () {
 				) ),
 			),
 			// Their own EventsCollection searches content OR initiator.
-			'search' => array( 'columns' => array( 'content', 'initiator' ) ),
+			// An event can carry a queued message whole (a reset link's key).
+			'search' => array( 'columns' => minn_admin_mail_bodies_open() ? array( 'content', 'initiator' ) : array( 'initiator' ) ),
 			'range'  => array( 'column' => 'created_at', 'clock' => 'utc' ),
 			'order'  => array( 'column' => 'id' ),
 			'row'    => function ( array $r ) {
 				// Cut after the fence has seen it whole (Minn_Admin_Egress::clip()).
-				$content = Minn_Admin_Egress::clip( trim( preg_replace( '/\s+/', ' ', (string) $r['content'] ) ), 119 );
+				$content = Minn_Admin_Egress::clip( trim( preg_replace( '/\s+/', ' ', minn_admin_mail_mask_reset_keys( (string) $r['content'] ) ) ), 119 );
 				return array(
 					'id'         => (int) $r['id'],
 					'content'    => $content,

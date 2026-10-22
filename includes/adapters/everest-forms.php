@@ -25,6 +25,9 @@
 
 defined( 'ABSPATH' ) || exit;
 
+// Everest Forms' reCAPTCHA secret.
+minn_admin_secrets( 'everest-forms', array( 'options' => array( 'everest_forms_recaptcha_v2_secret_key' ) ) );
+
 function minn_admin_everest_active() {
 	if ( ! function_exists( 'evf' ) && ! defined( 'EVF_VERSION' ) ) {
 		return false;

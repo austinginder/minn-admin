@@ -33,7 +33,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		t.check( 'JetEngine is a writable backend', list.status === 200 && ( list.body.backends || [] ).includes( 'jet' ), JSON.stringify( list.body && list.body.backends ) );
 		t.check( 'the JetEngine fixture type is attributed to JetEngine and editable', !! fixture && fixture.source === 'jet' && fixture.editable === true && fixture.taxonomies.includes( 'minn_jet_topic' ), JSON.stringify( fixture ) );
 
-		const upd = await api( 'minn-admin/v1/post-types/minn_jet_case', { method: 'POST', body: { singular: fixture.singular, plural: 'Jet Cases (suite)', public: true, hierarchical: false, has_archive: true, show_in_rest: true, supports: [ 'title', 'editor', 'thumbnail', 'excerpt' ] } } );
+		const upd = await api( 'minn-admin/v1/post-types/minn_jet_case', { method: 'POST', body: { base: fixture.stamp, singular: fixture.singular, plural: 'Jet Cases (suite)', public: true, hierarchical: false, has_archive: true, show_in_rest: true, supports: [ 'title', 'editor', 'thumbnail', 'excerpt' ] } } );
 		const after = ( ( ( await api( 'minn-admin/v1/post-types' ) ).body || {} ).types || [] ).find( ( x ) => x.slug === 'minn_jet_case' );
 		t.check( 'an update writes through JetEngine and registers live', upd.status === 200 && after && after.plural === 'Jet Cases (suite)' && after.supports.includes( 'excerpt' ), JSON.stringify( { upd: upd.status, after } ) );
 
@@ -45,7 +45,7 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		const tcreated = ( ( ( await api( 'minn-admin/v1/taxonomies' ) ).body || {} ).taxonomies || [] ).find( ( x ) => x.slug === TAX );
 		t.check( 'a new taxonomy stored in JetEngine registers against the type', tcreate.status === 200 && tcreated && tcreated.source === 'jet' && tcreated.object_types.includes( SLUG ), JSON.stringify( { tcreate: tcreate.body, tcreated } ) );
 
-		const tupd = await api( `minn-admin/v1/taxonomies/${ TAX }`, { method: 'POST', body: { singular: 'Suite tag', plural: 'Suite tags (renamed)', public: true, show_in_rest: true, hierarchical: true, object_types: [ SLUG ] } } );
+		const tupd = await api( `minn-admin/v1/taxonomies/${ TAX }`, { method: 'POST', body: { base: tcreated && tcreated.stamp, singular: 'Suite tag', plural: 'Suite tags (renamed)', public: true, show_in_rest: true, hierarchical: true, object_types: [ SLUG ] } } );
 		const tafter = ( ( ( await api( 'minn-admin/v1/taxonomies' ) ).body || {} ).taxonomies || [] ).find( ( x ) => x.slug === TAX );
 		t.check( 'a taxonomy update writes through JetEngine', tupd.status === 200 && tafter && tafter.plural === 'Suite tags (renamed)' && tafter.hierarchical === true, JSON.stringify( tafter ) );
 
@@ -65,7 +65,9 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 		t.check( 'Structure labels the type as JetEngine', /JetEngine/.test( pill ), pill );
 	} finally {
 		if ( fixture ) {
-			await api( 'minn-admin/v1/post-types/minn_jet_case', { method: 'POST', body: { singular: fixture.singular, plural: fixture.plural, public: fixture.public, hierarchical: fixture.hierarchical, has_archive: fixture.has_archive, show_in_rest: fixture.show_in_rest, supports: fixture.supports.filter( ( s ) => s !== 'autosave' ) } } ).catch( () => {} );
+			// A definition save carries the stamp of what it edits.
+			const now = ( ( ( await api( 'minn-admin/v1/post-types' ) ).body || {} ).types || [] ).find( ( x ) => x.slug === 'minn_jet_case' ) || {};
+			await api( 'minn-admin/v1/post-types/minn_jet_case', { method: 'POST', body: { base: now.stamp, singular: fixture.singular, plural: fixture.plural, public: fixture.public, hierarchical: fixture.hierarchical, has_archive: fixture.has_archive, show_in_rest: fixture.show_in_rest, supports: fixture.supports.filter( ( s ) => s !== 'autosave' ) } } ).catch( () => {} );
 		}
 		await api( `minn-admin/v1/post-types/${ SLUG }`, { method: 'DELETE' } ).catch( () => {} );
 		await api( `minn-admin/v1/taxonomies/${ TAX }`, { method: 'DELETE' } ).catch( () => {} );

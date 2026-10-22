@@ -30,7 +30,7 @@ defined( 'ABSPATH' ) || exit;
 // Formidable's captcha private keys (privkey, hcaptcha_privkey,
 // turnstile_privkey) sit in frm_options, stored as an FrmSettings object:
 // the row whole, since leaves inside an object are not read.
-minn_admin_secrets( 'formidable', array( 'options' => array( 'frm_options' ) ) );
+minn_admin_secrets( 'formidable', array( 'options' => array( 'frm_options', 'frm_connect_token', 'frm_antispam_secret_key', 'frm_form_state_key' ) ) );
 
 function minn_admin_formidable_active() {
 	return class_exists( 'FrmEntry' ) && Minn_Admin_Kernel_SQL::exists( 'frm_items' );
