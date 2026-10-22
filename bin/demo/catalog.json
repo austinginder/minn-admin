@@ -374,6 +374,7 @@
 				{"name": "Akismet", "url": "https://wordpress.org/plugins/akismet/", "adapters": ["spam.php"]},
 				{"name": "Antispam Bee", "url": "https://wordpress.org/plugins/antispam-bee/", "adapters": ["spam.php"]},
 				{"name": "CleanTalk", "url": "https://wordpress.org/plugins/cleantalk-spam-protect/", "adapters": ["spam.php", "cleantalk.php"]},
+				{"name": "Breakwater", "url": "https://github.com/anchorhost/breakwater", "adapters": ["spam.php", "breakwater.php"], "surface": "breakwater"},
 				{"name": "WP Armour", "url": "https://wordpress.org/plugins/honeypot/", "adapters": ["spam.php"]},
 				{"name": "Disable Comments", "url": "https://wordpress.org/plugins/disable-comments/", "adapters": ["spam.php"]}
 			]

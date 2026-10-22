@@ -181,6 +181,30 @@ function minn_admin_spam_providers() {
 		);
 	}
 
+	// --- Breakwater (on-site checks, no key) -------------------------------
+	// Its mode is set on its own surface's Settings tab (the settings tier),
+	// so the card carries no toggles. Blocked is what it caught as spam in
+	// the days it keeps its log.
+	if ( class_exists( '\Breakwater\Api' ) ) {
+		$providers[] = array(
+			'id'     => 'breakwater',
+			'plugin' => 'breakwater',
+			'name'   => 'Breakwater',
+			'status' => function () {
+				$s = \Breakwater\Api::status();
+				return array(
+					'configured' => true, // no key or account
+					/* translators: 1: Breakwater's mode ("Protect"), 2: what that mode does. */
+					'note'       => sprintf( __( '%1$s. %2$s', 'minn-admin' ), $s['mode_label'], $s['mode_help'] ),
+					'blocked'    => (int) $s['spam'],
+					'toggles'    => array(),
+					'adminUrl'   => admin_url( 'tools.php?page=breakwater' ),
+				);
+			},
+			'set'    => function () {},
+		);
+	}
+
 	// --- WP Armour (honeypot, zero-config) --------------------------------
 	// Works the moment it activates: an invisible honeypot field on comments
 	// and the form plugins it integrates with. Stats live in the wpa_stats

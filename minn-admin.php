@@ -320,6 +320,7 @@ require_once MINN_ADMIN_DIR . 'includes/adapters/option-pages.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/field-groups.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/spam.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/cleantalk.php';
+require_once MINN_ADMIN_DIR . 'includes/adapters/breakwater.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/site-status.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/user-switching.php';
 require_once MINN_ADMIN_DIR . 'includes/adapters/one-time-login.php';
