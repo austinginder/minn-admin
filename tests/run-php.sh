@@ -10,6 +10,9 @@
 #   MINN_PHP_SUBSITE     URL of a site on it other than the main one
 #   MINN_PHP_NET2_URL    URL of a site on a second network (WP Multi Network)
 #   MINN_PHP_NET2_USER   that network's super admin, who is not one on the first
+# The WP Freighter sections need a site running WP Freighter, and SKIP without:
+#   MINN_PHP_FREIGHTER       its root path
+#   MINN_PHP_FREIGHTER_USER  an administrator there (default minn-freighter)
 # A suite fails on a non-zero exit, a FAIL line or a fatal error. Nothing is
 # retried: these run in the CLI process, not through the web stack, so the
 # load that makes browser suites flaky does not reach them.
@@ -24,13 +27,15 @@ NET="${MINN_PHP_NETWORK:-}"
 SUB="${MINN_PHP_SUBSITE:-}"
 NET2_URL="${MINN_PHP_NET2_URL:-}"
 NET2_USER="${MINN_PHP_NET2_USER:-}"
+FREIGHTER="${MINN_PHP_FREIGHTER:-}"
+FREIGHTER_USER="${MINN_PHP_FREIGHTER_USER:-minn-freighter}"
 
 pass=0
 fail=0
 skip=0
 failed=()
 
-# run <suite> <where> [wp args...]; where is single, subsite or net2.
+# run <suite> <where> [wp args...]; where is single, subsite, net2 or freighter.
 run() {
 	local name=$1 where=$2 log args start code fails
 	shift 2
@@ -52,6 +57,14 @@ run() {
 			return
 		fi
 		args=(--path="$NET" --url="$NET2_URL" --user="$NET2_USER")
+		;;
+	freighter)
+		if [ -z "$FREIGHTER" ]; then
+			echo "SKIP  $name ($where): set MINN_PHP_FREIGHTER" | tee -a "$OUT/summary.txt"
+			skip=$((skip + 1))
+			return
+		fi
+		args=(--path="$FREIGHTER" --user="$FREIGHTER_USER")
 		;;
 	esac
 	start=$(date +%s)
@@ -141,6 +154,10 @@ run write-surface single --user=admin
 MINN_SWAP_ADD=powerpress/powerpress.php run fields-tier-conformance single --user=admin --require=tests/lib/plugin-swap.php
 # WP Mail SMTP stays inactive on the lab; the swap loads it for this process only.
 MINN_SWAP_ADD=wp-mail-smtp/wp_mail_smtp.php run security-v047-registry-egress single --user=admin --require=tests/lib/plugin-swap.php
+run security-v047-rc-core single --user=admin
+run security-v047-rc-lows single --user=admin
+# WPCode stays inactive on the lab; the swap loads it for this process only. The suite defines DISALLOW_FILE_EDIT at its end.
+MINN_SWAP_ADD=insert-headers-and-footers/ihaf.php run security-v047-rc-adapters single --user=admin --require=tests/lib/plugin-swap.php
 
 # A network, from a site that is not the main one.
 run route-gates subsite --user=admin
@@ -166,9 +183,15 @@ run security-v046-registry-reads subsite --user=admin
 run security-v046-rc-core subsite --user=admin
 run security-v046-rc-adapters subsite --user=admin
 run security-v046-rc-round2 subsite --user=admin
+run security-v047-rc-adapters subsite --user=admin
 run security-v045-delta-surfaces net2
 run multi-network-system net2
 run security-v046-registry-rest net2
+# One Time Login stays inactive on the second network; the swap loads it for this process only.
+MINN_SWAP_ADD=one-time-login/one-time-login.php run security-v047-rc-lows net2 --require=tests/lib/plugin-swap.php
+
+# A WP Freighter install.
+run security-v047-rc-lows freighter
 
 # roundtrip-surfaces replays bodies a browser run captured; see its header.
 echo "SKIP  roundtrip-surfaces: needs a browser capture first; run ./roundtrip.sh" | tee -a "$OUT/summary.txt"

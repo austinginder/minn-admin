@@ -420,19 +420,19 @@ try {
 /*
  * S3 (review round, sibling of 05-1): Amelia's settings row, UpdraftPlus'
  * remote storage rows and its UpdraftCentral / Migrator key rows are
- * credential rows. Ninja Forms' settings row stays readable: its own
- * settings screen prints its reCAPTCHA secret in a plain field to the same
- * administrator.
+ * credential rows. Ninja Forms' settings row is one too since the v0.47.0 RC
+ * fix-delta review: it holds the reCAPTCHA secret, declared like every other
+ * form plugin's captcha secret (this control once kept it readable).
  */
 $up_rows = array( 'updraft_updraftvault', 'updraft_dropbox', 'updraft_s3', 'updraft_cloudfiles', 'updraft_googledrive', 'updraft_onedrive', 'updraft_ftp', 'updraft_azure', 'updraft_sftp', 'updraft_googlecloud', 'updraft_backblaze', 'updraft_webdav', 'updraft_s3generic', 'updraft_pcloud', 'updraft_openstack', 'updraft_dreamobjects', 'updraft_central_localkeys', 'updraft_migrator_localkeys', 'updraft_remotesites', 'updraft_encryptionphrase' );
 $miss    = array();
-foreach ( array_merge( array( 'amelia_settings' ), $up_rows ) as $o ) {
+foreach ( array_merge( array( 'amelia_settings', 'ninja_forms_settings' ), $up_rows ) as $o ) {
 	if ( ! Minn_Admin_DB::is_credential_option( $o ) || ! Minn_Admin_DB::redacts_cell( $wpdb->options, 'option_value', array( 'option_name' => $o, 'option_value' => 'x' ) ) ) {
 		$miss[] = $o;
 	}
 }
-$check( 'S3 Amelia settings and every UpdraftPlus storage and key row are redacted whole in the browser and named credential rows', ! $miss, implode( ', ', $miss ) );
-$check( 'S3 control: UpdraftPlus rows holding no secret (history, last backup, email destination) and Ninja Forms settings stay readable', ! Minn_Admin_DB::is_credential_option( 'updraft_backup_history' ) && ! Minn_Admin_DB::is_credential_option( 'updraft_last_backup' ) && ! Minn_Admin_DB::is_credential_option( 'updraft_email' ) && ! Minn_Admin_DB::is_credential_option( 'ninja_forms_settings' ) );
+$check( 'S3 Amelia settings, Ninja Forms settings and every UpdraftPlus storage and key row are redacted whole in the browser and named credential rows', ! $miss, implode( ', ', $miss ) );
+$check( 'S3 control: UpdraftPlus rows holding no secret (history, last backup, email destination) stay readable', ! Minn_Admin_DB::is_credential_option( 'updraft_backup_history' ) && ! Minn_Admin_DB::is_credential_option( 'updraft_last_backup' ) && ! Minn_Admin_DB::is_credential_option( 'updraft_email' ) );
 // The vendors' own shapes (Amelia's JSON settings; UpdraftPlus' per-instance storage settings).
 $am    = array(
 	'general'       => array( 'gMapApiKey' => '', 'googleRecaptcha' => array( 'siteKey' => '6LcSite' . $tag . '1234abcd', 'secret' => '6LcSecr' . $tag . '5678efgh' ) ),

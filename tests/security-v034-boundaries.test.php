@@ -511,13 +511,14 @@ if ( ! class_exists( 'WPCode_Snippet' ) || ! function_exists( 'minn_admin_wpcode
 			403 === $status && 'publish' !== get_post_status( $executing ),
 			'status ' . $status . ', post ' . get_post_status( $executing )
 		);
-		// Controls. The directive is about code the site RUNS, so a markup
-		// snippet at a location that only prints it is unaffected; and
-		// switching something off is never blocked by a bar on authoring it.
+		// A markup snippet at a location that only prints it is raw code in
+		// every page too, so it answers to the same directive (v0.47.0 RC
+		// audit 07-L1; this control once expected it to activate). Switching
+		// something off is never blocked by a bar on authoring it.
 		$inert_status = $set_active( $inert, true );
 		$check(
-			'A markup snippet at a non-executing location still activates',
-			200 === $inert_status && 'publish' === get_post_status( $inert ),
+			'A markup snippet at a print-only location is refused too while the site forbids code edits',
+			403 === $inert_status && 'publish' !== get_post_status( $inert ),
 			'status ' . $inert_status . ', post ' . get_post_status( $inert )
 		);
 		wp_update_post( array( 'ID' => $executing, 'post_status' => 'publish' ) );

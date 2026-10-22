@@ -505,6 +505,11 @@ $sim   = function ( $sql ) use ( $blank ) {
 	if ( preg_match( '/^SELECT `\w+` FROM `[^`]+` WHERE .+ LIMIT (2000|500)$/s', $sql, $m ) ) {
 		return 'SELECT `v` FROM `' . $blank . '` LIMIT ' . $m[1];
 	}
+	// The rows adapters declare are read by name, with no limit; they hold
+	// real keys on the lab too.
+	if ( preg_match( '/^SELECT `\w+` AS k, `\w+` AS v FROM `[^`]+` WHERE `\w+` IN \(/', $sql ) ) {
+		return 'SELECT NULL AS k, NULL AS v FROM DUAL WHERE 0';
+	}
 	return $sql;
 };
 add_filter( 'query', $sim );
