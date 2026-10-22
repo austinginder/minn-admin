@@ -156,7 +156,10 @@ const { launch, login, loginAs, reporter, BASE, pickCombo } = require( './helper
 			JSON.stringify( everyStored && everyStored.policies ) );
 		const smLogin = 'minn-rd-sm-' + Date.now();
 		const smPass = 'minn-rd-sm-pass-' + Math.random().toString( 36 ).slice( 2 );
-		const sm = await rest( 'POST', 'wp/v2/users', { username: smLogin, email: smLogin + '@example.org', password: smPass, roles: [ 'shop_manager' ] } );
+		// A plugin's role where WooCommerce is installed; a bare site (the
+		// next-core lab) has none, and any role left unset proves the same.
+		let sm = await rest( 'POST', 'wp/v2/users', { username: smLogin, email: smLogin + '@example.org', password: smPass, roles: [ 'shop_manager' ] } );
+		if ( ! sm.ok ) sm = await rest( 'POST', 'wp/v2/users', { username: smLogin, email: smLogin + '@example.org', password: smPass, roles: [ 'contributor' ] } );
 		smId = sm.data && sm.data.id;
 		const smCtx = await loginAs( browser, smLogin, smPass );
 		const smPolicy = await smCtx.page.evaluate( () => window.MINN.user.policy );
