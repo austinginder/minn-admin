@@ -404,6 +404,21 @@ add_action( 'rest_api_init', function () {
 			if ( $jobid < 1 || '' === $filename || false !== strpos( $filename, '..' ) || false !== strpos( $filename, '/' ) || false !== strpos( $filename, '\\' ) ) {
 				return new WP_Error( 'bad_id', __( 'Invalid backup id.', 'minn-admin' ), array( 'status' => 400 ) );
 			}
+			// Only an archive BackWPup's own listing returns, as its screen
+			// deletes. file_delete() builds the folder from the job's settings,
+			// so a job that does not exist resolves to wp-content (and would
+			// take object-cache.php or db.php), and a real job's folder holds
+			// the .htaccess and index.php that keep its dumps off the web.
+			$listed = false;
+			foreach ( minn_admin_backwpup_rows() as $r ) {
+				if ( $r['id'] === $jobid . ':' . $filename ) {
+					$listed = true;
+					break;
+				}
+			}
+			if ( ! $listed ) {
+				return new WP_Error( 'not_found', __( 'That backup is not in BackWPup\'s list.', 'minn-admin' ), array( 'status' => 404 ) );
+			}
 			try {
 				$dest = BackWPup::get_destination( 'FOLDER' );
 				if ( ! $dest || ! method_exists( $dest, 'file_delete' ) ) {

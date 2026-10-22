@@ -178,6 +178,37 @@ function minn_admin_blc_link( $id ) {
 	return $link;
 }
 
+/**
+ * Whether the user may edit every item a link appears in: Broken Link
+ * Checker's own rule before an edit or an unlink (current_user_can_modify_link
+ * in its core.php, since 2.4.15). The gate only says who may use the links
+ * screen (edit_others_posts by default); an Editor still may not rewrite a
+ * link inside a post type, comment or field they cannot edit. An item that
+ * cannot be resolved cannot be authorised, so it denies.
+ *
+ * @param blcLink $link Link.
+ * @return bool
+ */
+function minn_admin_blc_can_modify( $link ) {
+	if ( ! ( $link instanceof blcLink ) || ! $link->valid() || ! class_exists( 'blcContainerHelper' ) ) {
+		return false;
+	}
+	$refs = array();
+	foreach ( (array) $link->get_instances() as $instance ) {
+		$refs[ $instance->container_type . '|' . $instance->container_id ] = array( $instance->container_type, $instance->container_id );
+	}
+	if ( ! $refs ) {
+		return true; // Used nowhere: no item to authorise, as BLC answers.
+	}
+	$containers = blcContainerHelper::get_containers( $refs );
+	foreach ( array_keys( $refs ) as $key ) {
+		if ( ! isset( $containers[ $key ] ) || ! $containers[ $key ]->current_user_can_edit() ) {
+			return false;
+		}
+	}
+	return true;
+}
+
 /** Save a model change inside their transaction, as their handlers do. */
 function minn_admin_blc_save( $link ) {
 	$link->isOptionLinkChanged = true;
@@ -418,7 +449,11 @@ minn_admin_resource( 'blc/links', function () {
 					if ( '' === $new_url || ! wp_parse_url( $new_url ) || ( ! current_user_can( 'unfiltered_html' ) && wp_kses_bad_protocol( $new_url, wp_allowed_protocols() ) !== $new_url ) ) {
 						return new WP_Error( 'minn_blc_url', __( 'That URL is not valid.', 'minn-admin' ), array( 'status' => 400 ) );
 					}
-					$rez = minn_admin_blc_link( $id )->edit( $new_url, null );
+					$link = minn_admin_blc_link( $id );
+					if ( ! minn_admin_blc_can_modify( $link ) ) {
+						return new WP_Error( 'minn_blc_forbidden', __( 'You cannot edit every place this link appears, so it was not changed.', 'minn-admin' ), array( 'status' => 403 ) );
+					}
+					$rez = $link->edit( $new_url, null );
 					return false === $rez ? new WP_Error( 'minn_blc_edit', __( 'Broken Link Checker could not change that link.', 'minn-admin' ), array( 'status' => 500 ) ) : $rez;
 				},
 				// Their own count of the places it changed is the proof.
@@ -443,7 +478,11 @@ minn_admin_resource( 'blc/links', function () {
 			'unlink'     => array(
 				'gate'   => 'view',
 				'run'    => function ( $id ) {
-					$rez = minn_admin_blc_link( $id )->unlink();
+					$link = minn_admin_blc_link( $id );
+					if ( ! minn_admin_blc_can_modify( $link ) ) {
+						return new WP_Error( 'minn_blc_forbidden', __( 'You cannot edit every place this link appears, so it was not changed.', 'minn-admin' ), array( 'status' => 403 ) );
+					}
+					$rez = $link->unlink();
 					return false === $rez ? new WP_Error( 'minn_blc_unlink', __( 'Broken Link Checker could not remove that link.', 'minn-admin' ), array( 'status' => 500 ) ) : $rez;
 				},
 				'expect' => function ( $id, $fresh, $rez ) {

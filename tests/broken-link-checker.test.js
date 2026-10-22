@@ -90,6 +90,19 @@ const wpPhp = ( php, user = 'admin' ) => execSync( `wp --path=${ JSON.stringify(
 		const afterUnlink = content();
 		t.check( 'Unlink removes the link and keeps its text', 200 === un.status && /the old guide/.test( afterUnlink ) && ! /minn-blc-suite-fixed/.test( afterUnlink ), JSON.stringify( { un: un.body, afterUnlink } ) );
 
+		// Their per-content rule (2.4.15): an edit or unlink needs edit access
+		// to every item the link is in. The post becomes the privacy policy
+		// page for the check, which takes manage_privacy_options to edit and
+		// no Editor holds, while the screen's own gate still lets them in.
+		const homeId = wpPhp( `global $wpdb; echo (int) $wpdb->get_var( $wpdb->prepare( "SELECT link_id FROM {$wpdb->prefix}blc_instances WHERE container_id = %d LIMIT 1", ${ postId } ) );` );
+		const privacyBefore = wpPhp( `echo (int) get_option( 'wp_page_for_privacy_policy' );` );
+		wpPhp( `update_option( 'wp_page_for_privacy_policy', ${ postId } ); echo 1;` );
+		const beforeDenied = content();
+		const editorUnlink = wpPhp( `echo rest_do_request( new WP_REST_Request( 'POST', '/minn-admin/v1/blc/links/${ homeId }/unlink' ) )->get_status();`, 'minn-editor' );
+		const editorEdit = wpPhp( `$r = new WP_REST_Request( 'POST', '/minn-admin/v1/blc/links/${ homeId }/edit' ); $r->set_param( 'new_url', 'https://example.com/' ); echo rest_do_request( $r )->get_status();`, 'minn-editor' );
+		wpPhp( `update_option( 'wp_page_for_privacy_policy', ${ parseInt( privacyBefore, 10 ) || 0 } ); echo 1;` );
+		t.check( 'an Editor cannot unlink or edit a link inside content they cannot edit', '403' === editorUnlink && '403' === editorEdit && content() === beforeDenied, JSON.stringify( { homeId, editorUnlink, editorEdit } ) );
+
 		// Their links screen follows the "Show the dashboard widget for"
 		// setting; raised to manage_options, an Editor must lose Minn too.
 		const editorDefault = wpPhp( `echo rest_do_request( new WP_REST_Request( 'GET', '/minn-admin/v1/blc/links' ) )->get_status();`, 'minn-editor' );

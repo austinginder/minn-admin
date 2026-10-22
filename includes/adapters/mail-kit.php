@@ -94,7 +94,7 @@ function minn_admin_mail_surface( $res, array $o ) {
 function minn_admin_mail_sections( array $delivery, $subject, $body = null, array $more = array(), array $html = array() ) {
 	$message = array( array( 'label' => __( 'Subject', 'minn-admin' ), 'value' => (string) $subject ) );
 	if ( null !== $body ) {
-		$body      = (string) $body;
+		$body      = minn_admin_mail_mask_reset_keys( (string) $body );
 		$message[] = preg_match( '/<\/?[a-z][^>]*>/i', $body )
 			? array_merge( array( 'label' => __( 'Body', 'minn-admin' ), 'value' => $body, 'type' => 'html-preview' ), $html )
 			: array( 'label' => __( 'Body', 'minn-admin' ), 'value' => $body, 'type' => 'code' );
@@ -107,6 +107,33 @@ function minn_admin_mail_sections( array $delivery, $subject, $body = null, arra
 			),
 			$more
 		),
+	);
+}
+
+/**
+ * A logged email's body with the key of every password-reset link hidden,
+ * for anyone on a network who is not its owner. A site's administrator can
+ * ask for a reset for any account on the login page of their own site, a
+ * super admin's included, and the link lands in that site's mail log. Core
+ * keeps only a hash of the key, so the egress mask cannot know it. On a
+ * single site the administrator can reset any password already.
+ *
+ * @param string $body Logged body, text or HTML.
+ * @return string
+ */
+function minn_admin_mail_mask_reset_keys( $body ) {
+	if ( ! is_multisite() || Minn_Admin::network_owner() || false === stripos( $body, 'key=' ) ) {
+		return $body;
+	}
+	return (string) preg_replace_callback(
+		'#https?://[^\s"\'<>]+#i',
+		function ( $m ) {
+			if ( ! preg_match( '#action(?:=|%3D)(?:rp|resetpass)\b|lost-?password|reset-?password#i', $m[0] ) ) {
+				return $m[0];
+			}
+			return (string) preg_replace( '#((?:[?&]|&amp;|&\#0?38;)key=)[^&\#\s"\'<>]+#i', '$1' . rawurlencode( __( '[hidden]', 'minn-admin' ) ), $m[0] );
+		},
+		$body
 	);
 }
 
