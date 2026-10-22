@@ -10450,7 +10450,7 @@
 	 * search. Quantity edits rewrite subtotal/total from the line's unit price —
 	 * WC's REST keeps the old money otherwise.
 	 *
-	 * ctx: { entity(), route, fields, savedMsg, onSaved( full ) } — both hosts
+	 * ctx: { entity(), money( v ), route, fields, savedMsg, onSaved( full ) } — both hosts
 	 * PUT the identical line_items shape, so only the route and what to
 	 * invalidate afterwards differ.
 	 */
@@ -10471,7 +10471,7 @@
 			addsHost.innerHTML = adds.map( ( a, i ) => `
 			<div class="minn-ei-line">
 				<span class="minn-cell-clip">${ esc( a.name ) }</span>
-				<span class="minn-ei-unit">$${ esc( String( a.price || '0' ) ) }</span>
+				<span class="minn-ei-unit">${ esc( ctx.money( a.price ) ) }</span>
 				<input class="minn-input minn-ei-qty" data-eaddqty="${ i }" type="number" min="1" step="1" value="${ a.qty }">
 				<button type="button" class="minn-pdl-x" data-eadddel="${ i }" title="${ esc( __( 'Remove item' ) ) }">×</button>
 			</div>` ).join( '' );
@@ -10869,6 +10869,7 @@
 					if ( kind === 'items' ) {
 						bindItemsDialog( sub, sv, {
 							entity: () => m.full || m.order || {},
+							money: ( v ) => orderMoney( m.full || m.order, v ),
 							route: 'wc/v3/orders',
 							fields: ORDER_DETAIL_FIELDS,
 							onSaved: ( full ) => {
@@ -12987,6 +12988,7 @@
 				const dlg = openEditDialog( __( 'Items' ), itemsFormHtml( cur, ( v ) => subMoney( cur, v ) ), true );
 				bindItemsDialog( dlg, $( '[data-esave]', dlg.overlay ), {
 					entity: () => m.full || m.sub || {},
+					money: ( v ) => subMoney( m.full || m.sub, v ),
 					route: 'wc/v3/subscriptions',
 					fields: SUB_DETAIL_FIELDS,
 					onSaved: ( full ) => {
@@ -13392,9 +13394,10 @@
 	 */
 	function variationRowHtml( m, v, i ) {
 		const label = variationLabel( m, v );
+		const sym = esc( storeSym() );
 		const price = v.sale_price
-			? `$${ esc( v.sale_price ) }<span class="minn-prod-was">$${ esc( v.regular_price || '' ) }</span>`
-			: ( v.regular_price ? `$${ esc( v.regular_price ) }` : '—' );
+			? `${ sym }${ esc( v.sale_price ) }<span class="minn-prod-was">${ sym }${ esc( v.regular_price || '' ) }</span>`
+			: ( v.regular_price ? `${ sym }${ esc( v.regular_price ) }` : '—' );
 		// Available means a number only when the variant tracks stock; the
 		// status is the honest answer otherwise, and it is what WooCommerce
 		// itself falls back to.
@@ -13932,10 +13935,11 @@
 		// The span is why this returns markup and cannot be esc()'d wholesale
 		// at the call sites, so escape each VALUE here instead. WooCommerce
 		// normalises these through wc_format_decimal, so this is depth.
+		const sym = esc( storeSym() );
 		if ( p.on_sale && p.sale_price ) {
-			return `$${ esc( p.sale_price ) }` + ( p.regular_price ? ` <span class="minn-prod-was">$${ esc( p.regular_price ) }</span>` : '' );
+			return `${ sym }${ esc( p.sale_price ) }` + ( p.regular_price ? ` <span class="minn-prod-was">${ sym }${ esc( p.regular_price ) }</span>` : '' );
 		}
-		return price ? `$${ esc( price ) }` : '—';
+		return price ? `${ sym }${ esc( price ) }` : '—';
 	}
 
 	function productStockLabel( p ) {
