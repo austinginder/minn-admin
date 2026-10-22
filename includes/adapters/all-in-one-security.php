@@ -64,7 +64,10 @@ function minn_admin_aios_table() {
  * @return array Conditions.
  */
 function minn_admin_aios_site_scope() {
-	return Minn_Admin::network_owner() ? array() : array( 'site_id' => get_current_blog_id() );
+	// The table is the whole install's (every network of a multi-network
+	// install writes it), so all of it is the install owner's, as Minn's
+	// other install-wide stores are.
+	return Minn_Admin::install_owner() ? array() : array( 'site_id' => get_current_blog_id() );
 }
 
 function minn_admin_aios_admin_url() {
@@ -243,8 +246,18 @@ minn_admin_resource( 'aios/events', function () {
 			},
 			'where'   => 'minn_admin_aios_site_scope',
 			// Its other logs of who signed in, from where, and who was locked
-			// out or blocked.
-			'tables'  => array( 'aiowps_events', 'aiowps_debug_log', 'aiowps_logged_in_users', 'aiowps_login_lockdown', 'aiowps_permanent_block' ),
+			// out or blocked. AIOS keeps the debug log and the signed-in list
+			// on the network's prefix and the rest on each site's own
+			// (wp-security-core.php), so each is named where it lives.
+			'tables'  => array(
+				'aiowps_debug_log',
+				'aiowps_logged_in_users',
+				array( 'table' => 'aiowps_events', 'network' => false ),
+				array( 'table' => 'aiowps_login_lockdown', 'network' => false ),
+				array( 'table' => 'aiowps_permanent_block', 'network' => false ),
+				array( 'table' => 'aiowps_failed_logins', 'network' => false ),
+				array( 'table' => 'aiowps_login_activity', 'network' => false ),
+			),
 		),
 		'list'   => array(
 			// Their own vocabulary: a level they do not log reads as info.

@@ -885,7 +885,7 @@ class Minn_Admin_CPT {
 		}
 		$now  = self::type_def( get_post_type_object( $slug ) );
 		$base = (string) $request->get_param( 'base' );
-		if ( '' !== $base && ! hash_equals( self::def_stamp( $now ), $base ) ) {
+		if ( '' === $base || ! hash_equals( self::def_stamp( $now ), $base ) ) { // no stamp is a stale copy, as Minn_Admin::stale() reads it
 			return self::stale_error( 'type' );
 		}
 		$def = self::def_from_request( $request );
@@ -1389,7 +1389,7 @@ class Minn_Admin_CPT {
 		}
 		$now  = self::tax_def( get_taxonomy( $slug ) );
 		$base = (string) $request->get_param( 'base' );
-		if ( '' !== $base && ! hash_equals( self::def_stamp( $now ), $base ) ) {
+		if ( '' === $base || ! hash_equals( self::def_stamp( $now ), $base ) ) { // no stamp is a stale copy, as Minn_Admin::stale() reads it
 			return self::stale_error( 'taxonomy' );
 		}
 		$def = self::tax_def_from_request( $request );

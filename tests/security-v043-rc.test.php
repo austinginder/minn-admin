@@ -37,6 +37,21 @@ $call    = function ( $method, $route, $body = null, $params = array() ) {
 	return array( $res->get_status(), $res->get_data() );
 };
 
+// A definition save carries the stamp of what it edits (a save without one
+// is answered as stale), read from the list as Minn's own page reads it.
+if ( ! function_exists( 'minn_test_def_stamp' ) ) {
+	function minn_test_def_stamp( $kind, $slug ) {
+		$res = rest_do_request( new WP_REST_Request( 'GET', '/minn-admin/v1/' . $kind ) );
+		$d   = (array) $res->get_data();
+		foreach ( (array) ( $d[ 'post-types' === $kind ? 'types' : 'taxonomies' ] ?? array() ) as $r ) {
+			if ( $slug === ( $r['slug'] ?? '' ) ) {
+				return (string) ( $r['stamp'] ?? '' );
+			}
+		}
+		return '';
+	}
+}
+
 $admin = get_users( array( 'role' => 'administrator', 'number' => 1 ) );
 if ( ! $admin ) {
 	echo "SKIP  no administrator to run as\n";
@@ -164,7 +179,7 @@ if ( class_exists( 'Minn_Admin_CPT' ) && function_exists( 'cptui_get_post_type_d
 	update_option( 'cptui_post_types', $o );
 	add_post_type_support( $pt, 'post-formats' );
 	add_post_type_support( $pt, 'trackbacks' ); // attached by code only, never stored
-	list( $st2 ) = $call( 'POST', "/minn-admin/v1/post-types/{$pt}", array( 'singular' => 'Thing 2', 'plural' => 'Things 2', 'public' => true, 'show_in_rest' => true, 'supports' => $sup, 'taxonomies' => array() ) );
+	list( $st2 ) = $call( 'POST', "/minn-admin/v1/post-types/{$pt}", array( 'base' => minn_test_def_stamp( 'post-types', $pt ), 'singular' => 'Thing 2', 'plural' => 'Things 2', 'public' => true, 'show_in_rest' => true, 'supports' => $sup, 'taxonomies' => array() ) );
 	$o = (array) get_option( 'cptui_post_types', array() );
 	$check( 'post type edit: support attached only by code is not written into CPT UI (review N7)', 200 === $st2 && ! in_array( 'trackbacks', (array) ( ( (array) get_option( 'cptui_post_types', array() ) )[ $pt ]['supports'] ?? array() ), true ) );
 	$check( 'post type edit: CPT UI\'s "none" marker is not carried, so ticked supports apply (review R2-4)', ! in_array( 'none', (array) ( ( (array) get_option( 'cptui_post_types', array() ) )[ $pt ]['supports'] ?? array() ), true ) );
@@ -180,7 +195,7 @@ if ( class_exists( 'Minn_Admin_CPT' ) && function_exists( 'cptui_get_post_type_d
 	foreach ( array( 'title', 'editor', 'post-formats', 'trackbacks' ) as $feature ) {
 		remove_post_type_support( $pt, $feature );
 	}
-	list( $st3 ) = $call( 'POST', "/minn-admin/v1/post-types/{$pt}", array( 'singular' => 'Thing 3', 'plural' => 'Things 3', 'public' => true, 'show_in_rest' => true, 'supports' => array(), 'taxonomies' => array() ) );
+	list( $st3 ) = $call( 'POST', "/minn-admin/v1/post-types/{$pt}", array( 'base' => minn_test_def_stamp( 'post-types', $pt ), 'singular' => 'Thing 3', 'plural' => 'Things 3', 'public' => true, 'show_in_rest' => true, 'supports' => array(), 'taxonomies' => array() ) );
 	$sup3 = (array) ( ( (array) get_option( 'cptui_post_types', array() ) )[ $pt ]['supports'] ?? array() );
 	$check( 'post type edit: a save that ticks nothing keeps CPT UI\'s "none" (review R3-1)', 200 === $st3 && in_array( 'none', $sup3, true ), "update {$st3}, supports " . implode( ',', $sup3 ) );
 	list( $st ) = $call( 'POST', '/minn-admin/v1/taxonomies', array( 'slug' => $tx, 'singular' => 'Topic', 'plural' => 'Topics', 'public' => true, 'show_in_rest' => true, 'object_types' => array( 'post' ), 'backend' => 'cptui' ) );
@@ -189,7 +204,7 @@ if ( class_exists( 'Minn_Admin_CPT' ) && function_exists( 'cptui_get_post_type_d
 	$t[ $tx ]['object_types'][] = 'attachment';
 	update_option( 'cptui_taxonomies', $t );
 	register_taxonomy_for_object_type( $tx, 'attachment' );
-	list( $st2 ) = $call( 'POST', "/minn-admin/v1/taxonomies/{$tx}", array( 'singular' => 'Topic 2', 'plural' => 'Topics 2', 'public' => true, 'show_in_rest' => true, 'object_types' => array( 'post' ) ) );
+	list( $st2 ) = $call( 'POST', "/minn-admin/v1/taxonomies/{$tx}", array( 'base' => minn_test_def_stamp( 'taxonomies', $tx ), 'singular' => 'Topic 2', 'plural' => 'Topics 2', 'public' => true, 'show_in_rest' => true, 'object_types' => array( 'post' ) ) );
 	$t = (array) get_option( 'cptui_taxonomies', array() );
 	$check( 'taxonomy edit: a label save keeps it attached to Media', 200 === $st2 && in_array( 'attachment', (array) ( $t[ $tx ]['object_types'] ?? array() ), true ), "create {$st}, update {$st2}" );
 	$call( 'DELETE', "/minn-admin/v1/post-types/{$pt}" );

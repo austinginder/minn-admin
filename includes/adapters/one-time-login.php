@@ -65,9 +65,21 @@ add_action( 'rest_api_init', function () {
 			// the password reset an administrator would use to evict them.
 			// Minting one for yourself has no operator value, so require the
 			// administrative capability and refuse self-targeting outright.
-			return $id !== get_current_user_id()
-				&& current_user_can( 'edit_users' )
-				&& current_user_can( 'edit_user', $id );
+			if ( $id === get_current_user_id() || ! current_user_can( 'edit_users' ) || ! current_user_can( 'edit_user', $id ) ) {
+				return false;
+			}
+			// Core asks super admin status on the current network only, so on
+			// a multi-network install another network's super admin passes
+			// for a main-network super admin, the install's owner. Signing in
+			// as one is theirs to allow.
+			if ( is_multisite() && ! Minn_Admin::install_owner() ) {
+				$target = get_userdata( $id );
+				$owners = array_map( 'strtolower', (array) get_network_option( get_main_network_id(), 'site_admins', array() ) );
+				if ( $target && in_array( strtolower( $target->user_login ), $owners, true ) ) {
+					return false;
+				}
+			}
+			return true;
 		},
 		'run'                 => function ( WP_REST_Request $request ) {
 			$user = get_userdata( (int) Minn_Admin::path_param( $request ) );

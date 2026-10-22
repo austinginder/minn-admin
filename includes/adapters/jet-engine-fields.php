@@ -607,6 +607,12 @@ function minn_admin_jet_value_in( $f, $value, $stored = null ) {
 				$value = mb_substr( $value, 0, (int) $jt['max_length'] );
 			}
 			$field = array( 'value_format' => isset( $jt['value_format'] ) ? $jt['value_format'] : 'raw' );
+			// Raw stores what it is sent, and the field prints as stored. For
+			// someone WordPress does not trust with markup (a Contributor on
+			// their own post), the post's own rule: kses, as a post body gets.
+			if ( 'raw' === $field['value_format'] && ! current_user_can( 'unfiltered_html' ) ) {
+				$value = wp_kses_post( $value );
+			}
 			if ( function_exists( 'jet_engine_sanitize_textarea' ) ) {
 				return jet_engine_sanitize_textarea( $value, $f['name'], $field );
 			}

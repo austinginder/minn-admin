@@ -310,6 +310,21 @@
             "shop_manager",
             "administrator"
         ],
+        "GET /minn-admin/v1/breakwater/forms": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/breakwater/log": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/breakwater/log/(?P<id>\\d+)": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/breakwater/settings/(?P<tab>[a-z]+)": [
+            "administrator"
+        ],
+        "GET /minn-admin/v1/breakwater/status": [
+            "administrator"
+        ],
         "GET /minn-admin/v1/builders": [
             "contributor",
             "author",
@@ -1354,6 +1369,15 @@
             "administrator"
         ],
         "POST /minn-admin/v1/bookly/appointments/(?P<id>\\d+)/status": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/breakwater/log/(?P<id>\\d+)/release": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/breakwater/log/(?P<id>\\d+)/spam": [
+            "administrator"
+        ],
+        "POST /minn-admin/v1/breakwater/settings/(?P<tab>[a-z]+)": [
             "administrator"
         ],
         "POST /minn-admin/v1/builders/new": [

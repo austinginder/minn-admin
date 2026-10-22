@@ -94,6 +94,12 @@ function minn_admin_jet_options_layout( $page, $slug ) {
 		if ( 'radio' === $f['type'] ) {
 			$sf['clearable'] = true; // else an unpicked radio shows its first choice
 		}
+		// A raw-format textarea stores what it is sent and prints it as
+		// stored (JetEngine's default format): the tier's rule for a value
+		// printed unescaped, unfiltered_html and code edits left on.
+		if ( 'textarea' === $f['type'] && 'raw' === ( $f['_jet']['value_format'] ?? 'raw' ) ) {
+			$sf['_raw'] = true;
+		}
 		$sf['_jet'] = $f;
 		$fields[]   = $sf;
 	}

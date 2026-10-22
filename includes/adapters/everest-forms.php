@@ -325,20 +325,22 @@ function minn_admin_everest_status_model() {
  * @return int[]|null Allowed form ids, or null when the caller may read all.
  */
 function minn_admin_everest_allowed_form_ids() {
+	$others = current_user_can( 'everest_forms_view_others_entries' );
 	if ( current_user_can( 'manage_everest_forms' )
 		|| current_user_can( 'manage_options' )
-		|| current_user_can( 'everest_forms_view_others_entries' ) ) {
+		|| ( $others && current_user_can( 'everest_forms_view_entries' ) ) ) {
 		return null;
 	}
 	// Every status the site knows, trash included ('any' leaves trash out),
 	// and no query filters: another plugin's pre_get_posts must not reshape
-	// a security scope.
+	// a security scope. The others-only primitive reads everyone's forms but
+	// the caller's own, as Everest maps it (own forms answer to the own one).
 	$ids = get_posts( array(
 		'post_type'        => 'everest_form',
 		'post_status'      => array_keys( get_post_stati() ),
 		'numberposts'      => -1,
 		'fields'           => 'ids',
-		'author'           => get_current_user_id(),
+		( $others ? 'author__not_in' : 'author' ) => $others ? array( get_current_user_id() ) : get_current_user_id(),
 		'suppress_filters' => true,
 	) );
 	return array_map( 'intval', (array) $ids );

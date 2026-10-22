@@ -569,7 +569,9 @@ class Minn_Admin_Switch {
 	public static function rest_status( WP_REST_Request $request ) {
 		$token = (string) $request['token'];
 		$held  = preg_match( '/^[A-Za-z0-9]{32}$/', $token ) ? get_transient( 'minn_switch_' . $token ) : false;
-		if ( ! is_array( $held ) ) {
+		// The person who ran the check, as rest_run() holds it: the installer's
+		// report names folders and the engine's state.
+		if ( ! is_array( $held ) || (int) ( $held['user'] ?? 0 ) !== get_current_user_id() ) {
 			return new WP_Error( 'minn_switch_expired', __( 'That switch is not known here.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
 		$file = $held['dir'] . '/result.json';

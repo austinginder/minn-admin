@@ -743,9 +743,12 @@ add_action( 'rest_api_init', function () {
 					// (elements AND settings), so the element tree is decoded
 					// first: kses over the encoded JSON string re-quotes
 					// attributes inside it and corrupts the copy.
-					if ( ! current_user_can( 'unfiltered_html' )
-						&& class_exists( '\Elementor\Utils' )
-						&& method_exists( '\Elementor\Utils', 'kses_post_deep' ) ) {
+					// A value that cannot be filtered is left off the copy, never
+					// carried across as stored.
+					if ( ! current_user_can( 'unfiltered_html' ) ) {
+						if ( ! class_exists( '\Elementor\Utils' ) || ! method_exists( '\Elementor\Utils', 'kses_post_deep' ) ) {
+							continue;
+						}
 						try {
 							if ( '_elementor_data' === $key && is_string( $value ) ) {
 								$tree = json_decode( $value, true );
@@ -757,7 +760,9 @@ add_action( 'rest_api_init', function () {
 							} else {
 								$value = \Elementor\Utils::kses_post_deep( $value );
 							}
-						} catch ( \Throwable $e ) { /* fall through with the stored value */ }
+						} catch ( \Throwable $e ) {
+							continue;
+						}
 					}
 					// get_post_meta() has already turned these back into real
 					// values. Doing it a second time would take a value that

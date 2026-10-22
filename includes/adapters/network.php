@@ -1272,7 +1272,7 @@ function minn_admin_network_plugin_activate( WP_REST_Request $request ) {
 	}
 	// Core's network Plugins screen also asks the per-plugin meta cap, which
 	// is where a host pins a plugin it must never lose.
-	if ( ! current_user_can( $on ? 'activate_plugin' : 'deactivate_plugin', $file ) ) {
+	if ( ! minn_admin_network_user_can( $on ? 'activate_plugin' : 'deactivate_plugin', $file ) ) { // read on the main site, as every network check here
 		return new WP_Error( 'rest_forbidden', __( 'You are not allowed to change this plugin.', 'minn-admin' ), array( 'status' => 403 ) );
 	}
 	if ( ! $on && plugin_basename( MINN_ADMIN_FILE ) === $file ) {

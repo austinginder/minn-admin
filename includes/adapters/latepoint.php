@@ -285,7 +285,12 @@ function minn_admin_latepoint_detail( array $r ) {
 	if ( $row->booking_code ) {
 		$when[] = array( 'label' => __( 'Code', 'minn-admin' ), 'value' => (string) $row->booking_code );
 	}
-	$internal = trim( (string) $row->customer_admin_notes );
+	// The customer's admin-only notes are the customer record's, which
+	// LatePoint shows to customer__view holders only; booking__view alone
+	// reads the booking, not the notes.
+	$internal = class_exists( 'OsRolesHelper' ) && method_exists( 'OsRolesHelper', 'can_user' ) && ! OsRolesHelper::can_user( 'customer__view' )
+		? ''
+		: trim( (string) $row->customer_admin_notes );
 	if ( '' !== $internal ) {
 		$when[] = array( 'label' => __( 'Notes', 'minn-admin' ), 'value' => $internal );
 	}

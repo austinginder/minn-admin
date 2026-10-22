@@ -583,7 +583,11 @@ add_action( 'rest_api_init', function () {
 
 	minn_admin_endpoint( '/freighter/sites/(?P<id>\d+)/minn', array(
 		'methods'             => 'POST',
-		'gate'                => $can,
+		// It writes the tenant's active_plugins in SQL, where the write
+		// fence (activate_plugins for that row) cannot see it: asked here.
+		'gate'                => function () use ( $can ) {
+			return true === call_user_func( $can ) && current_user_can( 'activate_plugins' );
+		},
 		'run'                 => 'minn_admin_freighter_site_minn',
 		'args'                => array(
 			'on' => array( 'type' => 'boolean', 'required' => true ),

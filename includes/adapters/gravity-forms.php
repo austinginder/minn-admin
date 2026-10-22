@@ -818,6 +818,16 @@ add_action( 'rest_api_init', function () {
 				continue;
 			}
 			foreach ( $form['fields'] as $field ) {
+				// A password field never leaves, as the detail route skips it:
+				// with gform_encrypt_password on, GFAPI hands it back decrypted.
+				if ( 'password' === $field->type ) {
+					foreach ( array_keys( $entries[ $i ] ) as $k ) {
+						if ( (string) $k === (string) $field->id || 0 === strpos( (string) $k, $field->id . '.' ) ) {
+							unset( $entries[ $i ][ $k ] );
+						}
+					}
+					continue;
+				}
 				if ( 'fileupload' !== $field->type || ! method_exists( $field, 'get_value_entry_detail' ) ) {
 					continue;
 				}

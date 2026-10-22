@@ -40,6 +40,21 @@ $call    = function ( $method, $route, $body = null, $params = array() ) {
 	return array( $res->get_status(), $res->get_data() );
 };
 
+// A definition save carries the stamp of what it edits (a save without one
+// is answered as stale), read from the list as Minn's own page reads it.
+if ( ! function_exists( 'minn_test_def_stamp' ) ) {
+	function minn_test_def_stamp( $kind, $slug ) {
+		$res = rest_do_request( new WP_REST_Request( 'GET', '/minn-admin/v1/' . $kind ) );
+		$d   = (array) $res->get_data();
+		foreach ( (array) ( $d[ 'post-types' === $kind ? 'types' : 'taxonomies' ] ?? array() ) as $r ) {
+			if ( $slug === ( $r['slug'] ?? '' ) ) {
+				return (string) ( $r['stamp'] ?? '' );
+			}
+		}
+		return '';
+	}
+}
+
 // On a network wp_delete_user() only takes an account off this site.
 $drop_user = function ( $id ) {
 	require_once ABSPATH . 'wp-admin/includes/user.php';
@@ -404,11 +419,12 @@ wp_set_current_user( $admin[0]->ID );
 	$slug  = 'minnv045t';
 	$types = (array) get_option( 'cptui_post_types', array() );
 	$was   = $types;
-	$types[ $slug ] = array( 'name' => $slug, 'label' => 'V045s', 'singular_label' => 'V045', 'description' => '', 'public' => 'false', 'show_ui' => 'false', 'show_in_rest' => 'true', 'has_archive' => 'false', 'hierarchical' => 'false', 'supports' => array( 'title' ), 'taxonomies' => array() );
+	$types[ $slug ] = array( 'name' => $slug, 'label' => 'V045s', 'singular_label' => 'V045', 'description' => '', 'public' => 'true', 'show_ui' => 'false', 'show_in_rest' => 'true', 'has_archive' => 'false', 'hierarchical' => 'false', 'supports' => array( 'title' ), 'taxonomies' => array() );
 	update_option( 'cptui_post_types', $types );
-	register_post_type( $slug, array( 'public' => false, 'show_ui' => false, 'show_in_rest' => true, 'label' => 'V045s', 'supports' => array( 'title' ) ) );
+	// Public, so Minn lists it (and a save can carry its stamp); Show UI off.
+	register_post_type( $slug, array( 'public' => true, 'show_ui' => false, 'show_in_rest' => true, 'label' => 'V045s', 'supports' => array( 'title' ) ) );
 	try {
-		list( $status, $d ) = $call( 'POST', "/minn-admin/v1/post-types/{$slug}", array( 'singular' => 'V045 renamed', 'plural' => 'V045s', 'public' => false, 'show_in_rest' => true, 'supports' => array( 'title' ), 'taxonomies' => array() ) );
+		list( $status, $d ) = $call( 'POST', "/minn-admin/v1/post-types/{$slug}", array( 'base' => minn_test_def_stamp( 'post-types', $slug ), 'singular' => 'V045 renamed', 'plural' => 'V045s', 'public' => true, 'show_in_rest' => true, 'supports' => array( 'title' ), 'taxonomies' => array() ) );
 		$now = (array) get_option( 'cptui_post_types', array() );
 		$check( '04-6 a CPT UI type edited in Minn keeps Show UI off', $status < 300 && 'false' === ( $now[ $slug ]['show_ui'] ?? '' ) && 'V045 renamed' === ( $now[ $slug ]['singular_label'] ?? '' ), $status . ' ' . wp_json_encode( $now[ $slug ] ?? null ) );
 	} finally {
