@@ -277,6 +277,53 @@ rest_get_server();
 	}
 } )();
 
+/*
+ * 05-L1: an update is offered only from the release asset of the version
+ * the manifest names, so a newer version number cannot carry an older
+ * genuine release (and its real hash) back onto a site.
+ */
+( function () use ( $check ) {
+	if ( ! class_exists( 'Minn_Admin_Updater' ) ) {
+		return;
+	}
+	$base   = 'https://github.com/austinginder/minn-admin/releases/download/';
+	$plugin = plugin_basename( MINN_ADMIN_DIR . 'minn-admin.php' );
+	$offer  = function ( $manifest ) use ( $plugin ) {
+		$u = new class() extends Minn_Admin_Updater {
+			public $manifest;
+			public function request( $remote_only = false ) {
+				return $this->manifest;
+			}
+		};
+		$u->manifest = $manifest;
+		$t           = new stdClass();
+		$t->response = array();
+		$t->checked  = array( $plugin => MINN_ADMIN_VERSION ); // update() offers nothing for an unchecked transient
+		$t           = $u->update( $t );
+		return isset( $t->response[ $plugin ] ) ? (string) $t->response[ $plugin ]->package : '';
+	};
+	$old = (object) array( 'version' => '9.9.9', 'download_url' => $base . 'v0.45.0/minn-admin.zip', 'sha256' => str_repeat( 'a', 64 ), 'tested' => '', 'requires_php' => '' );
+	$check( 'updater: a manifest naming 9.9.9 with an older release\'s zip offers nothing', '' === $offer( $old ) );
+	$new = (object) array( 'version' => '9.9.9', 'download_url' => $base . 'v9.9.9/minn-admin.zip', 'sha256' => str_repeat( 'a', 64 ), 'tested' => '', 'requires_php' => '' );
+	$check( 'updater: control: 9.9.9 from its own release is offered', $base . 'v9.9.9/minn-admin.zip' === $offer( $new ) );
+
+	add_filter( 'minn_admin_translation_locales', $locales = function () {
+		return array( 'de_DE' );
+	} );
+	$u = new Minn_Admin_Updater();
+	$m = new ReflectionMethod( $u, 'offer_translations' );
+	$m->setAccessible( true );
+	$packs = function ( $url ) use ( $u, $m ) {
+		$t               = new stdClass();
+		$t->translations = array();
+		$m->invoke( $u, $t, (object) array( 'translations' => array( (object) array( 'language' => 'de_DE', 'version' => '99.0.0', 'updated' => '2026-10-21 00:00:00', 'package' => $url, 'sha256' => 'bbbb' ) ) ) );
+		return wp_list_pluck( $t->translations, 'language' );
+	};
+	$check( 'updater: a pack named 99.0.0 served from an older release is not offered', ! $packs( $base . 'v0.45.0/minn-admin-de_DE.zip' ) );
+	$check( 'updater: control: the pack from its own release is offered', array( 'de_DE' ) === $packs( $base . 'v99.0.0/minn-admin-de_DE.zip' ) );
+	remove_filter( 'minn_admin_translation_locales', $locales );
+} )();
+
 wp_set_current_user( $admin );
 $failed = count( array_filter( $results, function ( $ok ) {
 	return ! $ok;

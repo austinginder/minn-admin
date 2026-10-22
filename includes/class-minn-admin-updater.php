@@ -214,6 +214,29 @@ class Minn_Admin_Updater {
 	}
 
 	/**
+	 * Whether a package URL is the release asset of the version beside it:
+	 * .../releases/download/v<version>/<file>. Every release names its
+	 * packages so, a carried-forward language pack included (its version is
+	 * the release it was built in). Without the tie, a manifest naming a
+	 * newer version could hand over an OLDER genuine release with its real
+	 * hash, and every other check would pass: a quiet downgrade to code
+	 * whose fixed security bugs are public.
+	 *
+	 * @param string $url     Package URL (already is_our_package_url()).
+	 * @param string $version Version the manifest names for it.
+	 * @param string $file    Expected asset file name.
+	 * @return bool
+	 */
+	public function is_release_asset( $url, $version, $file ) {
+		$version = (string) $version;
+		if ( ! preg_match( '/^\d+\.\d+\.\d+$/', $version ) ) {
+			return false;
+		}
+		$path = (string) wp_parse_url( (string) $url, PHP_URL_PATH );
+		return self::PACKAGE_PATHS[0] . 'v' . $version . '/' . $file === $path;
+	}
+
+	/**
 	 * The sha256 the manifest publishes for a given package URL.
 	 *
 	 * Three-state on purpose:
@@ -614,7 +637,8 @@ class Minn_Admin_Updater {
 		// URL has to be https on a GitHub host under this repo, and the
 		// manifest has to publish a hash to check the download against.
 		if ( $remote && ! empty( $remote->download_url )
-			&& ( ! $this->is_our_package_url( $remote->download_url ) || empty( $remote->sha256 ) ) ) {
+			&& ( ! $this->is_our_package_url( $remote->download_url ) || empty( $remote->sha256 )
+				|| ! $this->is_release_asset( $remote->download_url, $remote->version ?? '', 'minn-admin.zip' ) ) ) {
 			return $transient;
 		}
 		if ( $remote && isset( $remote->version ) && version_compare( $this->version, $remote->version, '<' ) ) {
@@ -673,7 +697,8 @@ class Minn_Admin_Updater {
 			}
 			// Same refusal as the plugin package: never OFFER something we
 			// would refuse to install.
-			if ( ! $this->is_our_package_url( $pack->package ) || empty( $pack->sha256 ) ) {
+			if ( ! $this->is_our_package_url( $pack->package ) || empty( $pack->sha256 )
+				|| ! $this->is_release_asset( $pack->package, $pack->version ?? '', 'minn-admin-' . $pack->language . '.zip' ) ) {
 				continue;
 			}
 			// Skip a pack the site already has, comparing VERSIONS.

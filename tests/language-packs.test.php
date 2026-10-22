@@ -20,7 +20,7 @@ $check   = function ( $label, $ok, $detail = '' ) use ( &$results ) {
 
 $updater = new Minn_Admin_Updater();
 
-$ok_url  = 'https://github.com/austinginder/minn-admin/releases/download/v0.30.0/minn-admin-de_DE.zip';
+$ok_url  = 'https://github.com/austinginder/minn-admin/releases/download/v99.0.0/minn-admin-de_DE.zip';
 $manifest = (object) array(
 	'version'      => '0.30.0',
 	'download_url' => 'https://github.com/austinginder/minn-admin/releases/download/v0.30.0/minn-admin.zip',
