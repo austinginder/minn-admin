@@ -14,8 +14,9 @@
 
 defined( 'ABSPATH' ) || exit;
 
-// Fluent Forms' captcha secrets and its CleanTalk and Mailchimp keys.
-minn_admin_secrets( 'fluentform', array( 'options' => array( '_fluentform_reCaptcha_details', '_fluentform_hCaptcha_details', '_fluentform_turnstile_details', '_fluentform_cleantalk_details', '_fluentform_mailchimp_details' ) ) );
+// Fluent Forms' captcha secrets, its CleanTalk and Mailchimp keys, its Stripe
+// keys and the key it encrypts them with (kept in the same database).
+minn_admin_secrets( 'fluentform', array( 'options' => array( '_fluentform_reCaptcha_details', '_fluentform_hCaptcha_details', '_fluentform_turnstile_details', '_fluentform_cleantalk_details', '_fluentform_mailchimp_details', 'fluentform_payment_settings_stripe', '_fluentform_encryption_key' ) ) );
 
 /**
  * Fluent Forms is loaded.

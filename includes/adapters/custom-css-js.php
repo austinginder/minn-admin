@@ -154,7 +154,8 @@ function minn_admin_ccj_can_activate( $post_id, $writing = true ) {
 
 /** WP_Error explaining why a snippet write was refused. */
 function minn_admin_ccj_code_error( $opts ) {
-	if ( class_exists( 'Minn_Admin' ) && ! Minn_Admin::code_edits_allowed() ) {
+	// The setting is the reason only for someone who holds the capability.
+	if ( class_exists( 'Minn_Admin' ) && ! Minn_Admin::code_edits_allowed() && current_user_can( 'unfiltered_html' ) ) {
 		return new WP_Error( 'forbidden', __( 'This site disallows editing code from the dashboard, so snippets that run in the page cannot be created or changed here.', 'minn-admin' ), array( 'status' => 403 ) );
 	}
 	$language = isset( $opts['language'] ) ? (string) $opts['language'] : 'css';

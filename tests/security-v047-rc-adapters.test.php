@@ -124,7 +124,7 @@ rest_get_server();
 		return;
 	}
 	$login = wp_login_url();
-	$body  = "<p>Someone has requested a password reset.</p>\n<a href=\"{$login}?action=rp&amp;key=AbCdEf123456&amp;login=root\">Reset</a>\n{$login}?action=rp&key=ZyXw987654&login=root\nhttps://shop.example/my-account/lost-password/?key=Wc0011223344&id=1\nhttps://shop.example/checkout/order-received/7/?key=wc_order_keepme";
+	$body  = "<p>Someone has requested a password reset.</p>\n<a href=\"{$login}?action=rp&amp;key=AbCdEf123456&amp;login=root\">Reset</a>\n{$login}?action=rp&key=ZyXw987654&login=root\nhttps://shop.example/my-account/lost-password/?key=Wc0011223344&id=1\nhttps://example.com/resetpass/?key=TmlKey556677&login=root\nhttps://shop.example/my-account/forgot/?key=Renamed889900&id=1\nhttps://shop.example/checkout/order-received/7/?key=wc_order_keepme";
 	if ( ! is_multisite() ) {
 		wp_set_current_user( $admin );
 		$check( 'mail logs: on a single site the administrator sees the body as logged', minn_admin_mail_mask_reset_keys( $body ) === $body );
@@ -149,7 +149,7 @@ rest_get_server();
 	try {
 		wp_set_current_user( (int) $sub );
 		$out = minn_admin_mail_mask_reset_keys( $body );
-		$check( 'mail logs: a site administrator on a network never sees a reset key', false === strpos( $out, 'AbCdEf123456' ) && false === strpos( $out, 'ZyXw987654' ) && false === strpos( $out, 'Wc0011223344' ), $out );
+		$check( 'mail logs: a site administrator on a network never sees a reset key', false === strpos( $out, 'AbCdEf123456' ) && false === strpos( $out, 'ZyXw987654' ) && false === strpos( $out, 'Wc0011223344' ) && false === strpos( $out, 'TmlKey556677' ) && false === strpos( $out, 'Renamed889900' ), $out );
 		$check( 'mail logs: control: other links keep their key', false !== strpos( $out, 'wc_order_keepme' ) );
 		// A resend to another address would carry the key out whole.
 		if ( function_exists( 'minn_admin_fluent_smtp_resend' ) ) {
@@ -179,7 +179,7 @@ rest_get_server();
  */
 ( function () use ( $check ) {
 	$open = array();
-	foreach ( array( 'fluent-smtp', 'wp-mail-logging', 'post-smtp', 'gravity-smtp', 'suremails', 'site-mailer' ) as $a ) {
+	foreach ( array( 'fluent-smtp', 'wp-mail-logging', 'post-smtp', 'gravity-smtp', 'suremails', 'site-mailer', 'wp-mail-smtp' ) as $a ) {
 		$src = (string) file_get_contents( MINN_ADMIN_DIR . "includes/adapters/{$a}.php" );
 		if ( preg_match_all( "/'message'\s*\]?\s*=\s*>?\s*(.+);?$/m", $src, $m ) ) {
 			foreach ( $m[1] as $rhs ) {
@@ -281,6 +281,13 @@ rest_get_server();
 		$check( 'code edits: taking inline CSS out (a delete) stays open when code edits are off', true === minn_admin_ccj_can_write_code( $ccj_inline, false ) );
 		$err = minn_admin_ccj_code_error( $ccj_inline );
 		$check( 'code edits: the refusal names the setting, not a capability', false !== strpos( $err->get_error_message(), 'disallows editing code' ), $err->get_error_message() );
+		$deny = function ( $caps, $cap ) {
+			return 'unfiltered_html' === $cap ? array( 'do_not_allow' ) : $caps;
+		};
+		add_filter( 'map_meta_cap', $deny, 99, 2 );
+		$err = minn_admin_ccj_code_error( $ccj_inline );
+		remove_filter( 'map_meta_cap', $deny, 99 );
+		$check( 'code edits: for someone without unfiltered_html the refusal names the capability', false === strpos( $err->get_error_message(), 'disallows editing code' ), $err->get_error_message() );
 	} else {
 		$skip( 'code edits: custom-css-js adapter not loaded' );
 	}

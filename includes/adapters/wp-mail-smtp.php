@@ -154,7 +154,7 @@ minn_admin_resource( 'wp-mail-smtp/events', function () {
 					'initiator'  => minn_admin_wp_mail_smtp_initiator( $r['initiator'] ),
 					'type'       => minn_admin_wp_mail_smtp_type( $r['event_type'] ),
 					'created_at' => $r['created_at'],
-					'message'    => (string) $r['content'],
+					'message'    => minn_admin_mail_mask_reset_keys( (string) $r['content'] ),
 				);
 			},
 			'fields' => array(

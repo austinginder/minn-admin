@@ -133,7 +133,10 @@ function minn_admin_mail_mask_reset_keys( $body ) {
 	return (string) preg_replace_callback(
 		'#https?://[^\s"\'<>]+#i',
 		function ( $m ) {
-			if ( ! preg_match( '#action(?:=|%3D)(?:rp|resetpass)\b|lost-?password|reset-?password#i', $m[0] ) ) {
+			// Core's action=rp and resetpass, a /resetpass/ or lost-password
+			// page (Theme My Login, WooCommerce), or any link carrying a key
+			// beside the account it is for (a renamed endpoint).
+			if ( ! preg_match( '#action(?:=|%3D)(?:rp|resetpass)\b|lost-?password|reset-?pass|[?&;](?:amp;)?(?:login|id)=#i', $m[0] ) ) {
 				return $m[0];
 			}
 			return (string) preg_replace( '#((?:[?&]|&amp;|&\#0?38;)key=)[^&\#\s"\'<>]+#i', '$1' . rawurlencode( __( '[hidden]', 'minn-admin' ) ), $m[0] );

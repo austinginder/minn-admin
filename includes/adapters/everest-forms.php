@@ -25,8 +25,8 @@
 
 defined( 'ABSPATH' ) || exit;
 
-// Everest Forms' reCAPTCHA secret.
-minn_admin_secrets( 'everest-forms', array( 'options' => array( 'everest_forms_recaptcha_v2_secret_key' ) ) );
+// Everest Forms' captcha secrets (reCAPTCHA v2, invisible and v3, hCaptcha, Turnstile).
+minn_admin_secrets( 'everest-forms', array( 'options' => array( 'everest_forms_recaptcha_v2_secret_key', 'everest_forms_recaptcha_v2_invisible_secret_key', 'everest_forms_recaptcha_v3_secret_key', 'everest_forms_recaptcha_hcaptcha_secret_key', 'everest_forms_recaptcha_turnstile_secret_key', 'everest_forms_recaptcha_site_secret' ) ) );
 
 function minn_admin_everest_active() {
 	if ( ! function_exists( 'evf' ) && ! defined( 'EVF_VERSION' ) ) {

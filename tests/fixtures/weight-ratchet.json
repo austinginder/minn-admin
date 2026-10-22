@@ -3,7 +3,7 @@
 	"adapter_kernel_lines": 65640,
 	"vendor_guards": 1774,
 	"hand_errors": 782,
-	"cap_checks": 402,
+	"cap_checks": 403,
 	"detect_helpers": 197,
 	"adapters": {
 		"acf-field-groups": 1183,

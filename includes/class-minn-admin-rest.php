@@ -8934,8 +8934,13 @@ Please click the following link to confirm the invite:
 		$force = function ( $enabled, $object = null, $email_obj = null ) use ( $found ) {
 			return ( $email_obj === $found ) ? true : $enabled;
 		};
+		// The refund email renames itself for a partial refund while it sends,
+		// so it is asked under both names.
+		$forced = 'customer_refunded_order' === $found->id ? array( 'customer_refunded_order', 'customer_partially_refunded_order' ) : array( $found->id );
 		if ( current_user_can( 'manage_woocommerce' ) ) {
-			add_filter( 'woocommerce_email_enabled_' . $found->id, $force, 100, 3 );
+			foreach ( $forced as $hook_id ) {
+				add_filter( 'woocommerce_email_enabled_' . $hook_id, $force, 100, 3 );
+			}
 		}
 		// The new order email goes out once per order unless this filter
 		// allows it again, as WooCommerce's own "Resend new order
@@ -8980,7 +8985,9 @@ Please click the following link to confirm the invite:
 		} finally {
 			remove_action( 'woocommerce_email_sent', $listen, 10 );
 			remove_filter( 'woocommerce_new_order_email_allows_resend', $resend );
-			remove_filter( 'woocommerce_email_enabled_' . $found->id, $force, 100 );
+			foreach ( $forced as $hook_id ) {
+				remove_filter( 'woocommerce_email_enabled_' . $hook_id, $force, 100 );
+			}
 		}
 		if ( $thrown ) {
 			return new WP_Error( 'send_failed', $thrown->getMessage(), array( 'status' => 500 ) );

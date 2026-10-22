@@ -178,6 +178,24 @@ rest_get_server();
 			list( $st, $d ) = $send( $admin, 'customer_refunded_order' );
 			$subject = (string) ( $mail[0]['subject'] ?? '' );
 			$check( 'order emails: a partly refunded order\'s refund email says partially refunded', 200 === $st && false !== stripos( $subject, 'partial' ), $st . ' "' . $subject . '" ' . wp_json_encode( $d ) );
+			// Switched off, a manager still sends it (the email renames itself
+			// for a partial refund while it sends).
+			$off_partial = '__return_false';
+			$hooked      = function () {
+				global $wp_filter;
+				$n = 0;
+				foreach ( array( 'woocommerce_email_enabled_customer_refunded_order', 'woocommerce_email_enabled_customer_partially_refunded_order' ) as $h ) {
+					$n += isset( $wp_filter[ $h ] ) ? count( $wp_filter[ $h ]->callbacks, COUNT_RECURSIVE ) : 0;
+				}
+				return $n;
+			};
+			add_filter( 'woocommerce_email_enabled_customer_partially_refunded_order', $off_partial, 10 );
+			$before = $hooked();
+			list( $st, $d ) = $send( $admin, 'customer_refunded_order' );
+			$after = $hooked();
+			remove_filter( 'woocommerce_email_enabled_customer_partially_refunded_order', $off_partial, 10 );
+			$check( 'order emails: a switched-off partial refund email is still sent for a manager', 200 === $st && 1 === count( $mail ), $st . ' ' . wp_json_encode( $d ) );
+			$check( 'order emails: and the force is taken off both names afterwards', $before === $after, "{$before} before, {$after} after" );
 		}
 	} finally {
 		$clean();

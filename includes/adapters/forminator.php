@@ -26,8 +26,8 @@
 
 defined( 'ABSPATH' ) || exit;
 
-// Forminator's captcha secrets and its PayPal secret.
-minn_admin_secrets( 'forminator', array( 'options' => array( 'forminator_*captcha_secret', 'forminator_hcaptcha_secret', 'forminator_turnstile_secret', 'forminator_paypal_secret' ) ) );
+// Forminator's captcha secrets and its PayPal and Stripe configurations.
+minn_admin_secrets( 'forminator', array( 'options' => array( 'forminator_*captcha_secret', 'forminator_hcaptcha_secret', 'forminator_turnstile_secret', 'forminator_paypal_configuration', 'forminator_stripe_configuration' ) ) );
 
 function minn_admin_forminator_active() {
 	return class_exists( 'Forminator_API' ) && Minn_Admin_Kernel_SQL::exists( 'frmt_form_entry' );
