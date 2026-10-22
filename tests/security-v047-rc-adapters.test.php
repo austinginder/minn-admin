@@ -146,6 +146,67 @@ rest_get_server();
 	}
 } )();
 
+/*
+ * 08-L3, 09-L1, 04-L1: credential stores no adapter declared print redacted
+ * in the database browser. A row that is not there yet is made with a fake
+ * key and removed; a row that is there is read, never written.
+ */
+( function () use ( $check, $skip, $once, $admin ) {
+	global $wpdb;
+	wp_set_current_user( $admin );
+	if ( ! method_exists( 'Minn_Admin_REST', 'can_read_system' ) || ! Minn_Admin_REST::can_read_system() ) {
+		$skip( 'credential rows: the database browser is closed to this user here' );
+		return;
+	}
+	$fake  = 'minnRCkey' . wp_rand( 100000, 999999 ) . 'Qz7Lw9Pa';
+	$rows  = array( 'backwpup_cfg_jobrunauthkey', 'backwpup_jobs', 'wpvivid_upload_setting', 'srfm_security_settings_options', 'srfm_options', 'frm_options', 'plausible_analytics_settings', 'ss_podcasting_podmotor_account_api_token', 'powerpress_creds', 'powerpress_general', 'wp_2fa_secret_key' );
+	$made  = array();
+	$meta  = 0;
+	$clean = $once( function () use ( &$made, &$meta, $admin ) {
+		foreach ( $made as $name ) {
+			delete_option( $name );
+		}
+		if ( $meta ) {
+			delete_user_meta( $admin, 'wp_2fa_totp_key' );
+		}
+	} );
+	$cell = function ( $table, $fcol, $fq, $vcol ) {
+		$r = new WP_REST_Request( 'GET', '/minn-admin/v1/db/rows' );
+		$r->set_param( 'table', $table );
+		$r->set_param( 'fcol', $fcol );
+		$r->set_param( 'fq', $fq );
+		$data = rest_do_request( $r )->get_data();
+		$cols = wp_list_pluck( (array) ( $data['columns'] ?? array() ), 'name' );
+		foreach ( (array) ( $data['rows'] ?? array() ) as $row ) {
+			if ( $fq === $row[ array_search( $fcol, $cols, true ) ] ) {
+				return $row[ array_search( $vcol, $cols, true ) ];
+			}
+		}
+		return 'missing';
+	};
+	try {
+		$open = array();
+		foreach ( $rows as $name ) {
+			if ( false === get_option( $name ) ) {
+				add_option( $name, $fake, '', false );
+				$made[] = $name;
+			}
+			$c = $cell( $wpdb->options, 'option_name', $name, 'option_value' );
+			if ( ! ( is_array( $c ) && ! empty( $c['redacted'] ) ) ) {
+				$open[] = $name . ( 'missing' === $c ? ' (missing)' : '' );
+			}
+		}
+		$check( 'credential rows: every newly declared row prints redacted in the database browser', ! $open, implode( ', ', $open ) );
+		if ( ! get_user_meta( $admin, 'wp_2fa_totp_key', true ) ) {
+			$meta = add_user_meta( $admin, 'wp_2fa_totp_key', $fake, true ) ? 1 : 0;
+		}
+		$c = $cell( $wpdb->usermeta, 'meta_key', 'wp_2fa_totp_key', 'meta_value' );
+		$check( 'credential rows: WP 2FA\'s authenticator seed prints redacted', is_array( $c ) && ! empty( $c['redacted'] ), is_array( $c ) ? 'not redacted' : (string) $c );
+	} finally {
+		$clean();
+	}
+} )();
+
 wp_set_current_user( $admin );
 $failed = count( array_filter( $results, function ( $ok ) {
 	return ! $ok;

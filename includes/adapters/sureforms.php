@@ -19,6 +19,9 @@
 
 defined( 'ABSPATH' ) || exit;
 
+// SureForms' captcha secrets, and its Stripe secret keys and webhook secrets.
+minn_admin_secrets( 'sureforms', array( 'options' => array( 'srfm_security_settings_options', 'srfm_options' ) ) );
+
 function minn_admin_sureforms_active() {
 	return defined( 'SRFM_VER' ) || class_exists( 'SRFM\\Inc\\Database\\Tables\\Entries' );
 }

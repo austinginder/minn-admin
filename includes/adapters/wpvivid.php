@@ -21,6 +21,9 @@
 
 defined( 'ABSPATH' ) || exit;
 
+// WPvivid's remote storage keys and FTP/SFTP passwords, base64 only.
+minn_admin_secrets( 'wpvivid-backuprestore', array( 'options' => array( 'wpvivid_upload_setting' ) ) );
+
 function minn_admin_wpvivid_active() {
 	// WPvivid keeps its archives in one network-shared wp-content/wpvividbackups
 	// directory and registers its admin under network_admin_menu on multisite,

@@ -1187,7 +1187,7 @@ class Minn_Admin_DB {
 		array( '', 'elementor_connect_common_data' ),
 	);
 
-	const SECRET_USERMETA_KEYS = array( 'session_tokens', '_application_passwords', '_two_factor_totp_key', '_two_factor_backup_codes', 'one_time_login_token', 'captaincore_login_token', 'sucuriscan_topt_secret_key', 'sucuriscan_topt_backup_codes', '_two_factor_email_token', 'tfa_priv_key_64', 'simba_tfa_emergency_codes_64', 'tfa_trusted_devices' );
+	const SECRET_USERMETA_KEYS = array( 'session_tokens', '_application_passwords', '_two_factor_totp_key', '_two_factor_backup_codes', 'one_time_login_token', 'captaincore_login_token', 'sucuriscan_topt_secret_key', 'sucuriscan_topt_backup_codes', '_two_factor_email_token', 'tfa_priv_key_64', 'simba_tfa_emergency_codes_64', 'tfa_trusted_devices', 'wp_2fa_totp_key', 'wp_2fa_totp_pending_key' );
 
 	/**
 	 * Option and network option rows redacted whole: core's keys and salts,
@@ -1225,7 +1225,7 @@ class Minn_Admin_DB {
 	 * instead (minn_admin_secrets(), includes/kernel/class-minn-admin-kernel-secrets.php);
 	 * this list is for the plugins no adapter covers.
 	 */
-	const SECRET_OPTION_KEYS = array( 'auth_key', 'secure_auth_key', 'logged_in_key', 'nonce_key', 'auth_salt', 'secure_auth_salt', 'logged_in_salt', 'nonce_salt', 'secret_key', 'woocommerce_helper_data', 'wp_mail_smtp', 'wp_mail_smtp_mail_key', '_transient_wp_mail_smtp_connect_token', 'aio_wp_security_configs', 'postman_options', 'postman_auth_token', 'fs_accounts', 'wpmudev_apikey', 'wp_smush_api_auth', '_site_transient_update_plugins', '_site_transient_update_themes', 'gf_telemetry_data', '_site_transient_wp_rocket_update_data', 'fs_api_cache', 'fs_dbg_api_cache', 'wpforms_settings', 'wpforms_crypto_secret_key', 'wpforms_square_connections', 'frm-usage-uuid', 'iawp_salt', 'iawp_request_payload_salt', 'surecart_recaptcha_secret_key', 'surecart_registered_webhook', 'surecart_previous_webhook', 'fluentmail-settings', '_fluent_smtp_notify_settings', 'postman_office365_oauth', 'post_smtp_mobile_app_connection', 'suremails_connections', 'gosmtp_options', 'swpsmtp_options', 'swpsmtp_enc_key', 'site_mailer_client_secret', 'site_mailer_access_token', 'site_mailer_refresh_token', 'site_mailer_user_access_token', 'site_mailer_unsubscribe_encryption_data' );
+	const SECRET_OPTION_KEYS = array( 'auth_key', 'secure_auth_key', 'logged_in_key', 'nonce_key', 'auth_salt', 'secure_auth_salt', 'logged_in_salt', 'nonce_salt', 'secret_key', 'woocommerce_helper_data', 'wp_mail_smtp', 'wp_mail_smtp_mail_key', '_transient_wp_mail_smtp_connect_token', 'aio_wp_security_configs', 'postman_options', 'postman_auth_token', 'fs_accounts', 'wpmudev_apikey', 'wp_smush_api_auth', '_site_transient_update_plugins', '_site_transient_update_themes', 'gf_telemetry_data', '_site_transient_wp_rocket_update_data', 'fs_api_cache', 'fs_dbg_api_cache', 'wpforms_settings', 'wpforms_crypto_secret_key', 'wpforms_square_connections', 'frm-usage-uuid', 'iawp_salt', 'iawp_request_payload_salt', 'surecart_recaptcha_secret_key', 'surecart_registered_webhook', 'surecart_previous_webhook', 'fluentmail-settings', '_fluent_smtp_notify_settings', 'postman_office365_oauth', 'post_smtp_mobile_app_connection', 'suremails_connections', 'gosmtp_options', 'swpsmtp_options', 'swpsmtp_enc_key', 'site_mailer_client_secret', 'site_mailer_access_token', 'site_mailer_refresh_token', 'site_mailer_user_access_token', 'site_mailer_unsubscribe_encryption_data', 'wp_2fa_secret_key' );
 
 	/**
 	 * Whether a whole COLUMN can hold a credential on some row, so it must

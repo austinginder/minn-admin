@@ -21,6 +21,9 @@
 
 defined( 'ABSPATH' ) || exit;
 
+// The Castos hosting API token (publishes and deletes episodes).
+minn_admin_secrets( 'seriously-simple-podcasting', array( 'options' => array( 'ss_podcasting_podmotor_account_api_token' ) ) );
+
 function minn_admin_ssp_active() {
 	return defined( 'SSP_VERSION' )
 		&& function_exists( 'ssp_app' )

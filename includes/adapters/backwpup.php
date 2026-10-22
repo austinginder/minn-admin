@@ -20,6 +20,11 @@
 
 defined( 'ABSPATH' ) || exit;
 
+// BackWPup's job-run key (starts a job from a URL), archive encryption key,
+// HTTP auth and EasyCron keys, and every job's encrypted destination
+// credentials. Declared whether or not BackWPup is active.
+minn_admin_secrets( 'backwpup', array( 'options' => array( 'backwpup_cfg_jobrunauthkey', 'backwpup_cfg_encryptionkey', 'backwpup_cfg_httpauthpassword', 'backwpup_cfg_easycronapikey', 'backwpup_cfg_dropboxappsecret', 'backwpup_cfg_dropboxsandboxappsecret', 'backwpup_jobs' ) ) );
+
 function minn_admin_backwpup_active() {
 	// BackWPup keeps its job registry in the `backwpup_jobs` SITE option and
 	// writes archives to one network-shared folder, so on multisite the jobs
