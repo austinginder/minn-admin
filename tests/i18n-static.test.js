@@ -347,7 +347,7 @@ const PHP_PROSE_ALLOW = new Set( [
 	// name them): logged for adapter authors, never shown to a person, and
 	// composed while a declaration registers, which can be before
 	// translations may load.
-	const KERNEL_DIAG = /\$why\s*=|self::(wrong|refused)\(|\$at\(\s*'|^\s*array\(\s*'the (resource|endpoint)'/;
+	const KERNEL_DIAG = /\$why\s*=|self::(wrong|refused|problem)\(|\$at\(\s*'|^\s*array\(\s*'the (resource|endpoint)'|\berror_log\(|new LogicException\(/;
 	const bad = [];
 	for ( const f of walkPhp( path.join( ROOT, 'includes' ) ).concat( [ path.join( ROOT, 'minn-admin.php' ) ] ) ) {
 		const rel = path.relative( ROOT, f );
@@ -369,7 +369,8 @@ const PHP_PROSE_ALLOW = new Set( [
 				const v = m[ 1 ] != null ? m[ 1 ] : m[ 2 ];
 				if ( ! prose( v ) || skip( v ) ) continue;
 				if ( 'includes/class-minn-admin-surfaces.php' === rel && DIAG.test( v ) ) continue;
-				if ( 'includes/kernel/class-minn-admin-kernel.php' === rel && ( KERNEL_DIAG.test( line ) || /_problem$/.test( fn ) ) ) continue;
+				// The tiers (fields, settings, credentials) refuse a declaration the same way: unreadable() names why.
+				if ( /^includes\/kernel\/class-minn-admin-kernel(-[a-z]+)?\.php$/.test( rel ) && ( KERNEL_DIAG.test( line ) || /_problem$|^unreadable$/.test( fn ) ) ) continue;
 				bad.push( `${ rel }:${ i + 1 }  '${ v.slice( 0, 60 ) }'` );
 			}
 		}
