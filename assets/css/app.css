@@ -1043,7 +1043,7 @@ button.minn-look-row:focus-visible { outline: 2px solid var(--accent); outline-o
 .minn-stat-value { font-size: 28px; font-weight: 800; letter-spacing: -1px; margin-top: 8px; }
 .minn-stat-delta { font-size: 13px; font-weight: 600; margin-top: 6px; color: var(--text3); }
 .minn-stat-delta.up { color: var(--green-text); }
-.minn-stat-delta.warn { color: var(--amber); }
+.minn-stat-delta.warn { color: var(--amber-text); }
 .minn-stat-delta.down { color: var(--red-text); }
 
 /* Store needs-attention strip (Overview, WooCommerce only) */
