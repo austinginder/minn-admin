@@ -85,6 +85,12 @@ function minn_admin_wpforms_emails_payload( $data ) {
 	$settings      = (array) ( $data['settings'] ?? array() );
 	$notifications = array();
 	foreach ( (array) ( $settings['notifications'] ?? array() ) as $key => $n ) {
+		// WPForms only ever makes integer ids. Any other key came from a crafted
+		// builder save (it builds the form from posted input names) and is not
+		// served: the page puts keys into markup.
+		if ( ! ctype_digit( (string) $key ) ) {
+			continue;
+		}
 		$n               = (array) $n;
 		$notifications[] = array(
 			'key'            => (string) $key,
@@ -101,6 +107,9 @@ function minn_admin_wpforms_emails_payload( $data ) {
 	}
 	$confirmations = array();
 	foreach ( (array) ( $settings['confirmations'] ?? array() ) as $key => $c ) {
+		if ( ! ctype_digit( (string) $key ) ) {
+			continue;
+		}
 		$c               = (array) $c;
 		$type            = in_array( $c['type'] ?? '', array( 'message', 'page', 'redirect' ), true ) ? $c['type'] : 'message';
 		$confirmations[] = array(
@@ -173,7 +182,7 @@ add_action( 'rest_api_init', function () {
 			}
 			foreach ( (array) ( $body['notifications'] ?? array() ) as $in ) {
 				$key = $text( $in, 'key' );
-				if ( ! isset( $s['notifications'][ $key ] ) ) {
+				if ( ! ctype_digit( $key ) || ! isset( $s['notifications'][ $key ] ) ) {
 					return new WP_Error( 'minn_wpfe_unknown', __( 'That notification is not on this form.', 'minn-admin' ), array( 'status' => 400 ) );
 				}
 				foreach ( array( 'notification_name' => 'name', 'email' => 'email', 'carboncopy' => 'carboncopy', 'subject' => 'subject', 'sender_name' => 'sender_name', 'sender_address' => 'sender_address', 'replyto' => 'replyto', 'message' => 'message' ) as $stored => $field ) {
@@ -188,7 +197,7 @@ add_action( 'rest_api_init', function () {
 			}
 			foreach ( (array) ( $body['confirmations'] ?? array() ) as $in ) {
 				$key = $text( $in, 'key' );
-				if ( ! isset( $s['confirmations'][ $key ] ) ) {
+				if ( ! ctype_digit( $key ) || ! isset( $s['confirmations'][ $key ] ) ) {
 					return new WP_Error( 'minn_wpfe_unknown', __( 'That confirmation is not on this form.', 'minn-admin' ), array( 'status' => 400 ) );
 				}
 				// The page sends a changed confirmation with only its changed

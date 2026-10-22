@@ -4370,7 +4370,7 @@
 		const collapsed = !! navCollapsedMap()[ key ];
 		return `
 			<div class="minn-nav-group" id="minn-navgrp-${ key }"${ items.length ? '' : ' hidden' }>
-				<button class="minn-nav-label${ later ? ' later' : '' }${ collapsed ? ' collapsed' : '' }" data-navgroup="${ key }" type="button" aria-expanded="${ ! collapsed }">${ esc( label ) }${ icon( 'chev' ) }</button>
+				<button class="minn-nav-label${ later ? ' later' : '' }${ collapsed ? ' collapsed' : '' }" data-navgroup="${ esc( key ) }" type="button" aria-expanded="${ ! collapsed }">${ esc( label ) }${ icon( 'chev' ) }</button>
 				<div id="minn-nav-${ key }"${ collapsed ? ' hidden' : '' }>${ items.map( navBtnHtml ).join( '' ) }</div>
 			</div>`;
 	}
@@ -10564,7 +10564,7 @@
 		// order's stored values for any field whose input is absent.
 		// Themed combobox shell; options + seed bind via bindAutocomplete.
 		const orderCombo = ( key, label ) => `
-			<div class="minn-ac" data-oc="${ key }"><input class="minn-input minn-ac-input" placeholder="${ esc( label ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="${ esc( label ) }"><div class="minn-ac-panel" hidden></div></div>`;
+			<div class="minn-ac" data-oc="${ esc( key ) }"><input class="minn-input minn-ac-input" placeholder="${ esc( label ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="${ esc( label ) }"><div class="minn-ac-panel" hidden></div></div>`;
 		const fmtAddr = ( a ) => {
 			const lines = [
 				[ a.first_name, a.last_name ].filter( Boolean ).join( ' ' ),
@@ -10584,10 +10584,10 @@
 		const paidChip = o.date_paid
 			? `<span class="minn-status publish">${ __( 'Paid' ) }</span>`
 			: `<span class="minn-status private">${ __( 'Pending' ) }</span>`;
-		const pencil = ( key, label ) => ( canEdit ? `<button type="button" class="minn-order-editpen" data-oedit="${ key }" aria-label="${ esc( label ) }">${ icon( 'pencil' ) }</button>` : '' );
+		const pencil = ( key, label ) => ( canEdit ? `<button type="button" class="minn-order-editpen" data-oedit="${ esc( key ) }" aria-label="${ esc( label ) }">${ icon( 'pencil' ) }</button>` : '' );
 		// A tag, not a second pencil: two identical pencils in one card head
 		// say "edit something" twice and leave the user to guess which.
-		const tagBtn = ( key, label ) => ( canEdit ? `<button type="button" class="minn-order-editpen" data-oedit="${ key }" aria-label="${ esc( label ) }">${ icon( 'tag' ) }</button>` : '' );
+		const tagBtn = ( key, label ) => ( canEdit ? `<button type="button" class="minn-order-editpen" data-oedit="${ esc( key ) }" aria-label="${ esc( label ) }">${ icon( 'tag' ) }</button>` : '' );
 		return `
 					<div class="minn-order-body">
 						${ trashed ? `
@@ -12656,8 +12656,8 @@
 		// Its own attribute, not the order surface's data-oedit: bindOrderDetail
 		// queries [data-oedit] across the whole document, so sharing the name
 		// would let an order host bind pencils that are not its own.
-		const pencil = ( key, label ) => ( canEdit ? `<button type="button" class="minn-order-editpen" data-soedit="${ key }" aria-label="${ esc( label ) }">${ icon( 'pencil' ) }</button>` : '' );
-		const tagBtn = ( key, label ) => ( canEdit ? `<button type="button" class="minn-order-editpen" data-soedit="${ key }" aria-label="${ esc( label ) }">${ icon( 'tag' ) }</button>` : '' );
+		const pencil = ( key, label ) => ( canEdit ? `<button type="button" class="minn-order-editpen" data-soedit="${ esc( key ) }" aria-label="${ esc( label ) }">${ icon( 'pencil' ) }</button>` : '' );
+		const tagBtn = ( key, label ) => ( canEdit ? `<button type="button" class="minn-order-editpen" data-soedit="${ esc( key ) }" aria-label="${ esc( label ) }">${ icon( 'tag' ) }</button>` : '' );
 		// An order reference stays navigation, as it is everywhere else; the eye
 		// beside it opens the quick view, so glancing at a renewal does not cost
 		// the subscription you are reading. Siblings, never nested: a button
@@ -17042,7 +17042,7 @@
 		const b = c.billing || {};
 		const sh = c.shipping || {};
 		const canEdit = canEditCustomer( c );
-		const pencil = ( key, label ) => ( canEdit ? `<button type="button" class="minn-order-editpen" data-cedit="${ key }" aria-label="${ esc( label ) }" title="${ esc( label ) }">${ icon( 'pencil' ) }</button>` : '' );
+		const pencil = ( key, label ) => ( canEdit ? `<button type="button" class="minn-order-editpen" data-cedit="${ esc( key ) }" aria-label="${ esc( label ) }" title="${ esc( label ) }">${ icon( 'pencil' ) }</button>` : '' );
 		const st = m.stats;
 		const ords = m.orders;
 		const last = ords && ords.items && ords.items[ 0 ];
@@ -17128,7 +17128,7 @@
 	}
 
 	function customerAddressFormHtml( kind, a ) {
-		const f = ( key, label, attrs ) => `<div><div class="minn-field-label">${ esc( label ) }</div><input class="minn-input" data-caf="${ key }" value="${ esc( a[ key ] || '' ) }"${ attrs || '' }></div>`;
+		const f = ( key, label, attrs ) => `<div><div class="minn-field-label">${ esc( label ) }</div><input class="minn-input" data-caf="${ esc( key ) }" value="${ esc( a[ key ] || '' ) }"${ attrs || '' }></div>`;
 		return `
 			<div class="minn-order-fields">
 				${ kind === 'shipping' ? `<div><button type="button" class="minn-btn-soft" data-ccopy>${ icon( 'copy' ) } ${ esc( __( 'Same as billing address' ) ) }</button></div>` : '' }
@@ -31494,7 +31494,7 @@
 		const text = ( key, label, value, mono ) => `
 			<div>
 				<label class="minn-field-label" for="${ fid( key ) }">${ label }</label>
-				<input class="minn-input${ mono ? ' mono' : '' }" id="${ fid( key ) }" data-key="${ key }" value="${ esc( value == null ? '' : value ) }">
+				<input class="minn-input${ mono ? ' mono' : '' }" id="${ fid( key ) }" data-key="${ esc( key ) }" value="${ esc( value == null ? '' : value ) }">
 			</div>`;
 		const toggle = ( t ) => `
 			<div class="minn-toggle-row">
@@ -31510,7 +31510,7 @@
 		const permaText = ( key, label, value, mono ) => `
 			<div>
 				<label class="minn-field-label" for="${ fid( key ) }">${ label }</label>
-				<input class="minn-input${ mono ? ' mono' : '' }" id="${ fid( key ) }" data-permakey="${ key }" value="${ esc( value == null ? '' : value ) }">
+				<input class="minn-input${ mono ? ' mono' : '' }" id="${ fid( key ) }" data-permakey="${ esc( key ) }" value="${ esc( value == null ? '' : value ) }">
 			</div>`;
 		// Strict combobox variant of the permalink fields — the input carries
 		// data-permakey so the wp/v2/settings sweep never picks it up, and the
@@ -38062,7 +38062,7 @@
 					const has = cached && cached[ key ] && cached[ key ].length;
 					const hasFuture = has && cached[ key ].some( ( x ) => x.status === 'future' );
 					// Tip text rides data-dptip (set below) — styled float tip, not title=.
-					days += `<button type="button" class="minn-dp-day${ d.getMonth() !== view.getMonth() ? ' out' : '' }${ key === selKey ? ' sel' : '' }${ key === todayKey ? ' today' : '' }${ has ? ' has-posts' : '' }${ hasFuture ? ' has-scheduled' : '' }" data-day="${ key }">${ d.getDate() }</button>`;
+					days += `<button type="button" class="minn-dp-day${ d.getMonth() !== view.getMonth() ? ' out' : '' }${ key === selKey ? ' sel' : '' }${ key === todayKey ? ' today' : '' }${ has ? ' has-posts' : '' }${ hasFuture ? ' has-scheduled' : '' }" data-day="${ esc( key ) }">${ d.getDate() }</button>`;
 					d.setDate( d.getDate() + 1 );
 				}
 				dpPop.innerHTML = `
@@ -47306,7 +47306,7 @@
 			const key = UPLOAD_KEY + ( ++uploadSeq );
 			const blobUrl = URL.createObjectURL( file );
 			document.execCommand( 'insertHTML', false,
-				`<figure class="wp-block-image" data-minn-upload="${ key }"><img src="${ blobUrl }" alt=""><figcaption class="wp-element-caption"></figcaption></figure><p><br></p>` );
+				`<figure class="wp-block-image" data-minn-upload="${ esc( key ) }"><img src="${ blobUrl }" alt=""><figcaption class="wp-element-caption"></figcaption></figure><p><br></p>` );
 			scheduleAutosave();
 			uploadImageFile( file ).then( ( it ) => {
 				URL.revokeObjectURL( blobUrl );
@@ -56047,21 +56047,21 @@
 		const val = ( k ) => ( f[ k ] == null ? '' : f[ k ] );
 		const inp = ( key, label, o = {} ) => {
 			const control = o.area
-				? `<textarea class="minn-input${ o.mono ? ' mono' : '' }" rows="${ o.rows || 2 }" data-gf="${ key }" placeholder="${ esc( o.ph || '' ) }">${ esc( val( key ) ) }</textarea>`
-				: `<input class="minn-input${ o.mono ? ' mono' : '' }" data-gf="${ key }" value="${ esc( val( key ) ) }" placeholder="${ esc( o.ph || '' ) }"${ o.num ? ' inputmode="decimal"' : '' }>`;
+				? `<textarea class="minn-input${ o.mono ? ' mono' : '' }" rows="${ o.rows || 2 }" data-gf="${ esc( key ) }" placeholder="${ esc( o.ph || '' ) }">${ esc( val( key ) ) }</textarea>`
+				: `<input class="minn-input${ o.mono ? ' mono' : '' }" data-gf="${ esc( key ) }" value="${ esc( val( key ) ) }" placeholder="${ esc( o.ph || '' ) }"${ o.num ? ' inputmode="decimal"' : '' }>`;
 			// Settings that take merge tags get the picker (the notification page's).
 			const field = o.tags
-				? `<span class="minn-gfn-field has-tags${ o.area ? ' is-area' : '' }">${ control }<button type="button" class="minn-gfn-tagbtn" data-gfbtags="${ key }" title="${ esc( __( 'Insert a merge tag' ) ) }" aria-label="${ esc( __( 'Insert a merge tag' ) ) }">{ }</button></span>`
+				? `<span class="minn-gfn-field has-tags${ o.area ? ' is-area' : '' }">${ control }<button type="button" class="minn-gfn-tagbtn" data-gfbtags="${ esc( key ) }" title="${ esc( __( 'Insert a merge tag' ) ) }" aria-label="${ esc( __( 'Insert a merge tag' ) ) }">{ }</button></span>`
 				: control;
 			return `<label class="minn-gfb-set"><span class="minn-field-label">${ esc( label ) }</span>${ field }${ o.help ? `<span class="minn-toggle-desc">${ esc( o.help ) }</span>` : '' }</label>`;
 		};
 		const sw = ( key, label ) => `<div class="minn-gfb-set minn-fgb-set-inline"><span class="minn-field-label">${ esc( label ) }</span>
-			<button type="button" class="minn-switch${ f[ key ] ? ' on' : '' }" data-gfsw="${ key }" role="switch" aria-checked="${ !! f[ key ] }" aria-label="${ esc( label ) }"><span class="minn-switch-knob"></span></button></div>`;
+			<button type="button" class="minn-switch${ f[ key ] ? ' on' : '' }" data-gfsw="${ esc( key ) }" role="switch" aria-checked="${ !! f[ key ] }" aria-label="${ esc( label ) }"><span class="minn-switch-knob"></span></button></div>`;
 		const combo = ( key, label ) => {
 			const list = g.enums[ key ] || [];
 			const cur = list.find( ( p ) => p[ 0 ] === String( f[ key ] ) );
 			return `<div class="minn-gfb-set"><span class="minn-field-label">${ esc( label ) }</span>
-				<div class="minn-ac" data-gfcombo="${ key }"><input class="minn-input minn-ac-input" value="${ esc( cur ? cur[ 1 ] : String( val( key ) ) ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="${ esc( label ) }"><div class="minn-ac-panel" hidden></div></div></div>`;
+				<div class="minn-ac" data-gfcombo="${ esc( key ) }"><input class="minn-input minn-ac-input" value="${ esc( cur ? cur[ 1 ] : String( val( key ) ) ) }" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-label="${ esc( label ) }"><div class="minn-ac-panel" hidden></div></div></div>`;
 		};
 		const pair = ( a, b ) => `<div class="minn-gfb-pair">${ a }${ b }</div>`;
 		const span = Number( f.span ) || 12;
@@ -56900,11 +56900,11 @@
 		const g = gfnCur();
 		const err = g.err && g.err.field === key ? g.err.message : '';
 		const control = o.area
-			? `<textarea class="minn-input${ o.mono ? ' mono' : '' }" rows="${ o.rows || 8 }" data-gfn="${ key }" placeholder="${ esc( o.ph || '' ) }">${ esc( val ) }</textarea>`
-			: `<input class="minn-input${ o.mono ? ' mono' : '' }" data-gfn="${ key }" value="${ esc( val ) }" placeholder="${ esc( o.ph || '' ) }">`;
-		return `<label class="minn-gfn-set${ err ? ' minn-gfn-err' : '' }" data-gfnset="${ key }">
+			? `<textarea class="minn-input${ o.mono ? ' mono' : '' }" rows="${ o.rows || 8 }" data-gfn="${ esc( key ) }" placeholder="${ esc( o.ph || '' ) }">${ esc( val ) }</textarea>`
+			: `<input class="minn-input${ o.mono ? ' mono' : '' }" data-gfn="${ esc( key ) }" value="${ esc( val ) }" placeholder="${ esc( o.ph || '' ) }">`;
+		return `<label class="minn-gfn-set${ err ? ' minn-gfn-err' : '' }" data-gfnset="${ esc( key ) }">
 			<span class="minn-field-label">${ esc( label ) }</span>
-			<span class="minn-gfn-field${ o.tags ? ' has-tags' : '' }${ o.area ? ' is-area' : '' }">${ control }${ o.tags ? `<button type="button" class="minn-gfn-tagbtn" data-gfntags="${ key }" title="${ esc( __( 'Insert a merge tag' ) ) }" aria-label="${ esc( __( 'Insert a merge tag' ) ) }">{ }</button>` : '' }</span>
+			<span class="minn-gfn-field${ o.tags ? ' has-tags' : '' }${ o.area ? ' is-area' : '' }">${ control }${ o.tags ? `<button type="button" class="minn-gfn-tagbtn" data-gfntags="${ esc( key ) }" title="${ esc( __( 'Insert a merge tag' ) ) }" aria-label="${ esc( __( 'Insert a merge tag' ) ) }">{ }</button>` : '' }</span>
 			${ err ? `<span class="minn-gfn-errmsg">${ esc( err ) }</span>` : '' }
 			${ o.help ? `<span class="minn-toggle-desc">${ esc( o.help ) }</span>` : '' }
 			${ o.after || '' }
@@ -58198,18 +58198,18 @@
 			// list on every save, so the Email/Field tabs would only mislead.
 			const to = x.hasRouting
 				? `<div class="minn-insp-note">${ esc( __( 'Sent by routing rules set up in Fluent Forms Pro. They are kept as they are.' ) ) }</div>`
-				: `${ tabs( `data-ffeto="${ k }" data-v`, x.toType, [ [ 'email', __( 'Email address' ) ], [ 'field', __( 'Form field' ) ] ] ) }
+				: `${ tabs( `data-ffeto="${ esc( k ) }" data-v`, x.toType, [ [ 'email', __( 'Email address' ) ], [ 'field', __( 'Form field' ) ] ] ) }
 					${ 'field' === x.toType
 						? ( d.emailFields.length
-							? `<div class="minn-gfn-set${ c.err && c.err.field === k + '.toField' ? ' minn-gfn-err' : '' }" data-gfnset="${ k }.toField"><span class="minn-field-label">${ esc( __( 'Send to the address in' ) ) }</span>${ gfnCombo( `data-ffefield="${ k }"`, gfnPairLabel( d.emailFields, x.toField ) || __( 'Choose the email field' ) ) }${ err( k + '.toField' ) }</div>`
+							? `<div class="minn-gfn-set${ c.err && c.err.field === k + '.toField' ? ' minn-gfn-err' : '' }" data-gfnset="${ esc( k ) }.toField"><span class="minn-field-label">${ esc( __( 'Send to the address in' ) ) }</span>${ gfnCombo( `data-ffefield="${ esc( k ) }"`, gfnPairLabel( d.emailFields, x.toField ) || __( 'Choose the email field' ) ) }${ err( k + '.toField' ) }</div>`
 							: `<div class="minn-insp-note">${ esc( __( 'This form has no Email field.' ) ) }</div>` )
 						: gfnInput( k + '.toEmail', __( 'Email addresses' ), x.toEmail, { mono: true, tags: true, help: __( 'Separate several with commas. Smart tags work too.' ) } ) }`;
-			return `<div class="minn-gfn-sec" data-ffesec="${ k }">
+			return `<div class="minn-gfn-sec" data-ffesec="${ esc( k ) }">
 				<div class="minn-gfn-sec-head"><div class="minn-side-title">${ esc( x.name || __( 'Email notification' ) ) }</div></div>
 				<div class="minn-gfn-pair">
 					${ gfnInput( k + '.name', __( 'Name' ), x.name ) }
 					<div class="minn-gfn-set minn-fgb-set-inline"><span class="minn-field-label">${ esc( __( 'Send this email' ) ) }</span>
-						<button type="button" class="minn-switch${ x.enabled ? ' on' : '' }" data-ffeon="${ k }" role="switch" aria-checked="${ !! x.enabled }" aria-label="${ esc( __( 'Send this email' ) ) }"><span class="minn-switch-knob"></span></button></div>
+						<button type="button" class="minn-switch${ x.enabled ? ' on' : '' }" data-ffeon="${ esc( k ) }" role="switch" aria-checked="${ !! x.enabled }" aria-label="${ esc( __( 'Send this email' ) ) }"><span class="minn-switch-knob"></span></button></div>
 				</div>
 				<div class="minn-gfn-set"><span class="minn-field-label">${ esc( __( 'Send to' ) ) }</span>${ to }</div>
 				<div class="minn-gfn-pair">
@@ -58514,7 +58514,7 @@
 		const err = ( key ) => ( c.err && c.err.field === key ? `<span class="minn-gfn-errmsg">${ esc( c.err.message ) }</span>` : '' );
 		const notice = ( k, i ) => {
 			const x = n[ k ];
-			return `<div class="minn-gfn-sec" data-wpfesec="${ k }">
+			return `<div class="minn-gfn-sec" data-wpfesec="${ esc( k ) }">
 				<div class="minn-gfn-sec-head"><div class="minn-side-title">${ esc( x.name || ( nkeys.length > 1 ? sprintf( /* translators: %s: the notification's number. */ __( 'Notification %s' ), i + 1 ) : __( 'Notification' ) ) ) }</div></div>
 				${ gfnInput( k + '.name', __( 'Name' ), x.name, { ph: __( 'Default Notification' ) } ) }
 				${ gfnInput( k + '.email', __( 'Send to' ), x.email, { mono: true, tags: true, help: __( 'Separate several with commas. Smart tags work too.' ) } ) }
@@ -58532,14 +58532,14 @@
 		const conf = ( k, i ) => {
 			const x = n[ k ];
 			const body = 'page' === x.type
-				? `<div class="minn-gfn-set${ c.err && c.err.field === k + '.page' ? ' minn-gfn-err' : '' }" data-gfnset="${ k }.page"><span class="minn-field-label">${ esc( __( 'Send visitors to' ) ) }</span>${ gfnCombo( `data-wpfepage="${ k }"`, x.page ? gfnPairLabel( d.pages, x.page ) : '' ) }${ err( k + '.page' ) }</div>`
+				? `<div class="minn-gfn-set${ c.err && c.err.field === k + '.page' ? ' minn-gfn-err' : '' }" data-gfnset="${ esc( k ) }.page"><span class="minn-field-label">${ esc( __( 'Send visitors to' ) ) }</span>${ gfnCombo( `data-wpfepage="${ esc( k ) }"`, x.page ? gfnPairLabel( d.pages, x.page ) : '' ) }${ err( k + '.page' ) }</div>`
 				: 'redirect' === x.type
 					? gfnInput( k + '.redirect', __( 'Redirect to' ), x.redirect, { mono: true, ph: 'https://' } )
 					: gfnInput( k + '.message', __( 'Message' ), x.message, { area: true, rows: 5, tags: true } );
-			return `<div class="minn-gfn-sec" data-wpfesec="${ k }">
+			return `<div class="minn-gfn-sec" data-wpfesec="${ esc( k ) }">
 				<div class="minn-gfn-sec-head"><div class="minn-side-title">${ esc( x.name || ( ckeys.length > 1 ? sprintf( /* translators: %s: the confirmation's number. */ __( 'Confirmation %s' ), i + 1 ) : __( 'After submitting, visitors see' ) ) ) }</div></div>
 				${ ckeys.length > 1 ? gfnInput( k + '.name', __( 'Name' ), x.name ) : '' }
-				${ tabs( `data-wpfetype="${ k }" data-v`, x.type, [ [ 'message', __( 'A message' ) ], [ 'page', __( 'A page' ) ], [ 'redirect', __( 'An address' ) ] ] ) }
+				${ tabs( `data-wpfetype="${ esc( k ) }" data-v`, x.type, [ [ 'message', __( 'A message' ) ], [ 'page', __( 'A page' ) ], [ 'redirect', __( 'An address' ) ] ] ) }
 				${ body }
 				${ x.hasLogic ? `<div class="minn-insp-note">${ esc( __( 'Used only when its conditions in the WPForms builder match. They are kept as they are.' ) ) }</div>` : '' }
 			</div>`;
@@ -59526,12 +59526,12 @@
 									<div class="minn-wcm-rule-head">
 										${ wcmComboHtml( `minn-wcmr-target-${ key }`, __( 'Applies to' ), r.target, targets ) }
 										${ type === 'product_restriction' ? wcmComboHtml( `minn-wcmr-access-${ key }`, __( 'Only members can' ), r.access_type, [ [ 'view', __( 'View' ) ], [ 'purchase', __( 'Purchase' ) ] ] ) : '' }
-										<button type="button" class="minn-pdl-x minn-wcm-rule-del" data-wcmruledel="${ key }" title="${ esc( __( 'Remove rule' ) ) }" aria-label="${ esc( __( 'Remove rule' ) ) }">×</button>
+										<button type="button" class="minn-pdl-x minn-wcm-rule-del" data-wcmruledel="${ esc( key ) }" title="${ esc( __( 'Remove rule' ) ) }" aria-label="${ esc( __( 'Remove rule' ) ) }">×</button>
 									</div>
 									<div>
 										<div class="minn-field-label">${ isTax ? esc( __( 'Terms' ) ) : esc( __( 'Items' ) ) }</div>
-										<div class="minn-chips" data-wcmchips="${ key }">${ wcmChipsHtml( r.objects, 'data-wcmchip', sprintf( /* translators: %s: content type name, e.g. Pages. */ __( 'All %s' ), targetLabel ) ) }</div>
-										<div class="minn-ac" data-wcmpick="${ key }">
+										<div class="minn-chips" data-wcmchips="${ esc( key ) }">${ wcmChipsHtml( r.objects, 'data-wcmchip', sprintf( /* translators: %s: content type name, e.g. Pages. */ __( 'All %s' ), targetLabel ) ) }</div>
+										<div class="minn-ac" data-wcmpick="${ esc( key ) }">
 											<input class="minn-input minn-ac-input" placeholder="${ esc( sprintf( /* translators: %s: content type name. */ __( 'Search %s to narrow this rule…' ), targetLabel ) ) }" autocomplete="off" spellcheck="false" aria-label="${ esc( __( 'Search' ) ) }">
 											<div class="minn-ac-panel" hidden></div>
 										</div>
