@@ -12081,11 +12081,26 @@
 		return ( B.wcCurrency && B.wcCurrency.symbol ) || '$';
 	}
 
+	// An amount with its symbol where the store puts it (WooCommerce's
+	// currency position: left, right, or either with a space), and a minus
+	// sign ahead of both, as WooCommerce prints it.
+	function storeMoney( amount, sym = storeSym() ) {
+		let num = String( amount ?? '' );
+		const neg = num.startsWith( '-' );
+		if ( neg ) num = num.slice( 1 );
+		const pos = ( B.wcCurrency && B.wcCurrency.pos ) || 'left';
+		const out = 'right' === pos ? num + sym
+			: 'left_space' === pos ? sym + '\u00a0' + num
+				: 'right_space' === pos ? num + '\u00a0' + sym
+					: sym + num;
+		return ( neg ? '-' : '' ) + out;
+	}
+
 	function orderMoney( o, amount ) {
 		const sym = ( o && o.currency_symbol ) || storeSym();
 		const n = parseFloat( amount );
-		if ( Number.isNaN( n ) ) return sym + ( amount || '0' );
-		return sym + n.toFixed( 2 );
+		if ( Number.isNaN( n ) ) return storeMoney( amount || '0', sym );
+		return storeMoney( n.toFixed( 2 ), sym );
 	}
 
 	function orderRefundableTotal( o ) {
@@ -12210,7 +12225,7 @@
 			];
 			// Always paint chrome (Orders|Analytics + range tabs + card shells)
 			// so changing 7d/30d/… does not blank the headers while WC Analytics loads.
-			const money = ( n ) => storeSym() + Number( n || 0 ).toLocaleString( uiLocale(), { maximumFractionDigits: 2 } );
+			const money = ( n ) => storeMoney( Number( n || 0 ).toLocaleString( uiLocale(), { maximumFractionDigits: 2 } ) );
 			const tot = ( ! loading && a && a.totals ) || {};
 			const chartData = ( ! loading && a && a.chart ) || [];
 			const topProducts = ( ! loading && a && a.topProducts ) || [];
@@ -12323,7 +12338,7 @@
 		const summaryCards = [];
 		if ( s.month ) {
 			summaryCards.push( [ __( 'Orders this month' ), s.month.total_orders ?? '—', '' ] );
-			summaryCards.push( [ __( 'Revenue this month' ), sym + Number( s.month.total_sales || 0 ).toLocaleString( uiLocale() ), sprintf( /* translators: %s: formatted net revenue. */ __( 'net %s' ), sym + Number( s.month.net_sales || 0 ).toLocaleString( uiLocale() ) ) ] );
+			summaryCards.push( [ __( 'Revenue this month' ), storeMoney( Number( s.month.total_sales || 0 ).toLocaleString( uiLocale() ), sym ), sprintf( /* translators: %s: formatted net revenue. */ __( 'net %s' ), storeMoney( Number( s.month.net_sales || 0 ).toLocaleString( uiLocale() ), sym ) ) ] );
 		}
 		if ( s.processing != null ) summaryCards.push( [ __( 'Awaiting fulfillment' ), s.processing, __( 'Processing' ) ] );
 
@@ -12362,7 +12377,7 @@
 						/* translators: %s: an invoice number. */
 						? `<a class="minn-wcpdf-cell" data-wcpdf-cell href="${ esc( wcpdfHref( 'invoice', o.id ) ) }" target="_blank" rel="noopener" title="${ esc( sprintf( __( 'Open invoice %s as a PDF' ), String( o.wpo_wcpdf_invoice_number ) ) ) }">${ esc( String( o.wpo_wcpdf_invoice_number ) ) }</a>`
 						: '—' }</div>` : '' }
-					<div class="minn-row-meta" style="font-variant-numeric:tabular-nums;">${ esc( ( o.currency_symbol || sym ) + o.total ) }</div>
+					<div class="minn-row-meta" style="font-variant-numeric:tabular-nums;">${ esc( storeMoney( o.total, o.currency_symbol || sym ) ) }</div>
 					<div class="minn-row-end"><button class="minn-row-more minn-row-quick" data-qv="${ o.id }" type="button" title="${ esc( __( 'Quick view' ) ) }">${ icon( 'eye' ) }</button><span class="minn-row-arrow">›</span></div>
 				</div>` ).join( '' ) : `<div class="minn-empty">${ state.orderSearch ? __( 'No orders match “' ) + esc( state.orderSearch ) + '”.' : ( orderPresetActive() === 'trash' ? __( 'The Trash is empty.' ) : __( 'No orders here.' ) ) }</div>` }
 		</div>
@@ -12518,7 +12533,7 @@
 		// honestly.
 		const store = B.wcCurrency || {};
 		const code = ( s && s.currency ) || store.code || 'USD';
-		if ( code === store.code && store.symbol ) return store.symbol + num;
+		if ( code === store.code && store.symbol ) return storeMoney( num );
 		if ( code === 'USD' ) return '$' + num;
 		return code + ' ' + num;
 	}
@@ -13394,10 +13409,9 @@
 	 */
 	function variationRowHtml( m, v, i ) {
 		const label = variationLabel( m, v );
-		const sym = esc( storeSym() );
 		const price = v.sale_price
-			? `${ sym }${ esc( v.sale_price ) }<span class="minn-prod-was">${ sym }${ esc( v.regular_price || '' ) }</span>`
-			: ( v.regular_price ? `${ sym }${ esc( v.regular_price ) }` : '—' );
+			? `${ esc( storeMoney( v.sale_price ) ) }<span class="minn-prod-was">${ esc( storeMoney( v.regular_price || '' ) ) }</span>`
+			: ( v.regular_price ? esc( storeMoney( v.regular_price ) ) : '—' );
 		// Available means a number only when the variant tracks stock; the
 		// status is the honest answer otherwise, and it is what WooCommerce
 		// itself falls back to.
@@ -13935,11 +13949,10 @@
 		// The span is why this returns markup and cannot be esc()'d wholesale
 		// at the call sites, so escape each VALUE here instead. WooCommerce
 		// normalises these through wc_format_decimal, so this is depth.
-		const sym = esc( storeSym() );
 		if ( p.on_sale && p.sale_price ) {
-			return `${ sym }${ esc( p.sale_price ) }` + ( p.regular_price ? ` <span class="minn-prod-was">${ sym }${ esc( p.regular_price ) }</span>` : '' );
+			return esc( storeMoney( p.sale_price ) ) + ( p.regular_price ? ` <span class="minn-prod-was">${ esc( storeMoney( p.regular_price ) ) }</span>` : '' );
 		}
-		return price ? `${ sym }${ esc( price ) }` : '—';
+		return price ? esc( storeMoney( price ) ) : '—';
 	}
 
 	function productStockLabel( p ) {
@@ -16112,7 +16125,7 @@
 	function couponAmountLabel( c ) {
 		const amt = c.amount != null ? String( c.amount ) : '0';
 		if ( c.discount_type === 'percent' ) return amt.replace( /\.00$/, '' ) + '%';
-		return storeSym() + amt;
+		return storeMoney( amt );
 	}
 
 	function couponTypeLabel( type ) {
@@ -21914,7 +21927,7 @@
 		// A bare number gets the store's symbol when WooCommerce names one;
 		// a booking plugin's own formatted price passes through untouched.
 		const priceLbl = b.price && /^\d+(\.\d+)?$/.test( String( b.price ).trim() )
-			? ( B.wcCurrency ? storeSym() : '' ) + String( b.price ).trim()
+			? ( B.wcCurrency ? storeMoney( String( b.price ).trim() ) : String( b.price ).trim() )
 			: ( b.price || '' );
 		const extras = ( sec.sections || [] ).filter( ( g ) => {
 			const t = ( g.title || '' ).toLowerCase();

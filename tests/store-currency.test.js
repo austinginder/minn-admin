@@ -3,6 +3,9 @@
  * store in INR showed every product-list price as "$500" because the list
  * and the variation rows hard-coded the symbol (v0.46.0).
  *
+ * The symbol sits where the store's currency position puts it (left,
+ * right, or either with a space), as WooCommerce prints it (v0.47.0).
+ *
  * Fixtures (made here, deleted at the end): a variable product with one
  * variation, in a store switched to INR for the run and switched back after.
  */
@@ -31,10 +34,15 @@ const wp = ( args ) => execSync( `wp --path=${ JSON.stringify( WP ) } ${ args } 
 	}, { path, opts } );
 
 	const was = wp( 'option get woocommerce_currency' ) || 'USD';
-	const restore = onExit( () => wp( `option update woocommerce_currency ${ was }` ) );
+	const wasPos = wp( 'option get woocommerce_currency_pos' ) || 'left';
+	const restore = onExit( () => {
+		wp( `option update woocommerce_currency ${ was }` );
+		wp( `option update woocommerce_currency_pos ${ wasPos }` );
+	} );
 	let pid = null;
 	try {
 		wp( 'option update woocommerce_currency INR' );
+		wp( 'option update woocommerce_currency_pos left' );
 		const name = 'Minn Rupee Lamp ' + Date.now().toString( 36 );
 		const made = await api( 'wc/v3/products', { method: 'POST', body: JSON.stringify( {
 			name, type: 'variable', status: 'draft',
@@ -60,6 +68,21 @@ const wp = ( args ) => execSync( `wp --path=${ JSON.stringify( WP ) } ${ args } 
 		await page.waitForFunction( () => /₹450/.test( document.body.textContent ), null, { timeout: 30000 } ).catch( () => null );
 		const vars = await page.evaluate( () => [ ...document.querySelectorAll( '.minn-prod-was' ) ].map( ( el ) => el.parentElement.textContent.trim() ) );
 		t.check( 'variation rows print the store symbol', vars.length > 0 && vars.every( ( v ) => /^₹450\s*₹500$/.test( v ) ), JSON.stringify( vars ) );
+
+		// The symbol after the amount, with a space: "450 ₹".
+		wp( 'option update woocommerce_currency_pos right_space' );
+		await page.goto( BASE + '/minn-admin/products/' + pid, { waitUntil: 'domcontentloaded' } );
+		t.check( 'boot payload carries the position', ( await page.evaluate( () => ( window.MINN.wcCurrency || {} ).pos ) ) === 'right_space' );
+		await page.waitForFunction( () => /450\u00a0₹/.test( document.body.textContent ), null, { timeout: 30000 } ).catch( () => null );
+		const varsRight = await page.evaluate( () => [ ...document.querySelectorAll( '.minn-prod-was' ) ].map( ( el ) => el.parentElement.textContent.trim() ) );
+		t.check( 'variation rows put the symbol after the amount', varsRight.length > 0 && varsRight.every( ( v ) => /^450\u00a0₹\s*500\u00a0₹$/.test( v ) ), JSON.stringify( varsRight ) );
+		await page.goto( BASE + '/minn-admin/products', { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( '#minn-order-search', { timeout: 30000 } );
+		await page.fill( '#minn-order-search', name );
+		await page.waitForSelector( `.minn-table-row[data-product="${ pid }"]`, { timeout: 30000 } );
+		await listSettled( page );
+		const rowRight = await page.$eval( `.minn-table-row[data-product="${ pid }"]`, ( el ) => el.textContent );
+		t.check( 'product list puts the symbol after the amount', /450\u00a0₹/.test( rowRight ) && ! /₹450/.test( rowRight ), rowRight.replace( /\s+/g, ' ' ).trim() );
 	} catch ( e ) {
 		t.check( 'suite ran to the end', false, e.message );
 	} finally {

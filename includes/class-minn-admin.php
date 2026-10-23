@@ -2157,6 +2157,8 @@ class Minn_Admin {
 				? array(
 					'code'   => get_woocommerce_currency(),
 					'symbol' => html_entity_decode( get_woocommerce_currency_symbol(), ENT_QUOTES, 'UTF-8' ),
+					// Where the symbol goes: left, right, left_space, right_space.
+					'pos'    => (string) get_option( 'woocommerce_currency_pos', 'left' ),
 				)
 				: null,
 			'comments'        => self::comments_enabled(),

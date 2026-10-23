@@ -4978,15 +4978,18 @@ class Minn_Admin_REST {
 
 	/**
 	 * A money string for Overview cards: currency symbol plus a compact
-	 * number (no decimals when the amount is whole).
+	 * number (no decimals when the amount is whole), the symbol where the
+	 * store's currency position puts it.
 	 */
 	private static function wc_money( $n ) {
-		$sym = function_exists( 'get_woocommerce_currency_symbol' )
-			? html_entity_decode( get_woocommerce_currency_symbol(), ENT_QUOTES, 'UTF-8' )
-			: '$';
 		$n   = (float) $n;
 		$dec = ( abs( $n - round( $n ) ) < 0.005 ) ? 0 : 2;
-		return $sym . number_format_i18n( $n, $dec );
+		$num = number_format_i18n( abs( $n ), $dec );
+		if ( ! function_exists( 'get_woocommerce_currency_symbol' ) ) {
+			return ( $n < 0 ? '-' : '' ) . '$' . $num;
+		}
+		$money = sprintf( get_woocommerce_price_format(), get_woocommerce_currency_symbol(), $num );
+		return ( $n < 0 ? '-' : '' ) . html_entity_decode( $money, ENT_QUOTES, 'UTF-8' );
 	}
 
 	/**
