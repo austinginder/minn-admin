@@ -17,13 +17,16 @@
  *             'cap'    => 'manage_options',          // who sees the item
  *             'tabs'   => array( array( 'id' => 'tab-0', 'label' => 'Details' ) ),
  *             'route'  => 'my-plugin/v1/options/business-info/{tab}',
+ *             'adminPage' => 'business-info',       // its wp-admin menu slug, optional
  *         );
  *         return $pages;
  *     } );
  *
  * `route` answers GET with { groups, values, adminUrl } and POST with the
  * same after saving { values }, which is the settings contract in
- * docs/for-plugin-authors.md. Minn dispatches to it internally, so the
+ * docs/for-plugin-authors.md. `adminPage` names the wp-admin page the entry
+ * mirrors (a tab may name its own); a tab whose page a menu tool such as
+ * White Label CMS hid from this user leaves the surface too. Minn dispatches to it internally, so the
  * provider's own permission callback still runs on every request: this
  * surface gathers pages, it does not vouch for them.
  *
@@ -38,10 +41,14 @@ const MINN_ADMIN_OPTIONS_SURFACE = 'site-options';
 /**
  * Every contributed page, filtered to the ones this user may open.
  *
+ * @param bool $all Keep tabs whose wp-admin page a menu tool hid from this
+ *                  user. The surface declares those pages from this list, so
+ *                  the next menu capture still asks about them.
  * @return array[] Entries with a normalized shape.
  */
-function minn_admin_option_pages() {
-	$out = array();
+function minn_admin_option_pages( $all = false ) {
+	$hidden = $all ? array() : array_flip( Minn_Admin_Notices::hidden_admin_pages() );
+	$out    = array();
 	foreach ( (array) apply_filters( 'minn_admin_option_pages', array() ) as $page ) {
 		if ( ! is_array( $page ) || empty( $page['id'] ) || empty( $page['route'] ) ) {
 			continue;
@@ -52,22 +59,36 @@ function minn_admin_option_pages() {
 		if ( '' === $cap || ! current_user_can( $cap ) ) {
 			continue;
 		}
-		$tabs = array();
+		$host    = (string) ( $page['adminPage'] ?? '' );
+		$tabs    = array();
+		$dropped = false;
 		foreach ( (array) ( $page['tabs'] ?? array() ) as $tab ) {
 			if ( empty( $tab['id'] ) ) {
 				continue;
 			}
+			$tab_host = isset( $tab['adminPage'] ) ? (string) $tab['adminPage'] : $host;
+			if ( '' !== $tab_host && isset( $hidden[ $tab_host ] ) ) {
+				$dropped = true;
+				continue;
+			}
 			$tabs[] = array(
-				'id'    => (string) $tab['id'],
-				'label' => (string) ( $tab['label'] ?? $tab['id'] ),
+				'id'        => (string) $tab['id'],
+				'label'     => (string) ( $tab['label'] ?? $tab['id'] ),
+				'adminPage' => $tab_host,
 			);
 		}
 		if ( ! $tabs ) {
 			continue; // a page with nothing to edit is not a tab
 		}
+		$label = (string) ( $page['label'] ?? $page['id'] );
+		// A provider names a page for every tab it sent. With the others
+		// hidden, the one tab left says what is actually there.
+		if ( $dropped && 1 === count( $tabs ) ) {
+			$label = $tabs[0]['label'];
+		}
 		$out[] = array(
 			'id'     => (string) $page['id'],
-			'label'  => (string) ( $page['label'] ?? $page['id'] ),
+			'label'  => $label,
 			'source' => (string) ( $page['source'] ?? '' ),
 			'plugin' => (array) ( $page['plugin'] ?? array() ),
 			'cap'    => $cap,
@@ -150,11 +171,27 @@ function minn_admin_option_dispatch( $target, $method, $body = null ) {
 }
 
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
-	$tabs = minn_admin_option_tabs_merged();
-	if ( ! $tabs ) {
+	$every = minn_admin_option_pages( true );
+	if ( ! $every ) {
 		return $surfaces;
 	}
-	$pages = minn_admin_option_pages();
+	// The wp-admin pages the tabs mirror. Declared even while hidden, or the
+	// next menu capture would stop asking and bring them back. Only when
+	// every tab names one: the surface leaves once all of them are hidden,
+	// and a tab with no page of its own must not go with them.
+	$hosts = array();
+	foreach ( $every as $p ) {
+		foreach ( $p['tabs'] as $t ) {
+			if ( '' === $t['adminPage'] ) {
+				$hosts = null;
+				break 2;
+			}
+			$hosts[ $t['adminPage'] ] = true;
+		}
+	}
+	$hosts = $hosts ? array_keys( $hosts ) : array();
+	$tabs  = minn_admin_option_tabs_merged();
+	$pages = $tabs ? minn_admin_option_pages() : $every;
 	// One page keeps its own name: a site whose only options page is
 	// "Business info" should say so rather than be renamed by Minn.
 	$label = 1 === count( $pages ) ? $pages[0]['label'] : __( 'Site Options', 'minn-admin' );
@@ -170,13 +207,14 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 		$tab_list[] = array( 'id' => $t['id'], 'label' => $t['label'] );
 	}
 	$surfaces[ MINN_ADMIN_OPTIONS_SURFACE ] = array(
-		'label'    => $label,
-		'sub'      => 1 === count( $sources ) ? (string) key( $sources ) : '',
-		'plugin'   => array_values( array_unique( array_merge( ...array_map( function ( $p ) { return $p['plugin']; }, $pages ) ) ) ),
-		'icon'     => 'gear',
-		'group'    => 'tools',
-		'cap'      => $pages[0]['cap'], // every page re-checks its own on request
-		'settings' => array(
+		'label'      => $label,
+		'sub'        => 1 === count( $sources ) ? (string) key( $sources ) : '',
+		'plugin'     => array_values( array_unique( array_merge( ...array_map( function ( $p ) { return $p['plugin']; }, $pages ) ) ) ),
+		'icon'       => 'gear',
+		'group'      => 'tools',
+		'cap'        => $pages[0]['cap'], // every page re-checks its own on request
+		'adminPages' => $hosts,
+		'settings'   => array(
 			'label' => __( 'Settings', 'minn-admin' ),
 			'tabs'  => $tab_list,
 			'route' => 'minn-admin/v1/options/{tab}',

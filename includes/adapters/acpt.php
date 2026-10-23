@@ -1224,13 +1224,14 @@ add_filter( 'minn_admin_option_pages', function ( $pages ) {
 			$tab_list[] = array( 'id' => $t['id'], 'label' => $t['label'] );
 		}
 		$pages[] = array(
-			'id'     => 'acpt:' . $slug,
-			'label'  => method_exists( $page, 'getMenuTitle' ) ? $page->getMenuTitle() : $slug,
-			'source' => 'ACPT',
-			'plugin' => 'advanced-custom-post-type',
-			'cap'    => method_exists( $page, 'getCapability' ) ? (string) $page->getCapability() : 'manage_options',
-			'tabs'   => $tab_list,
-			'route'  => 'minn-admin/v1/acpt/options/' . rawurlencode( $slug ) . '/{tab}',
+			'id'        => 'acpt:' . $slug,
+			'label'     => method_exists( $page, 'getMenuTitle' ) ? $page->getMenuTitle() : $slug,
+			'source'    => 'ACPT',
+			'plugin'    => 'advanced-custom-post-type',
+			'cap'       => method_exists( $page, 'getCapability' ) ? (string) $page->getCapability() : 'manage_options',
+			'tabs'      => $tab_list,
+			'route'     => 'minn-admin/v1/acpt/options/' . rawurlencode( $slug ) . '/{tab}',
+			'adminPage' => $slug, // its menu slug
 		);
 	}
 	return $pages;

@@ -16,6 +16,10 @@ defined( 'ABSPATH' ) || exit;
 
 add_filter( 'minn_admin_admin_page_hidden', 'minn_admin_wlcms_page_hidden', 10, 3 );
 
+// A change to what White Label CMS hides reaches Minn on the next load.
+add_action( 'add_option_wlcms_options', array( 'Minn_Admin_Notices', 'expire_captures' ) );
+add_action( 'update_option_wlcms_options', array( 'Minn_Admin_Notices', 'expire_captures' ) );
+
 /**
  * Whether White Label CMS hides an admin page from the current user.
  *

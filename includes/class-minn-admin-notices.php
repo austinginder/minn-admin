@@ -26,6 +26,9 @@ class Minn_Admin_Notices {
 	/** User option (per site) holding the last capture's menu removals. */
 	const REMOVED_OPTION = 'minn_admin_menu_removed';
 
+	/** Site option: when a menu tool last changed what it hides. */
+	const EXPIRED_OPTION = 'minn_admin_captures_expired';
+
 	/**
 	 * How long a stored removal stands without a fresh capture. A capture
 	 * runs whenever the app opens and the last one is 15 minutes old, so
@@ -1248,7 +1251,17 @@ class Minn_Admin_Notices {
 	}
 
 	public static function is_stale() {
-		return ( time() - (int) self::stored()['captured'] ) > self::STALE_AFTER;
+		$captured = (int) self::stored()['captured'];
+		return ( time() - $captured ) > self::STALE_AFTER || $captured <= (int) get_option( self::EXPIRED_OPTION, 0 );
+	}
+
+	/**
+	 * Every user's capture is out of date: a menu tool changed what it hides,
+	 * so the next Minn load reads the menu again instead of waiting out
+	 * STALE_AFTER.
+	 */
+	public static function expire_captures() {
+		update_option( self::EXPIRED_OPTION, time(), false );
 	}
 
 	public static function nonce() {

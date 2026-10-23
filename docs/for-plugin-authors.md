@@ -1847,6 +1847,7 @@ add_filter( 'minn_admin_option_pages', function ( $pages ) {
 | `route` | Yes | Answers the settings contract below; `{tab}` is substituted |
 | `cap` | No | Defaults to `manage_options`. An empty string denies everyone, the way WordPress reads it on its own menus; say `read` if you mean anyone |
 | `source` | No | Shown as the item's badge while one source is the only one |
+| `adminPage` | No | The menu slug of the wp-admin page this entry mirrors; a tab may name its own. When a menu tool such as White Label CMS hides that page from someone, the tab leaves Site options for them too (since 0.48.0) |
 
 `route` answers **GET** with `{ groups, values, adminUrl }` and **POST** with the same
 shape after saving `{ values }` — the settings contract used everywhere else in Minn

@@ -17,7 +17,15 @@
  *
  * It creates the client account minn-wlcms-client and deletes it at the
  * end, and puts White Label CMS's settings back as it found them.
+ *
+ * With ACF PRO installed there too, it also hides one options page at a
+ * time: a page White Label CMS hides leaves Site Options for the client
+ * (its tab, then the whole item), whatever else ACF still shows. Those two
+ * pages come from a must-use file the suite writes and removes, and ACF
+ * PRO is switched back off when the lab kept it off.
  */
+const fs = require( 'fs' );
+const path = require( 'path' );
 const { execFileSync } = require( 'child_process' );
 const { launch, login, loginAs, reporter, BASE, WP } = require( './helpers' );
 
@@ -27,6 +35,25 @@ const wpEval = ( code ) => wp( 'eval', code );
 const CLIENT = 'minn-wlcms-client';
 const CLIENT_PASS = 'minn-wlcms-client-1';
 const BRICKS = [ 'bricks-templates', 'bricks-forms' ];
+const ACF_FIXTURE = path.join( WP, 'wp-content/mu-plugins/minn-test-wlcms-acf.php' );
+// Two ACF options pages, each with one field: one under Appearance, the way
+// a theme's settings page usually sits, and one top-level page of its own.
+const ACF_PAGES = `<?php
+add_action( 'acf/init', function () {
+	foreach ( array(
+		array( 'minn-wlcms-theme', 'Theme Settings', 'themes.php' ),
+		array( 'minn-wlcms-footer', 'Footer Settings', '' ),
+	) as $p ) {
+		acf_add_options_page( array( 'page_title' => $p[1], 'menu_title' => $p[1], 'menu_slug' => $p[0], 'parent_slug' => $p[2], 'capability' => 'manage_options' ) );
+		acf_add_local_field_group( array(
+			'key'      => 'group_' . str_replace( '-', '_', $p[0] ),
+			'title'    => $p[1],
+			'fields'   => array( array( 'key' => 'field_' . str_replace( '-', '_', $p[0] ), 'label' => 'Note', 'name' => str_replace( '-', '_', $p[0] ) . '_note', 'type' => 'text' ) ),
+			'location' => array( array( array( 'param' => 'options_page', 'operator' => '==', 'value' => $p[0] ) ) ),
+		) );
+	}
+} );
+`;
 
 ( async () => {
 	const t = reporter( 'white-label-cms' );
@@ -41,6 +68,8 @@ const BRICKS = [ 'bricks-templates', 'bricks-forms' ];
 	if ( ! wasActive ) {
 		wp( 'plugin', 'activate', 'white-label-cms' );
 	}
+	const hasAcf = 'yes' === wpEval( 'echo file_exists( WP_PLUGIN_DIR . "/advanced-custom-fields-pro/acf.php" ) ? "yes" : "no";' );
+	const acfWasActive = hasAcf && 'yes' === wpEval( 'echo is_plugin_active( "advanced-custom-fields-pro/acf.php" ) ? "yes" : "no";' );
 
 	const { browser, page, errors } = await launch();
 	const before = wpEval( 'echo wp_json_encode( get_option( "wlcms_options", null ) );' );
@@ -124,7 +153,80 @@ const BRICKS = [ 'bricks-templates', 'bricks-forms' ];
 		const cap3 = await capture( client );
 		const off = await surfaceIds( client );
 		t.check( 'turning White Label CMS\'s menu hiding off brings Bricks back', true === cap3.surfaces_changed && BRICKS.every( ( id ) => off.includes( id ) ), JSON.stringify( { changed: cap3.surfaces_changed, ids: off.filter( ( id ) => id.startsWith( 'bricks' ) ) } ) );
+		wpEval( '$o = get_option( "wlcms_options" ); $o["enable_wlcms_admin"] = 1; update_option( "wlcms_options", $o );' );
+
+		// Options pages: hidden one at a time, they leave Site Options.
+		if ( ! hasAcf ) {
+			console.log( 'SKIP  options pages: needs ACF PRO installed' );
+		} else {
+			fs.writeFileSync( ACF_FIXTURE, ACF_PAGES );
+			if ( ! acfWasActive ) {
+				wp( 'plugin', 'activate', 'advanced-custom-fields-pro' );
+			}
+			// The tab labels Site Options shows this user, or null without it.
+			const optionTabs = ( p ) => p.evaluate( async () => {
+				const r = await fetch( window.MINN.restUrl + 'minn-admin/v1/surfaces?_cb=' + Date.now(), {
+					headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'include',
+				} );
+				const s = ( await r.json() ).find( ( x ) => 'site-options' === x.id );
+				return s ? { label: s.label, tabs: ( s.settings && s.settings.tabs || [] ).map( ( x ) => x.label ) } : null;
+			} );
+			const both = ( o ) => !! o && o.tabs.includes( 'Theme Settings' ) && o.tabs.includes( 'Footer Settings' );
+
+			configure( {} );
+			await capture( client );
+			const start = await optionTabs( client );
+			t.check( 'with nothing hidden the client sees both options pages', both( start ), JSON.stringify( start ) );
+
+			// Appearance hidden, the way the report had it: the theme's
+			// settings page under it goes with it, ACF's other page stays.
+			// No capture by hand here: saving White Label CMS's settings
+			// marks the capture out of date, so the next load reads the menu.
+			configure( { main: [ 'themes.php' ] } );
+			await client.goto( BASE + '/minn-admin/overview', { waitUntil: 'domcontentloaded' } );
+			await client.waitForSelector( '.minn-sidebar', { timeout: 20000 } );
+			t.check( 'a White Label CMS save makes the next load recapture', true === await client.evaluate( () => !! ( window.MINN.notices && window.MINN.notices.stale ) ), '' );
+			let noTheme = null;
+			for ( let i = 0; i < 30; i++ ) {
+				noTheme = await optionTabs( client );
+				if ( noTheme && ! noTheme.tabs.includes( 'Theme Settings' ) ) {
+					break;
+				}
+				await client.waitForTimeout( 1000 );
+			}
+			t.check( 'hiding Appearance takes Theme Settings out of Site Options', !! noTheme && ! noTheme.tabs.includes( 'Theme Settings' ) && noTheme.tabs.includes( 'Footer Settings' ) && 'Footer Settings' === noTheme.label, JSON.stringify( noTheme ) );
+			const capA2 = await capture( client );
+			const still = await optionTabs( client );
+			t.check( 'and the next capture keeps it out (the page is still asked about)', false === capA2.surfaces_changed && !! still && ! still.tabs.includes( 'Theme Settings' ), JSON.stringify( { changed: capA2.surfaces_changed, still } ) );
+
+			// A submenu hidden on its own.
+			configure( { sub: [ 'themes.php_wlcms_minn-wlcms-theme' ] } );
+			await capture( client );
+			const subOnly = await optionTabs( client );
+			t.check( 'hiding just the Theme Settings submenu does the same', !! subOnly && ! subOnly.tabs.includes( 'Theme Settings' ) && subOnly.tabs.includes( 'Footer Settings' ), JSON.stringify( subOnly ) );
+
+			// Every options page hidden: the item leaves the sidebar.
+			configure( { main: [ 'themes.php', 'minn-wlcms-footer' ] } );
+			await capture( client );
+			t.check( 'with every options page hidden Site Options leaves the client', null === await optionTabs( client ), '' );
+			await client.goto( BASE + '/minn-admin/overview', { waitUntil: 'domcontentloaded' } );
+			await client.waitForSelector( '.minn-sidebar', { timeout: 20000 } );
+			t.check( 'nor in the client\'s nav', ! await client.$( '.minn-nav-btn[data-nav="site-options"]' ), '' );
+
+			await capture( page );
+			t.check( 'the White Label CMS admin keeps both', both( await optionTabs( page ) ), '' );
+
+			configure( {} );
+			const capB = await capture( client );
+			t.check( 'unhiding them brings both back', true === capB.surfaces_changed && both( await optionTabs( client ) ), JSON.stringify( capB.surfaces_changed ) );
+		}
 	} finally {
+		if ( fs.existsSync( ACF_FIXTURE ) ) {
+			fs.unlinkSync( ACF_FIXTURE );
+		}
+		if ( hasAcf && ! acfWasActive ) {
+			wp( 'plugin', 'deactivate', 'advanced-custom-fields-pro' );
+		}
 		if ( 'null' === before ) {
 			wpEval( 'delete_option( "wlcms_options" );' );
 		} else {

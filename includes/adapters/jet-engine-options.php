@@ -166,12 +166,14 @@ add_filter( 'minn_admin_option_pages', function ( $pages ) {
 		// The page name rides labels.name after filter_item_for_register.
 		$label   = ! empty( $page->page['labels']['name'] ) ? (string) $page->page['labels']['name'] : ( ! empty( $page->page['name'] ) ? (string) $page->page['name'] : $slug );
 		$pages[] = array(
-			'id'     => 'jet-engine:' . $slug,
-			'label'  => $label,
-			'source' => 'JetEngine',
-			'cap'    => ! empty( $page->page['capability'] ) ? (string) $page->page['capability'] : 'manage_options',
-			'tabs'   => array( array( 'id' => 'tab-0', 'label' => $label ) ),
-			'route'  => 'minn-admin/v1/jet-engine/options/' . rawurlencode( $slug ) . '/{tab}',
+			'id'        => 'jet-engine:' . $slug,
+			'label'     => $label,
+			'source'    => 'JetEngine',
+			'cap'       => ! empty( $page->page['capability'] ) ? (string) $page->page['capability'] : 'manage_options',
+			'tabs'      => array( array( 'id' => 'tab-0', 'label' => $label ) ),
+			'route'     => 'minn-admin/v1/jet-engine/options/' . rawurlencode( $slug ) . '/{tab}',
+			// The menu slug JetEngine registers the page under.
+			'adminPage' => ! empty( $page->page['slug'] ) ? (string) $page->page['slug'] : (string) $slug,
 		);
 	}
 	return $pages;

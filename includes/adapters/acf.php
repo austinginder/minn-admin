@@ -3758,7 +3758,9 @@ add_filter( 'minn_admin_option_pages', function ( $pages ) {
 	$first    = $allowed[ key( $sources ) ];
 	$tab_list = array();
 	foreach ( $tabs as $t ) {
-		$tab_list[] = array( 'id' => $t['id'], 'label' => $t['label'] );
+		// Each tab names the options page it came from, so a menu tool
+		// hiding that page hides the tab.
+		$tab_list[] = array( 'id' => $t['id'], 'label' => $t['label'], 'adminPage' => $t['_page'] );
 	}
 	$pages[] = array(
 		'id'     => 'acf:options',
