@@ -11571,7 +11571,7 @@
 		const o = m.full || m.order;
 		const loading = !! m.loading && ! m.full;
 		const dateStr = o.date_created
-			? new Date( o.date_created ).toLocaleString( undefined, { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' } )
+			? new Date( o.date_created ).toLocaleString( uiLocale(), { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' } )
 			: '';
 		view.innerHTML = `
 		<div class="minn-order-page minn-order-page-wide">
@@ -55920,7 +55920,7 @@
 				<button type="button" class="minn-btn-primary" id="minn-gfb-save">${ esc( __( 'Save form' ) ) }</button>
 			</div>
 			<div class="minn-fgb-meta">
-				<span>${ esc( sprintf( /* translators: %s: localized number of entries. */ _n( '%s entry', '%s entries', g.form.entries ), Number( g.form.entries ).toLocaleString() ) ) }</span>
+				<span>${ esc( sprintf( /* translators: %s: localized number of entries. */ _n( '%s entry', '%s entries', g.form.entries ), formattedNumber( g.form.entries ) ) ) }</span>
 				<button type="button" id="minn-gfb-settings">${ esc( __( 'Form settings' ) ) }</button>
 				<a href="${ esc( safeHref( g.form.adminUrl ) ) }" target="_blank" rel="noopener">${ esc( __( 'Edit in Gravity Forms ↗' ) ) }</a>
 			</div>
@@ -56296,7 +56296,7 @@
 					title: __( 'Remove this field?' ),
 					body: n
 						/* translators: 1: the field's label, 2: localized number of entries. */
-						? sprintf( _n( 'When you save, Gravity Forms deletes “%1$s” along with its answers in this form’s %2$s entry. Other answers stay.', 'When you save, Gravity Forms deletes “%1$s” along with its answers in this form’s %2$s entries. Other answers stay.', n ), gfbName( f ), n.toLocaleString() )
+						? sprintf( _n( 'When you save, Gravity Forms deletes “%1$s” along with its answers in this form’s %2$s entry. Other answers stay.', 'When you save, Gravity Forms deletes “%1$s” along with its answers in this form’s %2$s entries. Other answers stay.', n ), gfbName( f ), formattedNumber( n ) )
 						: __( 'The field is removed when you save.' ),
 					confirmLabel: __( 'Remove' ),
 					danger: true,

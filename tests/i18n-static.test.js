@@ -6,7 +6,7 @@
  * two, and three releases later the catalog is half the interface again.
  * This suite is what makes the sweep a one-time cost.
  *
- * It checks four things:
+ * It checks, among others:
  *
  *   1. No user-visible ATTRIBUTE literal (placeholder / title / aria-label /
  *      alt) sits unwrapped in template text.
@@ -452,6 +452,33 @@ const JS_PROSE_ALLOW = new Set( [
 	}
 	check( 'No unwrapped prose in app.js code context', bad.length === 0,
 		bad.length ? `${ bad.length } found:\n      ` + bad.slice( 0, 12 ).join( '\n      ' ) : '' );
+}
+
+/* ---------------------------------------------------------------------------
+ * 9. Numbers and dates format in the reader's language.
+ *    toLocaleString() with no locale (or undefined) formats in the browser's
+ *    language, so a Dutch reader on an English browser gets "1,234" inside a
+ *    Dutch sentence. Every call passes uiLocale(), or goes through
+ *    formattedNumber(). Intl formatters pinned to 'en' or 'en-US' read
+ *    timezone parts for arithmetic and never reach the screen; anything else
+ *    passes uiLocale() too.
+ * ------------------------------------------------------------------------ */
+{
+	const bad = [];
+	const bare = /\.toLocale(?:String|DateString|TimeString)\(\s*(?:\)|undefined\b|null\b|\[\s*\])/g;
+	let m;
+	while ( ( m = bare.exec( src ) ) ) {
+		if ( st[ m.index ] !== 0 ) continue;
+		bad.push( `app.js:${ lineOf( m.index ) }  ${ m[ 0 ] }` );
+	}
+	const intl = /new Intl\.(?:NumberFormat|DateTimeFormat|RelativeTimeFormat|ListFormat|PluralRules|DisplayNames)\(\s*([^,)]*)/g;
+	while ( ( m = intl.exec( src ) ) ) {
+		if ( st[ m.index ] !== 0 ) continue;
+		const arg = m[ 1 ].trim();
+		if ( /^\[?\s*uiLocale\(/.test( arg ) || /^'en(?:-US)?'$/.test( arg ) ) continue;
+		bad.push( `app.js:${ lineOf( m.index ) }  new Intl.…( ${ arg || 'no locale' } )` );
+	}
+	check( 'Numbers and dates format in the reader\'s language', bad.length === 0, bad.slice( 0, 8 ).join( '\n      ' ) );
 }
 
 function walkPhp( dir ) {

@@ -25,7 +25,7 @@ the swept rows are as the audit left them.
 | Untranslated display strings in PHP | ~1,200 | **0** |
 | Logical CSS properties | 0 | 183 declarations, plus 24 offsets |
 | Locales with a catalog | 0 | 24 (packed as 33, with the English variants and formal aliases) |
-| `toLocale*` calls using the reader's locale | 0 of 48 | **57 of 59** (two bare `toLocaleString()` calls in the Gravity Forms builder; no guard caught them) |
+| `toLocale*` calls using the reader's locale | 0 of 48 | **59 of 59**, guarded by `tests/i18n-static.test.js` (three had slipped through by v0.47.0) |
 | Plugin zip | 3.86MB | 2.02MB at v0.30.0, **2.82MB** at v0.47.0 |
 | Sentences split across an interpolation | 33 | **0** |
 | Decay guards | none | 7 static checks + 3 suites |
@@ -546,10 +546,6 @@ deliberate exclusions below.
 marking one `minn-reviewed` in the `.po` makes it permanent, and a re-import
 will not overwrite it. That is the path from generated to maintained, and it
 is what a native speaker's pull request should touch.
-
-**The two bare `toLocaleString()` calls** in the Gravity Forms builder format
-with the browser's locale rather than the reader's, and the decay guards did not
-catch them. Fix both and add the guard.
 
 **If Minn Admin ever moves to WordPress.org, most of this becomes dead code.**
 `bin/i18n/` and the pack-hosting half of the updater exist because the plugin
