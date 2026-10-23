@@ -210,7 +210,9 @@ Expand only the part of Minn you want to explore.
   where each key comes from (saved, wp-config constant or environment variable), install the
   companion plugin in place, keys saved through core's own masked route), under a sticky
   section nav. The **Spam** page shows who filters comment spam (Akismet, Antispam Bee,
-  CleanTalk, WP Armour) with safe toggles and blocked counts. **Site-visibility warnings**: an
+  CleanTalk, WP Armour, Breakwater) with safe toggles and blocked counts. **Breakwater**'s log
+  lives under Forms: everything it checked, why each one scored what it did, **Not spam** to
+  hand a held submission back to its form, **Was spam** for one that got through, and its mode. **Site-visibility warnings**: an
   Overview banner and a persistent topbar chip appear whenever a maintenance plugin, password
   gate or "discourage search engines" is hiding the site, with inline fix controls where Minn
   can safely flip the setting, including **turn-off switches with Undo** for detected

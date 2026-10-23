@@ -4,7 +4,7 @@
 checking on things, keeping plugins current. No code in here. If you build
 plugins, you want [for-plugin-authors.md](for-plugin-authors.md) instead.*
 
-*Current as of v0.46.0. This file ships inside the plugin, so the copy you
+*Current as of v0.47.0. This file ships inside the plugin, so the copy you
 are reading always matches the version you have installed.*
 
 ## What Minn is (and is not)
@@ -44,7 +44,14 @@ without a store still has the shorter navigation it needs:
   logs, activity logs, redirects, broken links, backups, snippets. Plugins whose Minn
   presence is purely a settings screen, and a theme's options pages,
   gather under a single **Site Options** entry here rather than each
-  claiming its own sidebar spot.
+  claiming its own sidebar spot. A settings screen there writes only
+  what you changed and checks every changed value before anything is
+  written: a value the plugin would refuse, or one you may not change,
+  is named and nothing is saved, and if someone changed one of those
+  values since you opened the page, Minn asks you to reload. Code
+  snippets (WPCode, Custom CSS & JS, a page's Bricks scripts) cannot be
+  changed on a site that switches off code editing with
+  DISALLOW_FILE_EDIT, though deleting or renaming one still works.
 - **Manage** — the site itself: Extensions, Users, Design (Menus and
   Widgets on classic themes), Structure, System, Settings.
 
@@ -317,10 +324,12 @@ counted as locked, with a link to edit them in wp-admin):
   post. A save sends only the fields you changed, so one someone else
   changed meanwhile keeps their value. Fields show and hide the way their rules intend as you flip the
   switches that control them, and a hidden field always keeps its value.
-  When ACPT or Pods refuses a value (a choice the field does not offer,
-  a malformed email), the post still saves once, the rest of the fields
-  with it, and the editor names the field that was not saved and keeps
-  it unsaved. An ACPT box its plugin shows only to certain accounts or
+  When ACPT, Pods, Meta Box or another field panel refuses a value (a
+  choice the field does not offer, a number outside its range, a
+  malformed email, an address that is not a web link), the post still
+  saves once, the rest of the fields with it, and the editor names the
+  field that was not saved and keeps it unsaved; what was stored stays,
+  so a refused link never erases the saved one. An ACPT box its plugin shows only to certain accounts or
   on posts in a certain state stays out of Minn the same way.
 - **The everyday types edit in place**: text, choices, switches,
   checkboxes, colors with a real picker, dates and times on the same
@@ -379,7 +388,10 @@ plugin uses. Everything saves through the plugin's own storage, so its
 analysis, sitemaps and caches behave exactly as if its screen had saved
 it, and clearing a field restores the site-wide default rather than
 storing an empty value. Each plugin's own permission model carries over:
-fields a plugin reserves for administrators are reserved here too.
+fields a plugin reserves for administrators are reserved here too, and
+the panel appears only where your SEO plugin's own box would (a
+Contributor under Rank Math gets none). A change the plugin refuses is
+named after the save, and the rest of the post saves as usual.
 Building schema stays in your SEO plugin's generator, one click away; the
 panel shows what the post actually emits.
 
@@ -491,6 +503,14 @@ does in Gravity Forms, and Minn says so before you confirm. Minn offers
 only what your edition of each plugin offers: answers are editable where
 the plugin itself allows it, and Fluent Forms' routing and new emails
 need Fluent Forms Pro.
+
+With **Breakwater** active, Forms also carries its log: every comment,
+sign-up and form submission it checked, filtered to what was held,
+marked spam or let through, each with the reasons it scored what it did.
+**Not spam** hands a held submission back to its form, saved and sent as
+if it had never been held, and trusts the sender from then on; **Was
+spam** marks one that got through. Breakwater's mode (Automatic, Monitor
+only, Protect or Off) switches on its Settings tab.
 
 **Cache and backups**: if a caching plugin or host cache is active, ⌘K
 "Clear site cache" purges all of them at once. If a backup plugin is
@@ -631,7 +651,8 @@ Customers, Products and Coupons. WooCommerce Subscriptions adds Subscriptions,
 WooCommerce Memberships adds Memberships, a supported appointment plugin
 adds Bookings, and a supported gift card plugin (YITH, official WooCommerce
 Gift Cards, or PW Gift Cards) adds Gift cards, all in the same operational
-group.
+group. Every price shows the store's currency on the side WooCommerce's
+currency position setting puts it ("₹500" or "500 ₹").
 
 - **Orders** open as their own page, at their own address, so an order can
   be linked to or kept in a second tab. The main column holds the work:
@@ -1151,7 +1172,8 @@ page where visitors hit it, with the same offer.
   that preview, so it cannot show them what they could not read.
 - **Will Minn show my keys?** No. A licence key, API token or other
   credential the database browser hides is hidden on every Minn screen,
-  shown as [redacted:…], even inside a log or a link. Screens that hand
+  shown as [redacted:…], even inside a log or a link, and whether or
+  not the plugin that stored it is still active. Screens that hand
   you a key on purpose (WP Migrate's connection info, the Disembark
   command, one-time login links) still show it. Saving a screen that
   showed a hidden key keeps the real one; a change that would store the
