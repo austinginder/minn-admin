@@ -37,14 +37,14 @@ make out loud:
   ecosystems never build this.
 - **A written compatibility promise** (additive-only, deprecation windows, "keys
   not on this page are internal") and reference adapters that are genuinely
-  readable. Ninety-four bundled adapter modules prove the primitives generalize
+  readable. A hundred and forty bundled adapter modules prove the primitives generalize
   across four different settings-schema frameworks.
-- **The quality bar**: 430 browser suites and 29 PHP suites, verification on clean and
+- **The quality bar**: 451 browser suites and 75 PHP suites, verification on clean and
   production-scale sites, zero-console-error gates.
 
 ## v1.0 gates
 
-*Status check 2026-08-18 (v0.32.0 released; current main has 286 browser
+*Status check 2026-10-23 (v0.47.0 released; main has 451 browser
 suites): G2 through G6 remain shipped and represented by their canonical
 gate suites (tests/hide-integrations.test.js,
 hide-slash-designs.test.js, design-sources.test.js,
@@ -52,8 +52,10 @@ attention-budgets.test.js, offsite-links.test.js, contract.test.js and
 example-adapter.test.js). G1, the afternoon test with a real outside
 tester, is still the only open gate. Its material is all in place
 (docs/shim-tutorial.md, the suite-enforced
-docs/examples/minn-example-adapter and the Playground blueprint); finding
-that tester remains scheduling work, not engineering work.*
+docs/examples/minn-example-adapter and the Playground blueprint). Since
+October 2026 one outside plugin ships its own Minn integration (see
+roadmap.md, Goal 3), so a developer who wired in from the docs alone may
+already exist; asking them is the cheapest way to close G1.*
 
 v1.0 ships when all of these are true:
 

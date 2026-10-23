@@ -527,12 +527,17 @@ fixed baseline every change is measured against
 
 ## Later
 
-- **Next:** redirects, snippets, gift cards, dev tools and backups, after forms,
-  activity logs, bookings and mail; then the earlier families' kits.
-  v0.47 decides whether to publish the kernel API for third-party authors. If
-  it does, a kernel-only adapter shows as such on the Integrations card, and
-  one with its own routes is flagged, which is what the site-owner extension
-  policy acts on.
+- **Done:** every family the v0.46 scope named, then redirects, snippets, gift
+  cards, dev tools, backups and the earlier families' kits, all in v0.46.0;
+  the fields, settings and credential tiers in v0.47.0.
+- **Left:** the hand-written routes in the shapes kept out of scope above:
+  WooCommerce settings, ACF (field groups and its own few routes), ACPT,
+  network administration and the licence manager.
+- **Public or internal** is still open. It was scheduled for v0.47 and v0.47.0
+  shipped without it. If the API goes public, a kernel-only integration shows
+  as such on the Integrations card, and one with its own routes is flagged,
+  which is what the site-owner extension policy acts on. The first outside
+  integration (see [roadmap.md](roadmap.md), Goal 3) is the second kind.
 - **Batteries.** A Minn-native forms, redirects or snippets feature is just a
   resource over Minn's own table, so the kernel makes the 2026-09-04 audit's
   "batteries included" idea cheap. Whether Minn should ship its own instead of
@@ -557,6 +562,7 @@ fixed baseline every change is measured against
 - Resource kernel as the direction, with form entries first.
 - Ported adapters keep their route paths (recommended) or move to a new
   namespace.
-- Kernel API internal in v0.46, public in v0.47 (recommended).
+- Kernel API internal in v0.46, public in v0.47 (recommended). Not yet taken:
+  the API is still internal after v0.47.0.
 - The default extension policy for third-party adapters: allowed and flagged
   (recommended), reviewed only, or bundled only.

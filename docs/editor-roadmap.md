@@ -1,6 +1,7 @@
 # Editor roadmap — the long-term plan
 
-*Statuses last verified against the code 2026-08-09 (v0.26.0 cycle, unreleased). The
+*Statuses last verified against the code 2026-08-09 (v0.26.0 cycle, unreleased);
+Horizon 3 re-checked 2026-10-23 (v0.47.0) and unchanged. The
 measurable goals this plan serves live in [roadmap.md](roadmap.md); this document holds
 the editor thesis, the shipped ledger, and the open frontier.*
 

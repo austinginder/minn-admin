@@ -9,22 +9,24 @@ catalogs, right to left layout, delivery, and upkeep.
 
 ## Status
 
-Phases 0 through 5 are built and verified in development, and a full source
-audit has closed the last three categories the sweeps missed. See "The audit"
-and "What is left" at the end.
+Phases 0 through 5 have shipped: the translation release (v0.30.0) carried
+twenty-three languages and Frisian made it twenty-four in v0.32.0. A full source
+audit closed the last three categories the sweeps missed. See "The audit" and
+"What is left" at the end. The counted rows below were re-measured at v0.47.0;
+the swept rows are as the audit left them.
 
 | | Before | Now |
 |---|---|---|
-| `.pot` entries | 341, stamped 0.25.0 | **2,994**, current, 0 extractor warnings |
-| Plural entries | 0 usable | 20, with a real Plural-Forms evaluator |
-| Translator notes | 0 | 110 |
+| `.pot` entries | 341, stamped 0.25.0 | **6,959**, current, 0 extractor warnings |
+| Plural entries | 0 usable | 161, with a real Plural-Forms evaluator |
+| Translator notes | 0 | 833 |
 | Unwrapped attribute literals in `app.js` | 265 | **0** |
 | Unwrapped visible text nodes in `app.js` | ~600 | **0** |
 | Untranslated display strings in PHP | ~1,200 | **0** |
 | Logical CSS properties | 0 | 183 declarations, plus 24 offsets |
-| Locales with a catalog | 0 | 13 (packed as 17, with the English variants) |
-| `toLocale*` calls using the reader's locale | 0 of 48 | **48 of 48** |
-| Plugin zip | 3.86MB | **2.02MB** |
+| Locales with a catalog | 0 | 24 (packed as 33, with the English variants and formal aliases) |
+| `toLocale*` calls using the reader's locale | 0 of 48 | **57 of 59** (two bare `toLocaleString()` calls in the Gravity Forms builder; no guard caught them) |
+| Plugin zip | 3.86MB | 2.02MB at v0.30.0, **2.82MB** at v0.47.0 |
 | Sentences split across an interpolation | 33 | **0** |
 | Decay guards | none | 7 static checks + 3 suites |
 
@@ -468,12 +470,12 @@ both the PHP side and the SPA when installed the way WordPress installs one.
 `wp_get_translation_updates()` returns the packs and the Updates screen reads
 "Translation Updates".
 
-**Phase 4, wave 1. Foundation done, coverage pending.** Thirteen catalogs
-exist, validate and compile, at 12% coverage from WordPress core alone. The
-model pass needs an API key. Persian ships with its contributor named as
-maintainer.
+**Phase 4, wave 1. Done.** Thirteen catalogs, seeded from WordPress core and
+completed by the model pass, shipped in v0.30.0. Persian ships with its
+contributor named as maintainer.
 
-**Phase 5, wave 2.** To twenty, after wave 1 has been through a release cycle.
+**Phase 5, wave 2. Done.** The ten wave 2 locales shipped in the same release
+rather than a cycle later, and Frisian followed in v0.32.0.
 
 ## What was found along the way
 
@@ -540,26 +542,20 @@ deliberate exclusions below.
 
 ## What is left
 
-**A reply to issue #19.** Hossein proposed all of this, built a working
-`fa_IR`/RTL fork against 0.27.0, offered to split it into four PRs, and asked
-three direct questions — including which of bundled, language packs or separate
-this project wanted. He has had no answer while essentially his whole proposal
-shipped. Deferred deliberately until the work is finished and verified, not
-forgotten.
-
 **A first human review per locale.** Generated entries are replaceable;
 marking one `minn-reviewed` in the `.po` makes it permanent, and a re-import
 will not overwrite it. That is the path from generated to maintained, and it
 is what a native speaker's pull request should touch.
 
-**Wave 2** takes the list to twenty and waits until wave 1 has been through a
-release cycle.
+**The two bare `toLocaleString()` calls** in the Gravity Forms builder format
+with the browser's locale rather than the reader's, and the decay guards did not
+catch them. Fix both and add the guard.
 
 **If Minn Admin ever moves to WordPress.org, most of this becomes dead code.**
 `bin/i18n/` and the pack-hosting half of the updater exist because the plugin
 is distributed from GitHub. On w.org, translate.wordpress.org does all of it:
 GlotPress, community translators, real language packs, and none of this
-code. The thirteen catalogs would become a seed import rather than the system.
+code. The twenty-four catalogs would become a seed import rather than the system.
 Worth knowing before investing further in the pipeline itself.
 
 **Working translations need a build.** `dist/` is gitignored, so a fresh
