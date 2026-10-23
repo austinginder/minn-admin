@@ -5981,13 +5981,18 @@
 			loadCoreStatus().then( () => { if ( state.route === 'overview' && state.cache.core && state.cache.core.update ) renderOverview(); } );
 			resumeJob();
 		}
-		// Chart source: traffic (when an analytics adapter answered) or activity.
-		// Traffic leads by default; the swap button cycles and the pick sticks.
-		const sources = o.traffic ? [ 'traffic', 'activity' ] : [ 'activity' ];
+		// Chart source: sales (on a store, for someone who may read its
+		// reports), traffic (when an analytics adapter answered) or activity.
+		// The first one present leads; the swap button cycles and the pick sticks.
+		const sources = [ o.sales && 'sales', o.traffic && 'traffic', 'activity' ].filter( Boolean );
 		if ( ! state.chartSource ) state.chartSource = localStorage.getItem( 'minn-chart-source' ) || sources[ 0 ];
 		if ( ! sources.includes( state.chartSource ) ) state.chartSource = sources[ 0 ];
 		const isTraffic = state.chartSource === 'traffic';
-		const chartData = isTraffic ? o.traffic.chart : o.chart;
+		const isSales = state.chartSource === 'sales';
+		const chartData = isTraffic ? o.traffic.chart : ( isSales ? o.sales.chart : o.chart );
+		const nextSource = sources[ ( sources.indexOf( state.chartSource ) + 1 ) % sources.length ];
+		const chartTitles = { sales: __( 'Sales' ), traffic: __( 'Traffic' ), activity: __( 'Activity' ) };
+		const swapTitles = { sales: __( 'Show Sales' ), traffic: __( 'Show Traffic' ), activity: __( 'Show Activity' ) };
 		// Traffic bars stack pageviews (soft) behind visitors (solid), so the
 		// scale runs to the pageview max like Koko's own widget.
 		const max = Math.max( 1, ...chartData.map( ( c ) => isTraffic ? ( c.views || c.value ) : c.value ) );
@@ -6021,10 +6026,10 @@
 		<div class="minn-dash-grid">
 			<div class="minn-card minn-panel-pad">
 				<div class="minn-chart-head">
-					<div class="minn-panel-title">${ esc( isTraffic ? __( 'Traffic' ) : __( 'Activity' ) ) }${ isTraffic ? ` <span class="minn-panel-sub">${ esc( o.traffic.source ) }</span>` : '' }</div>
+					<div class="minn-panel-title">${ esc( chartTitles[ state.chartSource ] ) }${ isTraffic ? ` <span class="minn-panel-sub">${ esc( o.traffic.source ) }</span>` : '' }${ isSales ? ` <span class="minn-panel-sub">${ esc( o.sales.total ) } · ${ esc( sprintf( /* translators: %s: number of orders. */ _n( '%s order', '%s orders', o.sales.orders ), formattedNumber( o.sales.orders ) ) ) }</span>` : '' }</div>
 					<div class="minn-chart-head-actions">
 						${ isTraffic ? `<button class="minn-link-btn" id="minn-open-stats">${ esc( __( 'Open stats' ) ) }</button>` : '' }
-						${ sources.length > 1 ? `<button class="minn-icon-btn sm" id="minn-chart-swap" title="${ esc( isTraffic ? __( 'Show Activity' ) : __( 'Show Traffic' ) ) }">⇄</button>` : '' }
+						${ sources.length > 1 ? `<button class="minn-icon-btn sm" id="minn-chart-swap" title="${ esc( swapTitles[ nextSource ] ) }">⇄</button>` : '' }
 						<div class="minn-range-tabs">
 							${ [ 7, 30, 90 ].map( ( d ) => `<button class="minn-range-tab${ state.range === d ? ' active' : '' }" data-range="${ d }">${ sprintf( /* translators: %s: number of days; "d" abbreviates days. */ esc( __( '%sd' ) ), d ) }</button>` ).join( '' ) }
 						</div>
@@ -6135,24 +6140,42 @@
 		if ( openStats ) openStats.addEventListener( 'click', () => go( 'stats' ) );
 		const swap = $( '#minn-chart-swap', view );
 		if ( swap ) swap.addEventListener( 'click', () => {
-			state.chartSource = isTraffic ? 'activity' : 'traffic';
+			state.chartSource = nextSource;
 			localStorage.setItem( 'minn-chart-source', state.chartSource );
 			renderOverview();
 		} );
-		bindChartTooltip( $( '#minn-chart', view ), chartData, isTraffic );
+		bindChartTooltip( $( '#minn-chart', view ), chartData, state.chartSource );
 		// Activity bars open the events behind them; traffic bars open the
-		// day's top pages (and referrers when the provider has them).
+		// day's top pages (and referrers when the provider has them); sales
+		// bars open the orders they counted.
 		$$( '.minn-chart-col', view ).forEach( ( col ) =>
 			col.addEventListener( 'click', () => {
 				const c = chartData[ parseInt( col.dataset.ci, 10 ) ];
 				if ( ! c || ! c.from ) return;
-				if ( isTraffic ) {
+				if ( isSales ) {
+					if ( c.orders > 0 ) openSalesOrders( c, o.sales.statuses );
+				} else if ( isTraffic ) {
 					if ( ( c.value || 0 ) + ( c.views || 0 ) > 0 ) openChartTraffic( c, chartData );
 				} else if ( c.value > 0 ) {
 					openChartActivity( c );
 				}
 			} )
 		);
+	}
+
+	/** A sales bar's orders: the Orders list narrowed to the report's
+	 *  statuses and the bar's local days. WooCommerce's after/before are
+	 *  exclusive, so the window opens the second before the first day and
+	 *  closes at the midnight after the last. */
+	function openSalesOrders( bucket, statuses ) {
+		state.orderView = 'list';
+		state.orderFilters = orderFiltersDefault( LIST_FILTER_SPECS.orders );
+		state.orderFilters.status = ( statuses || [] ).slice();
+		state.orderFilters.after = ymdShift( bucket.from, -1 ) + 'T23:59:59';
+		state.orderFilters.before = ymdShift( bucket.to, 1 ) + 'T00:00:00';
+		state.orderSearch = '';
+		state.cache.orders = null;
+		go( 'orders' );
 	}
 
 	async function openChartActivity( bucket ) {
@@ -6215,8 +6238,12 @@
 		return tip;
 	}
 
-	function bindChartTooltip( chart, data, isTraffic ) {
+	// mode: 'traffic', 'sales' or 'activity' (true and false are the old
+	// traffic and activity). Pass clickable false where a bar opens nothing.
+	function bindChartTooltip( chart, data, mode, clickable = true ) {
 		if ( ! chart ) return;
+		const kind = mode === true ? 'traffic' : ( mode || 'activity' );
+		const isTraffic = kind === 'traffic';
 		const tip = chartTip();
 		let current = -1;
 
@@ -6239,10 +6266,12 @@
 					<div class="minn-chart-tip-stats">
 						${ isTraffic ? `
 						<div><b>${ Number( c.value ).toLocaleString( uiLocale() ) }</b><span>${ esc( __( 'Visitors' ) ) }</span></div>
-						<div><b>${ Number( c.views || 0 ).toLocaleString( uiLocale() ) }</b><span>${ esc( __( 'Pageviews' ) ) }</span></div>` : `
+						<div><b>${ Number( c.views || 0 ).toLocaleString( uiLocale() ) }</b><span>${ esc( __( 'Pageviews' ) ) }</span></div>` : kind === 'sales' ? `
+						<div><b>${ esc( storeMoney( Number( c.value || 0 ).toLocaleString( uiLocale(), { maximumFractionDigits: 2 } ) ) ) }</b><span>${ esc( __( 'Sales' ) ) }</span></div>
+						<div><b>${ Number( c.orders || 0 ).toLocaleString( uiLocale() ) }</b><span>${ esc( _n( 'Order', 'Orders', Number( c.orders || 0 ) ) ) }</span></div>` : `
 						<div><b>${ Number( c.value ).toLocaleString( uiLocale() ) }</b><span>${ esc( c.value === 1 ? __( 'Event' ) : __( 'Events' ) ) }</span></div>` }
 					</div>
-					${ ( isTraffic ? ( ( c.value || 0 ) + ( c.views || 0 ) > 0 ) : c.value > 0 )
+					${ clickable && ( isTraffic ? ( ( c.value || 0 ) + ( c.views || 0 ) > 0 ) : kind === 'sales' ? c.orders > 0 : c.value > 0 )
 						? `<div class="minn-chart-tip-hint">${ esc( __( 'Click for details' ) ) }</div>` : '' }`;
 				$$( '.minn-chart-col.hover', chart ).forEach( ( el ) => el.classList.remove( 'hover' ) );
 				col.classList.add( 'hover' );
@@ -8924,6 +8953,12 @@
 		return f;
 	}
 
+	/** A Y-m-d date n calendar days away, with no time zone to shift it. */
+	const ymdShift = ( ymd, n ) => {
+		const [ y, m, d ] = ymd.split( '-' ).map( Number );
+		return new Date( Date.UTC( y, m - 1, d + n ) ).toISOString().slice( 0, 10 );
+	};
+
 	/** The window a date preset means, as WooCommerce's own parameters. */
 	function orderDateWindow( days ) {
 		const pad = ( n ) => String( n ).padStart( 2, '0' );
@@ -8991,7 +9026,12 @@
 		const f = orderFilters();
 		const preset = ORDER_DATE_PRESETS.find( ( [ d ] ) => d === f.datePreset );
 		if ( preset ) return preset[ 1 ];
-		return [ f.after, f.before ].filter( Boolean ).map( ( d ) => d.slice( 0, 10 ) ).join( ' → ' );
+		// after/before are exclusive, so a window written as the second
+		// before a day and the midnight after one names the days inside it.
+		const from = f.after ? ymdShift( f.after.slice( 0, 10 ), f.after.endsWith( 'T23:59:59' ) ? 1 : 0 ) : '';
+		const to = f.before ? ymdShift( f.before.slice( 0, 10 ), f.before.endsWith( 'T00:00:00' ) ? -1 : 0 ) : '';
+		if ( from && from === to ) return from;
+		return [ from, to ].filter( Boolean ).join( ' → ' );
 	};
 
 	function orderFilterChipsHtml() {
@@ -12307,11 +12347,7 @@
 				return;
 			}
 			if ( chartData.length ) {
-				bindChartTooltip( $( '#minn-wc-chart', view ), chartData.map( ( c ) => ( {
-					label: c.label,
-					value: c.value,
-					views: c.orders,
-				} ) ), false );
+				bindChartTooltip( $( '#minn-wc-chart', view ), chartData, 'sales', false );
 			}
 			return;
 		}

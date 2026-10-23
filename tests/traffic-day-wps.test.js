@@ -111,13 +111,15 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 			const title = document.querySelector( '.minn-panel-title' );
 			return title && /Traffic/i.test( title.textContent );
 		} );
-		if ( ! isTraffic ) {
+		// The swap button cycles Sales (on a store), Traffic and Activity.
+		for ( let n = 0; ! isTraffic && n < 3; n++ ) {
 			const swap = await page.$( '#minn-chart-swap' );
-			if ( swap ) await swap.click();
-			await page.waitForFunction( () => {
+			if ( ! swap ) break;
+			await swap.click();
+			if ( await page.waitForFunction( () => {
 				const title = document.querySelector( '.minn-panel-title' );
 				return title && /Traffic/i.test( title.textContent );
-			}, null, { timeout: 5000 } ).catch( () => null );
+			}, null, { timeout: 1500 } ).catch( () => null ) ) break;
 		}
 		const sourceBadge = await page.evaluate( () => ( document.querySelector( '.minn-panel-sub' ) || {} ).textContent || '' );
 		t.check( 'chart badge says WP Statistics', /WP Statistics/i.test( sourceBadge ), sourceBadge );

@@ -4381,6 +4381,11 @@ class Minn_Admin_REST {
 			);
 		}
 
+		// The chart's third source on a store: what sold each day. The same
+		// store-wide gate as the strip above, and WooCommerce's own reports
+		// permission inside the helper, as the Sales this month card has.
+		$sales = is_array( $store ) ? self::wc_sales_chart( $bucket_days, $buckets ) : null;
+
 		$catalog = self::overview_metric_catalog( $posts, $pages, $comments, $media, $store, $stats );
 		$layout  = self::overview_metric_layout( $catalog, $stats );
 
@@ -4394,6 +4399,7 @@ class Minn_Admin_REST {
 				'canSetMetricDefaults'  => current_user_can( 'manage_options' ),
 				'chart'                 => $chart,
 				'traffic'               => $traffic_out,
+				'sales'                 => $sales,
 				'activity'              => $activity,
 				'store'                 => $store,
 				'greeting'              => self::greeting(),
@@ -4974,6 +4980,128 @@ class Minn_Admin_REST {
 		);
 		set_transient( $key, $out, 15 * MINUTE_IN_SECONDS );
 		return $out;
+	}
+
+	/**
+	 * The Overview chart's Sales source: what sold on each of the store's
+	 * days, summed into the chart's buckets.
+	 *
+	 * It asks WooCommerce's sales report's question (orders in its four
+	 * statuses, by creation day in the store's time zone, totals without
+	 * refunds taken off) but of the orders themselves. The report caches its
+	 * queries for a day and clears them from a deferred job, so a new order
+	 * reached the bar minutes after the list showed it. Each bar carries its
+	 * local days and the statuses, so the Orders list it opens shows exactly
+	 * the orders it counted.
+	 *
+	 * @return array|null { chart: [{label,value,orders,from,to}], total, orders, statuses }
+	 */
+	private static function wc_sales_chart( $bucket_days, $buckets ) {
+		global $wpdb;
+		if ( ! function_exists( 'wc_rest_check_manager_permissions' )
+			|| ! wc_rest_check_manager_permissions( 'reports', 'read' ) ) {
+			return null;
+		}
+		$statuses = array( 'completed', 'processing', 'on-hold', 'refunded' );
+		$in       = "'wc-" . implode( "','wc-", $statuses ) . "'";
+		$span     = $bucket_days * $buckets;
+		$tz       = wp_timezone();
+		$start    = new DateTimeImmutable( 'today', $tz );
+		$start    = $start->modify( '-' . ( $span - 1 ) . ' days' );
+		$end      = $start->modify( '+' . $span . ' days' );
+
+		// Rows of [ local day, order count, sales ].
+		$days = array();
+		$hpos = class_exists( '\\Automattic\\WooCommerce\\Utilities\\OrderUtil' )
+			&& \Automattic\WooCommerce\Utilities\OrderUtil::custom_orders_table_usage_is_enabled();
+		if ( $hpos ) {
+			// The orders table keeps only GMT. Every time zone's offset is a
+			// whole number of quarter hours, so a quarter-hour slot never
+			// straddles two local days, and it bounds the rows a busy store
+			// returns.
+			$table = \Automattic\WooCommerce\Internal\DataStores\Orders\OrdersTableDataStore::get_orders_table_name();
+			$utc   = new DateTimeZone( 'UTC' );
+			$rows  = $wpdb->get_results(
+				$wpdb->prepare(
+					// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from WooCommerce, status list literal.
+					"SELECT LEFT( date_created_gmt, 13 ) AS h, FLOOR( MINUTE( date_created_gmt ) / 15 ) AS q, COUNT(*) AS n, SUM( total_amount ) AS t
+					 FROM {$table}
+					 WHERE type = 'shop_order' AND status IN ( {$in} )
+					 AND date_created_gmt >= %s AND date_created_gmt < %s
+					 GROUP BY h, q",
+					$start->setTimezone( $utc )->format( 'Y-m-d H:i:s' ),
+					$end->setTimezone( $utc )->format( 'Y-m-d H:i:s' )
+				)
+			);
+			foreach ( (array) $rows as $r ) {
+				$at = DateTimeImmutable::createFromFormat( 'Y-m-d H:i', $r->h . ':' . str_pad( (string) ( 15 * (int) $r->q ), 2, '0', STR_PAD_LEFT ), $utc );
+				if ( $at ) {
+					$days[] = array( $at->setTimezone( $tz )->format( 'Y-m-d' ), (int) $r->n, (float) $r->t );
+				}
+			}
+		} else {
+			// post_date is already the store's local time, and it is the
+			// column WooCommerce's REST after/before compare against.
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- status list literal.
+					"SELECT DATE( p.post_date ) AS d, COUNT(*) AS n, SUM( m.meta_value ) AS t
+					 FROM {$wpdb->posts} p
+					 LEFT JOIN {$wpdb->postmeta} m ON m.post_id = p.ID AND m.meta_key = '_order_total'
+					 WHERE p.post_type = 'shop_order' AND p.post_status IN ( {$in} )
+					 AND p.post_date >= %s AND p.post_date < %s
+					 GROUP BY d",
+					$start->format( 'Y-m-d H:i:s' ),
+					$end->format( 'Y-m-d H:i:s' )
+				)
+			);
+			foreach ( (array) $rows as $r ) {
+				$days[] = array( (string) $r->d, (int) $r->n, (float) $r->t );
+			}
+		}
+
+		$series = array_fill( 0, $buckets, array( 'sales' => 0.0, 'orders' => 0 ) );
+		$total  = 0.0;
+		$orders = 0;
+		foreach ( $days as $row ) {
+			$at = DateTimeImmutable::createFromFormat( '!Y-m-d', $row[0], $tz );
+			if ( ! $at ) {
+				continue;
+			}
+			// Rounded, because a day with a DST change is not 24 hours long.
+			$i = (int) round( ( $at->getTimestamp() - $start->getTimestamp() ) / DAY_IN_SECONDS );
+			if ( $i < 0 || $i >= $span ) {
+				continue;
+			}
+			$b = (int) floor( $i / $bucket_days );
+			$series[ $b ]['orders'] += $row[1];
+			$series[ $b ]['sales']  += $row[2];
+			$orders                 += $row[1];
+			$total                  += $row[2];
+		}
+
+		$chart = array();
+		foreach ( $series as $b => $bucket ) {
+			$from  = $start->modify( '+' . ( $b * $bucket_days ) . ' days' );
+			$to    = $from->modify( '+' . ( $bucket_days - 1 ) . ' days' );
+			$label = 1 === $bucket_days
+				? wp_date( 'M j, Y', $from->getTimestamp() )
+				/* translators: %s: the date the week starts on (e.g. "Jun 3, 2026"). */
+				: sprintf( __( 'Week of %s', 'minn-admin' ), wp_date( 'M j, Y', $from->getTimestamp() ) );
+			$chart[] = array(
+				'label'  => $label,
+				'value'  => round( $bucket['sales'], 2 ),
+				'orders' => $bucket['orders'],
+				'from'   => $from->format( 'Y-m-d' ),
+				'to'     => $to->format( 'Y-m-d' ),
+			);
+		}
+		return array(
+			'chart'    => $chart,
+			'total'    => self::wc_money( $total ),
+			'orders'   => $orders,
+			'statuses' => $statuses,
+		);
 	}
 
 	/**

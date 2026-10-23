@@ -77,6 +77,16 @@ the starting cards back. Only administrators see Save as defaults,
 which sets those starting cards for anyone who has not picked their
 own.
 
+On a store, the chart below the cards opens on **Sales**: what sold each
+day (each week over 90 days), with the range's total and order count in
+its header. Hover a bar for that day's sales and orders, and click it to
+open those orders in the Orders list. It counts orders that are completed,
+processing, on hold or refunded, by the day they were placed, the way
+WooCommerce's own sales report does, and a new order shows on today's bar
+straight away. The ⇄ button steps on to Traffic and Activity, and the
+chart remembers which one you left it on. Store owners and shop managers
+see it; a vendor who handles only their own orders does not.
+
 **The command palette** is the fastest way anywhere. Press **⌘K**
 (Ctrl+K on Windows and Linux), start typing, and jump to any view, any
 post, or run a command directly: "Clear site cache", "Back up site now",

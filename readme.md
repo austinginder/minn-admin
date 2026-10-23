@@ -56,7 +56,7 @@ Expand only the part of Minn you want to explore.
 <summary><strong>Daily site work</strong></summary>
 
 
-- **Overview** — stat cards, a real **Traffic chart** with hover details when an analytics plugin
+- **Overview** — stat cards, on a store a **Sales chart** (each day's sales and orders; click a bar for the orders behind it), a real **Traffic chart** with hover details when an analytics plugin
   is installed (Koko Analytics, WP Statistics, Burst, Independent Analytics, AnalyticsWP,
   **Plausible Analytics**, **Matomo** (in WordPress, self-hosted or Cloud via **Connect Matomo**), Google Analytics through
   **Site Kit**, **MonsterInsights** or **ExactMetrics**, or **Jetpack Stats**), **click a bar for
