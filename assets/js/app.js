@@ -36319,7 +36319,10 @@
 			// prepared meta field, so `meta` must ride the _fields list or it
 			// silently reads '' (meta is too heavy to fetch for other types).
 			const syncKeys = type === 'blocks' ? ',meta,wp_pattern_sync_status' : '';
-			const p = await api( `wp/v2/${ type }/${ id }?context=edit&_fields=id,title,content.raw,status,slug,link,categories,tags,date,modified,featured_media,parent,menu_order,template,excerpt,comment_status,ping_status,password,sticky,format,minn_builder${ syncKeys }${ extraKeys }` );
+			// A custom type's own taxonomies ride the item as fields named by their rest_base.
+			const taxes = await editorTaxonomies( type ).catch( () => [] );
+			const taxKeys = taxes.map( ( t ) => ',' + t.base ).join( '' );
+			const p = await api( `wp/v2/${ type }/${ id }?context=edit&_fields=id,title,content.raw,status,slug,link,categories,tags,date,modified,featured_media,parent,menu_order,template,excerpt,comment_status,ping_status,password,sticky,format,minn_builder${ syncKeys }${ extraKeys }${ taxKeys }` );
 			const raw = ( p.content && p.content.raw ) || '';
 			// A builder that OWNS the canvas (Elementor/Beaver/Brizy/Divi-4:
 			// canonical content lives outside post_content) forces locked mode —
@@ -36389,6 +36392,7 @@
 				syncedPattern: 'wp_pattern_sync_status' in p && p.wp_pattern_sync_status !== 'unsynced',
 			};
 			seedEditorTitle( state.editor, p.title && p.title.raw != null ? p.title.raw : '' );
+			attachEditorTaxonomies( state.editor, p, taxes );
 			if ( type === 'posts' && ( p.tags || [] ).length ) {
 				api( `wp/v2/tags?include=${ p.tags.join( ',' ) }&per_page=100&_fields=id,name` )
 					.then( ( t ) => {
@@ -36533,6 +36537,14 @@
 			} catch ( e ) {}
 			loadEditorPanels( state.editor, null );
 			loadPageAttrs( state.editor );
+			const blank = state.editor;
+			editorTaxonomies( newType )
+				.then( ( taxes ) => {
+					if ( state.editor !== blank ) return;
+					attachEditorTaxonomies( blank, null, taxes );
+					if ( state.route === 'editor' ) renderEditorSide();
+				} )
+				.catch( () => {} );
 		}
 		// All categories for the sidebar picker (posts only), cached per session.
 		if ( state.editor.type === 'posts' && ! state.cache.categories ) {
@@ -36647,6 +36659,9 @@
 		if ( ed.type === 'posts' && ed.tagsDirty ) {
 			payload.tags = Array.from( ed.tagIds );
 		}
+		( ed.taxes || [] ).forEach( ( tax ) => {
+			if ( tax.dirty ) payload[ tax.base ] = Array.from( tax.ids );
+		} );
 		( ed.panels || [] ).forEach( ( p ) => {
 			if ( ed.panelDirty && ed.panelDirty[ p.desc.id ] && p.desc.writeKey ) {
 				// Only the fields changed since the panel loaded or last
@@ -36869,6 +36884,9 @@
 			ed.templateDirty = false;
 			ed.orderDirty = false;
 			ed.excerptDirty = false;
+			( ed.taxes || [] ).forEach( ( tax ) => {
+				if ( tax.base in payload ) tax.dirty = false;
+			} );
 			if ( 'excerpt' in payload ) ed.excerptSeed = payload.excerpt;
 			ed.formatDirty = false;
 			ed.slugDirty = false;
@@ -38483,6 +38501,12 @@
 						<div class="minn-ac-panel" hidden></div>
 					</div>
 				</div>` : '' }
+				${ ( ed.taxes || [] ).map( ( tax ) => `<div>${ esc( tax.name ) }<div class="minn-chips">${
+					tax.terms == null ? `<span class="minn-chip">${ esc( __( 'Loading…' ) ) }</span>`
+					: tax.terms.map( ( t ) => `<button class="minn-chip pick${ tax.ids.has( t.id ) ? ' sel' : '' }" data-taxterm="${ esc( tax.base ) }" data-termid="${ t.id }">${ esc( t.name ) }</button>` ).join( '' )
+				}</div>
+					<input class="minn-input minn-tax-input" data-taxnew="${ esc( tax.base ) }" placeholder="${ esc( sprintf( /* translators: %s: a taxonomy's name, for example "Topics". */ __( 'Add to %s, press Enter' ), tax.name ) ) }" autocomplete="off" spellcheck="false">
+				</div>` ).join( '' ) }
 				${ ed.supportsExcerpt ? `<div>${ esc( __( 'Excerpt' ) ) }
 					<textarea class="minn-input minn-excerpt-input" id="minn-editor-excerpt" rows="3" placeholder="${ esc( __( 'Optional summary for archives, feeds and shares…' ) ) }">${ esc( ed.excerpt ) }</textarea>
 				</div>` : '' }
@@ -38904,6 +38928,31 @@
 				if ( ed.id ) scheduleAutosave();
 			} )
 		);
+		$$( '[data-taxterm]', root ).forEach( ( chip ) =>
+			chip.addEventListener( 'click', () => {
+				const tax = ( ed.taxes || [] ).find( ( t ) => t.base === chip.dataset.taxterm );
+				if ( ! tax ) return;
+				const id = parseInt( chip.dataset.termid, 10 );
+				if ( tax.ids.has( id ) ) tax.ids.delete( id );
+				else tax.ids.add( id );
+				tax.dirty = true;
+				chip.classList.toggle( 'sel' );
+				if ( ed.id ) scheduleAutosave();
+			} )
+		);
+		$$( '[data-taxnew]', root ).forEach( ( input ) =>
+			input.addEventListener( 'keydown', ( e ) => {
+				if ( e.key !== 'Enter' || e.isComposing ) return;
+				e.preventDefault();
+				const tax = ( ed.taxes || [] ).find( ( t ) => t.base === input.dataset.taxnew );
+				const name = input.value.trim();
+				if ( ! tax || ! name ) return;
+				input.disabled = true;
+				addEditorTaxTerm( ed, tax, name ).finally( () => {
+					input.disabled = false;
+				} );
+			} )
+		);
 		$$( '[data-tagchip]', root ).forEach( ( ch ) =>
 			ch.addEventListener( 'click', () => removeEditorTag( parseInt( ch.dataset.tagchip, 10 ) ) )
 		);
@@ -39041,6 +39090,99 @@
 			state.editor.tagsDirty = true;
 			refreshTagChips();
 			if ( state.editor.id ) scheduleAutosave();
+		} catch ( e ) {
+			toast( e.message, true );
+		}
+	}
+
+	/* ===== Editor: a custom type's own taxonomies ===== */
+	// A custom type's taxonomies (a wiki's topics, a portfolio's skills) are
+	// REST fields named by each taxonomy's rest_base, so the editor learns
+	// them from wp/v2/taxonomies?type=, asks for those fields with the item,
+	// and draws one chip picker per taxonomy. Posts keep their own
+	// Categories and Tags fields; pages and patterns have none.
+	const editorTaxPromises = {};
+	function editorTaxonomies( base ) {
+		if ( [ 'posts', 'pages', 'blocks' ].includes( base ) ) return Promise.resolve( [] );
+		if ( ! editorTaxPromises[ base ] ) {
+			editorTaxPromises[ base ] = loadTypes()
+				.then( ( types ) => {
+					const cpt = types.find( ( t ) => t.restBase === base );
+					return cpt ? api( `wp/v2/taxonomies?type=${ encodeURIComponent( cpt.slug ) }&context=edit` ) : {};
+				} )
+				.then( ( taxes ) => Object.values( taxes || {} )
+					// The base becomes a route segment and a field name: plain names under wp/v2 only.
+					.filter( ( t ) => t && /^[a-z0-9_-]+$/i.test( String( t.rest_base || '' ) ) && ( ! t.rest_namespace || 'wp/v2' === t.rest_namespace ) )
+					.map( ( t ) => ( { base: t.rest_base, name: decodeEntities( t.name ), hierarchical: !! t.hierarchical } ) ) )
+				.catch( ( e ) => {
+					delete editorTaxPromises[ base ];
+					throw e;
+				} );
+		}
+		return editorTaxPromises[ base ];
+	}
+
+	// The item's terms in each taxonomy (none on a blank document), then each
+	// taxonomy's terms for the picker, by name.
+	function attachEditorTaxonomies( ed, p, taxes ) {
+		ed.taxes = taxes.map( ( t ) => ( { ...t, ids: new Set( p && Array.isArray( p[ t.base ] ) ? p[ t.base ] : [] ), terms: null, dirty: false } ) );
+		ed.taxes.forEach( ( tax ) => {
+			api( `wp/v2/${ tax.base }?per_page=100&orderby=name&order=asc&_fields=id,name` )
+				.then( ( terms ) => {
+					tax.terms = ( Array.isArray( terms ) ? terms : [] ).map( ( t ) => ( { id: t.id, name: decodeEntities( t.name ) } ) );
+				} )
+				.catch( () => {
+					tax.terms = [];
+				} )
+				.then( () => {
+					if ( state.editor === ed && state.route === 'editor' ) {
+						renderEditorSide();
+						refreshEditorSettingsDoor();
+					}
+				} );
+		} );
+	}
+
+	// The Settings door is a modal drawn from the editor's state when it
+	// opens: a term that arrives while it is open redraws it in place, its
+	// scroll and the focused field kept.
+	function refreshEditorSettingsDoor( focusSelector ) {
+		const m = state.modal;
+		if ( ! m || m.type !== 'editor-side' || m.id !== 'settings' ) return;
+		const scroller = $( '.minn-editor-door-body' );
+		const top = scroller ? scroller.scrollTop : 0;
+		renderOverlays();
+		const sc = $( '.minn-editor-door-body' );
+		if ( sc ) sc.scrollTop = top;
+		const field = focusSelector ? $( focusSelector ) : null;
+		if ( field ) field.focus( { preventScroll: true } );
+	}
+
+	// A term typed into a taxonomy's picker: the one by that name when there
+	// is one (loaded, or found by search), else a new term; either way it is
+	// picked for the item.
+	async function addEditorTaxTerm( ed, tax, name ) {
+		const same = ( t ) => t.name.toLowerCase() === name.toLowerCase();
+		try {
+			let match = ( tax.terms || [] ).find( same );
+			if ( ! match ) {
+				const found = await api( `wp/v2/${ tax.base }?search=${ encodeURIComponent( name ) }&per_page=20&_fields=id,name` ).catch( () => [] );
+				match = ( Array.isArray( found ) ? found : [] ).map( ( t ) => ( { id: t.id, name: decodeEntities( t.name ) } ) ).find( same );
+			}
+			if ( ! match ) {
+				const created = await api( `wp/v2/${ tax.base }`, { method: 'POST', body: JSON.stringify( { name } ) } );
+				match = { id: created.id, name: decodeEntities( created.name ) };
+			}
+			if ( ! ( tax.terms || [] ).some( ( t ) => t.id === match.id ) ) {
+				tax.terms = [ ...( tax.terms || [] ), match ].sort( ( a, b ) => a.name.localeCompare( b.name ) );
+			}
+			tax.ids.add( match.id );
+			tax.dirty = true;
+			if ( state.editor === ed && state.route === 'editor' ) {
+				renderEditorSide();
+				refreshEditorSettingsDoor( `[data-taxnew="${ tax.base }"]` );
+			}
+			if ( ed.id ) scheduleAutosave();
 		} catch ( e ) {
 			toast( e.message, true );
 		}

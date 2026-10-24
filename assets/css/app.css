@@ -983,6 +983,7 @@ button.minn-look-row:focus-visible { outline: 2px solid var(--accent); outline-o
 .minn-widget-moveto { width: auto; font-size: 12.5px; padding: 4px 8px; }
 .minn-widget-textarea { resize: vertical; min-height: 120px; }
 .minn-excerpt-input { resize: vertical; margin-top: 5px; font-size: 13px; line-height: 1.5; }
+.minn-tax-input { margin-top: 8px; font-size: 13px; }
 .minn-core-banner {
   display: flex; align-items: center; gap: 16px; justify-content: space-between;
   padding: 16px 20px; margin-bottom: 16px; border-color: var(--accent);
