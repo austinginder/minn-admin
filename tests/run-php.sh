@@ -83,6 +83,7 @@ run() {
 
 # Single site. Suites that switch users themselves take none.
 run core-icons single
+run insert-examples single
 run demo-bugs-backups-builders single --user=admin
 run demo-bugs-bookings single
 run demo-bugs-forms single --user=admin

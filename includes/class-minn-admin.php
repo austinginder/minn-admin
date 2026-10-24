@@ -2874,6 +2874,47 @@ class Minn_Admin {
 	 * @return array[] Sorted list of { name, title, ns }.
 	 */
 	/**
+	 * A block with the children its registered example names, serialized,
+	 * or '' when the example names none.
+	 *
+	 * @param string $name    Block name.
+	 * @param mixed  $example The block type's example (block.json "example").
+	 * @return string
+	 */
+	private static function example_template( $name, $example ) {
+		if ( ! is_array( $example ) || empty( $example['innerBlocks'] ) || ! is_array( $example['innerBlocks'] ) ) {
+			return '';
+		}
+		return serialize_block( self::example_block( $name, $example ) );
+	}
+
+	/**
+	 * One example block (and its own example children) as a parsed block.
+	 *
+	 * @param string $name    Block name.
+	 * @param array  $example Attributes and innerBlocks.
+	 * @return array
+	 */
+	private static function example_block( $name, $example ) {
+		$inner   = array();
+		$content = array();
+		foreach ( (array) ( isset( $example['innerBlocks'] ) ? $example['innerBlocks'] : array() ) as $child ) {
+			if ( ! is_array( $child ) || empty( $child['name'] ) || ! is_string( $child['name'] ) ) {
+				continue;
+			}
+			$inner[]   = self::example_block( $child['name'], $child );
+			$content[] = null;
+		}
+		return array(
+			'blockName'    => $name,
+			'attrs'        => isset( $example['attributes'] ) && is_array( $example['attributes'] ) ? $example['attributes'] : array(),
+			'innerBlocks'  => $inner,
+			'innerHTML'    => '',
+			'innerContent' => $content,
+		);
+	}
+
+	/**
 	 * @param array $block_forms RAW (unfiltered) block-form descriptors. Pass
 	 *   the unfiltered set: candidacy keys the shared render-probe transient,
 	 *   so a per-user slash hide must not change it (the per-user filtering is
@@ -2919,18 +2960,24 @@ class Minn_Admin {
 				'title' => $title,
 				'ns'    => substr( $name, 0, strpos( $name, '/' ) ),
 			);
+			// A parent whose block.json example names children starts with
+			// them: a list block inserted empty has nothing to edit.
+			$template = self::example_template( $name, $type->example );
+			if ( '' !== $template ) {
+				$candidates[ $name ]['template'] = $template;
+			}
 		}
 
 		// Render probe, cached: ~60 candidate renders can run real queries, so
 		// the surviving list is kept in a transient. The key hashes the
 		// candidate set, so activating/deactivating a plugin busts it.
-		$key = 'minn_admin_insert_blocks_' . md5( MINN_ADMIN_VERSION . wp_json_encode( array_keys( $candidates ) ) );
+		$key = 'minn_admin_insert_blocks_' . md5( MINN_ADMIN_VERSION . wp_json_encode( $candidates ) );
 		$out = get_transient( $key );
 		if ( ! is_array( $out ) ) {
 			$out = array();
 			foreach ( $candidates as $name => $entry ) {
 				try {
-					$rendered = trim( do_blocks( '<!-- wp:' . $name . ' /-->' ) );
+					$rendered = trim( do_blocks( isset( $entry['template'] ) ? $entry['template'] : '<!-- wp:' . $name . ' /-->' ) );
 				} catch ( \Throwable $e ) {
 					$rendered = '';
 				}

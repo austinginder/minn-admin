@@ -43406,14 +43406,23 @@
 			const nf = fields ? ( fields.match( /data-insp="/g ) || [] ).length : 0;
 			/* translators: %d: number of settings fields */
 			const setLabel = sprintf( __( 'Settings (%d)' ), nf );
-			const setBlock = fields ? `
-				<button type="button" class="minn-cted-setbtn" data-ctset="${ i }" aria-expanded="false">${ icon( 'chevron-down' ) }${ esc( setLabel ) }</button>
-				<div class="minn-cted-set" data-ctset-panel="${ i }" hidden>${ fields }</div>` : '';
-			const title = ( t && t.title ) || c.name.replace( /^core\//, '' );
 			const content = ( textRow || runRowsC ) + dfRows;
+			// A server-rendered content block keeps its words in attributes, so
+			// with no text, runs or data form to put first its fields ARE the
+			// content: they show open instead of behind Settings.
+			const fieldsOpen = ! content && !! fields;
+			const setBlock = ! fields ? '' : fieldsOpen
+				? `<div class="minn-cted-set minn-cted-set-open">${ fields }</div>`
+				: `
+				<button type="button" class="minn-cted-setbtn" data-ctset="${ i }" aria-expanded="false">${ icon( 'chevron-down' ) }${ esc( setLabel ) }</button>
+				<div class="minn-cted-set" data-ctset-panel="${ i }" hidden>${ fields }</div>`;
+			const title = ( t && t.title ) || c.name.replace( /^core\//, '' );
+			// The child's own name for itself, so a list of like cards scans.
+			const named = [ 'title', 'label', 'heading' ].map( ( k ) => c.attrs && c.attrs[ k ] ).find( ( v ) => typeof v === 'string' && v.trim() );
+			const nameNote = named ? ` <span class="minn-cted-card-name">${ esc( stripTags( named ) ) }</span>` : '';
 			return `<div class="minn-cted-card" data-ci="${ i }">
 				<div class="minn-cted-card-head">
-					<span class="minn-cted-card-title">${ i + 1 }. ${ esc( title ) }</span>
+					<span class="minn-cted-card-title">${ i + 1 }. ${ esc( title ) }${ nameNote }</span>
 					${ structural ? `<span class="minn-insp-ctl">
 						<button type="button" data-cmove="${ i }:-1" title="${ esc( __( 'Move up' ) ) }"${ i === 0 ? ' disabled' : '' }>↑</button>
 						<button type="button" data-cmove="${ i }:1" title="${ esc( __( 'Move down' ) ) }"${ i === model.children.length - 1 ? ' disabled' : '' }>↓</button>
@@ -47724,7 +47733,7 @@
 			( B.insertBlocks || [] ).forEach( ( b ) => {
 				groupFor( 'b:' + b.ns, prettyNs( b.ns ) + ' · blocks', nsHide( b.ns ) ).items.push( {
 					ic: icon( 'block' ), label: b.title, meta: '',
-					action: { block: b.name, template: `<!-- wp:${ b.name } /-->` },
+					action: { block: b.name, template: b.template || `<!-- wp:${ b.name } /-->` },
 				} );
 			} );
 			designSources().forEach( ( src ) => {
@@ -48203,7 +48212,7 @@
 			// typing matches title or namespace ("/stackable" lists a whole
 			// plugin), so the default menu stays curated.
 			( B.insertBlocks || [] ).forEach( ( b ) => {
-				items.push( [ icon( 'block' ), b.title, { block: b.name, template: `<!-- wp:${ b.name } /-->` }, true, b.ns ] );
+				items.push( [ icon( 'block' ), b.title, { block: b.name, template: b.template || `<!-- wp:${ b.name } /-->` }, true, b.ns ] );
 			} );
 			// Design-library sections (Stackable, Kadence…) — search-only like
 			// the auto blocks ("/pricing", "/hero"…). Lists arrive async into

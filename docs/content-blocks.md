@@ -70,7 +70,9 @@ Design for this path and most blocks need zero Minn-specific code.
 3. **Register the schema in PHP or `block.json`.** Types, enums, defaults, titles, `parent` /
    `ancestor`. Minn's inspector and auto-insert both read the server registry.
 4. **Meaningful output from defaults.** Empty or default attrs should still render something
-   honest in `do_blocks`, or ship an `insert.template` with starter content.
+   honest in `do_blocks`, or ship an `insert.template` with starter content. A parent block can
+   name its starter children in block.json `example.innerBlocks`: the auto-insert then inserts
+   the parent with those children, so it arrives with something to edit (no adapter needed).
 5. **Front-end styles registered so `do_blocks` can enqueue them** (not only when
    `has_block()` finds them on a saved post). Island previews run the real render path.
 6. **Children as content units** (message, row, card, item), not free layout cells.
@@ -100,7 +102,7 @@ Design for this path and most blocks need zero Minn-specific code.
 | Your block | Insert | Edit content | Edit design / structure |
 |---|---|---|---|
 | Dynamic leaf, good schema | Auto (search) or slash via `insert` | Inspector form | N/A if attrs *are* content |
-| Dynamic parent of dynamic children | Template or empty + add children | Children list + forms | Add / remove / reorder content children when structural |
+| Dynamic parent of dynamic children | Template, `example.innerBlocks`, or empty + add children | Children list + forms (an attribute-only child's fields show open on its card) | Add / remove / reorder content children when structural |
 | Static InnerBlocks content parent | **Required** `insert.template` | Children + `wrapperText` | Parent design stays in block editor |
 | Static-save design kit | Design library / pattern markup, or paste from Gutenberg | Text runs + image swap when markup allows | Block editor only |
 | Hybrid without template | Excluded from auto-insert | Island if already in post | Block editor |
