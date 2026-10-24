@@ -668,6 +668,9 @@ class Minn_Admin_Switch_Command {
 	 * [--yes]
 	 * : Switch without asking.
 	 *
+	 * [--[no-]cache-flush]
+	 * : Purge the host's caches once the site answers as Minn (`wp cache flush`), as Minn's installer does. Default: on; --no-cache-flush skips it, and a host's page cache keeps WordPress's pages until purged.
+	 *
 	 * @param array $args       Positional arguments.
 	 * @param array $assoc_args Options.
 	 */
@@ -721,10 +724,85 @@ class Minn_Admin_Switch_Command {
 			WP_CLI::error( __( 'Minn was not installed; the site is still WordPress.', 'minn-admin' ) );
 		}
 		Minn_Admin_Switch::remember( (string) $staged['version'] );
+		if ( \WP_CLI\Utils\get_flag_value( $assoc_args, 'cache-flush', true ) ) {
+			$this->flush_caches();
+		}
 		/* translators: %s: Minn Admin's address. */
 		WP_CLI::success( sprintf( __( 'This site now runs on Minn. Minn Admin is at %s', 'minn-admin' ), home_url( '/minn-admin/' ) ) );
 		// WordPress's files have moved away under this process: stop before anything asks for one.
 		WP_CLI::halt( 0 );
+	}
+
+	/**
+	 * Purges the host's caches once the site answers as Minn, as Minn's own
+	 * installer does: a page cache (Kinsta's, for one) keeps serving
+	 * WordPress's pages until purged, and an opcode cache may run the old
+	 * index.php for a while, so a purge made too early is filled again by
+	 * WordPress. WordPress's files have moved away under this process, so
+	 * the site is asked with PHP's own stream (nothing WordPress loads
+	 * lazily), and the flush runs in a new `wp`, which boots Minn.
+	 */
+	private function flush_caches() {
+		$url    = home_url( '/' );
+		$seen   = false;
+		$misses = 0;
+		/* translators: %s: the site's address. */
+		WP_CLI::log( sprintf( __( 'Waiting for %s to answer as Minn…', 'minn-admin' ), $url ) );
+		for ( $try = 0; $try < 30 && ! $seen; $try++ ) {
+			if ( $try > 0 ) {
+				sleep( 3 );
+			}
+			$headers = $this->headers_of( $url );
+			if ( null === $headers ) {
+				if ( ++$misses >= 3 ) {
+					break;
+				}
+				continue;
+			}
+			$seen = (bool) preg_grep( '/^x-powered-by:\s*Minn\b/i', $headers );
+		}
+		if ( ! $seen ) {
+			WP_CLI::warning( __( 'The site did not answer as Minn yet; flushing anyway. If it still shows WordPress in a minute, run: wp cache flush', 'minn-admin' ) );
+		}
+		$flush = WP_CLI::runcommand(
+			'cache flush',
+			array(
+				'launch'     => true,
+				'return'     => 'all',
+				'exit_error' => false,
+			)
+		);
+		if ( 0 === (int) $flush->return_code ) {
+			WP_CLI::log( __( 'Caches flushed (wp cache flush).', 'minn-admin' ) );
+		} else {
+			WP_CLI::warning( __( 'wp cache flush failed. If the host caches pages, purge its cache now.', 'minn-admin' ) );
+		}
+	}
+
+	/**
+	 * The response headers a fresh request for the address gets, or null when
+	 * nothing answers. A logged-in cookie name and a query string of its own
+	 * step past page caches; the cookie's value signs nobody in.
+	 */
+	private function headers_of( $url ) {
+		$context = stream_context_create(
+			array(
+				'http' => array(
+					'method'          => 'GET',
+					'header'          => "Cookie: wordpress_logged_in_minn_install=1\r\n",
+					'timeout'         => 15,
+					'follow_location' => 0,
+					'ignore_errors'   => true,
+				),
+			)
+		);
+		$handle = @fopen( $url . ( false === strpos( $url, '?' ) ? '?' : '&' ) . 'minn-install=' . mt_rand(), 'r', false, $context );
+		if ( false === $handle ) {
+			return null;
+		}
+		$meta = stream_get_meta_data( $handle );
+		fclose( $handle );
+		return isset( $meta['wrapper_data'] ) ? array_map( 'strval', (array) $meta['wrapper_data'] ) : null;
 	}
 
 	/** The release fetched, checked and staged, or the command ends. */
