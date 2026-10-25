@@ -1493,6 +1493,7 @@
 	function contentTopbarSub() {
 		if ( state.contentTrash ) return __( 'Trash' );
 		const filter = state.filter || 'all';
+		if ( state.contentDrafts && filter === 'all' ) return __( 'Drafts' );
 		if ( filter === 'posts' ) return __( 'Posts' );
 		if ( filter === 'pages' ) return __( 'Pages' );
 		if ( filter !== 'all' ) {
@@ -6625,9 +6626,11 @@
 		// "private" requires read_private_posts — requesting it without the cap 403s.
 		// Trash mode swaps the whole list to status=trash (REST scopes it to what
 		// the user can read, so authors see only their own trashed items).
+		// The Drafts filter narrows to status=draft, so unfinished work is
+		// not scattered through the publishing timeline by its date.
 		const statuses = state.contentTrash
 			? 'trash'
-			: 'publish,future,draft,pending' + ( B.caps.readPrivate ? ',private' : '' );
+			: ( state.contentDrafts ? 'draft' : 'publish,future,draft,pending' + ( B.caps.readPrivate ? ',private' : '' ) );
 		// Default orderby=date puts scheduled posts (future dates) first, then
 		// everything else newest-published first — a publishing timeline.
 		// Title sort is opt-in via the column header (page-heavy sites).
@@ -6648,7 +6651,7 @@
 		}
 		// The Modified filter: live posts carrying unsaved edits (a newer
 		// autosave than the saved copy). Meaningless in trash mode.
-		if ( state.contentModified && ! state.contentTrash ) q += '&minn_modified=1';
+		if ( state.contentModified && ! state.contentTrash && ! state.contentDrafts ) q += '&minn_modified=1';
 		// categories/tags are post taxonomies — never send them for a custom post type.
 		if ( ! currentCpt() ) {
 			if ( state.contentCat ) q += '&categories=' + encodeURIComponent( state.contentCat );
@@ -6728,7 +6731,7 @@
 	// into the new context — in trash mode that would put Restore/Delete
 	// buttons on live posts. Same-context loads may land freely (they fetch
 	// identical data), so parallel startup loads can't starve each other.
-	const contentCtx = () => [ state.filter || 'all', state.contentTrash ? 't' : '', state.contentModified ? 'm' : '', state.contentSearch || '', state.contentCat || '', state.contentTag || '', state.contentOrderby || 'date', state.contentOrder || 'desc' ].join( '|' );
+	const contentCtx = () => [ state.filter || 'all', state.contentTrash ? 't' : '', state.contentModified ? 'm' : '', state.contentDrafts ? 'd' : '', state.contentSearch || '', state.contentCat || '', state.contentTag || '', state.contentOrderby || 'date', state.contentOrder || 'desc' ].join( '|' );
 
 	async function loadCpt( page = 1 ) {
 		const t = currentCpt();
@@ -6816,7 +6819,7 @@
 
 		// The sidebar badge is the ALL-content count — only a filterless load knows it.
 		const badge = $( '#minn-content-count' );
-		if ( badge && state.filter === 'all' && ! state.contentSearch && ! state.contentTrash && ! taxFilter ) {
+		if ( badge && state.filter === 'all' && ! state.contentSearch && ! state.contentTrash && ! state.contentDrafts && ! state.contentModified && ! taxFilter ) {
 			badge.textContent = c.total > 999 ? ( Math.round( c.total / 100 ) / 10 ) + 'k' : c.total;
 			badge.hidden = ! c.total;
 		}
@@ -6990,8 +6993,11 @@
 		// under an active chip, so they do not get the chip.
 		const ownOnly     = B.ownOnly || {};
 		const modifiedOff = ( state.filter || 'all' ) === 'all' ? !! ( ownOnly.posts || ownOnly.pages ) : !! ownOnly[ state.filter ];
+		// Drafts and Modified are exclusive: Modified means live content
+		// with unsaved edits, which a draft never is.
 		const trashHtml = `
 			<div class="minn-tabs minn-quiet-tabs minn-tabs-aux">
+				${ ! state.contentTrash ? `<button class="minn-tab${ state.contentDrafts ? ' active' : '' }" id="minn-content-drafts" title="${ esc( __( 'Only drafts' ) ) }">${ esc( __( 'Drafts' ) ) }</button>` : '' }
 				${ ! state.contentTrash && ! modifiedOff ? `<button class="minn-tab${ state.contentModified ? ' active' : '' }" id="minn-content-modified" title="${ esc( __( 'Only live content carrying unsaved edits' ) ) }">${ esc( __( 'Modified' ) ) }</button>` : '' }
 				<button class="minn-tab${ state.contentTrash ? ' active' : '' }" id="minn-content-trash" title="${ esc( state.contentTrash ? __( 'Back to content' ) : __( 'View trash' ) ) }">${ icon( 'trash' ) } ${ esc( __( 'Trash' ) ) }</button>
 			</div>`;
@@ -7034,7 +7040,7 @@
 						<button class="minn-btn-soft" data-restore="${ p.id }">${ esc( __( 'Restore' ) ) }</button>
 						<button class="minn-btn-soft danger" data-fdelete="${ p.id }">${ esc( __( 'Delete' ) ) }</button>
 					</div>` : `<div class="minn-row-end"><button class="minn-row-more" data-more="${ p.id }" type="button" title="${ esc( __( 'Actions' ) ) }">⋯</button><span class="minn-row-arrow">›</span></div>` }
-				</div>` ).join( '' ) : `<div class="minn-empty">${ state.contentSearch ? __( 'No matches for “' ) + esc( state.contentSearch ) + '”.' : ( state.contentTrash ? __( 'Trash is empty.' ) : sprintf( /* translators: %s: the New button label, in bold. */ __( 'Nothing here yet. Hit %s to write something.' ), '<b>' + esc( __( 'New' ) ) + '</b>' ) ) }</div>` }
+				</div>` ).join( '' ) : `<div class="minn-empty">${ state.contentSearch ? __( 'No matches for “' ) + esc( state.contentSearch ) + '”.' : ( state.contentTrash ? __( 'Trash is empty.' ) : state.contentDrafts ? __( 'No drafts.' ) : sprintf( /* translators: %s: the New button label, in bold. */ __( 'Nothing here yet. Hit %s to write something.' ), '<b>' + esc( __( 'New' ) ) + '</b>' ) ) }</div>` }
 		</div>
 		${ pagerHtml( c.page, c.totalPages, c.total, 'item' ) }`;
 
@@ -7253,8 +7259,14 @@
 		}
 
 		const modifiedBtn = $( '#minn-content-modified', view );
-		if ( modifiedBtn ) modifiedBtn.addEventListener( 'click', () => {
-			state.contentModified = ! state.contentModified;
+		const draftsBtn = $( '#minn-content-drafts', view );
+		const paintStatusChips = () => {
+			if ( modifiedBtn ) modifiedBtn.classList.toggle( 'active', !! state.contentModified );
+			if ( draftsBtn ) draftsBtn.classList.toggle( 'active', !! state.contentDrafts );
+		};
+		if ( draftsBtn ) draftsBtn.addEventListener( 'click', () => {
+			state.contentDrafts = ! state.contentDrafts;
+			if ( state.contentDrafts ) state.contentModified = false;
 			sel.clear();
 			softListReload( {
 				route: 'content',
@@ -7263,9 +7275,23 @@
 					state.cache.content = null;
 					state.cache.cptContent = {};
 				},
-				paintChrome: () => {
-					modifiedBtn.classList.toggle( 'active', !! state.contentModified );
+				paintChrome: paintStatusChips,
+				load: () => ( currentCpt() ? loadCpt() : loadContent() ),
+				render: renderContent,
+			} );
+		} );
+		if ( modifiedBtn ) modifiedBtn.addEventListener( 'click', () => {
+			state.contentModified = ! state.contentModified;
+			if ( state.contentModified ) state.contentDrafts = false;
+			sel.clear();
+			softListReload( {
+				route: 'content',
+				view,
+				clear: () => {
+					state.cache.content = null;
+					state.cache.cptContent = {};
 				},
+				paintChrome: paintStatusChips,
 				load: () => ( currentCpt() ? loadCpt() : loadContent() ),
 				render: renderContent,
 			} );
