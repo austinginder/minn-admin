@@ -397,6 +397,25 @@ const { BASE, launch, login, loginAs, reporter, pickCombo } = require( './helper
 	t.check( 'Orders Analytics has chart or empty state',
 		analytics.hasChart || analytics.hasTop || analytics.hasGross, JSON.stringify( analytics ) );
 
+	// Each range draws one bar per day, oldest first (the stats intervals
+	// page 10 at a time, newest first, unless asked otherwise).
+	const chartBars = () => page.evaluate( () => {
+		const cols = Array.from( document.querySelectorAll( '#minn-wc-chart .minn-chart-col' ) );
+		const days = cols.map( ( el ) => ( el.getAttribute( 'title' ) || '' ).split( ':' )[ 0 ] );
+		// MM-DD labels: oldest first steps back at most once (a new year).
+		const backs = days.filter( ( d, i ) => i && d < days[ i - 1 ] ).length;
+		return { n: cols.length, backs, first: days[ 0 ], last: days[ days.length - 1 ] };
+	} );
+	for ( const days of [ 30, 90 ] ) {
+		await page.click( `[data-orange="${ days }"]` );
+		await page.waitForFunction( ( d ) => document.querySelectorAll( '#minn-wc-chart .minn-chart-col' ).length === d
+			|| ( new RegExp( `last ${ d } days` ).test( document.body.innerText ) && ! /Loading analytics/.test( document.body.innerText ) ),
+		days, { timeout: 30000 } ).catch( () => null );
+		const bars = await chartBars();
+		t.check( `Analytics ${ days }d range draws ${ days } bars, oldest first`,
+			bars.n === days && bars.backs <= 1, JSON.stringify( bars ) );
+	}
+
 	// Long-range + list status coverage (historical orders).
 	const hasAllRange = await page.$( '[data-orange="all"]' );
 	const has1y = await page.$( '[data-orange="365"]' );

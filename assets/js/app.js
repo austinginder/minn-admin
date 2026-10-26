@@ -9476,12 +9476,26 @@
 		const q = `after=${ encodeURIComponent( after ) }&before=${ encodeURIComponent( before ) }`;
 		const out = { range, totals: null, chart: [], topProducts: [], error: null };
 		try {
-			const [ rev, prods ] = await Promise.all( [
-				api( `wc-analytics/reports/revenue/stats?${ q }&interval=${ encodeURIComponent( interval ) }` ),
+			// The intervals page like a collection (10 newest by default), so
+			// ask oldest-first at the largest page and walk the rest: without
+			// it every range drew the same ten days, backwards.
+			const statsPath = `wc-analytics/reports/revenue/stats?${ q }&interval=${ encodeURIComponent( interval ) }&order=asc&per_page=100`;
+			const [ first, prods ] = await Promise.all( [
+				apiPaged( statsPath + '&page=1' ),
 				api( `wc-analytics/reports/products?${ q }&orderby=items_sold&order=desc&per_page=8&extended_info=true` ).catch( () => [] ),
 			] );
+			const rev = first.items;
+			let intervals = ( rev && rev.intervals ) || [];
+			for ( let p = 2; p <= first.totalPages; p++ ) {
+				const more = await api( statsPath + '&page=' + p );
+				intervals = intervals.concat( ( more && more.intervals ) || [] );
+			}
+			// "All" starts in 2000; begin the chart at the first month with sales.
+			if ( range === 'all' ) {
+				const start = intervals.findIndex( ( iv ) => Number( ( iv.subtotals || {} ).orders_count ) > 0 );
+				intervals = start < 0 ? [] : intervals.slice( start );
+			}
 			out.totals = ( rev && rev.totals ) || null;
-			const intervals = ( rev && rev.intervals ) || [];
 			out.chart = intervals.map( ( iv ) => {
 				const sub = iv.subtotals || {};
 				// day → MM-DD; month → YYYY-MM
