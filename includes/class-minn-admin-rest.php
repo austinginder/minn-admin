@@ -13467,7 +13467,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				$loaded[] = $e;
 			}
 		}
-		$opcache = function_exists( 'opcache_get_status' ) ? @opcache_get_status( false ) : false;
+		$opcache = self::opcache_state();
 		$php     = array(
 			__( 'Version', 'minn-admin' )          => PHP_VERSION,
 			__( 'Interface (SAPI)', 'minn-admin' ) => PHP_SAPI,
@@ -13477,7 +13477,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			'post_max_size'       => ini_get( 'post_max_size' ),
 			'max_input_vars'      => ini_get( 'max_input_vars' ),
 			'max_input_time'      => ini_get( 'max_input_time' ) . 's',
-			'OPcache'             => ( is_array( $opcache ) && ! empty( $opcache['opcache_enabled'] ) ) ? __( 'Enabled', 'minn-admin' ) : ( function_exists( 'opcache_get_status' ) ? __( 'Disabled', 'minn-admin' ) : __( 'Not installed', 'minn-admin' ) ),
+			'OPcache'             => 'on' === $opcache ? __( 'Enabled', 'minn-admin' ) : ( 'hidden' === $opcache ? __( 'Enabled (status hidden by the host)', 'minn-admin' ) : ( 'off' === $opcache ? __( 'Disabled', 'minn-admin' ) : __( 'Not installed', 'minn-admin' ) ) ),
 			__( 'Extensions', 'minn-admin' ) => implode( ', ', $loaded ),
 			'cURL'                => function_exists( 'curl_version' ) ? ( curl_version()['version'] ?? 'yes' ) : 'no',
 		);
@@ -13690,8 +13690,8 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			array(
 				'key'    => 'opcache',
 				'label'  => __( 'OPcache', 'minn-admin' ),
-				'status' => ( is_array( $opcache ) && ! empty( $opcache['opcache_enabled'] ) ) ? 'pass' : 'warn',
-				'detail' => ( is_array( $opcache ) && ! empty( $opcache['opcache_enabled'] ) ) ? __( 'Bytecode caching is on', 'minn-admin' ) : __( 'Not enabled — pages recompile each request', 'minn-admin' ),
+				'status' => ( 'on' === $opcache || 'hidden' === $opcache ) ? 'pass' : 'warn',
+				'detail' => 'on' === $opcache ? __( 'Bytecode caching is on', 'minn-admin' ) : ( 'hidden' === $opcache ? __( 'Bytecode caching is on; the host keeps its status private', 'minn-admin' ) : __( 'Not enabled — pages recompile each request', 'minn-admin' ) ),
 			),
 			array(
 				'key'    => 'debug',
@@ -13933,6 +13933,14 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			}
 		}
 
+		// SiteGround Speed Optimizer's page and object caching
+		// (adapters/cache-purge.php). Only renders when the plugin is loaded.
+		if ( function_exists( 'minn_admin_siteground_cache_checks' ) ) {
+			foreach ( minn_admin_siteground_cache_checks() as $sg_check ) {
+				$checks[] = $sg_check;
+			}
+		}
+
 		// Licenses — read-only visibility (adapters/licenses.php); the health
 		// check only renders when the site has license-wanting components.
 		// /system is manage_options, so on multisite this re-export would hand
@@ -14026,6 +14034,30 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	 * Installed plugins (active first), must-use plugins, and themes with
 	 * versions — the diagnostic manifest a developer pastes into a ticket.
 	 */
+	/**
+	 * OPcache as on, hidden, off or missing. Shared hosts often fence the status
+	 * API with opcache.restrict_api (it returns false and warns) or list it in
+	 * disable_functions (it doesn't exist at all), so a failed status read is
+	 * not proof OPcache is off: the loaded extension and its enable setting
+	 * still are. CLI runs answer to opcache.enable_cli instead.
+	 */
+	private static function opcache_state() {
+		$status = function_exists( 'opcache_get_status' ) ? @opcache_get_status( false ) : false; // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		$ini    = 'cli' === PHP_SAPI ? 'opcache.enable_cli' : 'opcache.enable';
+		return self::opcache_state_of( $status, extension_loaded( 'Zend OPcache' ), filter_var( ini_get( $ini ), FILTER_VALIDATE_BOOLEAN ) );
+	}
+
+	/** The decision behind opcache_state(), apart from the runtime it reads. */
+	private static function opcache_state_of( $status, $loaded, $enabled ) {
+		if ( is_array( $status ) ) {
+			return empty( $status['opcache_enabled'] ) ? 'off' : 'on';
+		}
+		if ( ! $loaded ) {
+			return 'missing';
+		}
+		return $enabled ? 'hidden' : 'off';
+	}
+
 	private static function extensions_manifest() {
 		require_once ABSPATH . 'wp-admin/includes/plugin.php';
 

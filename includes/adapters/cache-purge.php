@@ -336,6 +336,51 @@ function minn_admin_redis_object_cache_checks() {
 	);
 }
 
+/**
+ * System health row for SiteGround Speed Optimizer's three caching layers.
+ * Dynamic cache (the host's NGINX page cache) and file-based caching serve
+ * pages; Memcached is an object cache, so on its own it doesn't count as page
+ * caching. All three are plain per-site options the plugin keeps as 0/1.
+ */
+function minn_admin_siteground_cache_checks() {
+	if ( ! defined( 'SiteGround_Optimizer\VERSION' ) ) {
+		return array();
+	}
+
+	$layers = array(
+		'siteground_optimizer_enable_cache'     => array( __( 'Dynamic cache', 'minn-admin' ), true ),
+		'siteground_optimizer_file_caching'     => array( __( 'File-based cache', 'minn-admin' ), true ),
+		'siteground_optimizer_enable_memcached' => array( __( 'Memcached', 'minn-admin' ), false ),
+	);
+	$on    = array();
+	$pages = false;
+	foreach ( $layers as $option => $layer ) {
+		if ( (int) get_option( $option, 0 ) ) {
+			$on[]  = $layer[0];
+			$pages = $pages || $layer[1];
+		}
+	}
+
+	if ( $pages ) {
+		/* translators: %s: comma-separated caching layers that are on (e.g. "Dynamic cache, Memcached"). */
+		$detail = sprintf( __( 'On: %s', 'minn-admin' ), implode( ', ', $on ) );
+	} elseif ( $on ) {
+		/* translators: %s: comma-separated caching layers that are on (e.g. "Memcached"). */
+		$detail = sprintf( __( 'Page caching is off. On: %s', 'minn-admin' ), implode( ', ', $on ) );
+	} else {
+		$detail = __( 'Installed, but every caching layer is off', 'minn-admin' );
+	}
+
+	return array(
+		array(
+			'id'     => 'siteground-cache',
+			'label'  => __( 'SiteGround caching', 'minn-admin' ),
+			'status' => $pages ? 'pass' : 'warn',
+			'detail' => $detail . ' · v' . constant( 'SiteGround_Optimizer\VERSION' ),
+		),
+	);
+}
+
 /** Slim [{id, name}] list for the boot payload / palette. */
 function minn_admin_cache_purgers_boot() {
 	return array_values(
