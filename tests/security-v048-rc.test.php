@@ -253,4 +253,53 @@ wp_set_current_user( $admin[0]->ID );
 	$check( '09-L4 control: an administrator who reads mail whole opens both', ! Minn_Admin_Kernel::table_refused( $wpdb->prefix . 'gravitysmtp_events' ) && ! Minn_Admin_Kernel::table_refused( $wpdb->prefix . 'gravitysmtp_debug_log' ) );
 } )();
 
+/*
+ * 09-L3: the Gravity Forms entry list and detail left out a password field
+ * only at the top level; a repeater holding one went out with every row's
+ * password, where Gravity Forms' own screens skip it.
+ */
+( function () use ( $check ) {
+	if ( ! class_exists( 'GFAPI' ) || ! class_exists( 'GF_Field_Repeater' ) ) {
+		echo "SKIP  09-L3 Gravity Forms inactive\n";
+		return;
+	}
+	$form_id = GFAPI::add_form( array(
+		'title'  => 'minn-v048rc repeater ' . wp_rand(),
+		'fields' => array(
+			array( 'type' => 'text', 'id' => 4, 'label' => 'Team' ),
+			array(
+				'type'   => 'repeater',
+				'id'     => 1,
+				'label'  => 'Members',
+				'fields' => array(
+					array( 'type' => 'text', 'id' => 3, 'label' => 'Name' ),
+					array( 'type' => 'password', 'id' => 2, 'label' => 'Password' ),
+				),
+			),
+		),
+	) );
+	if ( is_wp_error( $form_id ) ) {
+		$check( '09-L3 a repeater form was made', false, $form_id->get_error_message() );
+		return;
+	}
+	global $wpdb;
+	$entry_id = GFAPI::add_entry( array( 'form_id' => $form_id, '4' => 'Ferns' ) );
+	// A repeater's rows are stored under each sub-field's id with the row in
+	// item_index, which add_entry() does not write; their submission does.
+	foreach ( array( '3' => 'Ana', '2' => 'RepeaterSecret01' ) as $k => $v ) {
+		$wpdb->insert( $wpdb->prefix . 'gf_entry_meta', array( 'form_id' => $form_id, 'entry_id' => $entry_id, 'meta_key' => $k, 'meta_value' => $v, 'item_index' => '_0' ) );
+	}
+	GFFormsModel::flush_current_lead();
+	try {
+		$list   = rest_do_request( new WP_REST_Request( 'GET', "/minn-admin/v1/gf/forms/{$form_id}/entries" ) );
+		$detail = rest_do_request( new WP_REST_Request( 'GET', "/minn-admin/v1/gf/entries/{$entry_id}" ) );
+		$check( '09-L3 the entry list leaves out a repeater that holds a password', 200 === $list->get_status() && false === strpos( wp_json_encode( $list->get_data() ), 'RepeaterSecret01' ), (string) $list->get_status() );
+		$check( '09-L3 the entry detail leaves it out too', 200 === $detail->get_status() && false === strpos( wp_json_encode( $detail->get_data() ), 'RepeaterSecret01' ), (string) $detail->get_status() );
+		$check( '09-L3 control: the entry\'s other answers are listed', false !== strpos( wp_json_encode( $list->get_data() ), 'Ferns' ) );
+	} finally {
+		GFAPI::delete_entry( $entry_id );
+		GFAPI::delete_form( $form_id );
+	}
+} )();
+
 $summary();

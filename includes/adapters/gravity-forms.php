@@ -641,8 +641,9 @@ add_action( 'rest_api_init', function () {
 			foreach ( $form['fields'] as $field ) {
 				// Gravity Forms' entry screen skips password fields too: with
 				// gform_encrypt_password on, the entry holds the password and
-				// GFAPI hands it back decrypted.
-				if ( in_array( $field->type, array( 'html', 'section', 'page', 'captcha', 'password' ), true ) ) {
+				// GFAPI hands it back decrypted. A repeater holding one goes
+				// whole, as the list's does.
+				if ( in_array( $field->type, array( 'html', 'section', 'page', 'captcha', 'password' ), true ) || minn_admin_gfn_holds_password( $field ) ) {
 					continue;
 				}
 				// use_text=true resolves choice values to their labels.
@@ -826,7 +827,9 @@ add_action( 'rest_api_init', function () {
 			foreach ( $form['fields'] as $field ) {
 				// A password field never leaves, as the detail route skips it:
 				// with gform_encrypt_password on, GFAPI hands it back decrypted.
-				if ( 'password' === $field->type ) {
+				// Nor does a repeater with one among its fields: its value is
+				// every row's answers in one array.
+				if ( minn_admin_gfn_holds_password( $field ) ) {
 					foreach ( array_keys( $entries[ $i ] ) as $k ) {
 						if ( (string) $k === (string) $field->id || 0 === strpos( (string) $k, $field->id . '.' ) ) {
 							unset( $entries[ $i ][ $k ] );
