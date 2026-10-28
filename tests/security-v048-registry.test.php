@@ -175,4 +175,58 @@ wp_set_current_user( $admin[0]->ID );
 	}
 } )();
 
+/*
+ * Mask-1: reset links in shapes the mask did not know (Ultimate Member,
+ * MemberPress, a percent-encoded link inside a click-tracking wrapper, other
+ * entity spellings of "&"), and a key cut by quoted-printable soft breaks in
+ * a logged SMTP transcript, stayed readable to someone the log hides keys
+ * from.
+ */
+( function () use ( $check, $drop_user, $admin ) {
+	if ( is_multisite() || ! function_exists( 'minn_admin_mail_mask_reset_keys' ) ) {
+		echo "SKIP  Mask-1 needs a single site with the mail kit loaded\n";
+		return;
+	}
+	$site  = home_url( '/' );
+	$login = wp_login_url();
+	$cases = array(
+		'Ultimate Member'          => "{$site}password-reset/?act=reset_password&hash=UmKey0123456789abcdef&login=root",
+		'MemberPress'              => "{$site}login/?action=reset_password&mkey=MpKey0123456789abcdef&u=root",
+		'an encoded wrapper'       => 'https://click.example/t?u=' . rawurlencode( "{$login}?action=rp&key=WrapKey0123456789ab&login=root" ),
+		'&#x26; separators'        => "<a href=\"{$login}?action=rp&#x26;key=HexKey0123456789abc&#x26;login=root\">Reset</a>",
+		'&#0038; separators'       => "<a href=\"{$login}?action=rp&#0038;key=PadKey0123456789abc&#0038;login=root\">Reset</a>",
+		'&amp;amp; separators'     => "<a href=\"{$login}?action=rp&amp;amp;key=AmpKey0123456789abc&amp;amp;login=root\">Reset</a>",
+	);
+	$link  = "{$login}?action=rp&key=QpKey0123456789abcdefgh&login=root";
+	$qp    = quoted_printable_encode( str_repeat( 'Hello there. ', 6 ) . '<a href="' . $link . '">Reset</a>' );
+	$cases['an SMTP transcript cut by soft breaks'] = implode( "\n", array_map( function ( $l ) {
+		return '2026-10-28 10:00:00 CLIENT -> SERVER: ' . $l;
+	}, preg_split( '/\r?\n/', $qp ) ) );
+	$keys  = array( 'UmKey0123456789abcdef', 'MpKey0123456789abcdef', 'WrapKey0123456789ab', 'HexKey0123456789abc', 'PadKey0123456789abc', 'AmpKey0123456789abc', 'QpKey0123456789abcdefgh' );
+	$ed    = wp_insert_user( array( 'user_login' => 'minn-v048-ed-' . wp_rand(), 'user_pass' => wp_generate_password(), 'role' => 'editor', 'user_email' => 'minn-v048-ed-' . wp_rand() . '@example.com' ) );
+	try {
+		wp_set_current_user( $ed );
+		$i = 0;
+		foreach ( $cases as $label => $body ) {
+			$out = minn_admin_mail_mask_reset_keys( $body );
+			$key = $keys[ $i++ ];
+			// The transcript's key may be cut, so look for any 8 of it.
+			$leak = false;
+			for ( $o = 0; $o + 8 <= strlen( $key ); $o++ ) {
+				$leak = $leak || false !== strpos( str_replace( array( "=\r\n", "=\n" ), '', $out ), substr( $key, $o, 8 ) );
+			}
+			$check( "Mask-1 {$label}: the key is hidden from a reader the log hides keys from", ! $leak, substr( $out, 0, 220 ) );
+		}
+		$order = "{$site}checkout/order-received/7/?key=wc_order_KeepMe0123456";
+		$check( 'Mask-1 control: an order link keeps its key', minn_admin_mail_mask_reset_keys( $order ) === $order );
+		$plain = "{$login}?action=rp&key=PlainKey0123456789ab&login=root";
+		$check( 'Mask-1 control: a plain core link is still masked', false === strpos( minn_admin_mail_mask_reset_keys( $plain ), 'PlainKey0123456789ab' ) );
+		wp_set_current_user( $admin[0]->ID );
+		$check( 'Mask-1 control: an administrator reads every body as logged', minn_admin_mail_mask_reset_keys( $cases['Ultimate Member'] ) === $cases['Ultimate Member'] );
+	} finally {
+		wp_set_current_user( $admin[0]->ID );
+		$drop_user( $ed );
+	}
+} )();
+
 $summary();

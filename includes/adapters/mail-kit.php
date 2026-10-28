@@ -127,19 +127,55 @@ function minn_admin_mail_sections( array $delivery, $subject, $body = null, arra
  */
 function minn_admin_mail_mask_reset_keys( $body ) {
 	$body = (string) $body;
-	if ( minn_admin_mail_bodies_open() || false === stripos( $body, 'key=' ) ) {
+	if ( minn_admin_mail_bodies_open() || ! preg_match( '#(?:key|hash|token)(?:=|%3D)#i', $body ) ) {
 		return $body;
 	}
+	// A quoted-printable body (an SMTP transcript stores DATA as sent) breaks
+	// lines every 76 characters with "=" and writes "=" as "=3D", so a link
+	// can be cut anywhere, key included. Joined first, prefixes of a
+	// transcript's lines too; shown joined only when that hides a key.
+	if ( preg_match( '#=\r?\n#', $body ) ) {
+		$joined = preg_replace( '#=\r?\n(?:[^\S\r\n]*(?:\d{4}-\d\d-\d\d[ T][\d:.]+\s+)?(?:CLIENT -> SERVER|SERVER -> CLIENT):[^\S\r\n]?)?#', '', $body );
+		$joined = str_ireplace( '=3D', '=', (string) $joined );
+		$masked = minn_admin_mail_mask_reset_links( $joined );
+		if ( $masked !== $joined ) {
+			return $masked;
+		}
+	}
+	return minn_admin_mail_mask_reset_links( $body );
+}
+
+/**
+ * minn_admin_mail_mask_reset_keys() for one run of text: each link that
+ * reads as a reset link, judged with its entities and percent-encoding
+ * undone (a click-tracking wrapper encodes the whole link, an HTML body may
+ * write "&" as &amp;, &#038; or &#x26;), has every key-like parameter's
+ * value hidden, however its separator is written.
+ *
+ * @param string $body Text.
+ * @return string
+ */
+function minn_admin_mail_mask_reset_links( $body ) {
 	return (string) preg_replace_callback(
-		'#https?://[^\s"\'<>]+#i',
+		'#https?(?::|%3A)(?://|%2F%2F)[^\s"\'<>]+#i',
 		function ( $m ) {
-			// Core's action=rp and resetpass, a /resetpass/ or lost-password
-			// page (Theme My Login, WooCommerce), or any link carrying a key
-			// beside the account it is for (a renamed endpoint).
-			if ( ! preg_match( '#action(?:=|%3D)(?:rp|resetpass)\b|lost-?password|reset-?pass|[?&;](?:amp;)?(?:login|id)=#i', $m[0] ) ) {
+			$plain = $m[0];
+			for ( $i = 0; $i < 3; $i++ ) {
+				$plain = rawurldecode( html_entity_decode( $plain, ENT_QUOTES | ENT_HTML5, 'UTF-8' ) );
+			}
+			// Core's action=rp and resetpass, a /resetpass/, lost-password or
+			// password-reset page (Theme My Login, WooCommerce, Ultimate
+			// Member), a reset_password action (Ultimate Member, MemberPress),
+			// or any link carrying a key beside the account it is for (a
+			// renamed endpoint).
+			if ( ! preg_match( '#\bact(?:ion)?=(?:rp|resetpass|reset_?password)\b|lost-?password|reset-?pass|password-?reset|[?&;](?:login|id|u|user)=#i', $plain ) ) {
 				return $m[0];
 			}
-			return (string) preg_replace( '#((?:[?&]|&amp;|&\#0?38;)key=)[^&\#\s"\'<>]+#i', '$1' . rawurlencode( __( '[hidden]', 'minn-admin' ) ), $m[0] );
+			return (string) preg_replace(
+				'#((?:[?&;/]|%26|%3F|%2526|%253F)(?:key|hash|mkey|rp_key|token)(?:=|%3D|%253D))[^&\#;\s"\'<>%]+#i',
+				'$1' . rawurlencode( __( '[hidden]', 'minn-admin' ) ),
+				$m[0]
+			);
 		},
 		$body
 	);
