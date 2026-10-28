@@ -22470,13 +22470,21 @@
 					value: String( loc.menu || '' ),
 					onPick: async ( v ) => {
 						const target = parseInt( v, 10 ) || 0;
-						const holder = ms.menus.find( ( m ) => ( m.locations || [] ).includes( slug ) );
+						// A menu's locations as stored now: a write replaces the
+						// whole list, so one from this page's copy would drop a
+						// location given to that menu since.
+						const locationsOf = async ( id ) => ( ( await api( `wp/v2/menus/${ id }?context=edit&_fields=locations` ) ).locations || [] );
 						try {
 							if ( target ) {
-								const menu = ms.menus.find( ( m ) => m.id === target );
-								await api( `wp/v2/menus/${ target }`, { method: 'POST', body: JSON.stringify( { locations: [ ...( menu.locations || [] ), slug ] } ) } );
-							} else if ( holder ) {
-								await api( `wp/v2/menus/${ holder.id }`, { method: 'POST', body: JSON.stringify( { locations: ( holder.locations || [] ).filter( ( l ) => l !== slug ) } ) } );
+								const now = await locationsOf( target );
+								if ( ! now.includes( slug ) ) await api( `wp/v2/menus/${ target }`, { method: 'POST', body: JSON.stringify( { locations: [ ...now, slug ] } ) } );
+							} else {
+								const held = await api( `wp/v2/menu-locations/${ encodeURIComponent( slug ) }` ).catch( () => null );
+								const holderId = held && held.menu ? parseInt( held.menu, 10 ) : 0;
+								if ( holderId ) {
+									const now = await locationsOf( holderId );
+									await api( `wp/v2/menus/${ holderId }`, { method: 'POST', body: JSON.stringify( { locations: now.filter( ( l ) => l !== slug ) } ) } );
+								}
 							}
 							toast( __( 'Location updated' ) );
 							ms.menus = null;
@@ -24367,11 +24375,19 @@
 		return state.navEditData;
 	}
 
+	// A sidebar's widget order as stored now.
+	async function sidebarWidgetsNow( sid ) {
+		const s = await api( `wp/v2/sidebars/${ encodeURIComponent( sid ) }?context=edit&_fields=widgets` );
+		return Array.isArray( s && s.widgets ) ? [ ...s.widgets ] : [];
+	}
+
 	async function loadNavEdit() {
 		const ns = navEditState();
 		const post = await api( `wp/v2/navigation/${ ns.id }?context=edit&_fields=id,title,content,status` );
 		ns.post = post;
 		const raw = ( post.content && ( post.content.raw !== undefined ? post.content.raw : post.content.rendered ) ) || '';
+		// What this page holds, compared before every save.
+		ns.raw = raw;
 		ns.tree = navParse( raw );
 		ns.locked = ns.tree === null;
 		if ( ns.locked ) ns.tree = [];
@@ -24395,10 +24411,23 @@
 		ns.saving = true;
 		renderNavEdit();
 		try {
-			await api( `wp/v2/navigation/${ ns.id }`, {
+			// Each save writes the whole menu, so one made from a copy older
+			// than what is stored (the Site Editor, another tab) would undo
+			// that change. Read it first; changed since, reload instead.
+			const now = await api( `wp/v2/navigation/${ ns.id }?context=edit&_fields=content` );
+			const nowRaw = ( now && now.content && now.content.raw !== undefined ? now.content.raw : null );
+			if ( null !== nowRaw && nowRaw !== ns.raw ) {
+				ns.saving = false;
+				await loadNavEdit();
+				toast( __( 'This menu changed since you opened it. It has been reloaded; make your change again.' ), true );
+				renderNavEdit();
+				return false;
+			}
+			const saved = await api( `wp/v2/navigation/${ ns.id }`, {
 				method: 'POST',
 				body: JSON.stringify( { content: navSerialize( ns.tree ) } ),
 			} );
+			ns.raw = saved && saved.content && saved.content.raw !== undefined ? saved.content.raw : navSerialize( ns.tree );
 			ns.saving = false;
 			if ( msg ) toast( msg );
 			renderNavEdit();
@@ -24886,15 +24915,17 @@
 			btn.addEventListener( 'click', async () => {
 				const sid = btn.closest( '[data-sidebar]' ).dataset.sidebar;
 				const wid = btn.closest( '[data-widget]' ).dataset.widget;
-				const s = ws.sidebars.find( ( x ) => x.id === sid );
-				const arr = [ ...( s.widgets || [] ) ];
-				const i = arr.indexOf( wid );
-				const j = i + ( btn.dataset.wmove === 'up' ? -1 : 1 );
-				if ( i === -1 || j < 0 || j >= arr.length ) return;
-				[ arr[ i ], arr[ j ] ] = [ arr[ j ], arr[ i ] ];
 				btn.disabled = true;
 				try {
-					await api( `wp/v2/sidebars/${ sid }`, { method: 'POST', body: JSON.stringify( { widgets: arr } ) } );
+					// The order as stored now, not as this page loaded it: a
+					// widget added or moved elsewhere since stays where it is.
+					const arr = await sidebarWidgetsNow( sid );
+					const i = arr.indexOf( wid );
+					const j = i + ( btn.dataset.wmove === 'up' ? -1 : 1 );
+					if ( i !== -1 && j >= 0 && j < arr.length ) {
+						[ arr[ i ], arr[ j ] ] = [ arr[ j ], arr[ i ] ];
+						await api( `wp/v2/sidebars/${ sid }`, { method: 'POST', body: JSON.stringify( { widgets: arr } ) } );
+					}
 				} catch ( e ) {
 					toast( e.message, true );
 				}
@@ -24938,18 +24969,20 @@
 					if ( ! dragWid || targetId === dragWid ) return;
 					const movedId = dragWid;
 					const sid = area.dataset.sidebar;
-					const s = ws.sidebars.find( ( x ) => x.id === sid );
-					if ( ! s ) return;
-					const arr = [ ...( s.widgets || [] ) ];
-					const from = arr.indexOf( movedId );
-					if ( from === -1 ) return;
-					arr.splice( from, 1 );
-					const to = arr.indexOf( targetId );
-					if ( to === -1 ) return;
-					arr.splice( below ? to + 1 : to, 0, movedId );
+					if ( ! ws.sidebars.find( ( x ) => x.id === sid ) ) return;
 					area.classList.add( 'minn-busy' );
 					try {
-						await api( `wp/v2/sidebars/${ sid }`, { method: 'POST', body: JSON.stringify( { widgets: arr } ) } );
+						// The order as stored now (see the move buttons).
+						const arr = await sidebarWidgetsNow( sid );
+						const from = arr.indexOf( movedId );
+						if ( from !== -1 ) {
+							arr.splice( from, 1 );
+							const to = arr.indexOf( targetId );
+							if ( to !== -1 ) {
+								arr.splice( below ? to + 1 : to, 0, movedId );
+								await api( `wp/v2/sidebars/${ sid }`, { method: 'POST', body: JSON.stringify( { widgets: arr } ) } );
+							}
+						}
 					} catch ( err ) {
 						toast( err.message, true );
 					}
