@@ -303,6 +303,7 @@ const PHP_PROSE_ALLOW = new Set( [
 	'%%title%% %%sep%% %%sitename%%', '%title% %sep% %sitename%',   // SEO title templates: plugin tokens, not prose
 	'has-more',                                         // a CSS class
 	"Content-Security-Policy: frame-ancestors 'self'",  // an HTTP header
+	'cache flush',                                      // a WP-CLI command (WP_CLI::runcommand), not prose
 	// Integrations-card diagnostics are developer text composed in English by
 	// design, like the REST cheat sheet; this is the one line long enough to
 	// read as prose.
