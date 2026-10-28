@@ -1760,6 +1760,30 @@ minn_admin_secrets(
 	)
 );
 
+/*
+ * The other providers' keys, declared the same way. AIOSEO keeps its AI,
+ * Semrush, Search Statistics and Slack tokens in one JSON row; Squirrly its
+ * cloud API token inside its settings row; Rank Math its Google tokens
+ * (encrypted, but the ciphertext is still theirs). SEOPress names its own
+ * secrets in its settings export (AI provider and PageSpeed keys, the
+ * Google service-account JSON and Bing key, the Analytics client secret and
+ * Matomo token), keeps its Google Analytics OAuth tokens in a row of their
+ * own and an MCP client's tokens per user. SureRank keeps its AI account
+ * and Search Console credentials; SiteSEO its indexing keys.
+ */
+minn_admin_secrets( 'all-in-one-seo-pack', array( 'options' => array( 'aioseo_sensitive_options' ) ) );
+minn_admin_secrets( 'squirrly-seo', array( 'options' => array( 'sq_options' ) ) );
+minn_admin_secrets( 'seo-by-rank-math', array( 'options' => array( 'rank_math_google_oauth_tokens' ) ) );
+minn_admin_secrets(
+	'wp-seopress',
+	array(
+		'options'     => array( 'seopress_pro_option_name', 'seopress_instant_indexing_option_name', 'seopress_google_analytics_option_name', 'seopress_google_analytics_option_name1', 'seopress_mcp_oauth_clients', '_transient_seopress_mcp_code_*' ),
+		'user_tokens' => array( '_seopress_mcp_oauth_tokens' ),
+	)
+);
+minn_admin_secrets( 'surerank', array( 'options' => array( 'surerank_auth', 'surerank_google_console_credentials' ) ) );
+minn_admin_secrets( 'siteseo', array( 'options' => array( 'siteseo_instant_indexing_option_name' ) ) );
+
 function minn_admin_seo_plugin() {
 	if ( defined( 'WPSEO_VERSION' ) ) {
 		return minn_admin_seo_yoast_provider();

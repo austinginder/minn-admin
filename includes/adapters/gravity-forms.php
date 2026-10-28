@@ -16,7 +16,10 @@
 defined( 'ABSPATH' ) || exit;
 
 // Gravity Forms' reCAPTCHA private key.
-minn_admin_secrets( 'gravityforms', array( 'options' => array( 'rg_gforms_captcha_private_key' ) ) );
+// Gravity Forms' captcha key, and every add-on's settings row (the Web API's
+// private key, Twilio's auth token, Stripe's and PayPal's keys, a mailing
+// service's API key), which the add-on framework names after the add-on.
+minn_admin_secrets( 'gravityforms', array( 'options' => array( 'rg_gforms_captcha_private_key', 'gravityformsaddon_*_settings' ) ) );
 
 add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
 	if ( ! class_exists( 'GFAPI' ) ) {
