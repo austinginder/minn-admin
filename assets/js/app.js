@@ -2593,12 +2593,37 @@
 		el.removeAttribute( RT_PARK_CSS );
 	}
 
+	// A <noscript>'s inside is parsed two ways: as markup by the inert parse
+	// (scripting off) and as raw text ending at the first "</noscript" by the
+	// live page. An attribute value carrying that string is harmless here and
+	// breaks out into live markup wherever the editor re-parses its own HTML
+	// (every table op, a "/" insert). The live page never shows a noscript's
+	// inside, so it is parked whole in a page-token attribute (a start tag's
+	// attributes parse the same both ways) and goes back on the serializer's
+	// inert copy.
+	const RT_PARK_NOSCRIPT = RT_PARK_PREFIX + 'noscript';
+	const rtIsNoscript = ( el ) => 'noscript' === el.localName && 'http://www.w3.org/1999/xhtml' === el.namespaceURI;
+	function rtParkNoscript( el ) {
+		if ( ! rtIsNoscript( el ) || el.hasAttribute( RT_PARK_NOSCRIPT ) ) return;
+		el.setAttribute( RT_PARK_NOSCRIPT, el.innerHTML );
+		el.textContent = '';
+	}
+	function rtUnparkNoscript( el ) {
+		if ( ! rtIsNoscript( el ) || ! el.hasAttribute( RT_PARK_NOSCRIPT ) ) return;
+		const inner = el.getAttribute( RT_PARK_NOSCRIPT );
+		el.removeAttribute( RT_PARK_NOSCRIPT );
+		el.innerHTML = inner;
+	}
+
 	// Keeps every TAG. Dropping tags would delete core/embed output, raw-HTML
 	// blocks and a field's embeds. An
 	// iframe with an https src is legitimate embed output; the same iframe with
 	// srcdoc has its srcdoc parked, which is what actually stops it.
 	function rtNeutralize( root ) {
 		$$( '*', root ).forEach( ( el ) => {
+			// Its inside was captured raw: the descendants still listed here
+			// are detached and parked for nothing.
+			rtParkNoscript( el );
 			rtParkStyle( el );
 			rtRenameAttrs( el, rtParkName );
 			if ( el.content && el.content.nodeType === 11 ) rtNeutralize( el.content );
@@ -2620,6 +2645,9 @@
 		const all = $$( '*', root );
 		if ( root && 1 === root.nodeType ) all.unshift( root );
 		all.forEach( ( el ) => {
+			// Before the rename below, which would turn the parked inside
+			// into an attribute named "noscript".
+			rtUnparkNoscript( el );
 			rtUnparkStyle( el );
 			rtRenameAttrs( el, ( name ) => (
 				0 === name.toLowerCase().indexOf( RT_PARK_PREFIX )
