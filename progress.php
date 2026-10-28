@@ -38,8 +38,8 @@ if ( ! preg_match( '/^[a-f0-9]{40}$/', $token ) ) {
 $script  = isset( $_SERVER['SCRIPT_FILENAME'] ) ? (string) $_SERVER['SCRIPT_FILENAME'] : '';
 $content = dirname( ( '' !== $script && is_file( $script ) ) ? $script : __FILE__, 3 );
 $keyfile = $content . '/minn-admin-progress/key.php';
-$key     = is_file( $keyfile ) ? include $keyfile : '';
-if ( ! is_string( $key ) || ! preg_match( '/^[a-f0-9]{64}$/', $key ) ) {
+$key     = is_file( $keyfile ) && preg_match( '/\b([a-f0-9]{64})\b/', (string) file_get_contents( $keyfile ), $m ) ? $m[1] : ''; // phpcs:ignore WordPress.WP.AlternativeFunctions
+if ( '' === $key ) {
 	echo '{"known":false}';
 	exit;
 }

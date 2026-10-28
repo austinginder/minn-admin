@@ -13110,11 +13110,28 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 	 * @return string '' when no key could be kept.
 	 */
 	public static function progress_file_name( $token ) {
+		// Read as text, not included: no opcache copy outlives a new key, and
+		// a half-written file is no key rather than a parse error.
 		$keyfile = WP_CONTENT_DIR . '/minn-admin-progress/key.php';
-		$key     = is_file( $keyfile ) ? include $keyfile : '';
-		if ( ! is_string( $key ) || ! preg_match( '/^[a-f0-9]{64}$/', $key ) ) {
-			$key = bin2hex( random_bytes( 32 ) );
-			if ( ! wp_mkdir_p( dirname( $keyfile ) ) || false === file_put_contents( $keyfile, "<?php\nreturn '" . $key . "';\n" ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions
+		$read    = static function () use ( $keyfile ) {
+			return is_file( $keyfile ) && preg_match( '/\b([a-f0-9]{64})\b/', (string) file_get_contents( $keyfile ), $m ) ? $m[1] : ''; // phpcs:ignore WordPress.WP.AlternativeFunctions
+		};
+		$key     = $read();
+		if ( '' === $key ) {
+			if ( ! wp_mkdir_p( dirname( $keyfile ) ) ) {
+				return '';
+			}
+			// Written whole and renamed into place; two batches that both
+			// found no key keep whichever landed, read back.
+			$tmp = $keyfile . '.' . wp_generate_password( 8, false ) . '.tmp';
+			if ( false !== file_put_contents( $tmp, "<?php exit; // " . bin2hex( random_bytes( 32 ) ) . "\n" ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions
+				if ( ! is_file( $keyfile ) ) {
+					rename( $tmp, $keyfile ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+				}
+				wp_delete_file( $tmp );
+			}
+			$key = $read();
+			if ( '' === $key ) {
 				return '';
 			}
 		}
