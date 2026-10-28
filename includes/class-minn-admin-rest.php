@@ -1351,7 +1351,9 @@ class Minn_Admin_REST {
 					'permission_callback' => function ( WP_REST_Request $request ) {
 						$url = $request->get_url_params();
 						$id  = absint( $url['id'] ?? 0 );
-						return $id > 0 && current_user_can( 'edit_shop_orders' ) && current_user_can( 'edit_post', $id );
+						// Every order that used it, so every seller's: a
+						// marketplace vendor edits shop orders but not others'.
+						return $id > 0 && current_user_can( 'edit_others_shop_orders' ) && current_user_can( 'edit_post', $id );
 					},
 					'args'                => array(
 						'page' => array(
@@ -2283,13 +2285,15 @@ class Minn_Admin_REST {
 
 		// Months that actually hold uploads — feeds the Media view's date
 		// filter combobox (wp-admin's months_dropdown, minus the markup).
+		// Counts every author's uploads, so it asks what core's Media
+		// screens ask.
 		register_rest_route(
 			self::NS,
 			'/media/months',
 			array(
 				'methods'             => 'GET',
 				'permission_callback' => function () {
-					return current_user_can( 'edit_posts' );
+					return current_user_can( 'upload_files' );
 				},
 				'callback'            => function () {
 					global $wpdb;

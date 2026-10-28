@@ -767,7 +767,6 @@
             "administrator"
         ],
         "GET /minn-admin/v1/media/months": [
-            "contributor",
             "author",
             "editor",
             "shop_manager",

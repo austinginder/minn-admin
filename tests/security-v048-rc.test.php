@@ -81,4 +81,56 @@ wp_set_current_user( $admin[0]->ID );
 	}
 } )();
 
+/*
+ * 02-L1: the Media view's month filter counted every upload on the site per
+ * month for anyone with edit_posts. Core's Media screens ask upload_files,
+ * which a Contributor does not have.
+ */
+( function () use ( $check, $drop_user, $admin ) {
+	$co = wp_insert_user( array( 'user_login' => 'minn-v048rc-co-' . wp_rand(), 'user_pass' => wp_generate_password(), 'role' => 'contributor', 'user_email' => 'minn-v048rc-co-' . wp_rand() . '@example.com' ) );
+	$au = wp_insert_user( array( 'user_login' => 'minn-v048rc-au-' . wp_rand(), 'user_pass' => wp_generate_password(), 'role' => 'author', 'user_email' => 'minn-v048rc-au-' . wp_rand() . '@example.com' ) );
+	try {
+		wp_set_current_user( $co );
+		$r = rest_do_request( new WP_REST_Request( 'GET', '/minn-admin/v1/media/months' ) );
+		$check( '02-L1 a Contributor does not get the site\'s upload counts', 403 === $r->get_status(), (string) $r->get_status() );
+		wp_set_current_user( $au );
+		$r = rest_do_request( new WP_REST_Request( 'GET', '/minn-admin/v1/media/months' ) );
+		$check( '02-L1 control: an Author, who can upload, gets the months', 200 === $r->get_status(), (string) $r->get_status() );
+	} finally {
+		wp_set_current_user( $admin[0]->ID );
+		$drop_user( $co );
+		$drop_user( $au );
+	}
+} )();
+
+/*
+ * 02-L2: a coupon's orders listed every order that used it, ids and total,
+ * for anyone with edit_shop_orders. A marketplace vendor holds that without
+ * edit_others_shop_orders and learned other sellers' order volume.
+ */
+( function () use ( $check, $drop_user, $admin ) {
+	if ( ! class_exists( 'WooCommerce' ) || ! get_role( 'shop_manager' ) ) {
+		echo "SKIP  02-L2 WooCommerce inactive\n";
+		return;
+	}
+	$coupon = wp_insert_post( array( 'post_type' => 'shop_coupon', 'post_status' => 'publish', 'post_title' => 'minn-v048rc-' . wp_rand() ) );
+	add_role( 'minn_v048rc_vendor', 'Vendor', array( 'read' => true, 'edit_shop_orders' => true, 'edit_shop_coupons' => true, 'edit_others_shop_coupons' => true, 'edit_published_shop_coupons' => true ) );
+	$ve = wp_insert_user( array( 'user_login' => 'minn-v048rc-ve-' . wp_rand(), 'user_pass' => wp_generate_password(), 'role' => 'minn_v048rc_vendor', 'user_email' => 'minn-v048rc-ve-' . wp_rand() . '@example.com' ) );
+	$sm = wp_insert_user( array( 'user_login' => 'minn-v048rc-sm-' . wp_rand(), 'user_pass' => wp_generate_password(), 'role' => 'shop_manager', 'user_email' => 'minn-v048rc-sm-' . wp_rand() . '@example.com' ) );
+	try {
+		wp_set_current_user( $ve );
+		$r = rest_do_request( new WP_REST_Request( 'GET', "/minn-admin/v1/coupons/{$coupon}/orders" ) );
+		$check( '02-L2 edit_shop_orders without edit_others_shop_orders does not list a coupon\'s orders', 403 === $r->get_status(), (string) $r->get_status() );
+		wp_set_current_user( $sm );
+		$r = rest_do_request( new WP_REST_Request( 'GET', "/minn-admin/v1/coupons/{$coupon}/orders" ) );
+		$check( '02-L2 control: a Shop Manager lists them', 200 === $r->get_status(), (string) $r->get_status() );
+	} finally {
+		wp_set_current_user( $admin[0]->ID );
+		$drop_user( $ve );
+		$drop_user( $sm );
+		remove_role( 'minn_v048rc_vendor' );
+		wp_delete_post( $coupon, true );
+	}
+} )();
+
 $summary();
