@@ -3713,7 +3713,8 @@ class Minn_Admin_REST {
 		$css    = (string) $request['css'];
 		$stored = self::stored_custom_css();
 		$base   = (string) $request->get_param( 'base' );
-		if ( '' !== $base && ! hash_equals( substr( md5( $stored ), 0, 12 ), $base ) ) {
+		// A save with no stamp cannot show it saw what is stored now.
+		if ( ! hash_equals( substr( md5( $stored ), 0, 12 ), $base ) ) {
 			return new WP_Error( 'minn_stale', __( 'The custom CSS was changed somewhere else after you opened it. Copy your edit, reload, and apply it again.', 'minn-admin' ), array( 'status' => 409 ) );
 		}
 		// The stylesheet as stored goes back unwritten: no revision, and no
@@ -7358,7 +7359,8 @@ class Minn_Admin_REST {
 			return new WP_Error( 'minn_admin_bad_policies', __( 'No policies provided.', 'minn-admin' ), array( 'status' => 400 ) );
 		}
 		$base = (string) ( is_array( $json ) && isset( $json['base'] ) && is_scalar( $json['base'] ) ? $json['base'] : '' );
-		if ( '' !== $base && ! hash_equals( self::role_defaults_stamp(), $base ) ) {
+		// A save with no stamp cannot show it saw what is stored now.
+		if ( ! hash_equals( self::role_defaults_stamp(), $base ) ) {
 			return new WP_Error( 'minn_stale', __( 'Role defaults were changed somewhere else after you opened them. Reload to see the change, then make yours again.', 'minn-admin' ), array( 'status' => 409 ) );
 		}
 		$all    = wp_roles()->role_objects;

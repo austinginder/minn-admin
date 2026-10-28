@@ -328,4 +328,42 @@ wp_set_current_user( $admin[0]->ID );
 	}
 } )();
 
+/*
+ * Stamp-1: custom CSS and the role defaults saved over a change made
+ * elsewhere when the request carried no stamp. Their one client always
+ * sends it, so a save without one is refused.
+ */
+( function () use ( $check ) {
+	$post = function ( $route, $body ) {
+		$r = new WP_REST_Request( 'POST', $route );
+		$r->set_header( 'content-type', 'application/json' );
+		$r->set_body( wp_json_encode( $body ) );
+		$res = rest_do_request( $r );
+		return array( $res->get_status(), $res->get_data() );
+	};
+	$css = rest_do_request( new WP_REST_Request( 'GET', '/minn-admin/v1/custom-css' ) )->get_data();
+	if ( is_array( $css ) && isset( $css['stamp'] ) ) {
+		$was = (string) wp_get_custom_css();
+		try {
+			list( $st ) = $post( '/minn-admin/v1/custom-css', array( 'css' => $was . "\n/* minn v048 */" ) );
+			$check( 'Stamp-1 custom CSS: a save with no stamp answers 409 and writes nothing', 409 === $st && $was === (string) wp_get_custom_css(), (string) $st );
+			list( $st ) = $post( '/minn-admin/v1/custom-css', array( 'css' => $was . "\n/* minn v048 */", 'base' => $css['stamp'] ) );
+			$check( 'Stamp-1 custom CSS control: the stamp it loaded saves', 200 === $st && false !== strpos( (string) wp_get_custom_css(), 'minn v048' ), (string) $st );
+		} finally {
+			wp_update_custom_css_post( $was );
+		}
+	} else {
+		echo "SKIP  Stamp-1 custom CSS route not available\n";
+	}
+	$rd = rest_do_request( new WP_REST_Request( 'GET', '/minn-admin/v1/role-defaults' ) )->get_data();
+	if ( is_array( $rd ) && isset( $rd['stamp'], $rd['policies'] ) ) {
+		list( $st ) = $post( '/minn-admin/v1/role-defaults', array( 'policies' => $rd['policies'] ) );
+		$check( 'Stamp-1 role defaults: a save with no stamp answers 409', 409 === $st, (string) $st );
+		list( $st ) = $post( '/minn-admin/v1/role-defaults', array( 'policies' => $rd['policies'], 'base' => $rd['stamp'] ) );
+		$check( 'Stamp-1 role defaults control: the stamp it loaded saves', 200 === $st, (string) $st );
+	} else {
+		echo "SKIP  Stamp-1 role defaults route not available\n";
+	}
+} )();
+
 $summary();

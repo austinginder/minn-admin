@@ -15,7 +15,13 @@ const { launch, login, loginAs, reporter, BASE, pickCombo } = require( './helper
 	const t = reporter( 'role-defaults' );
 	await login( page );
 
+	// A role-defaults save carries the stamp it loaded, as the page's does
+	// (a save without one is refused); read fresh here.
 	const rest = ( method, path, body ) => page.evaluate( async ( a ) => {
+		if ( a.method === 'POST' && a.path === 'minn-admin/v1/role-defaults' && a.body && ! ( 'base' in a.body ) ) {
+			const cur = await fetch( window.MINN.restUrl + a.path, { headers: { 'X-WP-Nonce': window.MINN.nonce } } ).then( ( x ) => x.json() );
+			a.body.base = cur && cur.stamp || '';
+		}
 		const r = await fetch( window.MINN.restUrl + a.path, {
 			method: a.method,
 			headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },

@@ -94,7 +94,13 @@
  *      in it whose value as served (credentials masked, so a base can never
  *      test a guess at one) moved since answers 409, so the person reloads,
  *      sent or not (a page sends the field its other fields depend on); a
- *      body without one (an app cached from before) is saved as before;
+ *      body without one (an app cached from before, a script) is saved as
+ *      before. Decided, not overlooked: Minn's own pages always send a
+ *      base, a caller without one already holds the screen's gate (an
+ *      integrity question, not a privilege one), and any client can read
+ *      the route first and send what it read. Custom CSS and the role
+ *      defaults, each with one page as its only client, refuse a save
+ *      without its stamp;
  *   5. a placeholder left in an edited value: on a 'restore' screen, or in
  *      a field the tier stores, it
  *      goes through the options API's own restore

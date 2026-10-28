@@ -12,12 +12,18 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 	const { browser, page, errors } = await launch();
 	await login( page );
 
+	// A save carries the stamp it loaded, as the page's does (a save without
+	// one is refused); read fresh here.
 	const restCss = ( method, css ) => page.evaluate( async ( args ) => {
-		const r = await fetch( window.MINN.restUrl + 'minn-admin/v1/custom-css', {
+		const url = window.MINN.restUrl + 'minn-admin/v1/custom-css';
+		const base = args.method === 'POST'
+			? ( await fetch( url, { headers: { 'X-WP-Nonce': window.MINN.nonce }, credentials: 'same-origin' } ).then( ( x ) => x.json() ) ).stamp || ''
+			: '';
+		const r = await fetch( url, {
 			method: args.method,
 			headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce },
 			credentials: 'same-origin',
-			body: args.method === 'POST' ? JSON.stringify( { css: args.css } ) : undefined,
+			body: args.method === 'POST' ? JSON.stringify( { css: args.css, base } ) : undefined,
 		} );
 		return r.json();
 	}, { method, css } );
