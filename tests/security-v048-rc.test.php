@@ -302,4 +302,36 @@ wp_set_current_user( $admin[0]->ID );
 	}
 } )();
 
+/*
+ * 09-L6: a design insert reused any attachment with the image's file name,
+ * one on another author's private post included, and handed its id and URL
+ * to an author who could not open it.
+ */
+( function () use ( $check, $drop_user, $admin ) {
+	if ( ! function_exists( 'minn_admin_localize_images' ) ) {
+		echo "SKIP  09-L6 media localize not loaded\n";
+		return;
+	}
+	$name    = 'minn-v048rc-' . wp_rand() . '.jpg';
+	$private = wp_insert_post( array( 'post_title' => 'minn-v048rc private', 'post_status' => 'private', 'post_author' => $admin[0]->ID ) );
+	$att     = wp_insert_attachment( array( 'post_title' => 'minn-v048rc att', 'post_mime_type' => 'image/jpeg', 'post_status' => 'inherit', 'post_author' => $admin[0]->ID ), '2026/10/' . $name, $private );
+	update_post_meta( $att, '_wp_attached_file', '2026/10/' . $name );
+	$au = wp_insert_user( array( 'user_login' => 'minn-v048rc-au2-' . wp_rand(), 'user_pass' => wp_generate_password(), 'role' => 'author', 'user_email' => 'minn-v048rc-au2-' . wp_rand() . '@example.com' ) );
+	// A host that answers nothing, so a fresh copy cannot be fetched.
+	$tpl = '<!-- wp:image --><figure class="wp-block-image"><img src="https://minn-rc.invalid/img/' . $name . '"/></figure><!-- /wp:image -->';
+	try {
+		wp_set_current_user( $au );
+		$out = minn_admin_localize_images( $tpl );
+		$check( '09-L6 an author is not handed an attachment on another author\'s private post', ! in_array( $att, $out['attachments'], true ), wp_json_encode( $out['attachments'] ) );
+		wp_set_current_user( $admin[0]->ID );
+		$out = minn_admin_localize_images( $tpl );
+		$check( '09-L6 control: its owner still reuses it', in_array( $att, $out['attachments'], true ), wp_json_encode( $out['attachments'] ) );
+	} finally {
+		wp_set_current_user( $admin[0]->ID );
+		$drop_user( $au );
+		wp_delete_post( $att, true );
+		wp_delete_post( $private, true );
+	}
+} )();
+
 $summary();

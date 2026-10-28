@@ -253,6 +253,11 @@ function minn_admin_localize_images( $template, $url_re = null ) {
 				1
 			);
 			$existing = $found ? (int) $found[0]['post_id'] : 0;
+			// Only a copy the caller could open in the library: one on another
+			// author's private post is fetched afresh, not handed to them.
+			if ( $existing && ! current_user_can( 'read_post', $existing ) ) {
+				$existing = 0;
+			}
 
 			if ( $existing ) {
 				$media_id = $existing;
