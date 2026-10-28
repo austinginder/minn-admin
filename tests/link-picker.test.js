@@ -136,8 +136,64 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 	const scrollAfter = await page.$eval( '.minn-scroll', ( s ) => s.scrollTop );
 	t.check( 'Apply keeps the scroll position', Math.abs( scrollAfter - scrollBefore ) < 60 && scrollBefore > 500, `before=${ scrollBefore } after=${ scrollAfter }` );
 
+	/* ===== A selected plain-text URL seeds the field: Ctrl+K, Enter links it ===== */
+	const urlId = await createPost( page, { title: 'URL seed probe', content:
+		'<!-- wp:paragraph --><p>Weapons - https://example.com/weapons/ here</p><!-- /wp:paragraph -->'
+		+ '<!-- wp:paragraph --><p>Bare example.org/guide here</p><!-- /wp:paragraph -->'
+		+ '<!-- wp:paragraph --><p>Plain words here</p><!-- /wp:paragraph -->', status: 'draft' } );
+	await openEditor( page, urlId );
+	const selectIn = ( idx, text ) => page.evaluate( ( [ i, txt ] ) => {
+		const tn = document.querySelectorAll( '#minn-editor-body > p' )[ i ].firstChild;
+		const at = tn.textContent.indexOf( txt );
+		const r = document.createRange();
+		r.setStart( tn, at );
+		r.setEnd( tn, at + txt.length );
+		const s = getSelection();
+		s.removeAllRanges();
+		s.addRange( r );
+		document.querySelector( '#minn-editor-body' ).focus( { preventScroll: true } );
+	}, [ idx, text ] );
+	const fieldAfterOpen = async () => {
+		await page.waitForSelector( '.minn-link-pop', { timeout: 5000 } );
+		await page.waitForTimeout( 100 );
+		return page.$eval( '.minn-link-pop [data-link-url]', ( el ) => ( {
+			value: el.value,
+			selected: document.activeElement === el && el.selectionStart === 0 && el.selectionEnd === el.value.length,
+		} ) );
+	};
+	await selectIn( 0, 'https://example.com/weapons/' );
+	await page.keyboard.press( 'Control+k' );
+	const seeded = await fieldAfterOpen();
+	t.check( 'selected URL seeds the field, selected', seeded.value === 'https://example.com/weapons/' && seeded.selected, JSON.stringify( seeded ) );
+	await page.keyboard.press( 'Enter' );
+	await page.waitForFunction( () => ! document.querySelector( '.minn-link-pop' ), { timeout: 5000 } );
+	await selectIn( 1, 'example.org/guide' );
+	await page.keyboard.press( 'Control+k' );
+	const bare = await fieldAfterOpen();
+	t.check( 'bare domain seeds with https://', bare.value === 'https://example.org/guide', JSON.stringify( bare ) );
+	await page.keyboard.press( 'Enter' );
+	await page.waitForFunction( () => ! document.querySelector( '.minn-link-pop' ), { timeout: 5000 } );
+	await selectIn( 2, 'words' );
+	await page.keyboard.press( 'Control+k' );
+	const plain = await fieldAfterOpen();
+	t.check( 'plain words leave the field empty', plain.value === '', JSON.stringify( plain ) );
+	await page.keyboard.press( 'Escape' );
+	const seedSaved = page.waitForResponse( ( r ) => r.request().method() === 'POST' && r.url().includes( 'wp/v2/posts/' + urlId ), { timeout: 60000 } );
+	await page.keyboard.press( 'Meta+s' );
+	await seedSaved;
+	const savedSeed = await page.evaluate( async ( pid ) => {
+		const r = await fetch( window.MINN.restUrl + 'wp/v2/posts/' + pid + '?context=edit&_fields=content.raw', { headers: { 'X-WP-Nonce': window.MINN.nonce } } );
+		return ( await r.json() ).content.raw;
+	}, urlId );
+	t.check( 'Enter links the URL to itself',
+		savedSeed.includes( '<a href="https://example.com/weapons/">https://example.com/weapons/</a>' )
+		&& savedSeed.includes( '<a href="https://example.org/guide">example.org/guide</a>' )
+		&& ! /<a[^>]*>words<\/a>/.test( savedSeed ),
+		savedSeed.slice( 0, 400 ) );
+
 	await deletePost( page, id );
 	await deletePost( page, target );
 	await deletePost( page, longId );
+	await deletePost( page, urlId );
 	await t.done( browser, errors );
 } )().catch( ( e ) => { console.error( e ); process.exit( 1 ); } );

@@ -45809,6 +45809,9 @@
 		if ( ! body ) return;
 		linkPopSaved = ! a && range ? range.cloneRange() : null;
 		const href = a ? a.getAttribute( 'href' ) || '' : '';
+		// A selection that is itself a URL (a pasted bare link) seeds the
+		// field, so Enter links it to itself.
+		const seedUrl = ! a && range ? pasteLinkUrl( range.toString() ) || '' : '';
 		const newTabSeed = !!( a && a.getAttribute( 'target' ) === '_blank' );
 		linkPop = document.createElement( 'div' );
 		linkPop.className = 'minn-inspector minn-link-pop';
@@ -45819,7 +45822,7 @@
 			</div>
 			<div class="minn-insp-body">
 				<div class="minn-field-label">${ esc( __( 'URL or search' ) ) }</div>
-				<input class="minn-input" data-link-url placeholder="${ esc( __( 'https://… or search your content' ) ) }" value="${ esc( href ) }" spellcheck="false" autocomplete="off">
+				<input class="minn-input" data-link-url placeholder="${ esc( __( 'https://… or search your content' ) ) }" value="${ esc( href || seedUrl ) }" spellcheck="false" autocomplete="off">
 				<div class="minn-link-results" data-link-results hidden></div>
 				<div class="minn-toggle-rows minn-side-toggles" style="margin-top:12px;">
 					<div class="minn-toggle-row">
@@ -45842,6 +45845,8 @@
 		armBlockPopA11y( linkPop, { label: 'Link', onClose: hideLinkPop, focus: '[data-link-url]' } );
 
 		const urlInput = linkPop.querySelector( '[data-link-url]' );
+		// Runs after the a11y helper's deferred focus: typing replaces the seed.
+		if ( seedUrl ) setTimeout( () => { if ( document.activeElement === urlInput ) urlInput.select(); }, 0 );
 		const newTabBtn = linkPop.querySelector( '[data-link-newtab]' );
 		if ( newTabBtn ) {
 			newTabBtn.addEventListener( 'click', () => {
