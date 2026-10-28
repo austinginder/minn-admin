@@ -334,4 +334,78 @@ wp_set_current_user( $admin[0]->ID );
 	}
 } )();
 
+/*
+ * 07-L1 (not reproduced, kept as a guard): ACPT's own screen hides an option
+ * page field a role's field permissions keep from it. Minn's option tabs
+ * follow them through minn_admin_acpt_map_field(), which maps no field the
+ * role may not both read and edit, so it is neither served nor saved.
+ */
+( function () use ( $check, $drop_user, $admin ) {
+	if ( ! function_exists( 'minn_admin_acpt_option_tabs' ) || ! minn_admin_acpt_active() || ! class_exists( '\ACPT\Core\CQRS\Command\SaveMetaGroupCommand' ) || ! class_exists( '\ACPT\Core\CQRS\Command\SavePermissionCommand' ) ) {
+		echo "SKIP  07-L1 ACPT inactive\n";
+		return;
+	}
+	$sfx  = substr( md5( uniqid( '', true ) ), 0, 8 );
+	$slug = 'minn-v048rc-opts-' . $sfx;
+	$box  = 'minn_v048rc_box' . $sfx;
+	$gid  = '';
+	try {
+		$gid = ( new \ACPT\Core\CQRS\Command\SaveMetaGroupCommand( array(
+			'name'    => 'minn-v048rc-acpt-' . $sfx,
+			'label'   => 'Minn v048 RC ACPT',
+			'belongs' => array( array( 'belongsTo' => 'optionPage', 'operator' => '=', 'find' => $slug, 'logic' => '' ) ),
+			'boxes'   => array( array( 'name' => $box, 'label' => 'Box', 'fields' => array(
+				array( 'name' => 'secret', 'type' => 'Text', 'label' => 'Secret' ),
+				array( 'name' => 'shown', 'type' => 'Text', 'label' => 'Shown' ),
+			) ) ),
+		) ) )->execute();
+	} catch ( \Throwable $e ) {
+		echo 'SKIP  07-L1 could not build the fixture group (' . $e->getMessage() . ")\n";
+		return;
+	}
+	$ids = array();
+	foreach ( \ACPT\Core\Repository\MetaRepository::get( array( 'id' => $gid ) )[0]->getBoxes() as $b ) {
+		foreach ( $b->getFields() as $f ) {
+			$ids[ $f->getName() ] = $f->getId();
+		}
+	}
+	// Field permissions on "secret": ACPT then asks each role for
+	// read_<box>_<field> and edit_<box>_<field>. It takes only a role that
+	// exists.
+	$type = \ACPT\Core\Helper\Strings::toDBFormat( $box ) . '_secret';
+	add_role( 'minn_v048rc_acpt', 'ACPT reader', array( 'read' => true ) );
+	add_role( 'minn_v048rc_acpt_ok', 'ACPT granted', array( 'read' => true, 'read_' . $type => true, 'edit_' . $type => true ) );
+	( new \ACPT\Core\CQRS\Command\SavePermissionCommand( array(
+		'entityId' => $ids['secret'],
+		'items'    => array( array( 'id' => wp_generate_uuid4(), 'userRole' => 'minn_v048rc_acpt', 'permissions' => array( 'read' => true, 'edit' => true ) ) ),
+	) ) )->execute();
+	$no  = wp_insert_user( array( 'user_login' => 'minn-v048rc-ac-' . wp_rand(), 'user_pass' => wp_generate_password(), 'role' => 'minn_v048rc_acpt', 'user_email' => 'minn-v048rc-ac-' . wp_rand() . '@example.com' ) );
+	$yes = wp_insert_user( array( 'user_login' => 'minn-v048rc-ac2-' . wp_rand(), 'user_pass' => wp_generate_password(), 'role' => 'minn_v048rc_acpt_ok', 'user_email' => 'minn-v048rc-ac2-' . wp_rand() . '@example.com' ) );
+	$offered = function () use ( $slug ) {
+		$out = array();
+		foreach ( minn_admin_acpt_option_tabs( $slug ) as $t ) {
+			$out += $t['lookup'];
+		}
+		return $out;
+	};
+	try {
+		wp_set_current_user( $no );
+		$got = $offered();
+		$check( '07-L1 a role the field\'s permissions leave out is not offered it', ! isset( $got[ $ids['secret'] ] ) && isset( $got[ $ids['shown'] ] ), wp_json_encode( array_keys( $got ) ) );
+		wp_set_current_user( $yes );
+		$got = $offered();
+		$check( '07-L1 control: a role granted it is offered it', isset( $got[ $ids['secret'] ] ), wp_json_encode( array_keys( $got ) ) );
+	} finally {
+		wp_set_current_user( $admin[0]->ID );
+		$drop_user( $no );
+		$drop_user( $yes );
+		remove_role( 'minn_v048rc_acpt' );
+		remove_role( 'minn_v048rc_acpt_ok' );
+		( new \ACPT\Core\CQRS\Command\SavePermissionCommand( array( 'entityId' => $ids['secret'], 'items' => array() ) ) )->execute();
+		if ( class_exists( '\ACPT\Core\CQRS\Command\DeleteMetaGroupCommand' ) ) {
+			( new \ACPT\Core\CQRS\Command\DeleteMetaGroupCommand( $gid ) )->execute();
+		}
+	}
+} )();
+
 $summary();
