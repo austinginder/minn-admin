@@ -161,6 +161,12 @@ run security-v047-rc-lows single --user=admin
 # WPCode stays inactive on the lab; the swap loads it for this process only. The suite defines DISALLOW_FILE_EDIT at its end.
 MINN_SWAP_ADD=insert-headers-and-footers/ihaf.php run security-v047-rc-adapters single --user=admin --require=tests/lib/plugin-swap.php
 run security-v048-registry single --user=admin
+# The SEO panel's per-type switch, once per provider: Yoast resident, the rest swapped in for this process only.
+run seo-box-gate single --user=admin
+MINN_SEO_SWAP=rank-math run seo-box-gate single --user=admin --require=tests/lib/seo-swap.php
+MINN_SEO_SWAP=seopress run seo-box-gate single --user=admin --require=tests/lib/seo-swap.php
+MINN_SEO_SWAP=siteseo run seo-box-gate single --user=admin --require=tests/lib/seo-swap.php
+run seo-box-gate single --user=admin --require=tests/lib/aioseo-swap.php
 
 # A network, from a site that is not the main one.
 run route-gates subsite --user=admin

@@ -5,6 +5,8 @@
  *
  *   MINN_SEO_SWAP=rank-math   seo-by-rank-math/rank-math.php
  *   MINN_SEO_SWAP=surerank    surerank/surerank.php
+ *   MINN_SEO_SWAP=seopress    wp-seopress/seopress.php
+ *   MINN_SEO_SWAP=siteseo     siteseo/siteseo.php
  *
  * active_plugins in the database is never written; the filter changes the
  * read. Every option row whose name carries the provider's prefix is
@@ -20,6 +22,8 @@
 $minn_seo_swap = array(
 	'rank-math' => array( 'seo-by-rank-math/rank-math.php', array( 'rank_math%', 'rank-math%' ) ),
 	'surerank'  => array( 'surerank/surerank.php', array( 'surerank%' ) ),
+	'seopress'  => array( 'wp-seopress/seopress.php', array( 'seopress%' ) ),
+	'siteseo'   => array( 'siteseo/siteseo.php', array( 'siteseo%' ) ),
 )[ (string) getenv( 'MINN_SEO_SWAP' ) ] ?? null;
 
 if ( $minn_seo_swap ) {

@@ -2004,45 +2004,50 @@ function minn_admin_seo_shows_for_type( $plugin, $post_type ) {
 	}
 	$name = isset( $plugin['name'] ) ? (string) $plugin['name'] : '';
 	try {
+		// Each vendor's own two tests: does it box this type at all, and is
+		// the box switched off for it. A type it never boxes (a non-public
+		// type with REST) is as closed as one switched off.
 		if ( 'Yoast SEO' === $name && class_exists( 'WPSEO_Options' ) ) {
+			if ( class_exists( 'WPSEO_Post_Type' ) && method_exists( 'WPSEO_Post_Type', 'get_accessible_post_types' )
+				&& ! in_array( $post_type, (array) WPSEO_Post_Type::get_accessible_post_types(), true ) ) {
+				return false;
+			}
 			$v = WPSEO_Options::get( 'display-metabox-pt-' . $post_type, null );
 			return ( null === $v ) ? true : (bool) $v;
 		}
 		if ( 'Rank Math' === $name && class_exists( '\RankMath\Helper' ) ) {
+			if ( method_exists( '\RankMath\Helper', 'get_allowed_post_types' )
+				&& ! in_array( $post_type, (array) \RankMath\Helper::get_allowed_post_types(), true ) ) {
+				return false;
+			}
 			$v = \RankMath\Helper::get_settings( 'titles.pt_' . $post_type . '_add_meta_box', null );
 			return ( null === $v ) ? true : (bool) $v;
 		}
 		if ( 'AIOSEO' === $name && function_exists( 'aioseo' ) ) {
-			$types = aioseo()->dynamicOptions->searchAppearance->postTypes;
-			// A type AIOSEO has no settings for reads as set but null.
-			$type = $types && isset( $types->{$post_type} ) ? $types->{$post_type} : null;
-			if ( is_object( $type ) ) {
-				$adv = $type->advanced;
-				if ( is_object( $adv ) && isset( $adv->showMetaBox ) ) {
-					return (bool) $adv->showMetaBox;
-				}
+			// AIOSEO's own test (PostSettings): has() and then the value.
+			// isset() is no test here: its options answer isset() with
+			// "not empty", so a box switched off read as unset.
+			// Each read starts a fresh chain, as AIOSEO's does: has() resets
+			// the chain it was called on.
+			if ( ! aioseo()->dynamicOptions->noConflict()->searchAppearance->postTypes->has( $post_type ) ) {
+				return false;
 			}
-			return true;
+			return (bool) aioseo()->dynamicOptions->noConflict()->searchAppearance->postTypes->{$post_type}->advanced->showMetaBox;
 		}
 		if ( 'SEOPress' === $name || 'SEOPress PRO' === $name ) {
+			// 'enable' is "Disable SEO metabox": '1' means off.
 			$titles = get_option( 'seopress_titles_option_name' );
 			$key    = 'seopress_titles_single_titles';
-			if ( is_array( $titles ) && isset( $titles[ $key ][ $post_type ]['enable'] ) ) {
-				return (bool) $titles[ $key ][ $post_type ]['enable'];
-			}
-			return true;
+			return ! ( is_array( $titles ) && isset( $titles[ $key ][ $post_type ]['enable'] ) && '1' === (string) $titles[ $key ][ $post_type ]['enable'] );
 		}
-		// SiteSEO is the SEOPress fork, and Minn already builds it through the
-		// same provider factory, so it carries the same switch under its own
-		// option name. It was the one provider here whose sibling shape was
-		// known and still unasked.
+		// SiteSEO, the SEOPress fork, boxes the public types with a UI
+		// (siteseo_post_types()) unless titles_single_titles[type][disabled].
 		if ( 'SiteSEO' === $name ) {
-			$titles = get_option( 'siteseo_titles_option_name' );
-			$key    = 'siteseo_titles_single_titles';
-			if ( is_array( $titles ) && isset( $titles[ $key ][ $post_type ]['enable'] ) ) {
-				return (bool) $titles[ $key ][ $post_type ]['enable'];
+			if ( function_exists( 'siteseo_post_types' ) && ! array_key_exists( $post_type, (array) siteseo_post_types() ) ) {
+				return false;
 			}
-			return true;
+			$titles = get_option( 'siteseo_titles_option_name' );
+			return empty( $titles['titles_single_titles'][ $post_type ]['disabled'] );
 		}
 		// SureRank and Squirrly ship no per-post-type metabox switch, so there
 		// is nothing to mirror: their controls appear on every type that
