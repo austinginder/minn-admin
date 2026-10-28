@@ -2774,6 +2774,14 @@ button.minn-ac-item.minn-ac-add { display: flex; align-items: center; gap: 8px; 
    forcing overflow-y to auto — hidden would clip a first-block island's ⚙ chip,
    which pokes 10px above the island's top edge. */
 .minn-editor-body { color: var(--text); line-height: 1.75; font-size: 16px; min-height: 40vh; outline: none; overflow-x: clip; overflow-wrap: break-word; }
+/* Every host of stored markup contains it. kses keeps position, the offsets
+   and z-index for every role, so a Contributor's position:fixed paragraph
+   covered the whole admin for whoever opened the post. Layout containment
+   makes the host the containing block of fixed and absolute descendants (and
+   a stacking context for their z-index); paint containment keeps them
+   inside its box. Editor chrome lives on document.body, so nothing of Minn's
+   own is clipped. */
+.minn-editor-body, .minn-rt-body, .minn-revision-preview, .minn-diff { contain: layout paint; overflow-clip-margin: 16px; }
 .minn-editor-body table { display: block; max-width: 100%; overflow-x: auto; }
 /* Editable tables get the same cutout treatment as block islands — the dashed
    outline marks "this is a structured block". Direct children of the body OR
