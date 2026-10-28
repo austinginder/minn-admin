@@ -107,9 +107,9 @@ class Minn_Admin_Egress {
 		} );
 	}
 
-	/** Whether a request is one of Minn's own routes. */
+	/** Whether a request is one of Minn's own routes (any spelling, as core matches it). */
 	private static function ours( $request ) {
-		return $request instanceof WP_REST_Request && 0 === strpos( $request->get_route(), '/minn-admin/v1' );
+		return $request instanceof WP_REST_Request && 0 === stripos( $request->get_route(), '/minn-admin/v1' );
 	}
 
 	public static function enter( $response, $handler, $request ) {

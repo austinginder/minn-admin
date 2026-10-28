@@ -70,4 +70,21 @@ wp_set_current_user( $admin[0]->ID );
 	}
 } )();
 
+/*
+ * Case-1: core matches routes without regard to case and keeps the spelling,
+ * so /Minn-Admin/v1/... ran Minn's handlers outside the egress mask and the
+ * write fences. Any spelling but the registered one is refused.
+ */
+( function () use ( $check ) {
+	foreach ( array( '/Minn-Admin/v1/overview', '/minn-admin/V1/overview', '/MINN-ADMIN/v1/notifications' ) as $route ) {
+		$res = rest_do_request( new WP_REST_Request( 'GET', $route ) );
+		$err = $res->as_error();
+		$check( "Case-1 {$route} is refused before its handler", 400 === $res->get_status() && $err && 'minn_admin_route_case' === $err->get_error_code(), $res->get_status() . ' ' . wp_json_encode( $res->get_data() ) );
+	}
+	$res = rest_do_request( new WP_REST_Request( 'GET', '/minn-admin/v1/overview' ) );
+	$check( 'Case-1 control: the registered spelling still answers', 200 === $res->get_status(), (string) $res->get_status() );
+	$res = rest_do_request( new WP_REST_Request( 'GET', '/wp/v2/types/post' ) );
+	$check( 'Case-1 control: another namespace is untouched', 200 === $res->get_status(), (string) $res->get_status() );
+} )();
+
 $summary();

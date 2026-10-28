@@ -135,6 +135,9 @@ class Minn_Admin_Fences {
 	private static $network_was = array();
 
 	public static function init() {
+		// Last: a filter before it may hand back null whatever it was given
+		// (WooCommerce Gift Cards does), which would drop the refusal.
+		add_filter( 'rest_pre_dispatch', array( __CLASS__, 'canonical' ), PHP_INT_MAX, 3 );
 		add_filter( 'rest_request_before_callbacks', array( __CLASS__, 'arm' ), 0, 3 );
 		add_filter( 'rest_request_after_callbacks', array( __CLASS__, 'disarm' ), PHP_INT_MAX, 3 );
 
@@ -401,9 +404,32 @@ class Minn_Admin_Fences {
 		return $data;
 	}
 
-	/** Whether a request is one of Minn's own. */
+	/**
+	 * Core matches routes without regard to case and keeps the route as the
+	 * request spelled it, so /Minn-Admin/v1/... ran Minn's handlers while
+	 * every check that tells Minn's requests apart by their route (these
+	 * fences, the egress mask, the settings tier) read it as someone else's.
+	 * A Minn namespace in any spelling but its own is refused before it
+	 * reaches a handler.
+	 *
+	 * @param mixed           $result  A response a filter before this one gave.
+	 * @param WP_REST_Server  $server  Server.
+	 * @param WP_REST_Request $request Request.
+	 * @return mixed
+	 */
+	public static function canonical( $result, $server, $request ) {
+		if ( null !== $result || ! $request instanceof WP_REST_Request ) {
+			return $result;
+		}
+		if ( preg_match( '#^/minn-admin/v\d+(?=/|$)#i', $request->get_route(), $m ) && strtolower( $m[0] ) !== $m[0] ) {
+			return new WP_Error( 'minn_admin_route_case', __( 'Minn Admin routes are lowercase.', 'minn-admin' ), array( 'status' => 400 ) );
+		}
+		return $result;
+	}
+
+	/** Whether a request is one of Minn's own (any spelling, as core matches it). */
 	private static function ours( $request ) {
-		return $request instanceof WP_REST_Request && 0 === strpos( $request->get_route(), '/minn-admin/v1' );
+		return $request instanceof WP_REST_Request && 0 === stripos( $request->get_route(), '/minn-admin/v1' );
 	}
 
 	private static function option_allowed( $option ) {
