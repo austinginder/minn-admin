@@ -127,7 +127,9 @@ function minn_admin_mail_sections( array $delivery, $subject, $body = null, arra
  */
 function minn_admin_mail_mask_reset_keys( $body ) {
 	$body = (string) $body;
-	if ( minn_admin_mail_bodies_open() || ! preg_match( '#(?:key|hash|token)(?:=|%3D)#i', $body ) ) {
+	// No cheaper test of the body first: a soft break inside "key", a doubly
+	// encoded link or an "=" written as an entity would pass any such test.
+	if ( minn_admin_mail_bodies_open() ) {
 		return $body;
 	}
 	// A quoted-printable body (an SMTP transcript stores DATA as sent) breaks
@@ -150,7 +152,7 @@ function minn_admin_mail_mask_reset_keys( $body ) {
  * reads as a reset link, judged with its entities and percent-encoding
  * undone (a click-tracking wrapper encodes the whole link, an HTML body may
  * write "&" as &amp;, &#038; or &#x26;), has every key-like parameter's
- * value hidden, however its separator is written.
+ * value hidden, however its separator and its "=" are written.
  *
  * @param string $body Text.
  * @return string
@@ -172,7 +174,7 @@ function minn_admin_mail_mask_reset_links( $body ) {
 				return $m[0];
 			}
 			return (string) preg_replace(
-				'#((?:[?&;/]|%26|%3F|%2526|%253F)(?:key|hash|mkey|rp_key|token)(?:=|%3D|%253D))[^&\#;\s"\'<>%]+#i',
+				'#((?:[?&;/]|%26|%3F|%2526|%253F)(?:key|hash|mkey|rp_key|token)(?:=|%3D|%253D|&(?:amp;)?(?:\#0*61|\#x0*3d|equals);))[^&\#;\s"\'<>%]+#i',
 				'$1' . rawurlencode( __( '[hidden]', 'minn-admin' ) ),
 				$m[0]
 			);
