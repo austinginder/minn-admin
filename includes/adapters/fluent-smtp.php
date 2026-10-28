@@ -556,7 +556,12 @@ function minn_admin_fluent_smtp_resend( $id, array $row, WP_REST_Request $reques
 minn_admin_resource( 'fluent-smtp/emails', function () {
 	return array(
 		'active'  => 'minn_admin_fluent_smtp_active',
-		'gates'   => array( 'view' => 'minn_admin_fluent_smtp_can' ),
+		'gates'   => array(
+			'view'  => 'minn_admin_fluent_smtp_can',
+			// The raw table holds bodies whole, which the browser cannot
+			// mask a reset link's key in: only for who reads mail whole.
+			'table' => 'minn_admin_mail_bodies_open',
+		),
 		'labels'  => array( 'not_found' => __( 'Email not found', 'minn-admin' ) ),
 		'source'  => array(
 			'table'   => 'fsmpt_email_logs',

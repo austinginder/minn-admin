@@ -30,9 +30,11 @@
 
 defined( 'ABSPATH' ) || exit;
 
-// Otter's form, checkout and AI blocks keep their keys as plain option rows.
-// The map block's key is a browser key, sent to every visitor, so it stays.
-minn_admin_secrets( 'otter-blocks', array( 'options' => array( 'themeisle_stripe_api_key', 'themeisle_open_ai_api_key', 'themeisle_google_captcha_api_secret_key', 'themeisle_cloudflare_turnstile_secret_key' ) ) );
+// Otter's form, checkout and AI blocks keep their keys as plain option rows,
+// and its forms' mailing-list keys, webhook headers and template-cloud keys
+// inside arrays. The map block's key is a browser key, sent to every
+// visitor, so it stays.
+minn_admin_secrets( 'otter-blocks', array( 'options' => array( 'themeisle_stripe_api_key', 'themeisle_open_ai_api_key', 'themeisle_google_captcha_api_secret_key', 'themeisle_cloudflare_turnstile_secret_key', 'themeisle_blocks_form_emails', 'themeisle_webhooks_options', 'themeisle_template_cloud_sources' ) ) );
 
 /**
  * Register Otter front-end style handles for every themeisle-blocks/* present

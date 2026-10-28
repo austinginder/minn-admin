@@ -96,6 +96,14 @@ wp_set_current_user( $admin[0]->ID );
 		wp_set_current_user( $au );
 		$r = rest_do_request( new WP_REST_Request( 'GET', '/minn-admin/v1/media/months' ) );
 		$check( '02-L1 control: an Author, who can upload, gets the months', 200 === $r->get_status(), (string) $r->get_status() );
+		// The fix-delta review's sibling: the Overview's Media files card.
+		$card = static function () {
+			$o = rest_do_request( new WP_REST_Request( 'GET', '/minn-admin/v1/overview' ) );
+			return false !== strpos( wp_json_encode( $o->get_data() ), '"key":"media"' );
+		};
+		$check( '02-L1 control: an Author sees the Media files card', $card() );
+		wp_set_current_user( $co );
+		$check( '02-L1 a Contributor does not get the Media files card', ! $card() );
 	} finally {
 		wp_set_current_user( $admin[0]->ID );
 		$drop_user( $co );
@@ -140,7 +148,7 @@ wp_set_current_user( $admin[0]->ID );
  */
 ( function () use ( $check ) {
 	$names = Minn_Admin_Kernel_Secrets::option_names();
-	foreach ( array( 'themeisle_stripe_api_key', 'themeisle_open_ai_api_key', 'themeisle_google_captcha_api_secret_key', 'themeisle_cloudflare_turnstile_secret_key' ) as $row ) {
+	foreach ( array( 'themeisle_stripe_api_key', 'themeisle_open_ai_api_key', 'themeisle_google_captcha_api_secret_key', 'themeisle_cloudflare_turnstile_secret_key', 'themeisle_blocks_form_emails', 'themeisle_webhooks_options', 'themeisle_template_cloud_sources' ) as $row ) {
 		$check( "08-L1 {$row} is declared a secret", in_array( $row, $names, true ) );
 	}
 	$check( '08-L1 control: the browser-side map key is not', ! in_array( 'themeisle_google_map_block_api_key', $names, true ) );
@@ -179,6 +187,17 @@ wp_set_current_user( $admin[0]->ID );
 		}
 		$check( '09-L5 Disable reaches the rule that was listed (B), not what moved to its place', null !== $bid && false === ( $after['minn-rc B'] ?? null ), wp_json_encode( array( $r->get_status(), $after ) ) );
 		$check( '09-L5 the rule now at that position (A) keeps its switch', true === ( $after['minn-rc A'] ?? null ) && true === ( $after['minn-rc C'] ?? null ) );
+		// Two copies of one rule (a preset applied twice), the second on:
+		// Disable on the second reaches the second, not the first.
+		$off = array_merge( $a, array( 'enabled' => false ) );
+		minn_admin_gsmtp_routing_save( array( $off, $a ) );
+		$rows = rest_do_request( new WP_REST_Request( 'GET', '/minn-admin/v1/gravity-smtp/routing' ) )->get_data();
+		$rows = array_values( (array) ( $rows['items'] ?? $rows ) );
+		$two  = (int) ( $rows[1]['id'] ?? 0 );
+		$check( '09-L5 two copies of one rule get their own ids', $two && (int) ( $rows[0]['id'] ?? 0 ) !== $two );
+		rest_do_request( new WP_REST_Request( 'POST', "/minn-admin/v1/gravity-smtp/routing/{$two}/disable" ) );
+		$now = minn_admin_gsmtp_routing_recipes();
+		$check( '09-L5 Disable on the second copy turns the second off', empty( $now[1]['enabled'] ) || 'false' === $now[1]['enabled'], wp_json_encode( $now ) );
 	} finally {
 		minn_admin_gsmtp_routing_save( $was );
 		$check( '09-L5 cleanup: the stored rules are back as they were', minn_admin_gsmtp_routing_recipes() == $was ); // phpcs:ignore Universal.Operators.StrictComparisons.LooseEqual
@@ -245,6 +264,14 @@ wp_set_current_user( $admin[0]->ID );
 		$check( '09-L4 control: this administrator reads mail with keys hidden', ! minn_admin_mail_bodies_open() );
 		$check( '09-L4 the events table is refused to the database browser', Minn_Admin_Kernel::table_refused( $wpdb->prefix . 'gravitysmtp_events' ) );
 		$check( '09-L4 the debug log table is refused to the database browser', Minn_Admin_Kernel::table_refused( $wpdb->prefix . 'gravitysmtp_debug_log' ) );
+		// The fix-delta review's sibling: every mail log's raw table.
+		foreach ( array( 'fsmpt_email_logs', 'wpmailsmtp_debug_events', 'post_smtp_logs', 'wpml_mails', 'site_mail_logs', 'suremails_email_log' ) as $t ) {
+			if ( $t !== $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->prefix . $t ) ) && $wpdb->prefix . $t !== $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->prefix . $t ) ) ) {
+				echo "SKIP  09-L4 {$t} is not on this site\n";
+				continue;
+			}
+			$check( "09-L4 {$t} is refused to the database browser", Minn_Admin_Kernel::table_refused( $wpdb->prefix . $t ) );
+		}
 	} finally {
 		remove_filter( 'map_meta_cap', $deny, 10 );
 		wp_set_current_user( $admin[0]->ID );
@@ -458,7 +485,7 @@ wp_set_current_user( $admin[0]->ID );
 		return;
 	}
 	try {
-		$check( '05-L1 the record is not filed under the URL\'s token', $token . '.json' !== basename( $path ), basename( $path ) );
+		$check( '05-L1 the record is not filed under the URL\'s token, or anything the token alone gives', ! in_array( basename( $path ), array( $token . '.json', hash( 'sha256', $token ) . '.json' ), true ), basename( $path ) );
 		Minn_Admin_REST::progress_write( $token, $path, array( 'items' => array( array( 'error' => 'Could not copy ' . trailingslashit( get_temp_dir() ) . 'minn-rc-x.zip' ) ) ) );
 		$raw = (string) file_get_contents( $path ); // phpcs:ignore WordPress.WP.AlternativeFunctions
 		$check( '05-L1 the temp dir\'s path is stripped from the public record', '' !== $raw && false === strpos( str_replace( '\\/', '/', $raw ), untrailingslashit( get_temp_dir() ) ), $raw );
@@ -544,8 +571,11 @@ wp_set_current_user( $admin[0]->ID );
 		'permission_callback' => 'is_user_logged_in',
 		'callback'            => static function () use ( $wpdb ) {
 			// The fence's own answer, asked directly: nothing is deleted.
-			$answer = Minn_Admin_Fences::meta_delete( null, 0, $wpdb->get_blog_prefix() . 'capabilities' );
-			return rest_ensure_response( array( 'answer' => null === $answer ? 'allowed' : 'refused' ) );
+			$key    = $wpdb->get_blog_prefix() . 'capabilities';
+			$answer = Minn_Admin_Fences::meta_delete( null, 0, $key );
+			// delete_all with a real account's id deletes from every account too.
+			$named  = Minn_Admin_Fences::meta_delete( null, get_current_user_id(), $key, '', true );
+			return rest_ensure_response( array( 'answer' => null === $answer ? 'allowed' : 'refused', 'named' => null === $named ? 'allowed' : 'refused' ) );
 		},
 	) );
 	$empty = static function () {
@@ -562,7 +592,17 @@ wp_set_current_user( $admin[0]->ID );
 	}
 	$r = rest_do_request( new WP_REST_Request( 'POST', '/minn-admin/v1/zz-rc-fence' ) );
 	$d = $r->get_data();
-	$check( '01-L5 the fence refuses a delete of every account\'s capabilities', 'refused' === ( $d['answer'] ?? '' ) || 'minn_write_fenced' === ( $d['code'] ?? '' ), wp_json_encode( $d ) );
+	$check( '01-L5 the fence refuses a delete of every account\'s capabilities', 'minn_write_fenced' === ( $d['code'] ?? '' ) && array( $wpdb->get_blog_prefix() . 'capabilities' ) === array_values( array_unique( (array) ( $d['data']['fenced'] ?? array() ) ) ), wp_json_encode( $d ) );
+	// Each delete asked alone, so the second is not read off the first's refusal.
+	foreach ( array( 'user 0' => array( 0, false ), 'delete_all naming an account' => array( $admin[0]->ID, true ) ) as $how => $args ) {
+		$probe = static function () use ( $wpdb, $args ) {
+			$a = Minn_Admin_Fences::meta_delete( null, $args[0], $wpdb->get_blog_prefix() . 'capabilities', '', $args[1] );
+			return rest_ensure_response( array( 'answer' => null === $a ? 'allowed' : 'refused' ) );
+		};
+		register_rest_route( 'minn-admin/v1', '/zz-rc-fence-one', array( 'methods' => 'POST', 'permission_callback' => 'is_user_logged_in', 'callback' => $probe ), true );
+		$one = rest_do_request( new WP_REST_Request( 'POST', '/minn-admin/v1/zz-rc-fence-one' ) )->get_data();
+		$check( "01-L5 refused by {$how}", 'minn_write_fenced' === ( $one['code'] ?? '' ) || 'refused' === ( $one['answer'] ?? '' ), wp_json_encode( $one ) );
+	}
 } )();
 
 $summary();

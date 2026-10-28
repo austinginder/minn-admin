@@ -32,7 +32,8 @@
  * Log delete (single + bulk) goes through Event_Model::delete() — the
  * same model their Delete_Email_Endpoint / Delete_Events_Endpoint use —
  * gated on DELETE_EMAIL_LOG. Permanent; no trash. A routing rule's id is
- * its place in their list counted from one (the # column).
+ * drawn from the rule itself (minn_admin_gsmtp_routing_ids()); its place in
+ * their list is the # column.
  *
  * Capability model: Gravity SMTP ships granular gravitysmtp_* caps
  * (granted to administrators by their Roles::register()); every route here
@@ -245,29 +246,40 @@ function minn_admin_gsmtp_condition_summary( $conditions ) {
 }
 
 /**
- * A routing rule's id: their recipes carry none, and a position names
- * another rule once one is added or removed in their screen or another tab,
- * so the id is drawn from what the rule is (its name, service and
- * conditions; not its on/off switch, which the actions change).
+ * Each routing rule's id, by position: their recipes carry none, and a
+ * position names another rule once one is added or removed in their screen
+ * or another tab, so the id is drawn from what the rule is (its name,
+ * service and conditions; not its on/off switch, which the actions change),
+ * and which copy of it, where a rule was added twice.
+ *
+ * @param array $recipes Their stored recipes.
+ * @return int[] Position => id.
  */
-function minn_admin_gsmtp_routing_id( array $recipe ) {
-	unset( $recipe['enabled'] );
-	return 1 + ( crc32( (string) wp_json_encode( $recipe ) ) % 2147483646 );
+function minn_admin_gsmtp_routing_ids( array $recipes ) {
+	$ids  = array();
+	$seen = array();
+	foreach ( $recipes as $i => $recipe ) {
+		if ( ! is_array( $recipe ) ) {
+			continue;
+		}
+		unset( $recipe['enabled'] );
+		$body          = (string) wp_json_encode( $recipe );
+		$seen[ $body ] = ( $seen[ $body ] ?? -1 ) + 1;
+		$ids[ $i ]     = 1 + ( crc32( $body . '#' . $seen[ $body ] ) % 2147483646 );
+	}
+	return $ids;
 }
 
 /** The position of the rule with this id, or null. */
 function minn_admin_gsmtp_routing_index( array $recipes, $id ) {
-	foreach ( $recipes as $i => $recipe ) {
-		if ( is_array( $recipe ) && minn_admin_gsmtp_routing_id( $recipe ) === (int) $id ) {
-			return $i;
-		}
-	}
-	return null;
+	$at = array_search( (int) $id, minn_admin_gsmtp_routing_ids( $recipes ), true );
+	return false === $at ? null : $at;
 }
 
 /** Display rows for the Routing list view, each under its rule's own id. */
 function minn_admin_gsmtp_routing_rows() {
 	$recipes = minn_admin_gsmtp_routing_recipes();
+	$ids     = minn_admin_gsmtp_routing_ids( $recipes );
 	$items   = array();
 	foreach ( $recipes as $i => $recipe ) {
 		if ( ! is_array( $recipe ) ) {
@@ -281,7 +293,7 @@ function minn_admin_gsmtp_routing_rows() {
 		}
 		$connector = isset( $recipe['connector'] ) ? (string) $recipe['connector'] : '';
 		$items[]   = array(
-			'id'         => minn_admin_gsmtp_routing_id( $recipe ),
+			'id'         => $ids[ $i ],
 			'name'       => isset( $recipe['name'] ) && $recipe['name'] !== ''
 				? (string) $recipe['name']
 				: ( 'Rule ' . ( $i + 1 ) ),

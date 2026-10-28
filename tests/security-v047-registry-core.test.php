@@ -619,7 +619,10 @@ $private = static function ( $class, $method ) {
 		Minn_Admin_Switch::switch_now( str_repeat( 'a', 32 ), $failed );
 		$ran = (array) ( $GLOBALS['minn_v047_installer_calls'] ?? array() );
 		$check( 'I4 switch: the stub installer is what ran, asked to install', 1 === count( $ran ) && 'install' === ( $ran[0][0] ?? '' ), wp_json_encode( $ran ) );
-		$check( 'I4 switch: a switch that failed leaves the floor where it was', false === get_option( $floor_option ) && is_file( $failed['dir'] . '/result.json' ), wp_json_encode( get_option( $floor_option ) ) );
+		// The report is kept with the check (v0.48 RC 05-L2), not in the folder.
+		$report = get_transient( 'minn_switch_' . str_repeat( 'a', 32 ) );
+		delete_transient( 'minn_switch_' . str_repeat( 'a', 32 ) );
+		$check( 'I4 switch: a switch that failed leaves the floor where it was', false === get_option( $floor_option ) && 'failed' === ( $report['state'] ?? '' ), wp_json_encode( get_option( $floor_option ) ) );
 		$GLOBALS['minn_v047_installer_code'] = 0;
 		$done = $held( 'done', $version );
 		Minn_Admin_Switch::switch_now( str_repeat( 'b', 32 ), $done );

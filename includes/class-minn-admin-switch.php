@@ -537,7 +537,7 @@ class Minn_Admin_Switch {
 		// clicks would start two installers moving the same files.
 		require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
 		if ( ! WP_Upgrader::create_lock( 'minn_switch', self::STAGE_TTL ) ) {
-			return new WP_Error( 'minn_switch_running', __( 'A switch is already running on this site.', 'minn-admin' ), array( 'status' => 409 ) );
+			return new WP_Error( 'minn_switch_running', __( 'A switch to Minn started on this site in the last hour and has not finished. Try again once it has, or after the hour.', 'minn-admin' ), array( 'status' => 409 ) );
 		}
 		$held['state'] = 'switching';
 		set_transient( 'minn_switch_' . $token, $held, self::STAGE_TTL );
@@ -559,6 +559,9 @@ class Minn_Admin_Switch {
 		if ( function_exists( 'fastcgi_finish_request' ) ) {
 			fastcgi_finish_request();
 		}
+		// rest_run() loaded it; a caller that did not (WP-CLI, a test) still
+		// gets the lock released.
+		require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
 		$result = self::run( $held['engine'], array( 'install' ) );
 		if ( is_wp_error( $result ) ) {
 			$result = array(
@@ -718,7 +721,14 @@ class Minn_Admin_Switch_Command {
 		if ( $force ) {
 			$options[] = '--force';
 		}
+		// The same lock the app's switch takes: one installer at a time.
+		require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
+		if ( ! WP_Upgrader::create_lock( 'minn_switch', Minn_Admin_Switch::STAGE_TTL ) ) {
+			Minn_Admin_Switch::remove( $staged['dir'] );
+			WP_CLI::error( __( 'A switch to Minn started on this site in the last hour and has not finished. Try again once it has, or after the hour.', 'minn-admin' ) );
+		}
 		$result = Minn_Admin_Switch::run( $staged['engine'], $options );
+		WP_Upgrader::release_lock( 'minn_switch' );
 		Minn_Admin_Switch::remove( $staged['dir'] );
 		if ( is_wp_error( $result ) ) {
 			WP_CLI::error( $result->get_error_message() );

@@ -160,7 +160,7 @@ class Minn_Admin_Fences {
 
 		add_filter( 'add_user_metadata', array( __CLASS__, 'meta_add' ), PHP_INT_MAX, 4 );
 		add_filter( 'update_user_metadata', array( __CLASS__, 'meta_update' ), PHP_INT_MAX, 4 );
-		add_filter( 'delete_user_metadata', array( __CLASS__, 'meta_delete' ), PHP_INT_MAX, 3 );
+		add_filter( 'delete_user_metadata', array( __CLASS__, 'meta_delete' ), PHP_INT_MAX, 5 );
 		add_filter( 'wp_pre_insert_user_data', array( __CLASS__, 'user_row' ), PHP_INT_MAX, 3 );
 	}
 
@@ -377,8 +377,9 @@ class Minn_Admin_Fences {
 		return self::meta_write( $check, (int) $user_id, (string) $key, $value );
 	}
 
-	public static function meta_delete( $check, $user_id, $key ) {
-		return self::meta_write( $check, (int) $user_id, (string) $key, array() );
+	public static function meta_delete( $check, $user_id, $key, $value = '', $delete_all = false ) {
+		// delete_all takes the key from every account, whichever id it names.
+		return self::meta_write( $check, $delete_all ? 0 : (int) $user_id, (string) $key, array() );
 	}
 
 	/**

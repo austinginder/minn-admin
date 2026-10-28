@@ -4147,6 +4147,11 @@ class Minn_Admin_REST {
 				'goto'  => 'media',
 			),
 		);
+		// Every author's uploads and the folder's size: for who can upload,
+		// as core's Media screens are (the Media view's month filter too).
+		if ( ! current_user_can( 'upload_files' ) ) {
+			array_pop( $stats );
+		}
 
 		// Activity chart: posts published + comments received per bucket.
 		$bucket_days = $days > 45 ? 7 : 1;
@@ -4519,17 +4524,19 @@ class Minn_Admin_REST {
 				);
 			}
 		}
-		$add(
-			array(
-				'key'   => 'media',
-				'group' => 'content',
-				'label' => __( 'Media files', 'minn-admin' ),
-				'value' => number_format_i18n( (int) $media->inherit ),
-				'delta' => self::uploads_size_label(),
-				'up'    => null,
-				'goto'  => 'media',
-			)
-		);
+		if ( current_user_can( 'upload_files' ) ) {
+			$add(
+				array(
+					'key'   => 'media',
+					'group' => 'content',
+					'label' => __( 'Media files', 'minn-admin' ),
+					'value' => number_format_i18n( (int) $media->inherit ),
+					'delta' => self::uploads_size_label(),
+					'up'    => null,
+					'goto'  => 'media',
+				)
+			);
+		}
 		if ( current_user_can( 'list_users' ) ) {
 			$add(
 				array(
@@ -13088,16 +13095,30 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				wp_delete_file( $old );
 			}
 		}
-		return $dir . '/' . self::progress_file_name( $token );
+		$name = self::progress_file_name( $token );
+		return '' === $name ? '' : $dir . '/' . $name;
 	}
 
 	/**
-	 * A record's file name: the token's sha256, so the token a GET query
-	 * string carries is not also the name the web server would hand the
-	 * file out under where .htaccess is ignored (progress.php hashes it too).
+	 * A record's file name: the token keyed with a secret only this site
+	 * holds, so the token a GET query string carries cannot be turned into
+	 * the name the web server would hand the file out under where .htaccess
+	 * is ignored. The key sits beside the records as PHP, which a web server
+	 * runs (printing nothing) rather than serves; progress.php reads it.
+	 *
+	 * @param string $token The batch's token.
+	 * @return string '' when no key could be kept.
 	 */
 	public static function progress_file_name( $token ) {
-		return hash( 'sha256', (string) $token ) . '.json';
+		$keyfile = WP_CONTENT_DIR . '/minn-admin-progress/key.php';
+		$key     = is_file( $keyfile ) ? include $keyfile : '';
+		if ( ! is_string( $key ) || ! preg_match( '/^[a-f0-9]{64}$/', $key ) ) {
+			$key = bin2hex( random_bytes( 32 ) );
+			if ( ! wp_mkdir_p( dirname( $keyfile ) ) || false === file_put_contents( $keyfile, "<?php\nreturn '" . $key . "';\n" ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions
+				return '';
+			}
+		}
+		return hash_hmac( 'sha256', (string) $token, $key ) . '.json';
 	}
 
 	/**
@@ -13153,8 +13174,9 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		if ( ! preg_match( '/^[a-f0-9]{40}$/', $token ) ) {
 			return;
 		}
-		$file = WP_CONTENT_DIR . '/minn-admin-progress/' . self::progress_file_name( $token );
-		if ( is_file( $file ) ) {
+		$name = self::progress_file_name( $token );
+		$file = WP_CONTENT_DIR . '/minn-admin-progress/' . $name;
+		if ( '' !== $name && is_file( $file ) ) {
 			wp_delete_file( $file );
 		}
 	}

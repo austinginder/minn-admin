@@ -111,7 +111,12 @@ function minn_admin_suremails_can() {
 minn_admin_resource( 'suremails/emails', function () {
 	return array(
 		'active'  => 'minn_admin_suremails_active',
-		'gates'   => array( 'view' => 'minn_admin_suremails_can' ),
+		'gates'   => array(
+			'view'  => 'minn_admin_suremails_can',
+			// The raw table holds bodies whole, which the browser cannot
+			// mask a reset link's key in: only for who reads mail whole.
+			'table' => 'minn_admin_mail_bodies_open',
+		),
 		'labels'  => array( 'not_found' => __( 'Email not found', 'minn-admin' ) ),
 		'source'  => array(
 			'table'   => 'suremails_email_log',

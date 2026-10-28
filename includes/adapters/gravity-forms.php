@@ -605,7 +605,7 @@ function minn_admin_gf_entry_summary( $form, $entry ) {
 	}
 	$values = array();
 	foreach ( $form['fields'] as $field ) {
-		if ( ! is_object( $field ) || in_array( $field->type, array( 'html', 'section', 'page', 'captcha', 'fileupload', 'password' ), true ) ) {
+		if ( ! is_object( $field ) || in_array( $field->type, array( 'html', 'section', 'page', 'captcha', 'fileupload', 'password' ), true ) || minn_admin_gfn_holds_password( $field ) ) {
 			continue;
 		}
 		$value = trim( (string) $field->get_value_export( $entry, (string) $field->id, true ) );

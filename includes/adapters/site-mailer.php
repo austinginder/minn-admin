@@ -121,7 +121,12 @@ const MINN_ADMIN_SITE_MAILER_FAILED    = array( 'failed', 'bounce', 'dropped' );
 minn_admin_resource( 'site-mailer/emails', function () {
 	return array(
 		'active'  => 'minn_admin_site_mailer_active',
-		'gates'   => array( 'view' => 'minn_admin_site_mailer_can' ),
+		'gates'   => array(
+			'view'  => 'minn_admin_site_mailer_can',
+			// The raw table holds bodies whole, which the browser cannot
+			// mask a reset link's key in: only for who reads mail whole.
+			'table' => 'minn_admin_mail_bodies_open',
+		),
 		'labels'  => array( 'not_found' => __( 'Email not found', 'minn-admin' ) ),
 		'source'  => array(
 			'table'   => 'site_mail_logs',
