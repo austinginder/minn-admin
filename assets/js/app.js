@@ -40356,10 +40356,18 @@
 			// Synced pattern → its own editor. Save first (same discipline as
 			// the block-editor escape hatch) so nothing in this post is lost
 			// on the way out.
-			const patBtn = e.target.closest( '[data-patternedit]' );
+			// Only Minn's own cover on a real island, naming the pattern that
+			// island's stored block references: post content can wear
+			// data-patternedit (kses keeps data-*), and a planted one took
+			// every click on its text away to a pattern of its choosing.
+			const patCover = e.target.closest( '[data-patternedit]' );
+			const patIsland = patCover && patCover.classList.contains( 'minn-pattern-cover' ) && isRealIsland( patCover.parentElement ) ? patCover.parentElement : null;
+			const patRaw = patIsland ? String( ( ed.islands || [] )[ +patIsland.dataset.island ] || '' ) : '';
+			const patRef = ( patRaw.match( /"ref"\s*:\s*(\d+)/ ) || [] )[ 1 ] || '';
+			const patBtn = patRef && patRef === patCover.dataset.patternedit ? patCover : null;
 			if ( patBtn ) {
 				e.preventDefault();
-				const ref = patBtn.dataset.patternedit;
+				const ref = patRef;
 				( async () => {
 					try {
 						if ( ed.dirty || ! ed.id ) await saveEditor( { _explicit: true } );
