@@ -180,6 +180,10 @@ class Minn_Admin_Switch {
 		// deny; nginx needs the matching location rule), and the folder
 		// goes once its check expires, whether or not anyone checks again.
 		file_put_contents( $dir . '/index.php', "<?php\n// Silence is golden.\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+		// Nor is the folder's own name for a listing of upgrade/ to give away.
+		if ( ! file_exists( WP_CONTENT_DIR . '/upgrade/index.php' ) ) {
+			file_put_contents( WP_CONTENT_DIR . '/upgrade/index.php', "<?php\n// Silence is golden.\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+		}
 		file_put_contents( $dir . '/.htaccess', "<IfModule mod_authz_core.c>\nRequire all denied\n</IfModule>\n<IfModule !mod_authz_core.c>\nOrder deny,allow\nDeny from all\n</IfModule>\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions
 		self::schedule_sweep();
 		$zip = $dir . '/minn.zip';
@@ -529,6 +533,12 @@ class Minn_Admin_Switch {
 			/* translators: 1: a folder path, 2: a command. */
 			return new WP_Error( 'minn_switch_park', sprintf( __( 'The web server cannot create %1$s for WordPress\'s own files. Switch from the command line instead: %2$s', 'minn-admin' ), $park['path'], 'wp minn install --park=<folder>' ), array( 'status' => 409 ) );
 		}
+		// One switch at a time, as core's upgrader holds its own lock: two
+		// clicks would start two installers moving the same files.
+		require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
+		if ( ! WP_Upgrader::create_lock( 'minn_switch', self::STAGE_TTL ) ) {
+			return new WP_Error( 'minn_switch_running', __( 'A switch is already running on this site.', 'minn-admin' ), array( 'status' => 409 ) );
+		}
 		$held['state'] = 'switching';
 		set_transient( 'minn_switch_' . $token, $held, self::STAGE_TTL );
 		ignore_user_abort( true );
@@ -537,10 +547,10 @@ class Minn_Admin_Switch {
 	}
 
 	/**
-	 * The swap itself, at the end of the request. Its report is written
-	 * beside the staged engine: if the switch fails WordPress is still
-	 * here to read it (rest_status); if it works the folder goes and the
-	 * site answers as Minn.
+	 * The swap itself, at the end of the request. A failed switch's report
+	 * is kept with the check, out of the web server's reach: WordPress is
+	 * still here to read it (rest_status). If it works the folder goes and
+	 * the site answers as Minn.
 	 *
 	 * @param string $token The check's token.
 	 * @param array  $held  What the check kept.
@@ -560,9 +570,13 @@ class Minn_Admin_Switch {
 			self::remember( (string) $held['version'] );
 			// The engine copied itself into the webroot; its staged copy is spent.
 			self::remove( $held['dir'] );
+			WP_Upgrader::release_lock( 'minn_switch' );
 			return;
 		}
-		file_put_contents( $held['dir'] . '/result.json', wp_json_encode( $result ) );
+		$held['state'] = 'failed';
+		$held['lines'] = array_values( array_map( 'strval', (array) ( $result['lines'] ?? array() ) ) );
+		set_transient( 'minn_switch_' . $token, $held, self::STAGE_TTL );
+		WP_Upgrader::release_lock( 'minn_switch' );
 	}
 
 	/** Where a switch stands while WordPress still answers: switching, or failed with the installer's report. */
@@ -574,13 +588,11 @@ class Minn_Admin_Switch {
 		if ( ! is_array( $held ) || (int) ( $held['user'] ?? 0 ) !== get_current_user_id() ) {
 			return new WP_Error( 'minn_switch_expired', __( 'That switch is not known here.', 'minn-admin' ), array( 'status' => 404 ) );
 		}
-		$file = $held['dir'] . '/result.json';
-		if ( is_file( $file ) ) {
-			$result = json_decode( (string) file_get_contents( $file ), true );
+		if ( 'failed' === $held['state'] ) {
 			return rest_ensure_response(
 				array(
 					'state' => 'failed',
-					'lines' => is_array( $result ) ? (array) ( $result['lines'] ?? array() ) : array(),
+					'lines' => (array) ( $held['lines'] ?? array() ),
 				)
 			);
 		}

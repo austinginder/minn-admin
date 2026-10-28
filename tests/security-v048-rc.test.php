@@ -472,4 +472,61 @@ wp_set_current_user( $admin[0]->ID );
 	}
 } )();
 
+/*
+ * 05-L2, 05-L3: a failed switch's report sat in wp-content/upgrade as
+ * result.json, which the web server can serve where .htaccess is ignored;
+ * and two runs of one check could both start the installer. The engine
+ * here is a stand-in that only fails ("older than Minn Admin can install"),
+ * so nothing is switched.
+ */
+( function () use ( $check, $admin ) {
+	if ( ! class_exists( 'Minn_Admin_Switch' ) ) {
+		echo "SKIP  05-L2 the switch is not loaded\n";
+		return;
+	}
+	require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
+	$token  = wp_generate_password( 32, false );
+	$dir    = WP_CONTENT_DIR . '/upgrade/minn-switch-' . $token;
+	$engine = $dir . '/engine';
+	wp_mkdir_p( $engine . '/src/Minn' );
+	if ( ! class_exists( 'Minn\Autoloader' ) ) {
+		file_put_contents( $engine . '/src/Minn/Autoloader.php', "<?php\nnamespace Minn;\nclass Autoloader { public static function register() {} }\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+	}
+	$held = array( 'user' => $admin[0]->ID, 'state' => 'switching', 'dir' => $dir, 'engine' => $engine, 'version' => '0.0.0', 'light' => 'GREEN' );
+	$ref  = new ReflectionClass( 'Minn_Admin_Switch' );
+	$ttl  = $ref->hasConstant( 'STAGE_TTL' ) ? $ref->getConstant( 'STAGE_TTL' ) : HOUR_IN_SECONDS;
+	try {
+		set_transient( 'minn_switch_' . $token, $held, $ttl );
+		Minn_Admin_Switch::switch_now( $token, $held );
+		$check( '05-L2 a failed switch leaves no report in wp-content/upgrade', ! file_exists( $dir . '/result.json' ) );
+		$q = new WP_REST_Request( 'GET', '/minn-admin/v1/minn-switch/status' );
+		$q->set_param( 'token', $token );
+		$st = Minn_Admin_Switch::rest_status( $q );
+		$d  = is_wp_error( $st ) ? array() : $st->get_data();
+		$check( '05-L2 control: the person who ran it still reads the failure', 'failed' === ( $d['state'] ?? '' ) && ! empty( $d['lines'] ), wp_json_encode( $d ) );
+
+		// A second run while one holds the lock.
+		$held['state'] = 'checked';
+		set_transient( 'minn_switch_' . $token, $held, $ttl );
+		$host = (string) wp_parse_url( home_url(), PHP_URL_HOST );
+		if ( ! Minn_Admin_Switch::park()['ready'] ) {
+			echo "SKIP  05-L3 the park folder is not writable here\n";
+		} else {
+			WP_Upgrader::create_lock( 'minn_switch', $ttl );
+			$q = new WP_REST_Request( 'POST', '/minn-admin/v1/minn-switch/run' );
+			$q->set_param( 'token', $token );
+			$q->set_param( 'confirm', $host );
+			$r = Minn_Admin_Switch::rest_run( $q );
+			$check( '05-L3 a run while another holds the lock is refused', is_wp_error( $r ) && 'minn_switch_running' === $r->get_error_code(), is_wp_error( $r ) ? $r->get_error_code() : wp_json_encode( $r->get_data() ) );
+		}
+	} finally {
+		WP_Upgrader::release_lock( 'minn_switch' );
+		delete_transient( 'minn_switch_' . $token );
+		require_once ABSPATH . 'wp-admin/includes/file.php';
+		global $wp_filesystem;
+		WP_Filesystem();
+		$wp_filesystem->delete( $dir, true );
+	}
+} )();
+
 $summary();
