@@ -164,6 +164,10 @@
 	window.fetch = function ( input, init ) {
 		var url = typeof input === 'string' ? input : ( input && input.url ) || String( input );
 		var abs = new URL( url, location.href ).href;
+		// The recorded site itself (its address scrubbed to example.com): the
+		// app's background calls there, such as the admin-notices capture at
+		// start, get an empty answer instead of leaving the demo.
+		if ( 'example.com' === new URL( abs ).host ) return Promise.resolve( new Response( null, { status: 204 } ) );
 		if ( abs.indexOf( here ) !== 0 ) return realFetch( input, init );
 		var method = String( ( init && init.method ) || ( input && input.method ) || 'GET' ).toUpperCase();
 		var key = null;
