@@ -529,4 +529,40 @@ wp_set_current_user( $admin[0]->ID );
 	}
 } )();
 
+/*
+ * 01-L2: the refusal of Minn's namespace in another spelling stood aside
+ * when an earlier rest_pre_dispatch filter answered false, '' or an empty
+ * array, and core dispatches past an empty answer.
+ * 01-L5: a delete of every account's capabilities at once (account 0, as
+ * delete_metadata()'s delete_all asks) passed the fence.
+ */
+( function () use ( $check, $admin ) {
+	global $wpdb;
+	rest_get_server();
+	register_rest_route( 'minn-admin/v1', '/zz-rc-fence', array(
+		'methods'             => 'POST',
+		'permission_callback' => 'is_user_logged_in',
+		'callback'            => static function () use ( $wpdb ) {
+			// The fence's own answer, asked directly: nothing is deleted.
+			$answer = Minn_Admin_Fences::meta_delete( null, 0, $wpdb->get_blog_prefix() . 'capabilities' );
+			return rest_ensure_response( array( 'answer' => null === $answer ? 'allowed' : 'refused' ) );
+		},
+	) );
+	$empty = static function () {
+		return false;
+	};
+	// Just before the fence's own: an earlier one (WooCommerce Gift Cards)
+	// turns any answer back into null.
+	add_filter( 'rest_pre_dispatch', $empty, PHP_INT_MAX - 1 );
+	try {
+		$r = rest_do_request( new WP_REST_Request( 'POST', '/MINN-ADMIN/v1/zz-rc-fence' ) );
+		$check( '01-L2 another spelling is refused after a filter answered false', 400 === $r->get_status(), (string) $r->get_status() );
+	} finally {
+		remove_filter( 'rest_pre_dispatch', $empty, PHP_INT_MAX - 1 );
+	}
+	$r = rest_do_request( new WP_REST_Request( 'POST', '/minn-admin/v1/zz-rc-fence' ) );
+	$d = $r->get_data();
+	$check( '01-L5 the fence refuses a delete of every account\'s capabilities', 'refused' === ( $d['answer'] ?? '' ) || 'minn_write_fenced' === ( $d['code'] ?? '' ), wp_json_encode( $d ) );
+} )();
+
 $summary();

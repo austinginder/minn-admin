@@ -418,7 +418,9 @@ class Minn_Admin_Fences {
 	 * @return mixed
 	 */
 	public static function canonical( $result, $server, $request ) {
-		if ( null !== $result || ! $request instanceof WP_REST_Request ) {
+		// Core takes a filter's answer only when it is not empty, and
+		// dispatches past false, '' or an empty array: so does this.
+		if ( ! empty( $result ) || ! $request instanceof WP_REST_Request ) {
 			return $result;
 		}
 		if ( preg_match( '#^/minn-admin/v\d+(?=/|$)#i', $request->get_route(), $m ) && strtolower( $m[0] ) !== $m[0] ) {
@@ -479,6 +481,12 @@ class Minn_Admin_Fences {
 		list( $kind, $stored ) = self::access_key( $key );
 		if ( '' === $kind ) {
 			return $check;
+		}
+		// Account 0 is every account at once (delete_metadata()'s delete_all):
+		// no Minn screen takes everyone's role away.
+		if ( 0 === (int) $user_id ) {
+			self::$refused[] = $key;
+			return false;
 		}
 		$ok = 'caps' === $kind
 			? self::may_change_caps( $user_id, $stored, $value )
