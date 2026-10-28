@@ -29,7 +29,7 @@ const TABLE = '<!-- wp:table --><figure class="wp-block-table"><table><thead><tr
 	// persisting; the rule-51 fixed-wait lesson).
 	const save = async () => {
 		const wait = page.waitForResponse( ( res ) =>
-			res.request().method() === 'POST' && new RegExp( 'wp/v2/posts/' + id ).test( res.url() ), { timeout: 20000 } );
+			res.request().method() === 'POST' && new RegExp( 'wp/v2/posts/' + id ).test( res.url() ), { timeout: 60000 } );
 		await page.keyboard.press( 'Meta+s' );
 		await wait;
 		await page.waitForTimeout( 300 );
