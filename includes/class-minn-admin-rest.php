@@ -10588,7 +10588,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			$cfg = self::gs_set_path( $cfg, $path, $value );
 		}
 		$write = new WP_REST_Request( 'POST', '/wp/v2/global-styles/' . $id );
-		$write->set_body_params( array( 'settings' => (object) ( $cfg['settings'] ?? array() ), 'styles' => (object) ( $cfg['styles'] ?? array() ) ) );
+		$write->set_body_params( array( 'settings' => (object) self::gs_settings_to_write( $cfg['settings'] ?? array() ), 'styles' => (object) ( $cfg['styles'] ?? array() ) ) );
 		$wres = rest_do_request( $write );
 		if ( $wres->is_error() ) {
 			return $wres->as_error();
@@ -10840,12 +10840,42 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			$cfg['styles']   = self::gs_merge( $cfg['styles'], isset( $decoded['styles'] ) && is_array( $decoded['styles'] ) ? $decoded['styles'] : array() );
 		}
 		$write = new WP_REST_Request( 'POST', '/wp/v2/global-styles/' . $id );
-		$write->set_body_params( array( 'settings' => (object) $cfg['settings'], 'styles' => (object) $cfg['styles'] ) );
+		$write->set_body_params( array( 'settings' => (object) self::gs_settings_to_write( $cfg['settings'] ), 'styles' => (object) $cfg['styles'] ) );
 		$wres = rest_do_request( $write );
 		if ( $wres->is_error() ) {
 			return $wres->as_error();
 		}
 		return rest_ensure_response( array( 'ok' => true ) );
+	}
+
+	/**
+	 * The stored settings as a save should send them. The raw read keeps
+	 * presets as they were written, and a palette or typeset applied by
+	 * someone who may post unfiltered HTML is stored as a flat list. For
+	 * anyone else, core's kses pass on the post keeps only presets filed
+	 * under their origin, so a save of one link color dropped every flat
+	 * palette, font and size the edit never touched. Their settings go out
+	 * as core's own read files them (WP_Theme_JSON, origin 'custom'), which
+	 * is what the Site Editor sends.
+	 *
+	 * @param array $settings Stored settings.
+	 * @return array
+	 */
+	private static function gs_settings_to_write( $settings ) {
+		$settings = is_array( $settings ) ? $settings : array();
+		if ( ! $settings || current_user_can( 'unfiltered_html' ) || ! class_exists( 'WP_Theme_JSON' ) ) {
+			return $settings;
+		}
+		$json = new WP_Theme_JSON(
+			array(
+				'version'                     => WP_Theme_JSON::LATEST_SCHEMA,
+				'isGlobalStylesUserThemeJSON' => true,
+				'settings'                    => $settings,
+			),
+			'custom'
+		);
+		$raw = $json->get_raw_data();
+		return isset( $raw['settings'] ) && is_array( $raw['settings'] ) ? $raw['settings'] : $settings;
 	}
 
 	/** The Customized lines with who/when per line (same order as `changes`). */

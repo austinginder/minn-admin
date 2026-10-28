@@ -366,4 +366,48 @@ wp_set_current_user( $admin[0]->ID );
 	}
 } )();
 
+/*
+ * GS-1: a global styles save by someone without unfiltered_html rewrote the
+ * stored settings as read raw, and core's kses pass on the post keeps only
+ * presets filed under their origin, so a palette stored flat (as a
+ * variation applied by someone with unfiltered_html is) was wiped.
+ */
+( function () use ( $check, $admin ) {
+	if ( ! class_exists( 'WP_Theme_JSON_Resolver' ) ) {
+		echo "SKIP  GS-1 no global styles\n";
+		return;
+	}
+	$id = (int) WP_Theme_JSON_Resolver::get_user_global_styles_post_id();
+	if ( ! $id ) {
+		echo "SKIP  GS-1 no user global styles post for this theme\n";
+		return;
+	}
+	$was  = get_post_field( 'post_content', $id );
+	$flat = array(
+		'version'                     => WP_Theme_JSON::LATEST_SCHEMA,
+		'isGlobalStylesUserThemeJSON' => true,
+		'settings'                    => array( 'color' => array( 'palette' => array( array( 'slug' => 'minn-evening', 'color' => '#123456', 'name' => 'Evening' ) ) ) ),
+		'styles'                      => array(),
+	);
+	wp_update_post( array( 'ID' => $id, 'post_content' => wp_slash( wp_json_encode( $flat ) ) ) );
+	$deny = function ( $caps, $cap ) {
+		return 'unfiltered_html' === $cap ? array( 'do_not_allow' ) : $caps;
+	};
+	add_filter( 'map_meta_cap', $deny, 10, 2 );
+	kses_init(); // as set_current_user would: kses filters on for this caller
+	try {
+		$r = new WP_REST_Request( 'POST', '/minn-admin/v1/styles/update' );
+		$r->set_header( 'content-type', 'application/json' );
+		$r->set_body( wp_json_encode( array( 'changes' => array( 'styles.elements.link.color.text' => '#ff0000' ) ) ) );
+		$res    = rest_do_request( $r );
+		$stored = (string) get_post_field( 'post_content', $id );
+		$check( 'GS-1 a link color save without unfiltered_html answers 200 (premise)', 200 === $res->get_status() && false !== stripos( $stored, '#ff0000' ), $res->get_status() . ' ' . substr( $stored, 0, 200 ) );
+		$check( 'GS-1 the palette it never touched survives', false !== strpos( $stored, 'minn-evening' ) && false !== strpos( $stored, '#123456' ), substr( $stored, 0, 300 ) );
+	} finally {
+		remove_filter( 'map_meta_cap', $deny, 10 );
+		kses_init();
+		wp_update_post( array( 'ID' => $id, 'post_content' => wp_slash( (string) $was ) ) );
+	}
+} )();
+
 $summary();
