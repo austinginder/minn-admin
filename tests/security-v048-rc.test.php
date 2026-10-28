@@ -408,4 +408,41 @@ wp_set_current_user( $admin[0]->ID );
 	}
 } )();
 
+/*
+ * 08-L2: Check for updates flushed the vendors' plugin update caches (and
+ * asked Gravity Forms' servers) for someone who may only update languages.
+ */
+( function () use ( $check, $drop_user, $admin ) {
+	if ( ! function_exists( 'minn_admin_force_update_check' ) ) {
+		echo "SKIP  08-L2 licences not loaded\n";
+		return;
+	}
+	$ran  = 0;
+	$hook = function () use ( &$ran ) {
+		++$ran;
+	};
+	add_action( 'minn_admin_flush_vendor_update_caches', $hook );
+	add_role( 'minn_v048rc_lang', 'Languages', array( 'read' => true, 'update_languages' => true ) );
+	$u = wp_insert_user( array( 'user_login' => 'minn-v048rc-lg-' . wp_rand(), 'user_pass' => wp_generate_password(), 'role' => 'minn_v048rc_lang', 'user_email' => 'minn-v048rc-lg-' . wp_rand() . '@example.com' ) );
+	// No outbound calls from the check itself.
+	$block = function () {
+		return new WP_Error( 'minn_test_offline', 'offline' );
+	};
+	add_filter( 'pre_http_request', $block );
+	try {
+		wp_set_current_user( $u );
+		minn_admin_force_update_check( 'languages' );
+		$check( '08-L2 a languages-only check leaves the plugin update caches', 0 === $ran, (string) $ran );
+		wp_set_current_user( $admin[0]->ID );
+		minn_admin_force_update_check( 'languages' );
+		$check( '08-L2 control: an administrator\'s check flushes them', $ran > 0, (string) $ran );
+	} finally {
+		remove_filter( 'pre_http_request', $block );
+		remove_action( 'minn_admin_flush_vendor_update_caches', $hook );
+		wp_set_current_user( $admin[0]->ID );
+		$drop_user( $u );
+		remove_role( 'minn_v048rc_lang' );
+	}
+} )();
+
 $summary();

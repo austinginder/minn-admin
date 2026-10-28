@@ -12405,7 +12405,7 @@
 							<div class="minn-row-title">${ esc( p.name || ( p.extended_info && p.extended_info.name ) || ( __( 'Product #' ) + ( p.product_id || p.id ) ) ) }</div>
 						</div>
 						<div class="minn-row-meta" style="font-variant-numeric:tabular-nums;">${ esc( String( p.items_sold ?? '—' ) ) }</div>
-						<div class="minn-row-meta" style="font-variant-numeric:tabular-nums;">${ money( p.net_revenue ) }</div>
+						<div class="minn-row-meta" style="font-variant-numeric:tabular-nums;">${ esc( money( p.net_revenue ) ) }</div>
 					</div>` ).join( '' ) : `<div class="minn-empty">${ esc( __( 'No product sales in this range.' ) ) }</div>`
 				) }
 			</div>` }`;

@@ -6833,8 +6833,11 @@ function minn_admin_force_update_check( $component = '' ) {
 
 	// Vendor caches BEFORE the core check — Gravity SMTP's Auto_Updater
 	// only injects into the transient when its Common key + offerings
-	// cache already know about the license.
-	minn_admin_flush_vendor_update_caches();
+	// cache already know about the license. Plugins' caches, for someone
+	// who updates plugins: a languages-only check leaves them.
+	if ( current_user_can( 'update_plugins' ) ) {
+		minn_admin_flush_vendor_update_caches();
+	}
 
 	if ( current_user_can( 'update_plugins' ) ) {
 		require_once ABSPATH . 'wp-admin/includes/plugin.php';
