@@ -207,16 +207,18 @@ add_action( 'rest_api_init', function () {
 				// stored as typed through sanitize_text_field ('Promo 50%DEAL'
 				// became 'Promo 50AL') and turned a type the page reads as a
 				// message into one.
-				$was     = (array) $s['confirmations'][ $key ];
-				$changed = function ( $field ) use ( $in, $was, $text ) {
-					return array_key_exists( $field, $in ) && $text( $in, $field ) !== $text( $was, $field );
+				// Not $was: that holds the form's stored settings, which the
+				// mask check after these loops compares against.
+				$stored  = (array) $s['confirmations'][ $key ];
+				$changed = function ( $field ) use ( $in, $stored, $text ) {
+					return array_key_exists( $field, $in ) && $text( $in, $field ) !== $text( $stored, $field );
 				};
-				$type = $changed( 'type' ) ? $text( $in, 'type' ) : $text( $was, 'type' );
+				$type = $changed( 'type' ) ? $text( $in, 'type' ) : $text( $stored, 'type' );
 				if ( $changed( 'type' ) && ! in_array( $type, array( 'message', 'page', 'redirect' ), true ) ) {
 					$type = 'message';
 				}
-				$page = absint( $changed( 'page' ) ? $text( $in, 'page' ) : $text( $was, 'page' ) );
-				$url  = $changed( 'redirect' ) ? trim( $text( $in, 'redirect' ) ) : $text( $was, 'redirect' );
+				$page = absint( $changed( 'page' ) ? $text( $in, 'page' ) : $text( $stored, 'page' ) );
+				$url  = $changed( 'redirect' ) ? trim( $text( $in, 'redirect' ) ) : $text( $stored, 'redirect' );
 				// Where visitors go is checked when this save changes it.
 				$aims = $changed( 'type' ) || $changed( 'page' ) || $changed( 'redirect' );
 				if ( $aims && 'page' === $type && ( ! $page || ! get_post( $page ) || ! current_user_can( 'read_post', $page ) ) ) {

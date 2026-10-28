@@ -410,4 +410,34 @@ wp_set_current_user( $admin[0]->ID );
 	}
 } )();
 
+/*
+ * WPF-1: the WPForms emails save's confirmations loop reused $was, which
+ * held the form's stored settings, so the mask check after it compared
+ * every write with an empty baseline whenever a confirmation was saved, and
+ * refused a notification whose stored text already held a placeholder.
+ */
+( function () use ( $check ) {
+	if ( ! function_exists( 'wpforms' ) || ! function_exists( 'minn_admin_wpforms_emails_payload' ) ) {
+		echo "SKIP  WPF-1 WPForms inactive\n";
+		return;
+	}
+	$fid = (int) wpforms()->obj( 'form' )->add( 'Minn v048 WPForms ' . wp_rand() );
+	try {
+		$data = wpforms()->obj( 'form' )->get( $fid, array( 'content_only' => true ) );
+		$data['settings']['notifications'] = array( '1' => array( 'notification_name' => 'Default', 'email' => '{admin_email}', 'subject' => 'S', 'message' => 'Stored as text: [redacted:0a1b2c]' ) );
+		$data['settings']['confirmations'] = array( '1' => array( 'name' => 'Default', 'type' => 'message', 'message' => 'Thanks', 'page' => '', 'redirect' => '' ) );
+		wpforms()->obj( 'form' )->update( $fid, wp_slash( $data ) );
+		$r = new WP_REST_Request( 'POST', "/minn-admin/v1/wpforms/forms/{$fid}/emails" );
+		$r->set_header( 'content-type', 'application/json' );
+		$r->set_body( wp_json_encode( array( 'notifications' => array( array( 'key' => '1', 'subject' => 'New subject' ) ), 'confirmations' => array( array( 'key' => '1', 'message' => 'Thanks again' ) ) ) ) );
+		$res = rest_do_request( $r );
+		$d   = wpforms()->obj( 'form' )->get( $fid, array( 'content_only' => true, 'cap' => false ) );
+		$check( 'WPF-1 a notification and a confirmation saved together keep a stored placeholder as it was', 200 === $res->get_status() && 'New subject' === ( $d['settings']['notifications']['1']['subject'] ?? '' ) && 'Thanks again' === ( $d['settings']['confirmations']['1']['message'] ?? '' ), $res->get_status() . ' ' . wp_json_encode( $res->get_data() ) );
+	} finally {
+		if ( $fid > 1 && 'wpforms' === get_post_type( $fid ) ) {
+			wp_delete_post( $fid, true );
+		}
+	}
+} )();
+
 $summary();
