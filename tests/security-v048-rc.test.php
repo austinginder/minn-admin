@@ -445,4 +445,31 @@ wp_set_current_user( $admin[0]->ID );
 	}
 } )();
 
+/*
+ * 05-L1: a batch's progress record was a file named by the token its GET URL
+ * carries, so where .htaccess is ignored the web server handed it out by
+ * that name with no age check, and the temp dir's paths stayed in it.
+ */
+( function () use ( $check ) {
+	$token = substr( hash( 'sha256', uniqid( '', true ) ), 0, 40 );
+	$path  = Minn_Admin_REST::progress_file_path( $token );
+	if ( '' === $path ) {
+		echo "SKIP  05-L1 this layout writes no progress file\n";
+		return;
+	}
+	try {
+		$check( '05-L1 the record is not filed under the URL\'s token', $token . '.json' !== basename( $path ), basename( $path ) );
+		Minn_Admin_REST::progress_write( $token, $path, array( 'items' => array( array( 'error' => 'Could not copy ' . trailingslashit( get_temp_dir() ) . 'minn-rc-x.zip' ) ) ) );
+		$raw = (string) file_get_contents( $path ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+		$check( '05-L1 the temp dir\'s path is stripped from the public record', '' !== $raw && false === strpos( str_replace( '\\/', '/', $raw ), untrailingslashit( get_temp_dir() ) ), $raw );
+		$r = wp_remote_get( plugins_url( 'progress.php', MINN_ADMIN_DIR . 'minn-admin.php' ) . '?t=' . $token, array( 'sslverify' => false, 'timeout' => 20 ) );
+		$d = json_decode( (string) wp_remote_retrieve_body( $r ), true );
+		$check( '05-L1 control: progress.php still reads it by the token', is_array( $d ) && ! empty( $d['items'] ), substr( (string) wp_remote_retrieve_body( $r ), 0, 160 ) );
+	} finally {
+		Minn_Admin_REST::progress_expire( $token );
+		delete_transient( 'minn_bulk_update_' . $token );
+		wp_delete_file( $path );
+	}
+} )();
+
 $summary();

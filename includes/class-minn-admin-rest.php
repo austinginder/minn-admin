@@ -13088,7 +13088,16 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 				wp_delete_file( $old );
 			}
 		}
-		return $dir . '/' . $token . '.json';
+		return $dir . '/' . self::progress_file_name( $token );
+	}
+
+	/**
+	 * A record's file name: the token's sha256, so the token a GET query
+	 * string carries is not also the name the web server would hand the
+	 * file out under where .htaccess is ignored (progress.php hashes it too).
+	 */
+	public static function progress_file_name( $token ) {
+		return hash( 'sha256', (string) $token ) . '.json';
 	}
 
 	/**
@@ -13119,7 +13128,17 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		if ( ! is_string( $value ) || '' === $value ) {
 			return $value;
 		}
-		$roots = array_unique( array( WP_CONTENT_DIR . '/', wp_normalize_path( WP_CONTENT_DIR ) . '/', ABSPATH, wp_normalize_path( ABSPATH ) ) );
+		// The temp dir (wp_tempnam() downloads) and a languages folder
+		// outside wp-content show up in upgrader messages too.
+		$roots = array( WP_CONTENT_DIR . '/', ABSPATH, trailingslashit( get_temp_dir() ) );
+		if ( defined( 'WP_LANG_DIR' ) ) {
+			$roots[] = trailingslashit( WP_LANG_DIR );
+		}
+		$roots = array_unique( array_merge( $roots, array_map( 'wp_normalize_path', $roots ) ) );
+		// Longest first, so a folder inside another is stripped whole.
+		usort( $roots, function ( $a, $b ) {
+			return strlen( $b ) - strlen( $a );
+		} );
 		foreach ( $roots as $root ) {
 			if ( strlen( $root ) > 1 ) { // a site rooted at '/' has nothing to strip
 				$value = str_replace( $root, '', $value );
@@ -13134,7 +13153,7 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 		if ( ! preg_match( '/^[a-f0-9]{40}$/', $token ) ) {
 			return;
 		}
-		$file = WP_CONTENT_DIR . '/minn-admin-progress/' . $token . '.json';
+		$file = WP_CONTENT_DIR . '/minn-admin-progress/' . self::progress_file_name( $token );
 		if ( is_file( $file ) ) {
 			wp_delete_file( $file );
 		}

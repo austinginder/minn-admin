@@ -9,9 +9,11 @@
  * writes its progress record to a file, and this script reads it back
  * without loading WordPress at all.
  *
- * The file lives at <wp-content>/minn-admin-progress/<token>.json, where
- * the token is 40 random hex characters minted by the client; anything else
- * is refused, and nothing but that one file is ever read. The record holds
+ * The file lives at <wp-content>/minn-admin-progress/<sha256 of token>.json,
+ * where the token is 40 random hex characters minted by the client; anything
+ * else is refused, and nothing but that one file is ever read. The hash keeps
+ * the token in a GET query string from also naming the file where the web
+ * server would serve the folder itself. The record holds
  * plugin files, versions, byte counts and states: nothing a site owner would
  * mind another site owner seeing, and the token is the only way to it.
  */
@@ -34,7 +36,7 @@ if ( ! preg_match( '/^[a-f0-9]{40}$/', $token ) ) {
 // site's wp-content.
 $script  = isset( $_SERVER['SCRIPT_FILENAME'] ) ? (string) $_SERVER['SCRIPT_FILENAME'] : '';
 $content = dirname( ( '' !== $script && is_file( $script ) ) ? $script : __FILE__, 3 );
-$file    = $content . '/minn-admin-progress/' . $token . '.json';
+$file    = $content . '/minn-admin-progress/' . hash( 'sha256', $token ) . '.json';
 // A record outlives its batch by an hour at most: the token rides a GET
 // query string, so it lands in browser history and access logs, and a
 // stale record would otherwise stay readable to any later holder.
