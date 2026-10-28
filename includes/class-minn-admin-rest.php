@@ -3274,6 +3274,10 @@ class Minn_Admin_REST {
 			}
 			remove_filter( 'render_block_data', $clamp_preview_query );
 			remove_action( 'pre_get_posts', $cap_preview_posts, PHP_INT_MAX );
+			// Whatever an adapter armed for this render comes off here, so a
+			// later render in the same process (a batch request, a page) is
+			// not run through it.
+			do_action( 'minn_admin_after_render_blocks', $blocks, $post_id );
 			foreach ( $request_held['get'] as $key => $value ) {
 				$_GET[ $key ] = $value;
 			}

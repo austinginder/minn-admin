@@ -962,6 +962,7 @@ hooks, each with its own section below or its own contract note:
 | `minn_admin_design_sources` | filter | Register a design/template library for the slash menu + block picker |
 | `minn_admin_editor_commands` | filter | Register free-form slash-menu / block-picker commands (boilerplate HTML, island templates, async routes) |
 | `minn_admin_before_render_blocks` | action | Register assets before island `do_blocks` |
+| `minn_admin_after_render_blocks` | action | Take off anything the before action armed for that render (same arguments) |
 | `minn_admin_render_styles` | filter | Extra CSS URLs / inline CSS for island previews |
 | `minn_admin_rendered_html` | filter | Rewrite one island's rendered HTML (maps, fallbacks) |
 | `minn_admin_favicon` | filter | URL of the browser-tab icon for Minn's app on sites without a Site Icon (a theme's brand mark); without one Minn uses its own mark in the viewer's accent (since 0.43.0) |

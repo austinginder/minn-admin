@@ -2472,7 +2472,13 @@ add_action( 'minn_admin_before_render_blocks', function ( $blocks, $post_id ) {
 	if ( $post_id && ! current_user_can( 'edit_post', $post_id ) ) {
 		$post_id = 0;
 	}
-	add_filter( 'pre_render_block', function ( $pre, $parsed ) use ( $post_id ) {
+	// Without a post it asks acf/blocks/render_capability (edit_theme_options
+	// unless a site narrows it), as ACF's own preview does. Anyone else gets
+	// the block's ordinary front-end render.
+	if ( ! $post_id && ! current_user_can( (string) apply_filters( 'acf/blocks/render_capability', 'edit_theme_options', $post_id ) ) ) {
+		return;
+	}
+	$preview = function ( $pre, $parsed ) use ( $post_id ) {
 		if ( null !== $pre || ! is_array( $parsed ) || empty( $parsed['blockName'] ) || ! empty( $parsed['innerBlocks'] ) ) {
 			return $pre;
 		}
@@ -2532,7 +2538,16 @@ add_action( 'minn_admin_before_render_blocks', function ( $blocks, $post_id ) {
 			}
 		}
 		return $html;
-	}, 10, 2 );
+	};
+	// For this render only: left on, it ran a later render in the same
+	// process (a batch request, another caller) through the preview path
+	// with this caller's post.
+	add_filter( 'pre_render_block', $preview, 10, 2 );
+	$done = function () use ( $preview, &$done ) {
+		remove_filter( 'pre_render_block', $preview, 10 );
+		remove_action( 'minn_admin_after_render_blocks', $done );
+	};
+	add_action( 'minn_admin_after_render_blocks', $done, 10, 0 );
 }, 10, 2 );
 
 /**

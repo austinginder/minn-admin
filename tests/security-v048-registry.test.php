@@ -87,4 +87,92 @@ wp_set_current_user( $admin[0]->ID );
 	$check( 'Case-1 control: another namespace is untouched', 200 === $res->get_status(), (string) $res->get_status() );
 } )();
 
+/*
+ * ACF-1: the ACF block preview hook rendered through ACF's preview path with
+ * no post for any edit_posts caller; ACF's own preview asks
+ * acf/blocks/render_capability there.
+ */
+( function () use ( $check, $drop_user, $admin ) {
+	if ( ! function_exists( 'acf_has_block_type' ) || ! acf_has_block_type( 'acf/minn-inline' ) ) {
+		echo "SKIP  ACF-1 needs ACF PRO and the acf/minn-inline fixture\n";
+		return;
+	}
+	$markup = '<!-- wp:acf/minn-inline {"name":"acf/minn-inline","data":{},"mode":"preview"} /-->';
+	$render = function ( $post ) use ( $markup ) {
+		$r = new WP_REST_Request( 'POST', '/minn-admin/v1/render-blocks' );
+		$r->set_header( 'content-type', 'application/json' );
+		$r->set_body( wp_json_encode( array( 'blocks' => array( $markup ), 'post' => $post ) ) );
+		$d = rest_do_request( $r )->get_data();
+		return (string) ( $d['rendered'][0] ?? '' );
+	};
+	$mode = function ( $html ) {
+		return preg_match( '#class="acfi-mode">(\w+)<#', $html, $m ) ? $m[1] : '';
+	};
+	$cid = wp_insert_user( array( 'user_login' => 'minn-v048-co-' . wp_rand(), 'user_pass' => wp_generate_password(), 'role' => 'contributor', 'user_email' => 'minn-v048-co-' . wp_rand() . '@example.com' ) );
+	$own = wp_insert_post( array( 'post_title' => 'minn v048 acf own', 'post_status' => 'draft', 'post_author' => $cid ) );
+	try {
+		wp_set_current_user( $cid );
+		$check( 'ACF-1 a Contributor with no post gets the front-end render', 'front' === $mode( $render( 0 ) ), $mode( $render( 0 ) ) );
+		$check( 'ACF-1 a Contributor on a post they cannot edit gets the front-end render', 'front' === $mode( $render( 1 ) ), $mode( $render( 1 ) ) );
+		$check( 'ACF-1 control: a Contributor on their own draft gets the preview', 'preview' === $mode( $render( $own ) ), $mode( $render( $own ) ) );
+		wp_set_current_user( $admin[0]->ID );
+		$check( 'ACF-1 control: an administrator with no post gets the preview', 'preview' === $mode( $render( 0 ) ), $mode( $render( 0 ) ) );
+		$check( 'ACF-1 the preview filter comes off after the render', 'front' === $mode( do_blocks( $markup ) ), 'a later render took the preview path' );
+		$narrow = function () {
+			return 'minn_v048_nobody_holds_this';
+		};
+		add_filter( 'acf/blocks/render_capability', $narrow );
+		$check( 'ACF-1 a site narrowing render_capability is honoured', 'front' === $mode( $render( 0 ) ), $mode( $render( 0 ) ) );
+		remove_filter( 'acf/blocks/render_capability', $narrow );
+	} finally {
+		wp_set_current_user( $admin[0]->ID );
+		wp_delete_post( $own, true );
+		$drop_user( $cid );
+	}
+} )();
+
+/*
+ * Sucuri-1: Sucuri's audit queue is install-wide, so it asks install_owner()
+ * like the sibling install-wide stores, not network_owner().
+ */
+( function () use ( $check ) {
+	$src = (string) file_get_contents( dirname( __DIR__ ) . '/includes/adapters/sucuri.php' );
+	$check( 'Sucuri-1 the audit queue gate asks install_owner()', (bool) preg_match( '#function minn_admin_sucuri_can\(\)[^}]*Minn_Admin::install_owner\(\)#s', $src ) );
+} )();
+
+/*
+ * TM-1: the Transients list cut a value to 120 characters before the egress
+ * fence saw it, so a key straddling the cut left its prefix behind.
+ */
+( function () use ( $check ) {
+	if ( ! function_exists( 'minn_admin_tm_row' ) ) {
+		echo "SKIP  TM-1 Transients Manager adapter not loaded\n";
+		return;
+	}
+	// A credential the fence knows (a core Connector key row, redacted by
+	// its name shape) copied into a long transient, placed so the
+	// 120-character cut falls inside it.
+	$forget  = static function () {
+		Minn_Admin_DB::forget_credentials();
+		Minn_Admin_Egress::reset();
+	};
+	$key_row = 'connectors_minn048tm' . wp_rand() . '_api_key';
+	$secret  = 'mTm048Kx7Q2' . strtolower( wp_generate_password( 12, false, false ) ) . '94Ly3Zt8';
+	$name    = 'minn_v048_tm_' . wp_rand();
+	add_option( $key_row, $secret, '', 'no' );
+	$forget();
+	set_transient( $name, str_repeat( 'x', 110 ) . $secret . ' tail', 600 );
+	try {
+		global $wpdb;
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT option_name, option_value FROM {$wpdb->options} WHERE option_name = %s", '_transient_' . $name ) );
+		$out = minn_admin_tm_row( $row, 0, time() );
+		$check( 'TM-1 fixture: the fence counts the probe key as a credential', in_array( $secret, Minn_Admin_DB::egress_credentials(), true ) );
+		$check( 'TM-1 no prefix of a straddling key survives the cut', false === strpos( (string) $out['preview'], 'mTm048Kx' ), (string) $out['preview'] );
+	} finally {
+		delete_transient( $name );
+		delete_option( $key_row );
+		$forget();
+	}
+} )();
+
 $summary();
