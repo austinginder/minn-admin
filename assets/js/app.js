@@ -19815,9 +19815,34 @@
 	const PREVIEW_CSP_BLOCK = "default-src 'none'; img-src data: cid: blob:; style-src 'unsafe-inline'; font-src data:; media-src data:";
 	const PREVIEW_CSP_ALLOW = "default-src 'none'; img-src * data: cid: blob:; style-src 'unsafe-inline' *; font-src * data:; media-src * data:";
 	const PREVIEW_REMOTE_RE = /<(?:img|source|video|audio|input)\b[^>]*\b(?:src|srcset|poster)\s*=\s*["']?\s*(?:https?:)?\/\/|\bbackground\s*=\s*["']?\s*(?:https?:)?\/\/|url\(\s*["']?\s*(?:https?:)?\/\/|<link\b[^>]*\bhref\s*=\s*["']?\s*(?:https?:)?\/\/|@import\s+(?:url\()?\s*["']?\s*(?:https?:)?\/\//i;
+	// What the policy cannot stop: the document navigating itself (a meta
+	// refresh, which a sandbox without scripts still follows) and the
+	// browser's own lookups (dns-prefetch, preconnect, prefetch, prerender),
+	// each of which reaches the sender's host when the preview opens, and a
+	// <base> pointing every relative link there. Taken out of the parsed
+	// message (an inert parse: nothing in it runs or loads); a message
+	// without any of them is left exactly as written.
+	const PREVIEW_SELF_NAV_RE = /http-equiv|<base\b|prefetch|preconnect|prerender|preload/i;
+	function previewStripSelfNav( str ) {
+		if ( ! PREVIEW_SELF_NAV_RE.test( str ) ) return str;
+		const doc = new DOMParser().parseFromString( str, 'text/html' );
+		let removed = 0;
+		$$( 'meta[http-equiv], base, link[rel]', doc ).forEach( ( el ) => {
+			const drop = 'BASE' === el.tagName
+				|| ( 'META' === el.tagName && /refresh/i.test( el.getAttribute( 'http-equiv' ) || '' ) )
+				|| ( 'LINK' === el.tagName && /(?:^|\s)(?:dns-prefetch|preconnect|prefetch|prerender|preload|modulepreload)(?:\s|$)/i.test( el.getAttribute( 'rel' ) || '' ) );
+			if ( drop ) {
+				el.remove();
+				removed++;
+			}
+		} );
+		if ( ! removed ) return str;
+		const dt = str.match( /^\s*<!doctype[^>]*>/i );
+		return ( dt ? dt[ 0 ] : '' ) + doc.documentElement.outerHTML;
+	}
 	function previewSrcdoc( html, allowRemote ) {
 		const meta = `<meta http-equiv="Content-Security-Policy" content="${ allowRemote ? PREVIEW_CSP_ALLOW : PREVIEW_CSP_BLOCK }">`;
-		const str = String( html == null ? '' : html );
+		const str = previewStripSelfNav( String( html == null ? '' : html ) );
 		const dt = str.match( /^\s*<!doctype[^>]*>/i );
 		return dt ? dt[ 0 ] + meta + str.slice( dt[ 0 ].length ) : meta + str;
 	}
