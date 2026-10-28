@@ -136,7 +136,9 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		const reshaped = await page.$$eval( '[data-sset]', ( els ) => els.map( ( e ) => e.dataset.sset ) );
 		t.check( 'tab reshapes with the new connector schema', ! reshaped.includes( 'host' ), reshaped.join( ',' ) );
 		stored = await raw();
-		t.check( 'config maps flipped to postmark', JSON.stringify( stored.config.primary_connector ) === '{"postmark":true}', JSON.stringify( stored.config.primary_connector ) );
+		// Their own endpoint's shape: the others stay in the map, false.
+		const onlyTrue = ( map, slug ) => Object.keys( map || {} ).filter( ( k ) => map[ k ] === true || map[ k ] === 'true' ).join( ',' ) === slug;
+		t.check( 'config maps flipped to postmark', onlyTrue( stored.config.primary_connector, 'postmark' ), JSON.stringify( stored.config.primary_connector ) );
 		// Restore generic as primary.
 		await page.waitForSelector( combo, { timeout: 15000 } );
 		await page.click( combo );
@@ -146,7 +148,7 @@ const { launch, login, reporter, BASE } = require( './helpers' );
 		await clickSave();
 		await page.waitForSelector( '[data-sset="host"]', { timeout: 15000 } );
 		stored = await raw();
-		t.check( 'generic restored as primary', JSON.stringify( stored.config.primary_connector ) === '{"generic":true}' );
+		t.check( 'generic restored as primary', onlyTrue( stored.config.primary_connector, 'generic' ), JSON.stringify( stored.config.primary_connector ) );
 
 		/* ===== General tab ===== */
 		await page.click( '[data-ssettab="general"]' );

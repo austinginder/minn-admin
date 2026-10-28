@@ -1299,14 +1299,38 @@ function minn_admin_gsmtp_settings_write( $tab, array $vals ) {
 		$was    = minn_admin_gsmtp_primary();
 		$target = $vals['primary_connector'] ?? $was;
 		if ( $target !== $was ) {
-			// Mirror their Save_Connector_Settings_Endpoint semantics:
-			// the config maps hold ONE truthy primary/enabled entry and
-			// the connector's own option mirrors the flags.
-			$plugin->save( 'primary_connector', array( $target => true ) );
-			$plugin->save( 'enabled_connector', array( $target => true ) );
-			$opts->save( 'is_primary', true, $target );
-			$opts->save( 'enabled', true, $target );
+			// Their Save_Connector_Settings_Endpoint::save_connector_status():
+			// primary and backup are exclusive (granting one clears it from
+			// every other connector, in the map and in that connector's own
+			// option), enabled is per connector (only the target's entry
+			// changes, so a backup or a routing integration stays enabled).
+			$status = function ( $map, $flag, $exclusive ) use ( $plugin, $opts, $target ) {
+				$values = $plugin->get( $map, 'config', array() );
+				$values = is_array( $values ) ? $values : array();
+				if ( $exclusive ) {
+					foreach ( array_keys( $values ) as $slug ) {
+						if ( $slug !== $target ) {
+							if ( Minn_Admin_Kernel_Settings::on( $values[ $slug ] ) ) {
+								$opts->save( $flag, false, $slug );
+							}
+							$values[ $slug ] = false;
+						}
+					}
+				}
+				$values[ $target ] = true;
+				$plugin->save( $map, $values );
+				$opts->save( $flag, true, $target );
+			};
+			$status( 'enabled_connector', 'enabled', false );
+			$status( 'primary_connector', 'is_primary', true );
 			$opts->save( 'is_primary', false, $was );
+			// One connector is not both: the new primary stops being the backup.
+			$backup = $plugin->get( 'backup_connector', 'config', array() );
+			if ( is_array( $backup ) && ! empty( $backup[ $target ] ) ) {
+				$backup[ $target ] = false;
+				$plugin->save( 'backup_connector', $backup );
+				$opts->save( 'is_backup', false, $target );
+			}
 		} elseif ( $vals ) {
 			// Their store: skips the '****************' sentinel, coerces
 			// 'true'/'false' strings — the masked-secret contract for free.

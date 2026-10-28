@@ -276,4 +276,56 @@ wp_set_current_user( $admin[0]->ID );
 	}
 } )();
 
+/*
+ * GSMTP-1: switching Gravity SMTP's primary service replaced the whole
+ * enabled_connector map, so every other enabled integration (the backup,
+ * a routing target) read as disabled.
+ */
+( function () use ( $check ) {
+	if ( ! class_exists( 'Gravity_Forms\Gravity_SMTP\Data_Store\Plugin_Opts_Data_Store' ) ) {
+		echo "SKIP  GSMTP-1 Gravity SMTP inactive\n";
+		return;
+	}
+	$plugin = new Gravity_Forms\Gravity_SMTP\Data_Store\Plugin_Opts_Data_Store();
+	$opts   = new Gravity_Forms\Gravity_SMTP\Data_Store\Opts_Data_Store();
+	$keep   = array();
+	foreach ( array( 'enabled_connector', 'primary_connector', 'backup_connector' ) as $map ) {
+		$keep[ $map ] = $plugin->get( $map, 'config', array() );
+	}
+	$flags = array();
+	foreach ( array( 'generic', 'postmark', 'sendgrid' ) as $c ) {
+		foreach ( array( 'enabled', 'is_primary', 'is_backup' ) as $f ) {
+			$flags[ $c ][ $f ] = $opts->get( $f, $c );
+		}
+	}
+	$plugin->save( 'enabled_connector', array( 'generic' => true, 'postmark' => true, 'sendgrid' => true ) );
+	$plugin->save( 'primary_connector', array( 'generic' => true ) );
+	$plugin->save( 'backup_connector', array( 'postmark' => true ) );
+	$opts->save( 'is_primary', true, 'generic' );
+	$opts->save( 'is_backup', true, 'postmark' );
+	$opts->save( 'enabled', true, 'postmark' );
+	try {
+		$r = new WP_REST_Request( 'POST', '/minn-admin/v1/gravity-smtp/settings/sending' );
+		$r->set_header( 'content-type', 'application/json' );
+		$r->set_body( wp_json_encode( array( 'values' => array( 'primary_connector' => 'sendgrid' ) ) ) );
+		$res     = rest_do_request( $r );
+		$enabled = (array) $plugin->get( 'enabled_connector', 'config', array() );
+		$primary = (array) $plugin->get( 'primary_connector', 'config', array() );
+		$check( 'GSMTP-1 the switch saved (premise)', 200 === $res->get_status() && ! empty( $primary['sendgrid'] ), $res->get_status() . ' ' . wp_json_encode( $primary ) );
+		$check( 'GSMTP-1 the backup stays enabled', ! empty( $enabled['postmark'] ) && ! empty( $enabled['generic'] ) && ! empty( $enabled['sendgrid'] ), wp_json_encode( $enabled ) );
+		$check( 'GSMTP-1 one primary', empty( $primary['generic'] ) && ! $opts->get( 'is_primary', 'generic' ), wp_json_encode( $primary ) );
+		$backup = (array) $plugin->get( 'backup_connector', 'config', array() );
+		$check( 'GSMTP-1 the backup stays the backup', ! empty( $backup['postmark'] ), wp_json_encode( $backup ) );
+	} finally {
+		foreach ( $keep as $map => $v ) {
+			$plugin->save( $map, is_array( $v ) ? $v : array() );
+		}
+		foreach ( $flags as $c => $fs ) {
+			foreach ( $fs as $f => $v ) {
+				$opts->save( $f, $v, $c );
+			}
+		}
+	}
+} )();
+
 $summary();
