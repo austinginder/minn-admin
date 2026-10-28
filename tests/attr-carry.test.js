@@ -57,11 +57,11 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 		const body = document.querySelector( '#minn-editor-body' );
 		return {
 			islands: body.querySelectorAll( '.minn-block-island' ).length,
-			pMarker: body.querySelector( ':scope > p[data-minn-attrs]' )?.dataset.minnAttrs || '',
+			pMarker: ( body.querySelector( ':scope > p[data-minn-attrs]' )?.dataset.minnAttrs || '' ).replace( /^m[^:]*:/, '' ),
 			pStyle: body.querySelector( ':scope > p[data-minn-attrs]' )?.getAttribute( 'style' ) || '',
-			hMarker: body.querySelector( ':scope > h3[data-minn-attrs]' )?.dataset.minnAttrs || '',
-			listMarker: body.querySelector( ':scope > ul[data-minn-attrs]' )?.dataset.minnAttrs || '',
-			liMarker: body.querySelector( ':scope > ul li[data-minn-attrs]' )?.dataset.minnAttrs || '',
+			hMarker: ( body.querySelector( ':scope > h3[data-minn-attrs]' )?.dataset.minnAttrs || '' ).replace( /^m[^:]*:/, '' ),
+			listMarker: ( body.querySelector( ':scope > ul[data-minn-attrs]' )?.dataset.minnAttrs || '' ).replace( /^m[^:]*:/, '' ),
+			liMarker: ( body.querySelector( ':scope > ul li[data-minn-attrs]' )?.dataset.minnAttrs || '' ).replace( /^m[^:]*:/, '' ),
 			pEditable: !! body.querySelector( ':scope > p[data-minn-attrs]' )?.isContentEditable,
 		};
 	} );

@@ -2457,6 +2457,23 @@
 	// body; a figure that merely wears the attribute is content, saved as
 	// written.
 	const PAGE_TOKEN = RT_PARK_PREFIX.slice( 'data-minn-inert-'.length, -1 );
+	// A block's comment attributes parked on its element (data-minn-attrs)
+	// carry this page's token ahead of their JSON. Post content can wear the
+	// attribute (kses keeps data-*), and a planted one, read as Minn's own,
+	// became block-comment attributes on the next save by someone whose
+	// save skips filter_block_kses. One without the token is content's, and
+	// is no block's attributes.
+	const MINN_ATTRS_MARK = 'm' + PAGE_TOKEN + ':';
+	const minnAttrsValue = ( attrs ) => MINN_ATTRS_MARK + JSON.stringify( attrs );
+	const readMinnAttrs = ( el ) => {
+		const v = el && el.getAttribute ? el.getAttribute( 'data-minn-attrs' ) : null;
+		if ( ! v || 0 !== v.indexOf( MINN_ATTRS_MARK ) ) return null;
+		try {
+			return JSON.parse( v.slice( MINN_ATTRS_MARK.length ) );
+		} catch ( e ) {
+			return null;
+		}
+	};
 	const UPLOAD_KEY = 'u' + PAGE_TOKEN + '-';
 	const isUploadPlaceholder = ( el ) => !! el && 1 === el.nodeType
 		&& 0 === String( el.getAttribute( 'data-minn-upload' ) || '' ).indexOf( UPLOAD_KEY );
@@ -32815,7 +32832,7 @@
 			pre = pre.replace( /<!--\s*wp:list-item\s+(\{(?:(?!-->)[\s\S])*?\})\s*-->\s*(<li)([\s>])/g, ( m0, json, li, tail ) => {
 				try {
 					const a = JSON.parse( json );
-					if ( a && Object.keys( a ).length ) return `${ li } data-minn-attrs="${ esc( JSON.stringify( a ) ) }"${ tail }`;
+					if ( a && Object.keys( a ).length ) return `${ li } data-minn-attrs="${ esc( minnAttrsValue( a ) ) }"${ tail }`;
 				} catch ( e ) { /* invalid JSON — stripped, as before */ }
 				return li + tail;
 			} );
@@ -32826,7 +32843,7 @@
 				if ( off === 0 ) return m0;
 				try {
 					const a = JSON.parse( json );
-					if ( a && Object.keys( a ).length ) return `${ open } data-minn-attrs="${ esc( JSON.stringify( a ) ) }"${ tail }`;
+					if ( a && Object.keys( a ).length ) return `${ open } data-minn-attrs="${ esc( minnAttrsValue( a ) ) }"${ tail }`;
 				} catch ( e ) { /* invalid JSON — stripped, as before */ }
 				return open + tail;
 			} );
@@ -32846,7 +32863,7 @@
 			// Park the comment attrs on the element; serialization re-emits them.
 			const attrs = segmentAttrs( seg );
 			if ( attrs && Object.keys( attrs ).length ) {
-				html = html.replace( /<([a-z][a-z0-9]*)/i, ( m, tag ) => `<${ tag } data-minn-attrs="${ esc( JSON.stringify( attrs ) ) }"` );
+				html = html.replace( /<([a-z][a-z0-9]*)/i, ( m, tag ) => `<${ tag } data-minn-attrs="${ esc( minnAttrsValue( attrs ) ) }"` );
 			}
 		} else if ( TEXTFLOW_CARRY_BLOCKS.includes( name ) ) {
 			// Attrs the serializer derives from the DOM need no marker; a
@@ -32855,7 +32872,7 @@
 			const attrs = segmentAttrs( seg );
 			const allowed = EDITABLE_ATTRS[ name ] || [];
 			if ( attrs && Object.keys( attrs ).length && ! Object.keys( attrs ).every( ( k ) => allowed.includes( k ) ) ) {
-				html = html.replace( /<([a-z][a-z0-9]*)/i, ( m, tag ) => `<${ tag } data-minn-attrs="${ esc( JSON.stringify( attrs ) ) }"` );
+				html = html.replace( /<([a-z][a-z0-9]*)/i, ( m, tag ) => `<${ tag } data-minn-attrs="${ esc( minnAttrsValue( attrs ) ) }"` );
 			}
 		}
 		return html;
@@ -35725,16 +35742,13 @@
 		const pushBlock = ( name, attrs, html ) =>
 			out.push( `<!-- wp:${ name }${ serializeBlockAttrs( attrs && Object.keys( attrs ).length ? attrs : null ) } -->\n${ html }\n<!-- /wp:${ name } -->` );
 		// Passthrough attrs parked by buildEditableContent; consumed off the clone
-		// so the live DOM keeps its marker for later autosaves.
+		// so the live DOM keeps its marker for later autosaves. One the content
+		// wore itself (no page token) is dropped, not read.
 		const takeMinnAttrs = ( el ) => {
-			const raw = el.dataset ? el.dataset.minnAttrs : null;
-			if ( ! raw ) return null;
+			if ( ! el.hasAttribute || ! el.hasAttribute( 'data-minn-attrs' ) ) return null;
+			const parked = readMinnAttrs( el );
 			el.removeAttribute( 'data-minn-attrs' );
-			try {
-				return JSON.parse( raw );
-			} catch ( e ) {
-				return null;
-			}
+			return parked;
 		};
 
 		// A list serializes RECURSIVELY: a nested list is its own wp:list
@@ -35853,7 +35867,7 @@
 			// Editor chrome styles (table hot-border) are stripped — but a
 			// marker element's inline style is SAVED content (Gutenberg style
 			// attrs paint through it) and must survive.
-			if ( ! ( el.dataset && el.dataset.minnAttrs ) ) el.removeAttribute( 'style' );
+			if ( ! readMinnAttrs( el ) ) el.removeAttribute( 'style' );
 			// A redo can resurrect an empty paste-bracket paragraph (see
 			// pasteBlocksInsert) — typed-into, it must not leak its marker.
 			if ( isPasteBracket( el ) ) el.removeAttribute( 'data-minn-bkt' );
@@ -46025,7 +46039,7 @@
 		// and parked block attrs (lightbox lives there — comment-only attr).
 		const linkEl = figure ? figure.querySelector( ':scope > a' ) : ( img.parentElement && 'A' === img.parentElement.tagName ? img.parentElement : null );
 		let parked = {};
-		try { parked = JSON.parse( ( figure || img ).dataset.minnAttrs || '{}' ) || {}; } catch ( e ) { parked = {}; }
+		parked = readMinnAttrs( figure || img ) || {};
 		const hasLightbox = !! ( parked.lightbox && parked.lightbox.enabled );
 
 		imgPop = document.createElement( 'div' );
@@ -46123,7 +46137,7 @@
 			if ( fig && linkTouched ) {
 				let a = fig.querySelector( ':scope > a' );
 				const attrs = ( () => {
-					try { return JSON.parse( fig.dataset.minnAttrs || '{}' ) || {}; } catch ( e ) { return {}; }
+					return readMinnAttrs( fig ) || {};
 				} )();
 				// A fresh attrs object must still carry the attachment id or
 				// Gutenberg's regenerated save loses the wp-image class.
@@ -46153,7 +46167,7 @@
 					if ( wantLb ) attrs.lightbox = Object.assign( {}, attrs.lightbox, { enabled: true } );
 					else if ( urlChanged || lbChanged ) delete attrs.lightbox;
 				}
-				if ( Object.keys( attrs ).length ) fig.dataset.minnAttrs = JSON.stringify( attrs );
+				if ( Object.keys( attrs ).length ) fig.setAttribute( 'data-minn-attrs', minnAttrsValue( attrs ) );
 				else fig.removeAttribute( 'data-minn-attrs' );
 			}
 			stampSlotDirtyFor( img );
@@ -46172,12 +46186,10 @@
 				img.className = ( img.className.replace( /\bwp-image-\d+\b/, '' ).trim() + ' wp-image-' + it.id ).trim();
 				// The parked block attrs follow the new attachment.
 				const host = img.closest( 'figure' ) || img;
-				if ( host.dataset.minnAttrs ) {
-					try {
-						const a = JSON.parse( host.dataset.minnAttrs );
-						a.id = it.id;
-						host.dataset.minnAttrs = JSON.stringify( a );
-					} catch ( e ) {}
+				const hostAttrs = readMinnAttrs( host );
+				if ( hostAttrs ) {
+					hostAttrs.id = it.id;
+					host.setAttribute( 'data-minn-attrs', minnAttrsValue( hostAttrs ) );
 				}
 				stampSlotDirtyFor( img );
 				scheduleAutosave();
@@ -47552,7 +47564,7 @@
 	// data-minn-attrs marker (PASSTHROUGH_BLOCKS) so the serializer emits a
 	// true Gutenberg image block: {"id":N} + wp-image-N.
 	const imageFigureHtml = ( it ) =>
-		`<figure class="wp-block-image" data-minn-attrs="${ esc( JSON.stringify( { id: it.id } ) ) }"><img src="${ esc( it.url ) }" alt="${ esc( it.alt || '' ) }" class="wp-image-${ it.id }"><figcaption class="wp-element-caption"></figcaption></figure>`;
+		`<figure class="wp-block-image" data-minn-attrs="${ esc( minnAttrsValue( { id: it.id } ) ) }"><img src="${ esc( it.url ) }" alt="${ esc( it.alt || '' ) }" class="wp-image-${ it.id }"><figcaption class="wp-element-caption"></figcaption></figure>`;
 
 	// Insert pasted/dropped image files at the caret. The instant preview is a
 	// local blob: URL inserted through the undo stack; the upload runs behind
@@ -47601,7 +47613,7 @@
 				img.src = it.url;
 				if ( it.alt ) img.alt = it.alt;
 				img.className = 'wp-image-' + it.id;
-				fig.dataset.minnAttrs = JSON.stringify( { id: it.id } );
+				fig.setAttribute( 'data-minn-attrs', minnAttrsValue( { id: it.id } ) );
 				fig.removeAttribute( 'data-minn-upload' );
 				state.cache.media = null;
 				scheduleAutosave();

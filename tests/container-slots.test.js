@@ -94,7 +94,7 @@ const { BASE, launch, login, createPost, deletePost, reporter } = require( './he
 			slotIslands: slots.length,
 			slotEditable: slots.every( ( s ) => s.querySelector( '.minn-slot' )?.isContentEditable ),
 			slotAH2: !! slots[ 0 ]?.querySelector( '.minn-slot > h2' ),
-			slotAStyledMarker: slots[ 0 ]?.querySelector( '.minn-slot > p[data-minn-attrs]' )?.dataset.minnAttrs || '',
+			slotAStyledMarker: ( slots[ 0 ]?.querySelector( '.minn-slot > p[data-minn-attrs]' )?.dataset.minnAttrs || '' ).replace( /^m[^:]*:/, '' ),
 			wrapperClass: slots[ 0 ]?.querySelector( '.wp-block-group' ) ? true : false,
 			columnsIsIsland: !! cols && ! cols.classList.contains( 'minn-slot-island' ),
 			nestedBadge: !! document.querySelector( '.minn-slot .minn-block-island[data-block="acme/badge"]' ),
