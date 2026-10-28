@@ -21,8 +21,16 @@
 	 * carry a page-builder edit_url, which the minn_admin_page_builders filter
 	 * lets third-party code populate, so it is not first-party by construction.
 	 * Scheme allowlist plus an origin guard: the leading-slash branch refuses a
-	 * second slash or a backslash, which would otherwise resolve off-origin. */
-	const safeHref = ( u ) => ( /^(https?:\/\/|\/(?![/\\]))/i.test( String( u == null ? '' : u ).trim() ) ? String( u ).trim() : '' );
+	 * second slash or a backslash, which would otherwise resolve off-origin.
+	 * Tabs and newlines come out first (a browser drops them, so "/\t/host"
+	 * would pass as a path here and resolve to another site), and any other
+	 * control character fails. */
+	const safeHref = ( u ) => {
+		const v = String( u == null ? '' : u ).replace( /[\t\n\r]/g, '' );
+		if ( /[\u0000-\u001f\u007f]/.test( v ) ) return '';
+		const t = v.trim();
+		return /^(https?:\/\/|\/(?![/\\]))/i.test( t ) ? t : '';
+	};
 
 	/* ===== Theme: follow the SPA's saved preference; system when unset ===== */
 	function applyTheme() {
