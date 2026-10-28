@@ -20281,7 +20281,7 @@
 			${ opts.length ? `<div class="minn-setup-opts">
 				${ opts.map( ( o ) => `
 				<div class="minn-setup-opt">
-					<button class="minn-switch${ o.default ? ' on' : '' }" data-setupopt="${ esc( o.id ) }" role="switch" aria-checked="${ o.default }" aria-label="${ esc( o.label ) }"><span class="minn-switch-knob"></span></button>
+					<button class="minn-switch${ o.default ? ' on' : '' }" data-setupopt="${ esc( o.id ) }" role="switch" aria-checked="${ o.default ? 'true' : 'false' }" aria-label="${ esc( o.label ) }"><span class="minn-switch-knob"></span></button>
 					<span>${ esc( o.label ) }</span>
 				</div>` ).join( '' ) }
 			</div>` : '' }
@@ -28621,7 +28621,7 @@
 					const href = c.href && ! ( ENGINE && isWpAdminUrl( c.href ) ) ? c.href : '';
 		const clickable = detail || goto || href;
 					return `
-					<div class="minn-sys-check ${ esc( c.status ) }${ clickable ? ' minn-sys-link' : '' }"${ detail ? ` data-sysdetail="${ detail }" role="button" tabindex="0" title="${ esc( __( 'View the full list' ) ) }"` : '' }${ goto ? ` data-sysgoto="${ goto }" role="button" tabindex="0"` : '' }${ ! detail && ! goto && href ? ` data-syshref="${ esc( href ) }" role="button" tabindex="0" title="${ esc( __( 'Open in wp-admin' ) ) }"` : '' }>
+					<div class="minn-sys-check ${ esc( c.status ) }${ clickable ? ' minn-sys-link' : '' }"${ detail ? ` data-sysdetail="${ esc( detail ) }" role="button" tabindex="0" title="${ esc( __( 'View the full list' ) ) }"` : '' }${ goto ? ` data-sysgoto="${ esc( goto ) }" role="button" tabindex="0"` : '' }${ ! detail && ! goto && href ? ` data-syshref="${ esc( href ) }" role="button" tabindex="0" title="${ esc( __( 'Open in wp-admin' ) ) }"` : '' }>
 						${ dot( c.status ) }
 						<div class="minn-sys-check-body">
 							<div class="minn-sys-check-label">${ esc( c.label ) }</div>
