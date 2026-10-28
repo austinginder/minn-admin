@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Minn Admin\n"
 "Report-Msgid-Bugs-To: https://github.com/austinginder/minn-admin/issues\n"
-"PO-Revision-Date: 2026-10-28 21:39+0000\n"
+"PO-Revision-Date: 2026-10-28 23:34+0000\n"
 "Last-Translator: Minn Admin translation pipeline\n"
 "Language-Team: Persian\n"
 "MIME-Version: 1.0\n"
@@ -43,7 +43,7 @@ msgstr "https://austinginder.com"
 #: includes/adapters/acf-field-groups.php:25
 #: includes/adapters/gravity-forms-builder.php:622
 #: includes/adapters/gravity-forms-confirmations.php:73
-#: includes/class-minn-admin-rest.php:10756
+#: includes/class-minn-admin-rest.php:10767
 #: includes/class-minn-admin.php:2240
 #: assets/js/app.js:23098
 #: assets/js/app.js:44438
@@ -65,7 +65,7 @@ msgstr "عدد"
 
 #: includes/adapters/acf-field-groups.php:28
 #: includes/adapters/bookings-kit.php:127
-#: includes/adapters/gravity-smtp.php:333
+#: includes/adapters/gravity-smtp.php:366
 #: includes/adapters/jet-appointments.php:233
 #: includes/adapters/jet-booking.php:301
 #: includes/adapters/jet-reviews.php:195
@@ -194,7 +194,7 @@ msgstr "قالب"
 #: includes/adapters/gravity-forms.php:356
 #: includes/adapters/gravity-forms.php:418
 #: includes/adapters/gravity-forms.php:487
-#: includes/adapters/gravity-smtp.php:591
+#: includes/adapters/gravity-smtp.php:624
 #: includes/adapters/jet-appointments.php:270
 #: includes/adapters/jet-booking.php:322
 #: includes/adapters/jet-cct.php:268
@@ -540,7 +540,7 @@ msgstr "فیلد"
 #: includes/adapters/woocommerce-memberships.php:1752
 #: includes/adapters/wpcode.php:518
 #: includes/adapters/yith-gift-cards.php:356
-#: includes/class-minn-admin-rest.php:13643
+#: includes/class-minn-admin-rest.php:13705
 #: assets/js/app.js:992
 #: assets/js/app.js:13976
 #: assets/js/app.js:14485
@@ -641,9 +641,9 @@ msgstr "ضروری"
 #: includes/adapters/redirection.php:308
 #: includes/adapters/woocommerce-gift-cards.php:362
 #: includes/adapters/wp-migrate.php:308
-#: includes/class-minn-admin-rest.php:13477
-#: includes/class-minn-admin-rest.php:13664
-#: includes/class-minn-admin-rest.php:13668
+#: includes/class-minn-admin-rest.php:13539
+#: includes/class-minn-admin-rest.php:13726
+#: includes/class-minn-admin-rest.php:13730
 #: assets/js/app.js:8874
 #: assets/js/app.js:29980
 #: assets/js/app.js:29999
@@ -656,8 +656,8 @@ msgstr "خیر"
 #: includes/adapters/woocommerce-gift-cards.php:362
 #: includes/adapters/woocommerce-gift-cards.php:391
 #: includes/adapters/wp-migrate.php:308
-#: includes/class-minn-admin-rest.php:13664
-#: includes/class-minn-admin-rest.php:13668
+#: includes/class-minn-admin-rest.php:13726
+#: includes/class-minn-admin-rest.php:13730
 #: assets/js/app.js:8874
 #: assets/js/app.js:29980
 #: assets/js/app.js:29999
@@ -929,14 +929,14 @@ msgstr[1] "%d تصویر"
 #. translators: %s: the environment type (e.g. "staging").
 #: includes/adapters/acf.php:2586
 #: includes/adapters/elementor-mcp.php:147
-#: includes/adapters/gravity-smtp.php:1001
+#: includes/adapters/gravity-smtp.php:1051
 #: includes/adapters/jet-smart-filters.php:81
 #: includes/adapters/novamira.php:216
 #: includes/adapters/simple-301-redirects.php:116
 #: includes/adapters/wp-freighter.php:641
 #: includes/adapters/wpvivid.php:326
-#: includes/class-minn-admin-rest.php:13483
-#: includes/class-minn-admin-rest.php:13739
+#: includes/class-minn-admin-rest.php:13545
+#: includes/class-minn-admin-rest.php:13801
 #: assets/js/app.js:5653
 msgid "Off"
 msgstr "خاموش"
@@ -944,12 +944,12 @@ msgstr "خاموش"
 #: includes/adapters/acf.php:2586
 #: includes/adapters/code-snippets.php:312
 #: includes/adapters/elementor-mcp.php:147
-#: includes/adapters/gravity-smtp.php:1001
+#: includes/adapters/gravity-smtp.php:1051
 #: includes/adapters/novamira.php:216
 #: includes/adapters/simple-301-redirects.php:116
 #: includes/adapters/wp-freighter.php:641
 #: includes/adapters/wpvivid.php:326
-#: includes/class-minn-admin-rest.php:13482
+#: includes/class-minn-admin-rest.php:13544
 #: assets/js/app.js:5653
 msgid "On"
 msgstr "روشن"
@@ -990,11 +990,11 @@ msgstr "تغییر کرد"
 #: includes/adapters/public-post-preview.php:55
 #: includes/adapters/public-post-preview.php:166
 #: includes/adapters/public-post-preview.php:177
-#: includes/class-minn-admin-rest.php:5358
-#: includes/class-minn-admin-rest.php:5450
-#: includes/class-minn-admin-rest.php:5483
-#: includes/class-minn-admin-rest.php:12966
-#: includes/class-minn-admin-rest.php:12971
+#: includes/class-minn-admin-rest.php:5369
+#: includes/class-minn-admin-rest.php:5461
+#: includes/class-minn-admin-rest.php:5494
+#: includes/class-minn-admin-rest.php:12977
+#: includes/class-minn-admin-rest.php:12982
 #: includes/kernel/class-minn-admin-kernel-panels.php:479
 msgid "Post not found."
 msgstr "نوشته پیدا نشد."
@@ -1131,8 +1131,8 @@ msgid "Unknown settings tab."
 msgstr "زبانه تنظیمات ناشناخته."
 
 #: includes/adapters/acpt.php:1318
-#: includes/class-minn-admin-rest.php:4115
-#: includes/class-minn-admin-rest.php:4534
+#: includes/class-minn-admin-rest.php:4119
+#: includes/class-minn-admin-rest.php:4545
 #: includes/class-minn-admin-surfaces.php:512
 #: assets/js/app.js:1470
 #: assets/js/app.js:4261
@@ -1384,7 +1384,7 @@ msgstr "رویداد"
 #: includes/adapters/bricks.php:1774
 #: includes/adapters/forms-kit.php:80
 #: includes/adapters/gravity-forms.php:417
-#: includes/adapters/gravity-smtp.php:385
+#: includes/adapters/gravity-smtp.php:418
 #: includes/adapters/jet-reviews.php:126
 #: includes/adapters/latepoint.php:234
 #: includes/adapters/scrutoscope.php:898
@@ -1503,7 +1503,7 @@ msgstr "آماده‌سازی برون‌بری…"
 #: includes/adapters/updraftplus.php:331
 #: includes/adapters/wp-migrate.php:366
 #: includes/adapters/wpvivid.php:382
-#: includes/class-minn-admin-rest.php:13890
+#: includes/class-minn-admin-rest.php:13952
 msgid "Backups"
 msgstr "پشتیبان‌ها"
 
@@ -1519,7 +1519,7 @@ msgstr "برون‌بری"
 #: includes/adapters/updraftplus.php:347
 #: includes/adapters/wp-migrate.php:382
 #: includes/adapters/wpvivid.php:396
-#: includes/class-minn-admin-rest.php:13648
+#: includes/class-minn-admin-rest.php:13710
 #: assets/js/app.js:993
 #: assets/js/app.js:28883
 #: assets/js/app.js:29699
@@ -1642,7 +1642,7 @@ msgstr "سطح"
 #: includes/adapters/all-in-one-security.php:190
 #: includes/adapters/bricks.php:1861
 #: includes/adapters/elementor-forms.php:227
-#: includes/adapters/gravity-forms.php:684
+#: includes/adapters/gravity-forms.php:685
 #: includes/adapters/novamira.php:668
 #: includes/adapters/wordfence.php:98
 #: includes/adapters/wp-activity-log.php:214
@@ -1778,13 +1778,13 @@ msgstr "قیمت"
 #: includes/adapters/amelia.php:161
 #: includes/adapters/amelia.php:222
 #: includes/adapters/bookly.php:136
-#: includes/adapters/gravity-forms.php:734
-#: includes/adapters/gravity-smtp.php:335
-#: includes/adapters/gravity-smtp.php:345
+#: includes/adapters/gravity-forms.php:735
+#: includes/adapters/gravity-smtp.php:368
+#: includes/adapters/gravity-smtp.php:378
 #: includes/adapters/latepoint.php:295
 #: includes/adapters/latepoint.php:499
 #: includes/adapters/woocommerce-memberships.php:1830
-#: includes/class-minn-admin-rest.php:11884
+#: includes/class-minn-admin-rest.php:11895
 #: assets/js/app.js:10109
 #: assets/js/app.js:10657
 #: assets/js/app.js:10807
@@ -1957,7 +1957,7 @@ msgid "WP Abilities"
 msgstr "WP Abilities"
 
 #: includes/adapters/aryo-activity-log.php:277
-#: includes/adapters/gravity-smtp.php:322
+#: includes/adapters/gravity-smtp.php:355
 #: includes/adapters/stream.php:261
 msgid "All sources"
 msgstr "همه منابع"
@@ -2002,9 +2002,9 @@ msgstr "عمل"
 #: includes/adapters/eps-301-redirects.php:246
 #: includes/adapters/fluent-forms.php:311
 #: includes/adapters/fluent-smtp.php:432
-#: includes/adapters/gravity-forms.php:677
-#: includes/adapters/gravity-smtp.php:310
-#: includes/adapters/gravity-smtp.php:318
+#: includes/adapters/gravity-forms.php:678
+#: includes/adapters/gravity-smtp.php:343
+#: includes/adapters/gravity-smtp.php:351
 #: includes/adapters/jet-reviews.php:161
 #: includes/adapters/rank-math-redirections.php:242
 #: includes/adapters/redirection.php:142
@@ -2134,8 +2134,8 @@ msgid "Plugin behaviour"
 msgstr "رفتار افزونه"
 
 #: includes/adapters/asset-cleanup.php:147
-#: includes/adapters/gravity-smtp.php:1000
-#: includes/adapters/gravity-smtp.php:1236
+#: includes/adapters/gravity-smtp.php:1050
+#: includes/adapters/gravity-smtp.php:1297
 msgid "Test mode"
 msgstr "حالت آزمایشی"
 
@@ -2348,9 +2348,9 @@ msgstr "BackWPup در حال ساخت پشتیبان است"
 #: includes/adapters/updraftplus.php:250
 #: includes/adapters/wordfence.php:275
 #: includes/adapters/wpvivid.php:303
-#: includes/class-minn-admin-rest.php:4370
-#: includes/class-minn-admin-rest.php:5309
-#: includes/class-minn-admin-rest.php:5903
+#: includes/class-minn-admin-rest.php:4379
+#: includes/class-minn-admin-rest.php:5320
+#: includes/class-minn-admin-rest.php:5914
 #: includes/kernel/class-minn-admin-kernel.php:2467
 msgid "%s ago"
 msgstr "%s پیش"
@@ -2576,8 +2576,8 @@ msgstr "افراد"
 
 #: includes/adapters/bookings-kit.php:132
 #: includes/adapters/bookings-kit.php:282
-#: includes/adapters/gravity-smtp.php:311
-#: includes/adapters/gravity-smtp.php:604
+#: includes/adapters/gravity-smtp.php:344
+#: includes/adapters/gravity-smtp.php:637
 #: includes/adapters/jet-appointments.php:266
 #: assets/js/app.js:22121
 msgid "Service"
@@ -2643,7 +2643,7 @@ msgstr "وضعیت ناشناخته"
 
 #: includes/adapters/bookings-kit.php:239
 #: includes/adapters/bookings-kit.php:320
-#: includes/class-minn-admin-rest.php:5902
+#: includes/class-minn-admin-rest.php:5913
 #: assets/js/app.js:38295
 msgid "Today"
 msgstr "امروز"
@@ -2843,8 +2843,8 @@ msgid "Protecting"
 msgstr "در حال محافظت"
 
 #: includes/adapters/breakwater.php:215
-#: includes/class-minn-admin-rest.php:4123
-#: includes/class-minn-admin-rest.php:4490
+#: includes/class-minn-admin-rest.php:4127
+#: includes/class-minn-admin-rest.php:4499
 #: includes/class-minn-admin-surfaces.php:506
 #: assets/js/app.js:977
 #: assets/js/app.js:1447
@@ -2911,7 +2911,7 @@ msgstr "ارسالی‌های گزینش‌شده به فرم‌هایشان ب�
 #: includes/adapters/breakwater.php:326
 #: includes/adapters/bricks.php:830
 #: includes/adapters/fluent-smtp.php:293
-#: includes/adapters/gravity-smtp.php:406
+#: includes/adapters/gravity-smtp.php:439
 #: includes/adapters/perfmatters.php:32
 #: includes/adapters/redirection.php:214
 #: assets/js/app.js:974
@@ -3013,10 +3013,10 @@ msgstr "آن پرونده برون‌بری قالب Bricks نیست."
 #: includes/adapters/jet-smart-filters.php:64
 #: includes/adapters/jet-theme-core.php:102
 #: includes/adapters/woocommerce-settings.php:179
-#: includes/class-minn-admin-rest.php:2340
-#: includes/class-minn-admin-rest.php:2457
-#: includes/class-minn-admin-rest.php:5243
-#: includes/class-minn-admin-rest.php:5297
+#: includes/class-minn-admin-rest.php:2344
+#: includes/class-minn-admin-rest.php:2461
+#: includes/class-minn-admin-rest.php:5254
+#: includes/class-minn-admin-rest.php:5308
 msgid "(no title)"
 msgstr "(بدون عنوان)"
 
@@ -3450,7 +3450,7 @@ msgstr "حالت تعمیر"
 #: includes/adapters/pw-gift-cards.php:230
 #: includes/adapters/woocommerce-gift-cards.php:281
 #: includes/adapters/yith-gift-cards.php:296
-#: includes/class-minn-admin-rest.php:13516
+#: includes/class-minn-admin-rest.php:13578
 #: assets/js/app.js:31137
 #: assets/js/app.js:31170
 msgid "Disabled"
@@ -3549,7 +3549,7 @@ msgstr "همه ارسال‌ها"
 #: includes/adapters/bricks.php:1772
 #: includes/adapters/bricks.php:1867
 #: includes/adapters/forms-kit.php:275
-#: includes/adapters/gravity-forms.php:731
+#: includes/adapters/gravity-forms.php:732
 #: assets/js/app.js:21739
 msgid "Submission"
 msgstr "ارسالی"
@@ -3577,8 +3577,8 @@ msgstr "فرم"
 #: includes/adapters/core-blocks.php:107
 #: includes/adapters/fluent-smtp.php:437
 #: includes/adapters/gravity-forms.php:100
-#: includes/adapters/gravity-smtp.php:372
-#: includes/adapters/gravity-smtp.php:605
+#: includes/adapters/gravity-smtp.php:405
+#: includes/adapters/gravity-smtp.php:638
 #: includes/adapters/jet-reviews.php:164
 #: includes/adapters/mail-kit.php:71
 #: includes/adapters/post-smtp.php:176
@@ -3776,7 +3776,7 @@ msgid "Check log"
 msgstr "گزارش بررسی"
 
 #: includes/adapters/broken-link-checker.php:352
-#: includes/adapters/gravity-smtp.php:314
+#: includes/adapters/gravity-smtp.php:347
 #: assets/js/app.js:28947
 msgid "Log"
 msgstr "گزارش"
@@ -3946,8 +3946,8 @@ msgid "(unknown sender)"
 msgstr "(فرستنده ناشناخته)"
 
 #: includes/adapters/cf7-flamingo.php:272
-#: includes/adapters/post-smtp.php:208
-#: includes/adapters/wp-mail-logging.php:214
+#: includes/adapters/post-smtp.php:213
+#: includes/adapters/wp-mail-logging.php:219
 msgid "(no subject)"
 msgstr "(بدون موضوع)"
 
@@ -4181,11 +4181,11 @@ msgstr "درباره پیام و سایت"
 #: includes/adapters/gravity-forms-confirmations.php:355
 #: includes/adapters/gravity-forms-confirmations.php:385
 #: includes/adapters/gravity-forms-notifications.php:793
-#: includes/adapters/gravity-forms.php:1030
-#: includes/adapters/gravity-forms.php:1113
-#: includes/adapters/gravity-forms.php:1177
-#: includes/adapters/gravity-forms.php:1200
-#: includes/adapters/gravity-forms.php:1600
+#: includes/adapters/gravity-forms.php:1033
+#: includes/adapters/gravity-forms.php:1116
+#: includes/adapters/gravity-forms.php:1180
+#: includes/adapters/gravity-forms.php:1203
+#: includes/adapters/gravity-forms.php:1603
 #: includes/adapters/wpforms-emails.php:155
 msgid "Form not found."
 msgstr "فرم پیدا نشد."
@@ -4223,10 +4223,10 @@ msgstr "باز کردن CFDB7 ↗"
 #: includes/adapters/fluent-forms.php:383
 #: includes/adapters/gravity-forms-entry-edit.php:277
 #: includes/adapters/gravity-forms.php:637
-#: includes/adapters/gravity-forms.php:780
-#: includes/adapters/gravity-forms.php:949
-#: includes/adapters/gravity-forms.php:999
-#: includes/adapters/gravity-forms.php:1026
+#: includes/adapters/gravity-forms.php:781
+#: includes/adapters/gravity-forms.php:952
+#: includes/adapters/gravity-forms.php:1002
+#: includes/adapters/gravity-forms.php:1029
 #: includes/adapters/wpforms.php:108
 #: includes/adapters/wpforms.php:341
 msgid "Entry not found."
@@ -4342,7 +4342,7 @@ msgid "Could not delete this account."
 msgstr "این حساب حذف نشد."
 
 #: includes/adapters/cleantalk.php:484
-#: includes/adapters/licenses.php:6938
+#: includes/adapters/licenses.php:6941
 msgid "Unknown action."
 msgstr "عمل نامشخص."
 
@@ -4442,7 +4442,7 @@ msgstr "گستره"
 #: includes/adapters/code-snippets.php:392
 #: includes/adapters/custom-css-js.php:677
 #: includes/adapters/fluent-snippets.php:156
-#: includes/adapters/gravity-smtp.php:370
+#: includes/adapters/gravity-smtp.php:403
 #: includes/adapters/snippets-kit.php:70
 #: includes/adapters/wpcode.php:537
 #: assets/js/app.js:30950
@@ -4527,7 +4527,7 @@ msgstr "قطعه‌کد غیرفعال شد."
 #: includes/adapters/jetpack-stats.php:254
 #: includes/adapters/matomo.php:329
 #: includes/adapters/monsterinsights.php:399
-#: includes/class-minn-admin-rest.php:3983
+#: includes/class-minn-admin-rest.php:3987
 #: assets/js/app.js:49641
 msgid "Top pages"
 msgstr "برگه‌های برتر"
@@ -4537,7 +4537,7 @@ msgstr "برگه‌های برتر"
 #: includes/adapters/jetpack-stats.php:256
 #: includes/adapters/matomo.php:331
 #: includes/adapters/monsterinsights.php:401
-#: includes/class-minn-admin-rest.php:4001
+#: includes/class-minn-admin-rest.php:4005
 msgid "Referrers"
 msgstr "ارجاع‌دهنده‌ها"
 
@@ -4710,7 +4710,7 @@ msgid "/* your CSS */"
 msgstr "/* CSS شما */"
 
 #: includes/adapters/custom-css-js.php:673
-#: includes/class-minn-admin-rest.php:13478
+#: includes/class-minn-admin-rest.php:13540
 #: assets/js/app.js:53790
 #: assets/js/app.js:53792
 #: assets/js/app.js:54042
@@ -4786,7 +4786,7 @@ msgstr "آخرین پویش"
 
 #: includes/adapters/disembark.php:160
 #: includes/adapters/updraftplus.php:389
-#: includes/class-minn-admin-rest.php:14043
+#: includes/class-minn-admin-rest.php:14105
 #: includes/class-minn-admin-surfaces.php:518
 #: assets/js/app.js:1484
 msgid "Database"
@@ -5078,10 +5078,10 @@ msgid "That answer could not be read."
 msgstr "آن پاسخ خوانده نشد."
 
 #: includes/adapters/elementor-forms-entry-edit.php:224
-#: includes/adapters/fluent-smtp.php:709
+#: includes/adapters/fluent-smtp.php:714
 #: includes/adapters/gravity-forms-entry-edit.php:214
-#: includes/adapters/gravity-smtp.php:879
-#: includes/adapters/gravity-smtp.php:1070
+#: includes/adapters/gravity-smtp.php:921
+#: includes/adapters/gravity-smtp.php:1120
 #: includes/adapters/network.php:644
 #: includes/adapters/network.php:1160
 #: includes/adapters/ninja-forms-entry-edit.php:203
@@ -5558,10 +5558,10 @@ msgid "Field Groups"
 msgstr "گروه‌های فیلد"
 
 #: includes/adapters/fluent-forms-emails.php:243
-#: includes/adapters/gravity-smtp.php:386
+#: includes/adapters/gravity-smtp.php:419
 #: includes/adapters/woocommerce-gift-cards.php:362
-#: includes/class-minn-admin-rest.php:13485
-#: includes/class-minn-admin-rest.php:13516
+#: includes/class-minn-admin-rest.php:13547
+#: includes/class-minn-admin-rest.php:13578
 msgid "Enabled"
 msgstr "فعال شد"
 
@@ -5570,7 +5570,7 @@ msgstr "فعال شد"
 #: includes/adapters/fluent-forms-emails.php:246
 #: includes/adapters/fluent-smtp.php:251
 #: includes/adapters/fluent-smtp.php:280
-#: includes/adapters/gravity-smtp.php:1041
+#: includes/adapters/gravity-smtp.php:1091
 #: assets/js/app.js:57307
 #: assets/js/app.js:57319
 #: assets/js/app.js:57320
@@ -5580,7 +5580,7 @@ msgid "Send to"
 msgstr "فرستادن به"
 
 #: includes/adapters/fluent-forms-emails.php:247
-#: includes/adapters/gravity-smtp.php:183
+#: includes/adapters/gravity-smtp.php:184
 #: assets/js/app.js:57352
 #: assets/js/app.js:58575
 #: assets/js/app.js:58883
@@ -5608,8 +5608,8 @@ msgstr "Bcc"
 #: includes/adapters/fluent-forms-emails.php:252
 #: includes/adapters/fluent-forms-emails.php:272
 #: includes/adapters/gift-cards-kit.php:135
-#: includes/adapters/gravity-smtp.php:181
-#: includes/adapters/gravity-smtp.php:369
+#: includes/adapters/gravity-smtp.php:182
+#: includes/adapters/gravity-smtp.php:402
 #: includes/adapters/jet-reviews.php:196
 #: includes/adapters/mail-kit.php:106
 #: includes/adapters/pw-gift-cards.php:298
@@ -5753,7 +5753,7 @@ msgid "Open FluentSMTP ↗"
 msgstr "باز کردن FluentSMTP ↗"
 
 #: includes/adapters/fluent-smtp.php:245
-#: includes/adapters/gravity-smtp.php:1037
+#: includes/adapters/gravity-smtp.php:1087
 msgid "Send a test email"
 msgstr "فرستادن ایمیل آزمایشی"
 
@@ -5816,7 +5816,7 @@ msgstr "ایمیل‌ها ثبت می‌شوند اما هرگز واقعاً ف
 
 #: includes/adapters/fluent-smtp.php:428
 #: includes/adapters/gravity-forms.php:355
-#: includes/adapters/gravity-smtp.php:592
+#: includes/adapters/gravity-smtp.php:625
 #: includes/adapters/mail-kit.php:67
 #: includes/adapters/post-smtp.php:167
 #: includes/adapters/site-mailer.php:97
@@ -5868,8 +5868,8 @@ msgid "This email holds a link whose key is hidden from you (a password reset li
 msgstr "این ایمیل پیوندی دارد که کلیدش از شما پنهان است (پیوند بازنشانی رمز عبور)، پس فقط می‌توان آن را برای کسی که برایش فرستاده شده دوباره فرستاد."
 
 #: includes/adapters/fluent-smtp.php:524
-#: includes/adapters/gravity-smtp.php:1443
-#: includes/adapters/post-smtp.php:267
+#: includes/adapters/gravity-smtp.php:1504
+#: includes/adapters/post-smtp.php:272
 msgid "No recipient address on record for this email."
 msgstr "نشانی گیرنده‌ای برای این ایمیل ثبت نشده است."
 
@@ -5881,37 +5881,37 @@ msgstr "FluentSMTP این ارسال دوباره را ثبت نکرد، بنا�
 msgid "The mailer reported the resend to "
 msgstr "فرستنده ایمیل درباره ارسال دوباره به "
 
-#: includes/adapters/fluent-smtp.php:560
-#: includes/adapters/post-smtp.php:185
-#: includes/adapters/site-mailer.php:125
-#: includes/adapters/suremails.php:115
-#: includes/adapters/wp-mail-logging.php:193
-#: includes/adapters/wp-mail-logging.php:274
+#: includes/adapters/fluent-smtp.php:565
+#: includes/adapters/post-smtp.php:190
+#: includes/adapters/site-mailer.php:130
+#: includes/adapters/suremails.php:120
+#: includes/adapters/wp-mail-logging.php:198
+#: includes/adapters/wp-mail-logging.php:279
 msgid "Email not found"
 msgstr "ایمیل پیدا نشد"
 
-#: includes/adapters/fluent-smtp.php:634
+#: includes/adapters/fluent-smtp.php:639
 msgid "Log entry still exists after delete."
 msgstr "ثبت گزارش پس از حذف هنوز وجود دارد."
 
-#: includes/adapters/fluent-smtp.php:675
+#: includes/adapters/fluent-smtp.php:680
 msgid "That connection no longer exists."
 msgstr "این اتصال دیگر وجود ندارد."
 
-#: includes/adapters/fluent-smtp.php:682
+#: includes/adapters/fluent-smtp.php:687
 msgid "FluentSMTP is not fully loaded."
 msgstr "FluentSMTP به‌طور کامل بارگذاری نشده است."
 
-#: includes/adapters/fluent-smtp.php:711
+#: includes/adapters/fluent-smtp.php:716
 msgid "Test email sent to "
 msgstr "ایمیل آزمایشی فرستاده شد به "
 
-#: includes/adapters/fluent-smtp.php:717
+#: includes/adapters/fluent-smtp.php:722
 msgid "FluentSMTP could not send the test email."
 msgstr "FluentSMTP نتوانست ایمیل آزمایشی را بفرستد."
 
 #. translators: %s: the site title.
-#: includes/adapters/fluent-smtp.php:726
+#: includes/adapters/fluent-smtp.php:731
 msgid "Fluent SMTP: Test Email - %s"
 msgstr "Fluent SMTP: ایمیل آزمایشی - %s"
 
@@ -6097,12 +6097,12 @@ msgstr "فیلد "
 
 #: includes/adapters/forms-kit.php:244
 #: includes/adapters/forms-kit.php:251
-#: includes/adapters/gravity-forms.php:673
+#: includes/adapters/gravity-forms.php:674
 msgid "Submitted"
 msgstr "ارسال‌شده"
 
 #: includes/adapters/forms-kit.php:274
-#: includes/adapters/gravity-forms.php:730
+#: includes/adapters/gravity-forms.php:731
 msgid "Responses"
 msgstr "پاسخ‌ها"
 
@@ -6177,7 +6177,7 @@ msgid "Recipient"
 msgstr "گیرنده"
 
 #: includes/adapters/gift-cards-kit.php:193
-#: includes/adapters/gravity-smtp.php:393
+#: includes/adapters/gravity-smtp.php:426
 #: includes/adapters/redirection.php:169
 #: includes/adapters/redirection.php:190
 msgid "Disable"
@@ -6188,7 +6188,7 @@ msgid "Disable this gift card? Its balance can no longer be spent."
 msgstr "این کارت هدیه غیر فعال شود؟ موجودی‌اش دیگر قابل خرج نیست."
 
 #: includes/adapters/gift-cards-kit.php:201
-#: includes/adapters/gravity-smtp.php:392
+#: includes/adapters/gravity-smtp.php:425
 #: includes/adapters/redirection.php:174
 #: includes/adapters/redirection.php:195
 msgid "Enable"
@@ -6373,7 +6373,7 @@ msgid "is"
 msgstr "است"
 
 #: includes/adapters/gravity-forms-builder.php:344
-#: includes/adapters/gravity-smtp.php:201
+#: includes/adapters/gravity-smtp.php:202
 #: assets/js/app.js:55655
 #: assets/js/app.js:57083
 msgid "is not"
@@ -6395,13 +6395,13 @@ msgid "contains"
 msgstr "شامل"
 
 #: includes/adapters/gravity-forms-builder.php:348
-#: includes/adapters/gravity-smtp.php:208
+#: includes/adapters/gravity-smtp.php:209
 #: assets/js/app.js:57084
 msgid "starts with"
 msgstr "شروع می‌شود با"
 
 #: includes/adapters/gravity-forms-builder.php:349
-#: includes/adapters/gravity-smtp.php:209
+#: includes/adapters/gravity-smtp.php:210
 #: assets/js/app.js:57084
 msgid "ends with"
 msgstr "پایان می‌یابد با"
@@ -6451,7 +6451,7 @@ msgid "User Login"
 msgstr "نام کاربری"
 
 #: includes/adapters/gravity-forms-builder.php:436
-#: includes/adapters/gravity-smtp.php:1499
+#: includes/adapters/gravity-smtp.php:1560
 #: includes/adapters/wpforms-emails.php:54
 #: assets/js/app.js:18969
 msgid "Other"
@@ -6507,7 +6507,7 @@ msgid "Mr., Mrs., Miss, Ms., Mx., Dr., Prof., Rev."
 msgstr "آقا، خانم، دوشیزه، بانو، محترم، دکتر، استاد، کشیش"
 
 #: includes/adapters/gravity-forms-builder.php:542
-#: includes/class-minn-admin-rest.php:13646
+#: includes/class-minn-admin-rest.php:13708
 msgid "Prefix"
 msgstr "پیشوند"
 
@@ -7008,7 +7008,7 @@ msgstr "افزودنی"
 msgid "Delete this feed permanently? The add-on stops running for its form."
 msgstr "این فید برای همیشه حذف شود؟ افزودنی برای فرم آن دیگر اجرا نمی‌شود."
 
-#: includes/adapters/gravity-forms.php:687
+#: includes/adapters/gravity-forms.php:688
 #: includes/adapters/latepoint.php:497
 #: assets/js/app.js:10773
 #: assets/js/app.js:11886
@@ -7018,274 +7018,276 @@ msgstr "این فید برای همیشه حذف شود؟ افزودنی برا�
 msgid "Payment"
 msgstr "پرداخت"
 
-#: includes/adapters/gravity-forms.php:785
+#: includes/adapters/gravity-forms.php:786
 msgid "Write a note first."
 msgstr "نخست یک یادداشت بنویسید."
 
-#: includes/adapters/gravity-forms.php:959
+#: includes/adapters/gravity-forms.php:962
 msgid "You are not allowed to move entries to or from the trash."
 msgstr "شما نمی‌توانید ورودی‌ها را به زباله‌دان یا از زباله‌دان جابه‌جا کنید."
 
-#: includes/adapters/gravity-forms.php:974
+#: includes/adapters/gravity-forms.php:977
 msgid "Unknown entry status."
 msgstr "وضعیت ورودی ناشناخته."
 
-#: includes/adapters/gravity-forms.php:983
+#: includes/adapters/gravity-forms.php:986
 msgid "Nothing to update."
 msgstr "چیزی برای به‌روزرسانی وجود ندارد."
 
-#: includes/adapters/gravity-forms.php:1009
+#: includes/adapters/gravity-forms.php:1012
 msgid "The entry is already in the trash."
 msgstr "این ورودی از پیش در زباله‌دان است."
 
 #. translators: %d: number of routing rules on the notification.
-#: includes/adapters/gravity-forms.php:1079
+#: includes/adapters/gravity-forms.php:1082
 msgid "Routing (%d rule)"
 msgid_plural "Routing (%d rules)"
 msgstr[0] "مسیریابی (%d قانون)"
 msgstr[1] "مسیریابی (%d قانون)"
 
-#: includes/adapters/gravity-forms.php:1084
+#: includes/adapters/gravity-forms.php:1087
 msgid "Form is submitted"
 msgstr "فرم ارسال می‌شود"
 
-#: includes/adapters/gravity-forms.php:1085
+#: includes/adapters/gravity-forms.php:1088
 msgid "Draft is saved"
 msgstr "پیش‌نویس ذخیره می‌شود"
 
-#: includes/adapters/gravity-forms.php:1086
+#: includes/adapters/gravity-forms.php:1089
 msgid "Draft link is requested"
 msgstr "پیوند پیش‌نویس درخواست می‌شود"
 
-#: includes/adapters/gravity-forms.php:1294
-#: includes/adapters/gravity-forms.php:1314
+#: includes/adapters/gravity-forms.php:1297
+#: includes/adapters/gravity-forms.php:1317
 msgid "Feed not found."
 msgstr "فید پیدا نشد."
 
-#: includes/adapters/gravity-forms.php:1297
-#: includes/adapters/gravity-forms.php:1317
+#: includes/adapters/gravity-forms.php:1300
+#: includes/adapters/gravity-forms.php:1320
 msgid "You cannot manage this add-on's feeds."
 msgstr "شما نمی‌توانید فیدهای این افزودنی را مدیریت کنید."
 
-#: includes/adapters/gravity-forms.php:1302
+#: includes/adapters/gravity-forms.php:1305
 msgid "Gravity Forms refused the change."
 msgstr "Gravity Forms این تغییر را نپذیرفت."
 
-#: includes/adapters/gravity-forms.php:1545
+#: includes/adapters/gravity-forms.php:1548
 #: assets/js/app.js:59903
 #: assets/js/app.js:59948
 msgid "Period"
 msgstr "بازه"
 
-#: includes/adapters/gravity-forms.php:1613
+#: includes/adapters/gravity-forms.php:1616
 msgid "Give the form a title."
 msgstr "برای فرم یک عنوان بگذارید."
 
-#: includes/adapters/gravity-forms.php:1617
+#: includes/adapters/gravity-forms.php:1620
 msgid "Another form already uses that title."
 msgstr "فرم دیگری همین عنوان را دارد."
 
 #. translators: 1: the rejected value, 2: the setting key.
-#: includes/adapters/gravity-forms.php:1640
+#: includes/adapters/gravity-forms.php:1643
 msgid "\"%1$s\" is not one of the choices for %2$s."
 msgstr "\"%1$s\" یکی از گزینه‌های %2$s نیست."
 
-#: includes/adapters/gravity-smtp.php:189
+#: includes/adapters/gravity-smtp.php:190
 msgid "Source type"
 msgstr "گونه منبع"
 
-#: includes/adapters/gravity-smtp.php:190
+#: includes/adapters/gravity-smtp.php:191
 msgid "To count"
 msgstr "تعداد گیرنده"
 
-#: includes/adapters/gravity-smtp.php:191
+#: includes/adapters/gravity-smtp.php:192
 msgid "CC count"
 msgstr "تعداد CC"
 
-#: includes/adapters/gravity-smtp.php:192
+#: includes/adapters/gravity-smtp.php:193
 msgid "BCC count"
 msgstr "تعداد BCC"
 
-#: includes/adapters/gravity-smtp.php:193
+#: includes/adapters/gravity-smtp.php:194
 msgid "Has attachments"
 msgstr "پیوست دارد"
 
-#: includes/adapters/gravity-smtp.php:195
+#: includes/adapters/gravity-smtp.php:196
 msgid "Content type"
 msgstr "گونه محتوا"
 
-#: includes/adapters/gravity-smtp.php:196
+#: includes/adapters/gravity-smtp.php:197
 msgid "Message size"
 msgstr "اندازه پیام"
 
-#: includes/adapters/gravity-smtp.php:197
+#: includes/adapters/gravity-smtp.php:198
 msgid "Attachment size"
 msgstr "اندازه پیوست"
 
-#: includes/adapters/gravity-smtp.php:207
+#: includes/adapters/gravity-smtp.php:208
 msgid "does not contain"
 msgstr "شامل نیست"
 
-#: includes/adapters/gravity-smtp.php:236
+#: includes/adapters/gravity-smtp.php:237
 msgid "No conditions"
 msgstr "بدون شرط"
 
-#: includes/adapters/gravity-smtp.php:331
+#: includes/adapters/gravity-smtp.php:364
 msgid "Suppressions"
 msgstr "مسدودشده‌ها"
 
-#: includes/adapters/gravity-smtp.php:334
+#: includes/adapters/gravity-smtp.php:367
 #: assets/js/app.js:12282
 msgid "Reason"
 msgstr "دلیل"
 
-#: includes/adapters/gravity-smtp.php:337
+#: includes/adapters/gravity-smtp.php:370
 msgid "Since"
 msgstr "از زمان"
 
-#: includes/adapters/gravity-smtp.php:341
+#: includes/adapters/gravity-smtp.php:374
 msgid "Suppress email"
 msgstr "جلوگیری از فرستادن ایمیل"
 
-#: includes/adapters/gravity-smtp.php:344
+#: includes/adapters/gravity-smtp.php:377
 #: assets/js/app.js:57292
 #: assets/js/app.js:58560
 msgid "Email address"
 msgstr "نشانی ایمیل"
 
-#: includes/adapters/gravity-smtp.php:345
+#: includes/adapters/gravity-smtp.php:378
 msgid "Why sending to this address is off"
 msgstr "چرا فرستادن به این نشانی خاموش است"
 
-#: includes/adapters/gravity-smtp.php:349
+#: includes/adapters/gravity-smtp.php:382
 msgid "Reactivate (allow sending again)"
 msgstr "فعال‌سازی دوباره (اجازه فرستادن دوباره)"
 
-#: includes/adapters/gravity-smtp.php:349
+#: includes/adapters/gravity-smtp.php:382
 msgid "Allow Gravity SMTP to send to this address again?"
 msgstr "به Gravity SMTP اجازه داده شود دوباره به این نشانی بفرستد؟"
 
-#: includes/adapters/gravity-smtp.php:356
-#: includes/adapters/gravity-smtp.php:1249
+#: includes/adapters/gravity-smtp.php:389
+#: includes/adapters/gravity-smtp.php:1310
 #: includes/class-minn-admin-logs.php:86
 msgid "Debug log"
 msgstr "گزارش اشکال‌زدایی"
 
-#: includes/adapters/gravity-smtp.php:379
-#: includes/adapters/gravity-smtp.php:1017
+#: includes/adapters/gravity-smtp.php:412
+#: includes/adapters/gravity-smtp.php:1067
 #: assets/js/app.js:57292
 msgid "Routing"
 msgstr "مسیریابی"
 
-#: includes/adapters/gravity-smtp.php:383
+#: includes/adapters/gravity-smtp.php:416
 #: includes/adapters/rewrite-rules-inspector.php:195
 msgid "Rule"
 msgstr "قانون"
 
-#: includes/adapters/gravity-smtp.php:384
+#: includes/adapters/gravity-smtp.php:417
 msgid "Send with"
 msgstr "فرستادن با"
 
-#: includes/adapters/gravity-smtp.php:394
+#: includes/adapters/gravity-smtp.php:427
 msgid "Delete rule"
 msgstr "حذف قانون"
 
-#: includes/adapters/gravity-smtp.php:394
+#: includes/adapters/gravity-smtp.php:427
 msgid "Delete this routing rule permanently?"
 msgstr "این قانون مسیردهی برای همیشه حذف شود؟"
 
-#: includes/adapters/gravity-smtp.php:396
+#: includes/adapters/gravity-smtp.php:429
 msgid "Edit in Gravity SMTP ↗"
 msgstr "ویرایش در Gravity SMTP ↗"
 
-#: includes/adapters/gravity-smtp.php:405
+#: includes/adapters/gravity-smtp.php:438
 msgid "Sending"
 msgstr "ارسال"
 
-#: includes/adapters/gravity-smtp.php:602
+#: includes/adapters/gravity-smtp.php:635
 #: includes/adapters/wp-mail-logging.php:170
 #: assets/js/app.js:58291
 msgid "Attachments"
 msgstr "پیوست‌ها"
 
-#: includes/adapters/gravity-smtp.php:617
+#: includes/adapters/gravity-smtp.php:650
 #: includes/adapters/wp-mail-logging.php:177
 msgid "Headers"
 msgstr "سربرگ‌ها"
 
-#: includes/adapters/gravity-smtp.php:617
+#: includes/adapters/gravity-smtp.php:650
 msgid "Stored headers"
 msgstr "سربرگ‌های ذخیره‌شده"
 
-#: includes/adapters/gravity-smtp.php:642
-#: includes/adapters/wp-mail-smtp.php:110
+#: includes/adapters/gravity-smtp.php:678
+#: includes/adapters/wp-mail-smtp.php:115
 msgid "Event not found"
 msgstr "رویداد پیدا نشد"
 
-#: includes/adapters/gravity-smtp.php:769
+#: includes/adapters/gravity-smtp.php:805
 msgid "Could not delete this log entry."
 msgstr "این ثبت گزارش حذف نشد."
 
-#: includes/adapters/gravity-smtp.php:777
+#: includes/adapters/gravity-smtp.php:813
 msgid "Resent to the original recipients."
 msgstr "دوباره برای گیرندگان اصلی فرستاده شد."
 
-#: includes/adapters/gravity-smtp.php:778
+#: includes/adapters/gravity-smtp.php:814
 msgid "Resent, but another active mail plugin carried it, so the new send appears in that plugin’s log, not Gravity SMTP’s."
 msgstr "دوباره فرستاده شد، اما افزونه ایمیل فعال دیگری آن را برد، بنابراین ارسال تازه در گزارش آن افزونه دیده می‌شود، نه Gravity SMTP."
 
-#: includes/adapters/gravity-smtp.php:827
+#: includes/adapters/gravity-smtp.php:869
 msgid "Suppressed address not found."
 msgstr "نشانی مسدودشده پیدا نشد."
 
-#: includes/adapters/gravity-smtp.php:863
+#: includes/adapters/gravity-smtp.php:905
 msgid "Reactivated — Gravity SMTP can send to "
 msgstr "دوباره فعال شد — Gravity SMTP می‌تواند بفرستد به "
 
-#: includes/adapters/gravity-smtp.php:913
+#: includes/adapters/gravity-smtp.php:944
+#: includes/adapters/gravity-smtp.php:959
+#: includes/adapters/gravity-smtp.php:1009
 msgid "Routing rule not found."
 msgstr "قانون مسیردهی پیدا نشد."
 
-#: includes/adapters/gravity-smtp.php:945
+#: includes/adapters/gravity-smtp.php:991
 msgid "Rule enabled."
 msgstr "قانون فعال شد."
 
-#: includes/adapters/gravity-smtp.php:954
+#: includes/adapters/gravity-smtp.php:1000
 msgid "Rule disabled."
 msgstr "قانون غیرفعال شد."
 
-#: includes/adapters/gravity-smtp.php:969
+#: includes/adapters/gravity-smtp.php:1019
 msgid "Routing rule deleted."
 msgstr "قانون مسیردهی حذف شد."
 
-#: includes/adapters/gravity-smtp.php:998
+#: includes/adapters/gravity-smtp.php:1048
 msgid "Sending through"
 msgstr "فرستادن از راه"
 
-#: includes/adapters/gravity-smtp.php:1002
+#: includes/adapters/gravity-smtp.php:1052
 msgid "Emails are logged, not sent."
 msgstr "ایمیل‌ها ثبت می‌شوند، فرستاده نمی‌شوند."
 
-#: includes/adapters/gravity-smtp.php:1014
+#: includes/adapters/gravity-smtp.php:1064
 msgid "Needs at least 2 active integrations to evaluate (same as Gravity SMTP)."
 msgstr "برای ارزیابی دست‌کم به ۲ یکپارچه‌سازی فعال نیاز دارد (همانند Gravity SMTP)."
 
-#: includes/adapters/gravity-smtp.php:1015
+#: includes/adapters/gravity-smtp.php:1065
 msgid "First matching rule wins, top to bottom."
 msgstr "نخستین قانون همخوان برنده است، از بالا به پایین."
 
-#: includes/adapters/gravity-smtp.php:1015
+#: includes/adapters/gravity-smtp.php:1065
 msgid "No rules yet — add them in Gravity SMTP."
 msgstr "هنوز قانونی نیست — آن‌ها را در Gravity SMTP بیفزایید."
 
 #. translators: 1: number of routing rules; 2: number of enabled rules.
-#: includes/adapters/gravity-smtp.php:1021
+#: includes/adapters/gravity-smtp.php:1071
 msgid "%1$d rule · %2$d on"
 msgid_plural "%1$d rules · %2$d on"
 msgstr[0] "قوانین: %1$d · فعال شد: %2$d"
 msgstr[1] "قوانین: %1$d · فعال شد: %2$d"
 
-#: includes/adapters/gravity-smtp.php:1025
+#: includes/adapters/gravity-smtp.php:1075
 #: includes/adapters/seo.php:205
 #: includes/adapters/seo.php:402
 #: includes/adapters/seo.php:637
@@ -7298,118 +7300,118 @@ msgstr[1] "قوانین: %1$d · فعال شد: %2$d"
 msgid "None"
 msgstr "هیچکدام"
 
-#: includes/adapters/gravity-smtp.php:1041
+#: includes/adapters/gravity-smtp.php:1091
 msgid "you@example.com"
 msgstr "you@example.com"
 
-#: includes/adapters/gravity-smtp.php:1047
+#: includes/adapters/gravity-smtp.php:1097
 msgid "Edit routing rules ↗"
 msgstr "ویرایش قوانین مسیردهی ↗"
 
-#: includes/adapters/gravity-smtp.php:1093
+#: includes/adapters/gravity-smtp.php:1143
 msgid "Test email from Minn Admin (Gravity SMTP)"
 msgstr "ایمیل آزمایشی از Minn Admin (Gravity SMTP)"
 
-#: includes/adapters/gravity-smtp.php:1099
+#: includes/adapters/gravity-smtp.php:1149
 msgid "The mailer reported the test could not be sent."
 msgstr "فرستنده ایمیل گزارش داد که پیام آزمایشی فرستاده نشد."
 
-#: includes/adapters/gravity-smtp.php:1105
+#: includes/adapters/gravity-smtp.php:1155
 msgid "Test email sent and logged."
 msgstr "ایمیل آزمایشی فرستاده و ثبت شد."
 
-#: includes/adapters/gravity-smtp.php:1106
+#: includes/adapters/gravity-smtp.php:1156
 msgid "Test email sent, but another active mail plugin carried it, so it appears in that plugin’s log, not Gravity SMTP’s."
 msgstr "ایمیل آزمایشی فرستاده شد، اما افزونه ایمیل فعال دیگری آن را برد، بنابراین در گزارش آن افزونه دیده می‌شود، نه Gravity SMTP."
 
-#: includes/adapters/gravity-smtp.php:1167
+#: includes/adapters/gravity-smtp.php:1228
 msgid "Custom SMTP"
 msgstr "SMTP سفارشی"
 
-#: includes/adapters/gravity-smtp.php:1188
+#: includes/adapters/gravity-smtp.php:1249
 msgid "Sending service"
 msgstr "خدمت فرستنده"
 
-#: includes/adapters/gravity-smtp.php:1192
+#: includes/adapters/gravity-smtp.php:1253
 msgid "Primary service"
 msgstr "خدمت اصلی"
 
-#: includes/adapters/gravity-smtp.php:1195
+#: includes/adapters/gravity-smtp.php:1256
 msgid "Saving a different service reloads this tab with its settings."
 msgstr "ذخیره خدمتی دیگر این زبانه را با تنظیمات آن دوباره بار می‌کند."
 
-#: includes/adapters/gravity-smtp.php:1234
+#: includes/adapters/gravity-smtp.php:1295
 msgid "Sending behavior"
 msgstr "رفتار فرستادن"
 
-#: includes/adapters/gravity-smtp.php:1240
-#: includes/adapters/mail-kit.php:246
+#: includes/adapters/gravity-smtp.php:1301
+#: includes/adapters/mail-kit.php:248
 msgid "Email log"
 msgstr "گزارش ایمیل"
 
-#: includes/adapters/gravity-smtp.php:1242
+#: includes/adapters/gravity-smtp.php:1303
 msgid "Keep an email log"
 msgstr "نگه داشتن گزارش ایمیل"
 
-#: includes/adapters/gravity-smtp.php:1243
+#: includes/adapters/gravity-smtp.php:1304
 msgid "Store message bodies"
 msgstr "ذخیره بدنه پیام‌ها"
 
-#: includes/adapters/gravity-smtp.php:1244
+#: includes/adapters/gravity-smtp.php:1305
 msgid "Store attachments"
 msgstr "ذخیره پیوست‌ها"
 
-#: includes/adapters/gravity-smtp.php:1245
-#: includes/adapters/gravity-smtp.php:1252
+#: includes/adapters/gravity-smtp.php:1306
+#: includes/adapters/gravity-smtp.php:1313
 msgid "Retention (days)"
 msgstr "مدت نگهداری (روز)"
 
-#: includes/adapters/gravity-smtp.php:1251
+#: includes/adapters/gravity-smtp.php:1312
 msgid "Keep a debug log"
 msgstr "نگه داشتن گزارش اشکال‌زدایی"
 
-#: includes/adapters/gravity-smtp.php:1286
+#: includes/adapters/gravity-smtp.php:1347
 msgid "Unknown sending service."
 msgstr "سرویس ارسال ناشناخته."
 
-#: includes/adapters/gravity-smtp.php:1289
+#: includes/adapters/gravity-smtp.php:1350
 msgid "Switch the sending service on its own first, then edit its settings."
 msgstr "نخست سرویس ارسال را به‌تنهایی روشن کنید، سپس تنظیماتش را ویرایش کنید."
 
-#: includes/adapters/gravity-smtp.php:1368
+#: includes/adapters/gravity-smtp.php:1429
 msgid "Gravity SMTP reports this email cannot be resent (body or attachments were not stored)."
 msgstr "Gravity SMTP گزارش می‌دهد این ایمیل را نمی‌توان دوباره فرستاد (بدنه یا پیوست‌ها ذخیره نشده‌اند)."
 
-#: includes/adapters/gravity-smtp.php:1460
+#: includes/adapters/gravity-smtp.php:1521
 #: includes/kernel/class-minn-admin-kernel.php:2138
 msgid "The mailer reported the message could not be sent."
 msgstr "فرستنده ایمیل گزارش داد که پیام فرستاده نشد."
 
-#: includes/adapters/gravity-smtp.php:1497
+#: includes/adapters/gravity-smtp.php:1558
 #: assets/js/app.js:969
 msgid "Sandboxed"
 msgstr "آزمایشی"
 
-#: includes/adapters/gravity-smtp.php:1498
+#: includes/adapters/gravity-smtp.php:1559
 #: assets/js/app.js:969
 msgid "Filtered"
 msgstr "فیلترشده"
 
-#: includes/adapters/gravity-smtp.php:1506
-#: includes/adapters/mail-kit.php:264
+#: includes/adapters/gravity-smtp.php:1567
+#: includes/adapters/mail-kit.php:266
 #: includes/adapters/redirection.php:444
 #: includes/adapters/status-chart.php:267
 msgid "Last 14 days"
 msgstr "۱۴ روز گذشته"
 
-#: includes/adapters/gravity-smtp.php:1507
+#: includes/adapters/gravity-smtp.php:1568
 #: includes/adapters/ottokit.php:160
 #: includes/adapters/ottokit.php:204
 #: assets/js/app.js:968
 msgid "Sent"
 msgstr "ارسال شد"
 
-#: includes/adapters/gravity-smtp.php:1508
+#: includes/adapters/gravity-smtp.php:1569
 #: includes/adapters/ottokit.php:328
 #: includes/adapters/wordfence.php:210
 #: assets/js/app.js:966
@@ -7637,7 +7639,7 @@ msgid "Published"
 msgstr "منتشرشده"
 
 #: includes/adapters/jet-cct.php:279
-#: includes/class-minn-admin-rest.php:4466
+#: includes/class-minn-admin-rest.php:4475
 #: assets/js/app.js:1496
 #: assets/js/app.js:7045
 msgid "Drafts"
@@ -9407,7 +9409,7 @@ msgid "The plugin is not loaded."
 msgstr "افزونه بارگذاری نشده است."
 
 #: includes/adapters/licenses.php:6208
-#: includes/adapters/licenses.php:6962
+#: includes/adapters/licenses.php:6965
 msgid "Paste a key first."
 msgstr "نخست یک کلید بچسبانید."
 
@@ -9460,24 +9462,24 @@ msgstr "کلید پروانه"
 msgid "core connector"
 msgstr "اتصال‌دهنده هسته"
 
-#: includes/adapters/licenses.php:6943
+#: includes/adapters/licenses.php:6946
 msgid "No such action for this provider."
 msgstr "چنین عملی برای این ارائه‌دهنده وجود ندارد."
 
-#: includes/adapters/licenses.php:6957
+#: includes/adapters/licenses.php:6960
 msgid "Fill in every field first."
 msgstr "نخست همه فیلدها را پر کنید."
 
 #. translators: %s: PHP constant name defined in wp-config.php.
-#: includes/adapters/licenses.php:6996
+#: includes/adapters/licenses.php:6999
 msgid "This key is defined in wp-config (%s), which takes precedence. Change it there."
 msgstr "این کلید در wp-config (%s) تعریف شده که اولویت دارد. آنجا تغییرش دهید."
 
-#: includes/adapters/licenses.php:7009
+#: includes/adapters/licenses.php:7012
 msgid "The plugin reported an error during the request."
 msgstr "افزونه هنگام درخواست خطایی گزارش کرد."
 
-#: includes/adapters/licenses.php:7081
+#: includes/adapters/licenses.php:7084
 msgid "Could not check for updates."
 msgstr "بررسی به‌روزرسانی‌ها ممکن نشد."
 
@@ -9581,42 +9583,42 @@ msgstr "بدنه"
 msgid "Delivery"
 msgstr "تحویل"
 
-#: includes/adapters/mail-kit.php:176
+#: includes/adapters/mail-kit.php:178
 msgid "[hidden]"
 msgstr "[پنهان]"
 
-#: includes/adapters/mail-kit.php:220
+#: includes/adapters/mail-kit.php:222
 msgid "Failure"
 msgstr "شکست"
 
-#: includes/adapters/mail-kit.php:221
+#: includes/adapters/mail-kit.php:223
 #: includes/adapters/ottokit.php:213
 msgid "Error"
 msgstr "خطا"
 
-#: includes/adapters/mail-kit.php:238
+#: includes/adapters/mail-kit.php:240
 msgid "All logged sends"
 msgstr "همه ارسال‌های ثبت‌شده"
 
-#: includes/adapters/mail-kit.php:255
+#: includes/adapters/mail-kit.php:257
 msgid "Logged emails"
 msgstr "ایمیل‌های ثبت‌شده"
 
 #. translators: %s: number of failed sends.
 #. translators: %s: the job label.
-#: includes/adapters/mail-kit.php:258
+#: includes/adapters/mail-kit.php:260
 #: assets/js/app.js:19483
 msgid "%s failed"
 msgid_plural "%s failed"
 msgstr[0] "%s خطا"
 msgstr[1] "%s خطا"
 
-#: includes/adapters/mail-kit.php:289
+#: includes/adapters/mail-kit.php:291
 #: includes/adapters/rank-math-redirections.php:558
 msgid "Log entry deleted."
 msgstr "ثبت گزارش حذف شد."
 
-#: includes/adapters/mail-kit.php:307
+#: includes/adapters/mail-kit.php:309
 msgid "Resent to "
 msgstr "دوباره فرستاده شد به "
 
@@ -9937,7 +9939,7 @@ msgid "You are not allowed to delete that site."
 msgstr "شما مجاز به حذف آن سایت نیستید."
 
 #: includes/adapters/network.php:1271
-#: includes/class-minn-admin-rest.php:11344
+#: includes/class-minn-admin-rest.php:11355
 msgid "That plugin is not installed."
 msgstr "این افزونه نصب نشده است."
 
@@ -9955,7 +9957,7 @@ msgid "That theme name is not valid."
 msgstr "این نام پوسته معتبر نیست."
 
 #: includes/adapters/network.php:1317
-#: includes/class-minn-admin-rest.php:11488
+#: includes/class-minn-admin-rest.php:11499
 msgid "That theme is not installed."
 msgstr "این پوسته نصب نشده است."
 
@@ -11262,8 +11264,8 @@ msgid "REST"
 msgstr "REST"
 
 #: includes/adapters/scrutoscope.php:80
-#: includes/class-minn-admin-rest.php:13636
-#: includes/class-minn-admin-rest.php:13786
+#: includes/class-minn-admin-rest.php:13698
+#: includes/class-minn-admin-rest.php:13848
 #: assets/js/app.js:974
 msgid "Cron"
 msgstr "کرون"
@@ -11314,10 +11316,10 @@ msgid "Login"
 msgstr "ورود"
 
 #: includes/adapters/scrutoscope.php:96
-#: includes/class-minn-admin-rest.php:10995
-#: includes/class-minn-admin-rest.php:11093
-#: includes/class-minn-admin-rest.php:13662
-#: includes/class-minn-admin-rest.php:13672
+#: includes/class-minn-admin-rest.php:11006
+#: includes/class-minn-admin-rest.php:11104
+#: includes/class-minn-admin-rest.php:13724
+#: includes/class-minn-admin-rest.php:13734
 #: assets/js/app.js:25584
 msgid "Unknown"
 msgstr "ناشناخته"
@@ -11411,8 +11413,8 @@ msgstr "نقاط عطف خط زمان"
 #. translators: %s: number of background jobs waiting to run.
 #. translators: %s: number of comments awaiting moderation.
 #: includes/adapters/scrutoscope.php:450
-#: includes/class-minn-admin-rest.php:4131
-#: includes/class-minn-admin-rest.php:4498
+#: includes/class-minn-admin-rest.php:4135
+#: includes/class-minn-admin-rest.php:4507
 msgid "%s pending"
 msgstr "%s در انتظار"
 
@@ -11511,9 +11513,9 @@ msgid "Timeline + per-callback trace"
 msgstr "خط زمانی + ردگیری هر callback"
 
 #: includes/adapters/scrutoscope.php:548
-#: includes/class-minn-admin-rest.php:13466
-#: includes/class-minn-admin-rest.php:13508
-#: includes/class-minn-admin-rest.php:13641
+#: includes/class-minn-admin-rest.php:13528
+#: includes/class-minn-admin-rest.php:13570
+#: includes/class-minn-admin-rest.php:13703
 msgid "Version"
 msgstr "نگارش"
 
@@ -11977,7 +11979,7 @@ msgstr "شدت (۷ روز)"
 
 #: includes/adapters/simple-history.php:177
 #: includes/adapters/sucuri.php:169
-#: includes/adapters/wp-mail-smtp.php:249
+#: includes/adapters/wp-mail-smtp.php:254
 msgid "Errors"
 msgstr "خطاها"
 
@@ -11988,19 +11990,19 @@ msgid_plural "%1$s · %2$s times"
 msgstr[0] "%1$s · %2$s بار"
 msgstr[1] "%1$s · %2$s بار"
 
-#: includes/adapters/site-mailer.php:185
+#: includes/adapters/site-mailer.php:190
 msgid "Open Site Mailer ↗"
 msgstr "باز کردن Site Mailer ↗"
 
-#: includes/adapters/site-mailer.php:190
+#: includes/adapters/site-mailer.php:195
 msgid "Site Mailer has not logged any sends yet"
 msgstr "Site Mailer هنوز هیچ ارسالی را ثبت نکرده است"
 
-#: includes/adapters/site-mailer.php:192
+#: includes/adapters/site-mailer.php:197
 msgid "All delivered"
 msgstr "همه تحویل شده"
 
-#: includes/adapters/site-mailer.php:197
+#: includes/adapters/site-mailer.php:202
 #: includes/adapters/woocommerce-gift-cards.php:391
 msgid "Delivered"
 msgstr "تحویل شد"
@@ -12354,11 +12356,11 @@ msgstr "بازدیدها"
 msgid "Conversion"
 msgstr "تبدیل"
 
-#: includes/adapters/suremails.php:159
+#: includes/adapters/suremails.php:164
 msgid "Open SureMails ↗"
 msgstr "باز کردن SureMails ↗"
 
-#: includes/adapters/suremails.php:163
+#: includes/adapters/suremails.php:168
 msgid "SureMails has not logged any sends yet"
 msgstr "SureMails هنوز هیچ ارسالی را ثبت نکرده است"
 
@@ -12756,11 +12758,11 @@ msgid "User Switching nonce URL for the current viewer, when allowed."
 msgstr "نشانی اینترنتی nonce تعویض کاربر برای بیننده فعلی، وقتی مجاز باشد."
 
 #: includes/adapters/wcpdf.php:137
-#: includes/class-minn-admin-rest.php:8590
-#: includes/class-minn-admin-rest.php:8827
-#: includes/class-minn-admin-rest.php:8869
-#: includes/class-minn-admin-rest.php:8999
-#: includes/class-minn-admin-rest.php:9035
+#: includes/class-minn-admin-rest.php:8601
+#: includes/class-minn-admin-rest.php:8838
+#: includes/class-minn-admin-rest.php:8880
+#: includes/class-minn-admin-rest.php:9010
+#: includes/class-minn-admin-rest.php:9046
 msgid "Order not found."
 msgstr "سفارش پیدا نشد."
 
@@ -12973,7 +12975,7 @@ msgstr "خرید محصول"
 
 #: includes/adapters/woocommerce-memberships.php:727
 #: includes/adapters/woocommerce-memberships.php:1531
-#: includes/class-minn-admin-rest.php:4659
+#: includes/class-minn-admin-rest.php:4670
 #: includes/class-minn-admin-surfaces.php:509
 #: assets/js/app.js:1463
 #: assets/js/app.js:4196
@@ -14460,7 +14462,7 @@ msgid "Open WP Mail Logging ↗"
 msgstr "باز کردن WP Mail Logging ↗"
 
 #: includes/adapters/wp-mail-logging.php:166
-#: includes/class-minn-admin-rest.php:13642
+#: includes/class-minn-admin-rest.php:13704
 msgid "Host"
 msgstr "میزبان"
 
@@ -14468,11 +14470,11 @@ msgstr "میزبان"
 msgid "Raw headers"
 msgstr "سربرگ‌های خام"
 
-#: includes/adapters/wp-mail-logging.php:278
+#: includes/adapters/wp-mail-logging.php:283
 msgid "WP Mail Logging could not resend: "
 msgstr "WP Mail Logging نتوانست دوباره بفرستد: "
 
-#: includes/adapters/wp-mail-logging.php:281
+#: includes/adapters/wp-mail-logging.php:286
 msgid "Handed back to the mailer — the new attempt appears as its own log entry."
 msgstr "به فرستنده ایمیل سپرده شد — تلاش تازه به‌عنوان ثبت گزارش جداگانه‌ای نمایان می‌شود."
 
@@ -14480,52 +14482,52 @@ msgstr "به فرستنده ایمیل سپرده شد — تلاش تازه ب�
 msgid "Initiator"
 msgstr "آغازگر"
 
-#: includes/adapters/wp-mail-smtp.php:189
+#: includes/adapters/wp-mail-smtp.php:194
 msgid "Errors (30 days)"
 msgstr "خطاها (۳۰ روز)"
 
-#: includes/adapters/wp-mail-smtp.php:192
+#: includes/adapters/wp-mail-smtp.php:197
 msgid "Delivery problems this plugin recorded."
 msgstr "مشکلات تحویلی که این افزونه ثبت کرده است."
 
-#: includes/adapters/wp-mail-smtp.php:193
+#: includes/adapters/wp-mail-smtp.php:198
 msgid "No delivery errors recorded."
 msgstr "هیچ خطای تحویلی ثبت نشده است."
 
-#: includes/adapters/wp-mail-smtp.php:208
+#: includes/adapters/wp-mail-smtp.php:213
 msgid "Mailer"
 msgstr "ارسال‌کننده"
 
-#: includes/adapters/wp-mail-smtp.php:209
+#: includes/adapters/wp-mail-smtp.php:214
 #: assets/js/app.js:12698
 msgid "Not set"
 msgstr "تنظیم نشده"
 
-#: includes/adapters/wp-mail-smtp.php:211
+#: includes/adapters/wp-mail-smtp.php:216
 msgid "Sending through the web server, not an SMTP service."
 msgstr "ارسال از طریق سرور وب، نه یک سرویس SMTP."
 
-#: includes/adapters/wp-mail-smtp.php:212
+#: includes/adapters/wp-mail-smtp.php:217
 msgid "Configured in WP Mail SMTP."
 msgstr "در WP Mail SMTP پیکربندی شده است."
 
-#: includes/adapters/wp-mail-smtp.php:227
+#: includes/adapters/wp-mail-smtp.php:232
 msgid "Events logged"
 msgstr "رویدادهای ثبت‌شده"
 
-#: includes/adapters/wp-mail-smtp.php:230
+#: includes/adapters/wp-mail-smtp.php:235
 msgid "Debug logging is on, so sends are recorded too."
 msgstr "ثبت اشکال‌زدایی روشن است، بنابراین ارسال‌ها هم ثبت می‌شوند."
 
-#: includes/adapters/wp-mail-smtp.php:231
+#: includes/adapters/wp-mail-smtp.php:236
 msgid "Errors only. Turn on debug logging to record sends."
 msgstr "فقط خطاها. برای ثبت ارسال‌ها، ثبت اشکال‌زدایی را روشن کنید."
 
-#: includes/adapters/wp-mail-smtp.php:238
+#: includes/adapters/wp-mail-smtp.php:243
 msgid "Open WP Mail SMTP ↗"
 msgstr "باز کردن WP Mail SMTP ↗"
 
-#: includes/adapters/wp-mail-smtp.php:249
+#: includes/adapters/wp-mail-smtp.php:254
 #: assets/js/app.js:28665
 msgid "Debug"
 msgstr "اشکال‌زدایی"
@@ -15931,7 +15933,7 @@ msgstr "این مورد یک کلید ذخیره‌شده دارد (کلید API
 msgid "Part of this change was not saved: it would have changed who can run this site, which your account can’t do."
 msgstr "بخشی از این تغییر ذخیره نشد: کسانی را که می‌توانند این سایت را اداره کنند عوض می‌کرد، و حساب شما نمی‌تواند این کار را بکند."
 
-#: includes/class-minn-admin-fences.php:425
+#: includes/class-minn-admin-fences.php:428
 msgid "Minn Admin routes are lowercase."
 msgstr "مسیرهای Minn Admin با حروف کوچک هستند."
 
@@ -15940,7 +15942,7 @@ msgid "PHP error log"
 msgstr "گزارش خطای PHP"
 
 #: includes/class-minn-admin-logs.php:93
-#: includes/class-minn-admin-rest.php:14044
+#: includes/class-minn-admin-rest.php:14106
 msgid "Server"
 msgstr "سرور"
 
@@ -16029,190 +16031,190 @@ msgstr "[برچسب: %s]"
 msgid "Invalid notice id."
 msgstr "شناسه پیام غیرمعتبر است."
 
-#: includes/class-minn-admin-rest.php:1428
+#: includes/class-minn-admin-rest.php:1430
 msgid "Link to the payment in the payment provider's dashboard, as the order screen shows it."
 msgstr "پیوند به پرداخت در پیشخوان ارائه‌دهنده پرداخت، همان‌طور که صفحه سفارش نشان می‌دهد."
 
-#: includes/class-minn-admin-rest.php:2228
+#: includes/class-minn-admin-rest.php:2230
 msgid "Whether an autosave newer than the saved post exists (live post carrying unsaved edits)."
 msgstr "آیا ذخیرهٔ خودکاری تازه‌تر از نوشتهٔ ذخیره‌شده وجود دارد (نوشتهٔ زنده با ویرایش‌های ذخیره‌نشده)."
 
-#: includes/class-minn-admin-rest.php:2276
+#: includes/class-minn-admin-rest.php:2278
 msgid "The other user currently editing this post (core edit lock), or null."
 msgstr "کاربر دیگری که هم‌اکنون این نوشته را ویرایش می‌کند (قفل ویرایش هسته)، یا null."
 
 #. translators: 1: author display name, 2: post title.
-#: includes/class-minn-admin-rest.php:2546
-#: includes/class-minn-admin-rest.php:5249
-#: includes/class-minn-admin-rest.php:5464
+#: includes/class-minn-admin-rest.php:2550
+#: includes/class-minn-admin-rest.php:5260
+#: includes/class-minn-admin-rest.php:5475
 msgid "Someone"
 msgstr "کسی"
 
-#: includes/class-minn-admin-rest.php:2591
+#: includes/class-minn-admin-rest.php:2595
 msgid "That log lives outside this site, so Minn will not clear it."
 msgstr "آن گزارش بیرون از این سایت است، بنابراین Minn آن را پاک نمی‌کند."
 
-#: includes/class-minn-admin-rest.php:2599
+#: includes/class-minn-admin-rest.php:2603
 msgid "The debug log is not writable."
 msgstr "گزارش اشکال‌زدایی قابل نوشتن نیست."
 
-#: includes/class-minn-admin-rest.php:2603
+#: includes/class-minn-admin-rest.php:2607
 msgid "Could not clear the debug log."
 msgstr "گزارش اشکال‌زدایی پاکسازی نشد."
 
-#: includes/class-minn-admin-rest.php:2626
+#: includes/class-minn-admin-rest.php:2630
 msgid "That block does not offer image editing here."
 msgstr "این بلوک اینجا ویرایش تصویر ارائه نمی‌دهد."
 
-#: includes/class-minn-admin-rest.php:2635
+#: includes/class-minn-admin-rest.php:2639
 msgid "One of those images cannot be used here."
 msgstr "یکی از این تصویرها را نمی‌توان اینجا به کار برد."
 
-#: includes/class-minn-admin-rest.php:2649
+#: includes/class-minn-admin-rest.php:2653
 msgid "Pick at least one image."
 msgstr "دست‌کم یک تصویر برگزینید."
 
-#: includes/class-minn-admin-rest.php:2658
+#: includes/class-minn-admin-rest.php:2662
 msgid "That block could not be rebuilt for those images."
 msgstr "این بلوک برای آن تصاویر بازسازی نشد."
 
-#: includes/class-minn-admin-rest.php:3001
+#: includes/class-minn-admin-rest.php:3005
 msgid "Expected an array of block markup strings."
 msgstr "آرایه‌ای از رشته‌های نشانه‌گذاری بلوک انتظار می‌رفت."
 
-#: includes/class-minn-admin-rest.php:3472
-#: includes/class-minn-admin-rest.php:3497
+#: includes/class-minn-admin-rest.php:3476
+#: includes/class-minn-admin-rest.php:3501
 msgid "That surface has no setup to run."
 msgstr "این بخش راه‌اندازی‌ای برای اجرا ندارد."
 
-#: includes/class-minn-admin-rest.php:3500
+#: includes/class-minn-admin-rest.php:3504
 msgid "This setup runs on the plugin's own screen."
 msgstr "این راه‌اندازی در صفحه خود افزونه انجام می‌شود."
 
-#: includes/class-minn-admin-rest.php:3520
+#: includes/class-minn-admin-rest.php:3524
 msgid "The plugin reported an error during setup."
 msgstr "افزونه هنگام راه‌اندازی خطایی گزارش کرد."
 
-#: includes/class-minn-admin-rest.php:3575
+#: includes/class-minn-admin-rest.php:3579
 msgid "Pattern not found."
 msgstr "الگو پیدا نشد."
 
-#: includes/class-minn-admin-rest.php:3646
+#: includes/class-minn-admin-rest.php:3650
 msgid "A custom structure needs at least one tag, e.g. %postname%."
 msgstr "یک ساختار سفارشی دست‌کم به یک تگ نیاز دارد، برای نمونه %postname%."
 
-#: includes/class-minn-admin-rest.php:3718
+#: includes/class-minn-admin-rest.php:3722
 msgid "The custom CSS was changed somewhere else after you opened it. Copy your edit, reload, and apply it again."
 msgstr "CSS سفارشی پس از اینکه آن را باز کردید جای دیگری تغییر کرده است. ویرایش خود را کپی کنید، صفحه را دوباره بارگذاری کنید و آن را از نو اجرا کنید."
 
-#: includes/class-minn-admin-rest.php:3735
+#: includes/class-minn-admin-rest.php:3739
 msgid "curly brackets"
 msgstr "آکولادها"
 
-#: includes/class-minn-admin-rest.php:3736
+#: includes/class-minn-admin-rest.php:3740
 msgid "parentheses"
 msgstr "پرانتزها"
 
-#: includes/class-minn-admin-rest.php:3737
+#: includes/class-minn-admin-rest.php:3741
 msgid "square brackets"
 msgstr "کروشه‌ها"
 
 #. translators: %s: the bracket type that is unbalanced (e.g. "curly brackets").
-#: includes/class-minn-admin-rest.php:3742
+#: includes/class-minn-admin-rest.php:3746
 msgid "That CSS has unbalanced %s. Fix it and save again; nothing was changed."
 msgstr "این CSS دارای %s نامتوازن است. آن را درست کنید و دوباره ذخیره کنید؛ چیزی تغییر نکرد."
 
-#: includes/class-minn-admin-rest.php:3746
+#: includes/class-minn-admin-rest.php:3750
 msgid "That CSS has an unclosed comment. Fix it and save again; nothing was changed."
 msgstr "این CSS یک توضیح بسته‌نشده دارد. آن را درست کنید و دوباره ذخیره کنید؛ چیزی تغییر نکرد."
 
 #. translators: 1: the window's first day (e.g. "Jun 3"). 2: its last day with the year (e.g. "Jul 2, 2026").
-#: includes/class-minn-admin-rest.php:3812
+#: includes/class-minn-admin-rest.php:3816
 msgid "%1$s – %2$s"
 msgstr "%1$s – %2$s"
 
 #. translators: %s: the date the week starts on (e.g. "Jun 3, 2026").
 #. translators: %s: the date the week starts on (e.g. "Jun 3").
-#: includes/class-minn-admin-rest.php:3815
-#: includes/class-minn-admin-rest.php:4211
-#: includes/class-minn-admin-rest.php:5095
+#: includes/class-minn-admin-rest.php:3819
+#: includes/class-minn-admin-rest.php:4220
+#: includes/class-minn-admin-rest.php:5106
 msgid "Week of %s"
 msgstr "هفته %s"
 
-#: includes/class-minn-admin-rest.php:3850
-#: includes/class-minn-admin-rest.php:3935
-#: includes/class-minn-admin-rest.php:5158
+#: includes/class-minn-admin-rest.php:3854
+#: includes/class-minn-admin-rest.php:3939
+#: includes/class-minn-admin-rest.php:5169
 msgid "from must be on or before to."
 msgstr "«از» باید برابر یا پیش از «تا» باشد."
 
-#: includes/class-minn-admin-rest.php:3862
+#: includes/class-minn-admin-rest.php:3866
 msgid "Custom ranges reach back two years at most."
 msgstr "بازه‌های سفارشی حداکثر تا دو سال عقب می‌روند."
 
-#: includes/class-minn-admin-rest.php:3865
-#: includes/class-minn-admin-rest.php:3939
+#: includes/class-minn-admin-rest.php:3869
+#: includes/class-minn-admin-rest.php:3943
 msgid "Pick a window of a year or less."
 msgstr "بازه‌ای یک‌ساله یا کوتاه‌تر انتخاب کنید."
 
-#: includes/class-minn-admin-rest.php:4085
-#: includes/class-minn-admin-rest.php:4446
+#: includes/class-minn-admin-rest.php:4089
+#: includes/class-minn-admin-rest.php:4455
 msgid "Published posts"
 msgstr "نوشته‌های منتشرشده"
 
 #. translators: %s: number of draft posts.
 #. translators: %s: number of draft products.
-#: includes/class-minn-admin-rest.php:4091
-#: includes/class-minn-admin-rest.php:4452
-#: includes/class-minn-admin-rest.php:4669
+#: includes/class-minn-admin-rest.php:4095
+#: includes/class-minn-admin-rest.php:4461
+#: includes/class-minn-admin-rest.php:4680
 msgid "%s draft"
 msgid_plural "%s drafts"
 msgstr[0] "%s پیش‌نویس"
 msgstr[1] "%s پیش‌نویس"
 
-#: includes/class-minn-admin-rest.php:4092
-#: includes/class-minn-admin-rest.php:4101
-#: includes/class-minn-admin-rest.php:4453
-#: includes/class-minn-admin-rest.php:4480
-#: includes/class-minn-admin-rest.php:4670
-#: includes/class-minn-admin-rest.php:4709
+#: includes/class-minn-admin-rest.php:4096
+#: includes/class-minn-admin-rest.php:4105
+#: includes/class-minn-admin-rest.php:4462
+#: includes/class-minn-admin-rest.php:4489
+#: includes/class-minn-admin-rest.php:4681
+#: includes/class-minn-admin-rest.php:4720
 msgid "published"
 msgstr "منتشرشده"
 
-#: includes/class-minn-admin-rest.php:4099
-#: includes/class-minn-admin-rest.php:4478
+#: includes/class-minn-admin-rest.php:4103
+#: includes/class-minn-admin-rest.php:4487
 #: assets/js/app.js:1498
 #: assets/js/app.js:6942
 #: assets/js/app.js:6979
 msgid "Pages"
 msgstr "برگه‌ها"
 
-#: includes/class-minn-admin-rest.php:4117
-#: includes/class-minn-admin-rest.php:4536
-#: includes/class-minn-admin-rest.php:4691
+#: includes/class-minn-admin-rest.php:4121
+#: includes/class-minn-admin-rest.php:4547
+#: includes/class-minn-admin-rest.php:4702
 msgid "registered"
 msgstr "نام‌نویسی شده"
 
-#: includes/class-minn-admin-rest.php:4132
-#: includes/class-minn-admin-rest.php:4499
+#: includes/class-minn-admin-rest.php:4136
+#: includes/class-minn-admin-rest.php:4508
 msgid "approved"
 msgstr "تأییدشده"
 
-#: includes/class-minn-admin-rest.php:4139
-#: includes/class-minn-admin-rest.php:4522
+#: includes/class-minn-admin-rest.php:4143
+#: includes/class-minn-admin-rest.php:4532
 msgid "Media files"
 msgstr "پرونده‌های رسانه"
 
 #. translators: %s: page-view count, already formatted.
-#: includes/class-minn-admin-rest.php:4238
+#: includes/class-minn-admin-rest.php:4247
 msgid "%s pageviews"
 msgstr "%s بازدید برگه"
 
 #. translators: 1: up or down arrow, 2: percentage change, 3: number of days, 4: pageviews clause.
-#: includes/class-minn-admin-rest.php:4241
+#: includes/class-minn-admin-rest.php:4250
 msgid "%1$s %2$s%% vs prior %3$sd · %4$s"
 msgstr "%1$s %2$s%% نسبت به %3$s روز پیشین · %4$s"
 
-#: includes/class-minn-admin-rest.php:4248
+#: includes/class-minn-admin-rest.php:4257
 #: assets/js/app.js:6314
 #: assets/js/app.js:6447
 #: assets/js/app.js:6536
@@ -16222,102 +16224,102 @@ msgid "Visitors"
 msgstr "بازدیدکنندگان"
 
 #. translators: 1: author display name, 2: post title.
-#: includes/class-minn-admin-rest.php:4309
-#: includes/class-minn-admin-rest.php:5249
+#: includes/class-minn-admin-rest.php:4318
+#: includes/class-minn-admin-rest.php:5260
 msgid "%1$s published “%2$s”"
 msgstr "%1$s “%2$s” را منتشر کرد"
 
 #. translators: 1: author display name, 2: post title.
-#: includes/class-minn-admin-rest.php:4312
+#: includes/class-minn-admin-rest.php:4321
 msgid "%1$s scheduled “%2$s”"
 msgstr "%1$s “%2$s” را زمان‌بندی کرد"
 
 #. translators: 1: author display name, 2: post title.
-#: includes/class-minn-admin-rest.php:4315
+#: includes/class-minn-admin-rest.php:4324
 msgid "%1$s drafted “%2$s”"
 msgstr "%1$s “%2$s” را پیش‌نویس کرد"
 
-#: includes/class-minn-admin-rest.php:4468
+#: includes/class-minn-admin-rest.php:4477
 msgid "posts"
 msgstr "نوشته‌ها"
 
-#: includes/class-minn-admin-rest.php:4509
+#: includes/class-minn-admin-rest.php:4518
 msgid "Pending comments"
 msgstr "دیدگاه‌های در انتظار"
 
-#: includes/class-minn-admin-rest.php:4511
+#: includes/class-minn-admin-rest.php:4520
 msgid "awaiting review"
 msgstr "در انتظار بررسی"
 
-#: includes/class-minn-admin-rest.php:4555
+#: includes/class-minn-admin-rest.php:4566
 msgid "Sales this month"
 msgstr "فروش این ماه"
 
 #. translators: %s: formatted net sales.
 #. translators: %s: formatted net revenue.
-#: includes/class-minn-admin-rest.php:4558
+#: includes/class-minn-admin-rest.php:4569
 #: assets/js/app.js:12462
 msgid "net %s"
 msgstr "خالص: %s"
 
-#: includes/class-minn-admin-rest.php:4567
+#: includes/class-minn-admin-rest.php:4578
 #: assets/js/app.js:12461
 msgid "Orders this month"
 msgstr "سفارش‌های این ماه"
 
-#: includes/class-minn-admin-rest.php:4569
 #: includes/class-minn-admin-rest.php:4580
 #: includes/class-minn-admin-rest.php:4591
+#: includes/class-minn-admin-rest.php:4602
 msgid "this month"
 msgstr "این ماه"
 
-#: includes/class-minn-admin-rest.php:4578
+#: includes/class-minn-admin-rest.php:4589
 #: assets/js/app.js:12363
 msgid "Items sold"
 msgstr "موارد فروخته‌شده"
 
-#: includes/class-minn-admin-rest.php:4589
+#: includes/class-minn-admin-rest.php:4600
 msgid "Average order"
 msgstr "میانگین سفارش"
 
-#: includes/class-minn-admin-rest.php:4610
+#: includes/class-minn-admin-rest.php:4621
 msgid "All orders"
 msgstr "همه سفارش‌ها"
 
 #. translators: %s: number of orders awaiting fulfillment.
-#: includes/class-minn-admin-rest.php:4613
+#: includes/class-minn-admin-rest.php:4624
 msgid "%s to fulfill"
 msgid_plural "%s to fulfill"
 msgstr[0] "%s برای تکمیل"
 msgstr[1] "%s برای تکمیل"
 
-#: includes/class-minn-admin-rest.php:4622
+#: includes/class-minn-admin-rest.php:4633
 msgid "Awaiting payment"
 msgstr "در انتظار پرداخت"
 
-#: includes/class-minn-admin-rest.php:4624
+#: includes/class-minn-admin-rest.php:4635
 msgid "pending orders"
 msgstr "سفارش‌های در انتظار"
 
-#: includes/class-minn-admin-rest.php:4633
+#: includes/class-minn-admin-rest.php:4644
 msgid "To fulfill"
 msgstr "برای تکمیل"
 
-#: includes/class-minn-admin-rest.php:4635
+#: includes/class-minn-admin-rest.php:4646
 msgid "processing"
 msgstr "در حال انجام"
 
-#: includes/class-minn-admin-rest.php:4644
+#: includes/class-minn-admin-rest.php:4655
 #: assets/js/app.js:967
 #: assets/js/app.js:12614
 msgid "On hold"
 msgstr "در انتظار"
 
-#: includes/class-minn-admin-rest.php:4646
+#: includes/class-minn-admin-rest.php:4657
 msgid "orders"
 msgstr "سفارش‌ها"
 
-#: includes/class-minn-admin-rest.php:4689
+#: includes/class-minn-admin-rest.php:4700
 #: includes/class-minn-admin-surfaces.php:511
 #: assets/js/app.js:1468
 #: assets/js/app.js:4199
@@ -16325,7 +16327,7 @@ msgstr "سفارش‌ها"
 msgid "Customers"
 msgstr "مشتریان"
 
-#: includes/class-minn-admin-rest.php:4707
+#: includes/class-minn-admin-rest.php:4718
 #: includes/class-minn-admin-surfaces.php:510
 #: assets/js/app.js:1465
 #: assets/js/app.js:4202
@@ -16336,462 +16338,462 @@ msgstr "مشتریان"
 msgid "Coupons"
 msgstr "کوپن‌ها"
 
-#: includes/class-minn-admin-rest.php:4898
+#: includes/class-minn-admin-rest.php:4909
 msgid "You must be signed in."
 msgstr "باید وارد شده باشید."
 
-#: includes/class-minn-admin-rest.php:4902
-#: includes/class-minn-admin-rest.php:4908
-#: includes/class-minn-admin-rest.php:4929
-#: includes/class-minn-admin-rest.php:4935
+#: includes/class-minn-admin-rest.php:4913
+#: includes/class-minn-admin-rest.php:4919
+#: includes/class-minn-admin-rest.php:4940
+#: includes/class-minn-admin-rest.php:4946
 msgid "No metrics provided."
 msgstr "معیاری ارائه نشده است."
 
-#: includes/class-minn-admin-rest.php:5163
+#: includes/class-minn-admin-rest.php:5174
 msgid "Pick a window of 31 days or fewer."
 msgstr "بازه‌ای ۳۱ روزه یا کوتاه‌تر برگزینید."
 
 #. translators: 1: comment author name, 2: post title.
-#: includes/class-minn-admin-rest.php:5293
+#: includes/class-minn-admin-rest.php:5304
 msgid "Comment from %1$s awaiting moderation on “%2$s”"
 msgstr "دیدگاه %1$s در انتظار بررسی روی “%2$s”"
 
 #. translators: 1: comment author name, 2: post title.
-#: includes/class-minn-admin-rest.php:5295
+#: includes/class-minn-admin-rest.php:5306
 msgid "%1$s commented on “%2$s”"
 msgstr "%1$s روی “%2$s” دیدگاه گذاشت"
 
-#: includes/class-minn-admin-rest.php:5296
+#: includes/class-minn-admin-rest.php:5307
 msgid "Anonymous"
 msgstr "ناشناس"
 
-#: includes/class-minn-admin-rest.php:5361
+#: includes/class-minn-admin-rest.php:5372
 msgid "That post is not in the trash."
 msgstr "این نوشته در زباله‌دان نیست."
 
-#: includes/class-minn-admin-rest.php:5365
+#: includes/class-minn-admin-rest.php:5376
 msgid "You are not allowed to restore this item."
 msgstr "شما اجازه بازیافت این مورد را ندارید."
 
-#: includes/class-minn-admin-rest.php:5368
+#: includes/class-minn-admin-rest.php:5379
 msgid "Could not restore the item."
 msgstr "مورد بازیافت نشد."
 
-#: includes/class-minn-admin-rest.php:5423
+#: includes/class-minn-admin-rest.php:5434
 #: assets/js/app.js:39987
 #: assets/js/app.js:40069
 msgid "Someone else"
 msgstr "کس دیگری"
 
 #. translators: %s: display name of the user who now holds the edit lock.
-#: includes/class-minn-admin-rest.php:5427
+#: includes/class-minn-admin-rest.php:5438
 msgid "%s took over editing. Your copy was not saved."
 msgstr "%s ویرایش را در دست گرفت. رونوشت شما ذخیره نشد."
 
-#: includes/class-minn-admin-rest.php:5453
-#: includes/class-minn-admin-rest.php:5486
+#: includes/class-minn-admin-rest.php:5464
+#: includes/class-minn-admin-rest.php:5497
 msgid "You are not allowed to edit this item."
 msgstr "شما اجازه ویرایش این مورد را ندارید."
 
-#: includes/class-minn-admin-rest.php:5499
+#: includes/class-minn-admin-rest.php:5510
 msgid "Good morning"
 msgstr "صبح بخیر"
 
-#: includes/class-minn-admin-rest.php:5502
+#: includes/class-minn-admin-rest.php:5513
 msgid "Good afternoon"
 msgstr "ظهر بخیر"
 
-#: includes/class-minn-admin-rest.php:5504
+#: includes/class-minn-admin-rest.php:5515
 msgid "Good evening"
 msgstr "عصر بخیر"
 
 #. translators: %s: disk space used by uploads, already formatted.
-#: includes/class-minn-admin-rest.php:5586
+#: includes/class-minn-admin-rest.php:5597
 msgid "over %s used"
 msgstr "بیش از %s استفاده شده"
 
 #. translators: %s: disk space used by uploads, already formatted.
-#: includes/class-minn-admin-rest.php:5588
+#: includes/class-minn-admin-rest.php:5599
 msgid "%s used"
 msgstr "%s استفاده‌شده"
 
 #. translators: 1: plugin name, 2: version number.
-#: includes/class-minn-admin-rest.php:5762
+#: includes/class-minn-admin-rest.php:5773
 msgid "%1$s %2$s is available to install"
 msgstr "%1$s %2$s برای نصب دردسترس است"
 
 #. translators: %d: how many translation packs have an update waiting.
-#: includes/class-minn-admin-rest.php:5787
+#: includes/class-minn-admin-rest.php:5798
 msgid "%d translation is available to update"
 msgid_plural "%d translations are available to update"
 msgstr[0] "%d ترجمه برای به‌روزرسانی دردسترس است"
 msgstr[1] "%d ترجمه برای به‌روزرسانی دردسترس هستند"
 
 #. translators: 1: theme name, 2: version number.
-#: includes/class-minn-admin-rest.php:5817
+#: includes/class-minn-admin-rest.php:5828
 msgid "%1$s theme %2$s is available to install"
 msgstr "پوسته %1$s %2$s برای نصب دردسترس است"
 
 #. translators: %s: WordPress version number.
 #. translators: %s: the WordPress version being offered.
-#: includes/class-minn-admin-rest.php:5838
+#: includes/class-minn-admin-rest.php:5849
 #: assets/js/app.js:1797
 msgid "WordPress %s is available"
 msgstr "وردپرس %s در دسترس است"
 
 #. translators: %s: WordPress version number.
-#: includes/class-minn-admin-rest.php:5858
+#: includes/class-minn-admin-rest.php:5869
 msgid "WordPress updated itself to %s"
 msgstr "وردپرس خودش را به %s به‌روزرسانی کرد"
 
 #. translators: %s: the new user's display name.
-#: includes/class-minn-admin-rest.php:5886
+#: includes/class-minn-admin-rest.php:5897
 msgid "New user registered: %s"
 msgstr "کاربر تازه نام‌نویسی شد: %s"
 
-#: includes/class-minn-admin-rest.php:5902
+#: includes/class-minn-admin-rest.php:5913
 msgid "Earlier"
 msgstr "پیش‌تر"
 
-#: includes/class-minn-admin-rest.php:6936
+#: includes/class-minn-admin-rest.php:6947
 msgid "That language cannot be removed."
 msgstr "آن زبان را نمی‌توان حذف کرد."
 
-#: includes/class-minn-admin-rest.php:6940
+#: includes/class-minn-admin-rest.php:6951
 msgid "This is the site language, so it cannot be removed."
 msgstr "این زبان سایت است، بنابراین حذف‌شدنی نیست."
 
-#: includes/class-minn-admin-rest.php:6943
+#: includes/class-minn-admin-rest.php:6954
 msgid "A user has chosen this language, so it cannot be removed."
 msgstr "کاربری این زبان را انتخاب کرده، بنابراین حذف‌شدنی نیست."
 
-#: includes/class-minn-admin-rest.php:6946
+#: includes/class-minn-admin-rest.php:6957
 msgid "Another site on the network uses this language, so it cannot be removed."
 msgstr "سایت دیگری در شبکه از این زبان استفاده می‌کند، پس نمی‌توان آن را حذف کرد."
 
 #. translators: %s: a multilingual plugin's name, such as Polylang.
-#: includes/class-minn-admin-rest.php:6950
+#: includes/class-minn-admin-rest.php:6961
 msgid "%s serves this language to visitors, so it cannot be removed."
 msgstr "%s این زبان را به بازدیدکنندگان ارائه می‌دهد، بنابراین نمی‌توان آن را حذف کرد."
 
-#: includes/class-minn-admin-rest.php:6953
+#: includes/class-minn-admin-rest.php:6964
 msgid "This network has too many sites to check which languages they use, so languages cannot be removed here."
 msgstr "تعداد سایت‌های این شبکه بیش از آن است که بشود بررسی کرد کدام زبان‌ها را به کار می‌برند، پس اینجا نمی‌توان زبان‌ها را حذف کرد."
 
 #. translators: %s: a multilingual plugin's name, such as Polylang.
-#: includes/class-minn-admin-rest.php:6957
+#: includes/class-minn-admin-rest.php:6968
 msgid "%s may serve any installed language to visitors, so languages cannot be removed here."
 msgstr "%s ممکن است هر زبان نصب‌شده‌ای را به بازدیدکنندگان ارائه دهد، بنابراین زبان‌ها را نمی‌توان اینجا حذف کرد."
 
-#: includes/class-minn-admin-rest.php:6964
+#: includes/class-minn-admin-rest.php:6975
 msgid "That language is not installed on this site."
 msgstr "آن زبان روی این سایت نصب نیست."
 
-#: includes/class-minn-admin-rest.php:7059
+#: includes/class-minn-admin-rest.php:7070
 #: assets/js/app.js:27893
 msgid "Translation update failed."
 msgstr "به‌روزرسانی ترجمه ناموفق بود."
 
-#: includes/class-minn-admin-rest.php:7118
+#: includes/class-minn-admin-rest.php:7129
 msgid "Automatic updates are turned off for this site."
 msgstr "به‌روزرسانی‌های خودکار برای این سایت خاموش هستند."
 
-#: includes/class-minn-admin-rest.php:7127
+#: includes/class-minn-admin-rest.php:7138
 msgid "Unknown plugin."
 msgstr "افزونه ناشناخته."
 
-#: includes/class-minn-admin-rest.php:7127
+#: includes/class-minn-admin-rest.php:7138
 msgid "Unknown theme."
 msgstr "پوسته ناشناخته."
 
-#: includes/class-minn-admin-rest.php:7359
+#: includes/class-minn-admin-rest.php:7370
 msgid "No policies provided."
 msgstr "سیاستی ارائه نشده است."
 
-#: includes/class-minn-admin-rest.php:7364
+#: includes/class-minn-admin-rest.php:7375
 msgid "Role defaults were changed somewhere else after you opened them. Reload to see the change, then make yours again."
 msgstr "پیش‌فرض‌های نقش پس از اینکه آن‌ها را باز کردید جای دیگری تغییر کرده‌اند. دوباره بارگذاری کنید تا تغییر را ببینید، سپس تغییر خود را از نو انجام دهید."
 
-#: includes/class-minn-admin-rest.php:7373
+#: includes/class-minn-admin-rest.php:7384
 msgid "Unknown role."
 msgstr "نقش ناشناخته."
 
-#: includes/class-minn-admin-rest.php:7387
+#: includes/class-minn-admin-rest.php:7398
 msgid "Unknown sign-in policy."
 msgstr "سیاست ورود ناشناخته."
 
-#: includes/class-minn-admin-rest.php:7397
+#: includes/class-minn-admin-rest.php:7408
 msgid "Unknown toolbar policy."
 msgstr "سیاست نوار ابزار ناشناخته."
 
-#: includes/class-minn-admin-rest.php:7408
+#: includes/class-minn-admin-rest.php:7419
 msgid "That role cannot use Minn, so a Minn policy cannot apply to it."
 msgstr "آن نقش نمی‌تواند از Minn استفاده کند، بنابراین سیاست Minn بر آن اعمال نمی‌شود."
 
-#: includes/class-minn-admin-rest.php:7525
+#: includes/class-minn-admin-rest.php:7536
 msgid "The active theme does not support a custom logo."
 msgstr "پوسته فعال از نشان سفارشی پشتیبانی نمی‌کند."
 
-#: includes/class-minn-admin-rest.php:7530
+#: includes/class-minn-admin-rest.php:7541
 msgid "That attachment is not an image."
 msgstr "این پیوست تصویر نیست."
 
-#: includes/class-minn-admin-rest.php:7536
+#: includes/class-minn-admin-rest.php:7547
 msgid "You cannot use that attachment."
 msgstr "نمی‌توانید از آن پیوست استفاده کنید."
 
-#: includes/class-minn-admin-rest.php:7556
-#: includes/class-minn-admin-rest.php:7705
+#: includes/class-minn-admin-rest.php:7567
+#: includes/class-minn-admin-rest.php:7716
 msgid "That language is not installed, and you cannot install languages on this site."
 msgstr "این زبان نصب نشده است و شما نمی‌توانید در این سایت زبان نصب کنید."
 
-#: includes/class-minn-admin-rest.php:7562
-#: includes/class-minn-admin-rest.php:7711
+#: includes/class-minn-admin-rest.php:7573
+#: includes/class-minn-admin-rest.php:7722
 msgid "The language pack could not be downloaded. Check the site can reach wordpress.org and try again."
 msgstr "بسته زبان دریافت نشد. بررسی کنید سایت به wordpress.org دسترسی دارد و دوباره تلاش کنید."
 
-#: includes/class-minn-admin-rest.php:7745
+#: includes/class-minn-admin-rest.php:7756
 msgid "That integration is not registered."
 msgstr "این یکپارچه‌سازی ثبت نشده است."
 
-#: includes/class-minn-admin-rest.php:7897
+#: includes/class-minn-admin-rest.php:7908
 msgid "You cannot remove your own account from this site."
 msgstr "شما نمی‌توانید حساب خودتان را از این سایت حذف کنید."
 
-#: includes/class-minn-admin-rest.php:7905
+#: includes/class-minn-admin-rest.php:7916
 msgid "That account is not a member of this site."
 msgstr "این حساب عضو این سایت نیست."
 
-#: includes/class-minn-admin-rest.php:7916
+#: includes/class-minn-admin-rest.php:7927
 msgid "Network administrators cannot be removed from a site here. Manage network administrators in Network Admin."
 msgstr "مدیران شبکه را نمی‌توان از اینجا از یک سایت حذف کرد. مدیران شبکه را در مدیریت شبکه اداره کنید."
 
-#: includes/class-minn-admin-rest.php:7943
+#: includes/class-minn-admin-rest.php:7954
 msgid "That role cannot be assigned here."
 msgstr "این نقش اینجا قابل واگذاری نیست."
 
-#: includes/class-minn-admin-rest.php:7964
+#: includes/class-minn-admin-rest.php:7975
 msgid "Enter the email address of the account you want to add. Only network administrators can add an account by username."
 msgstr "آدرس ایمیل حسابی را که می خواهید اضافه کنید وارد کنید. فقط مدیران شبکه می توانند یک حساب کاربری با نام کاربری اضافه کنند."
 
-#: includes/class-minn-admin-rest.php:7971
+#: includes/class-minn-admin-rest.php:7982
 msgid "No account on this network matches that email address. New accounts are created by a network administrator."
 msgstr "هیچ حسابی در این شبکه با آن آدرس ایمیل مطابقت ندارد. حساب های جدید توسط مدیر شبکه ایجاد می شود."
 
-#: includes/class-minn-admin-rest.php:7980
+#: includes/class-minn-admin-rest.php:7991
 msgid "That account is already a member of this site."
 msgstr "آن حساب از پیش عضو این سایت است."
 
-#: includes/class-minn-admin-rest.php:7991
+#: includes/class-minn-admin-rest.php:8002
 msgid "You are not allowed to add that account."
 msgstr "شما اجازه افزودن این حساب را ندارید."
 
-#: includes/class-minn-admin-rest.php:7999
+#: includes/class-minn-admin-rest.php:8010
 msgid "Network administrators are added to a site from Network Admin."
 msgstr "مدیران شبکه از طریق Network Admin به یک سایت اضافه می شوند."
 
-#: includes/class-minn-admin-rest.php:8011
-#: includes/class-minn-admin-rest.php:8072
+#: includes/class-minn-admin-rest.php:8022
+#: includes/class-minn-admin-rest.php:8083
 msgid "Invitation sent. The account holder has to confirm before they join this site."
 msgstr "دعوت نامه ارسال شد. دارنده حساب باید قبل از پیوستن به این سایت تأیید کند."
 
 #. translators: Joining confirmation notification email subject. %s: Site title.
-#: includes/class-minn-admin-rest.php:8043
+#: includes/class-minn-admin-rest.php:8054
 msgid "[%s] Joining Confirmation"
 msgstr "[%s] تاییدیه پیوستن"
 
 #. translators: 1: Site title, 2: Site URL, 3: User role, 4: Activation URL.
-#: includes/class-minn-admin-rest.php:8046
+#: includes/class-minn-admin-rest.php:8057
 msgid "Hi,\n\nYou've been invited to join '%1$s' at\n%2$s with the role of %3$s.\n\nPlease click the following link to confirm the invite:\n%4$s"
 msgstr "درود، \n\nشما دعوت شده‌اید تا به '%1$s' در \n%2$s و با عنوان %3$s بپیوندید.\n\nلطفاً جهت تایید دعوت، پیوند زیر را کلیک نمایید:\n%4$s"
 
-#: includes/class-minn-admin-rest.php:8295
+#: includes/class-minn-admin-rest.php:8306
 msgid "Session not found"
 msgstr "نشست پیدا نشد"
 
-#: includes/class-minn-admin-rest.php:8308
-#: includes/class-minn-admin-rest.php:8332
-#: includes/class-minn-admin-rest.php:8397
+#: includes/class-minn-admin-rest.php:8319
+#: includes/class-minn-admin-rest.php:8343
+#: includes/class-minn-admin-rest.php:8408
 msgid "User not found."
 msgstr "کاربر پیدا نشد."
 
-#: includes/class-minn-admin-rest.php:8312
+#: includes/class-minn-admin-rest.php:8323
 msgid "You cannot reset a super admin password."
 msgstr "شما نمی‌توانید رمز یک مدیر ارشد را بازنشانی کنید."
 
-#: includes/class-minn-admin-rest.php:8316
+#: includes/class-minn-admin-rest.php:8327
 msgid "Could not send the reset email."
 msgstr "ایمیل بازنشانی فرستاده نشد."
 
-#: includes/class-minn-admin-rest.php:8337
+#: includes/class-minn-admin-rest.php:8348
 msgid "You cannot send a super admin a password link."
 msgstr "شما نمی‌توانید به یک مدیر ارشد پیوند رمز عبور بفرستید."
 
-#: includes/class-minn-admin-rest.php:8347
+#: includes/class-minn-admin-rest.php:8358
 msgid "This site does not let this account set a password by email, so WordPress sent no email."
 msgstr "این سایت اجازه نمی‌دهد این حساب رمز عبور را با ایمیل تنظیم کند، پس WordPress ایمیلی نفرستاد."
 
-#: includes/class-minn-admin-rest.php:8376
+#: includes/class-minn-admin-rest.php:8387
 msgid "A plugin on this site turned off the new-account email, so WordPress sent none."
 msgstr "یک افزونه در این سایت ایمیل حساب تازه را خاموش کرده، پس WordPress چیزی نفرستاد."
 
-#: includes/class-minn-admin-rest.php:8382
+#: includes/class-minn-admin-rest.php:8393
 msgid "The account email could not be sent. Check that this site can send email."
 msgstr "ایمیل حساب فرستاده نشد. بررسی کنید که این سایت بتواند ایمیل بفرستد."
 
-#: includes/class-minn-admin-rest.php:8402
-#: includes/class-minn-admin-rest.php:8537
-#: includes/class-minn-admin-rest.php:8599
+#: includes/class-minn-admin-rest.php:8413
+#: includes/class-minn-admin-rest.php:8548
+#: includes/class-minn-admin-rest.php:8610
 msgid "Subject and message are required."
 msgstr "موضوع و پیام الزامی هستند."
 
-#: includes/class-minn-admin-rest.php:8405
+#: includes/class-minn-admin-rest.php:8416
 msgid "This user has no valid email address."
 msgstr "این کاربر نشانی ایمیل معتبری ندارد."
 
-#: includes/class-minn-admin-rest.php:8456
+#: includes/class-minn-admin-rest.php:8467
 msgid "That form entry is not available."
 msgstr "آن ورودی فرم دردسترس نیست."
 
-#: includes/class-minn-admin-rest.php:8467
+#: includes/class-minn-admin-rest.php:8478
 msgid "Your account can’t email people who submit this form."
 msgstr "حساب شما نمی‌تواند به افرادی که این فرم را می‌فرستند ایمیل بفرستد."
 
-#: includes/class-minn-admin-rest.php:8525
+#: includes/class-minn-admin-rest.php:8536
 msgid "That address is not on this entry."
 msgstr "آن نشانی در این ورودی نیست."
 
-#: includes/class-minn-admin-rest.php:8532
+#: includes/class-minn-admin-rest.php:8543
 msgid "This entry has no email address to reply to."
 msgstr "این ورودی نشانی ایمیلی برای پاسخ ندارد."
 
-#: includes/class-minn-admin-rest.php:8545
+#: includes/class-minn-admin-rest.php:8556
 msgid "there"
 msgstr "آنجا"
 
-#: includes/class-minn-admin-rest.php:8565
+#: includes/class-minn-admin-rest.php:8576
 msgid "No such coupon."
 msgstr "چنین کوپنی وجود ندارد."
 
-#: includes/class-minn-admin-rest.php:8586
-#: includes/class-minn-admin-rest.php:8865
-#: includes/class-minn-admin-rest.php:8995
-#: includes/class-minn-admin-rest.php:9031
+#: includes/class-minn-admin-rest.php:8597
+#: includes/class-minn-admin-rest.php:8876
+#: includes/class-minn-admin-rest.php:9006
+#: includes/class-minn-admin-rest.php:9042
 msgid "WooCommerce is not available."
 msgstr "WooCommerce دردسترس نیست."
 
-#: includes/class-minn-admin-rest.php:8594
+#: includes/class-minn-admin-rest.php:8605
 msgid "This order has no valid billing email."
 msgstr "این سفارش ایمیل صورتحساب معتبری ندارد."
 
 #. translators: 1: admin name, 2: subject
-#: includes/class-minn-admin-rest.php:8625
+#: includes/class-minn-admin-rest.php:8636
 msgid "Minn Admin email sent by %1$s: %2$s"
 msgstr "ایمیل Minn Admin فرستاده‌شده توسط %1$s: %2$s"
 
-#: includes/class-minn-admin-rest.php:8830
+#: includes/class-minn-admin-rest.php:8841
 msgid "This order is not in the Trash."
 msgstr "این سفارش در زباله‌دان نیست."
 
-#: includes/class-minn-admin-rest.php:8855
+#: includes/class-minn-admin-rest.php:8866
 msgid "The order could not be restored."
 msgstr "سفارش بازیافت نشد."
 
-#: includes/class-minn-admin-rest.php:9039
-#: includes/class-minn-admin-rest.php:9052
+#: includes/class-minn-admin-rest.php:9050
+#: includes/class-minn-admin-rest.php:9063
 msgid "That email type is not available."
 msgstr "این گونه ایمیل دردسترس نیست."
 
-#: includes/class-minn-admin-rest.php:9042
+#: includes/class-minn-admin-rest.php:9053
 msgid "That email does not fit this order as it stands. WooCommerce sends it when an order reaches that status."
 msgstr "آن ایمیل با وضع فعلی این سفارش جور نیست. WooCommerce آن را وقتی می‌فرستد که سفارشی به آن وضعیت برسد."
 
-#: includes/class-minn-admin-rest.php:9064
+#: includes/class-minn-admin-rest.php:9075
 msgid "This order has no note to the customer, so there is nothing to resend."
 msgstr "این سفارش یادداشتی برای مشتری ندارد، بنابراین چیزی برای ارسال دوباره نیست."
 
 #. translators: %s: a WooCommerce email's title, such as Processing order.
-#: includes/class-minn-admin-rest.php:9136
+#: includes/class-minn-admin-rest.php:9147
 msgid "WooCommerce sent no “%s” email: this order has no address for it, or a plugin on this site stopped it."
 msgstr "WooCommerce ایمیل «%s» را نفرستاد: این سفارش نشانی‌ای برای آن ندارد، یا افزونه‌ای در این سایت جلوی آن را گرفت."
 
 #. translators: %s: a WooCommerce email's title, such as Processing order.
-#: includes/class-minn-admin-rest.php:9144
+#: includes/class-minn-admin-rest.php:9155
 msgid "The “%s” email could not be sent. Check that this site can send email."
 msgstr "ایمیل «%s» فرستاده نشد. بررسی کنید که این سایت بتواند ایمیل بفرستد."
 
 #. translators: 1: email title, 2: admin name
-#: includes/class-minn-admin-rest.php:9152
+#: includes/class-minn-admin-rest.php:9163
 msgid "“%1$s” email resent via Minn Admin by %2$s."
 msgstr "ایمیل «%1$s» توسط %2$s از راه Minn Admin دوباره فرستاده شد."
 
-#: includes/class-minn-admin-rest.php:9180
+#: includes/class-minn-admin-rest.php:9191
 msgid "Your account needs an email address to send from."
 msgstr "حساب شما برای ارسال به یک نشانی ایمیل نیاز دارد."
 
-#: includes/class-minn-admin-rest.php:9212
+#: includes/class-minn-admin-rest.php:9223
 msgid "wp_mail() could not send the message. Check your mail configuration."
 msgstr "wp_mail() نتوانست پیام را بفرستد. پیکربندی ایمیل را بررسی کنید."
 
-#: includes/class-minn-admin-rest.php:9355
-#: includes/class-minn-admin-rest.php:9377
+#: includes/class-minn-admin-rest.php:9366
+#: includes/class-minn-admin-rest.php:9388
 msgid "Theme not found."
 msgstr "پوسته یافت نشد."
 
-#: includes/class-minn-admin-rest.php:9366
+#: includes/class-minn-admin-rest.php:9377
 msgid "That theme is not enabled for this site. A network administrator can enable it."
 msgstr "این پوسته برای این سایت فعال نشده است. مدیر شبکه می‌تواند آن را فعال کند."
 
-#: includes/class-minn-admin-rest.php:9380
+#: includes/class-minn-admin-rest.php:9391
 msgid "The active theme (or its parent) cannot be deleted."
 msgstr "پوسته فعال (یا پوسته مادر آن) قابل حذف نیست."
 
-#: includes/class-minn-admin-rest.php:9451
+#: includes/class-minn-admin-rest.php:9462
 msgid "No update available for that theme."
 msgstr "به‌روزرسانی‌ای برای این پوسته دردسترس نیست."
 
-#: includes/class-minn-admin-rest.php:9464
-#: includes/class-minn-admin-rest.php:12559
+#: includes/class-minn-admin-rest.php:9475
+#: includes/class-minn-admin-rest.php:12570
 msgid "Update failed."
 msgstr "به‌روزرسانی ناموفق بود."
 
-#: includes/class-minn-admin-rest.php:9539
+#: includes/class-minn-admin-rest.php:9550
 msgid "Unknown taxonomy."
 msgstr "طبقه‌بندی ناشناخته."
 
-#: includes/class-minn-admin-rest.php:9542
+#: includes/class-minn-admin-rest.php:9553
 msgid "You cannot manage terms in this taxonomy."
 msgstr "شما نمی‌توانید عبارت‌های این طبقه‌بندی را مدیریت کنید."
 
-#: includes/class-minn-admin-rest.php:9545
+#: includes/class-minn-admin-rest.php:9556
 msgid "Pick a different term to merge into."
 msgstr "عبارت دیگری برای ادغام در آن برگزینید."
 
-#: includes/class-minn-admin-rest.php:9550
+#: includes/class-minn-admin-rest.php:9561
 msgid "Both terms must exist in this taxonomy."
 msgstr "هر دو عبارت باید در این طبقه‌بندی وجود داشته باشند."
 
-#: includes/class-minn-admin-rest.php:9559
+#: includes/class-minn-admin-rest.php:9570
 msgid "This is the default term for its taxonomy, so it cannot be merged away. Merge other terms into it instead."
 msgstr "این عبارت پیش‌فرض طبقه‌بندی خودش است، پس نمی‌توان آن را با ادغام حذف کرد. به‌جای آن عبارت‌های دیگر را در آن ادغام کنید."
 
-#: includes/class-minn-admin-rest.php:9562
+#: includes/class-minn-admin-rest.php:9573
 msgid "You cannot merge these terms."
 msgstr "این عبارت‌ها را نمی‌توان ادغام کرد."
 
-#: includes/class-minn-admin-rest.php:9576
+#: includes/class-minn-admin-rest.php:9587
 msgid "The merge did not complete."
 msgstr "ادغام کامل نشد."
 
-#: includes/class-minn-admin-rest.php:10192
-#: includes/class-minn-admin-rest.php:10758
+#: includes/class-minn-admin-rest.php:10203
+#: includes/class-minn-admin-rest.php:10769
 #: assets/js/app.js:23100
 #: assets/js/app.js:23125
 msgid "Headings"
 msgstr "تیترها"
 
-#: includes/class-minn-admin-rest.php:10193
-#: includes/class-minn-admin-rest.php:10757
+#: includes/class-minn-admin-rest.php:10204
+#: includes/class-minn-admin-rest.php:10768
 #: assets/js/app.js:23099
 #: assets/js/app.js:26777
 #: assets/js/app.js:27160
@@ -16799,207 +16801,207 @@ msgstr "تیترها"
 msgid "Links"
 msgstr "پیوندها"
 
-#: includes/class-minn-admin-rest.php:10194
-#: includes/class-minn-admin-rest.php:10759
+#: includes/class-minn-admin-rest.php:10205
+#: includes/class-minn-admin-rest.php:10770
 #: assets/js/app.js:47859
 msgid "Buttons"
 msgstr "دکمه‌ها"
 
-#: includes/class-minn-admin-rest.php:10195
+#: includes/class-minn-admin-rest.php:10206
 #: assets/js/app.js:23103
 msgid "Captions"
 msgstr "توضیحات"
 
-#: includes/class-minn-admin-rest.php:10196
+#: includes/class-minn-admin-rest.php:10207
 msgid "Citations"
 msgstr "نقل‌قول‌ها"
 
-#: includes/class-minn-admin-rest.php:10199
+#: includes/class-minn-admin-rest.php:10210
 msgid "font"
 msgstr "فونت"
 
-#: includes/class-minn-admin-rest.php:10200
+#: includes/class-minn-admin-rest.php:10211
 msgid "size"
 msgstr "اندازه"
 
-#: includes/class-minn-admin-rest.php:10201
+#: includes/class-minn-admin-rest.php:10212
 msgid "line height"
 msgstr "ارتفاع خط"
 
-#: includes/class-minn-admin-rest.php:10202
+#: includes/class-minn-admin-rest.php:10213
 msgid "weight"
 msgstr "وزن"
 
-#: includes/class-minn-admin-rest.php:10203
+#: includes/class-minn-admin-rest.php:10214
 msgid "style"
 msgstr "حالت"
 
-#: includes/class-minn-admin-rest.php:10204
+#: includes/class-minn-admin-rest.php:10215
 msgid "letter spacing"
 msgstr "فاصله حروف"
 
-#: includes/class-minn-admin-rest.php:10205
+#: includes/class-minn-admin-rest.php:10216
 msgid "case"
 msgstr "حالت حروف"
 
-#: includes/class-minn-admin-rest.php:10206
+#: includes/class-minn-admin-rest.php:10217
 msgid "decoration"
 msgstr "آذین"
 
-#: includes/class-minn-admin-rest.php:10207
+#: includes/class-minn-admin-rest.php:10218
 msgid "columns"
 msgstr "ستون‌ها"
 
-#: includes/class-minn-admin-rest.php:10208
+#: includes/class-minn-admin-rest.php:10219
 msgid "color"
 msgstr "رنگ"
 
-#: includes/class-minn-admin-rest.php:10209
+#: includes/class-minn-admin-rest.php:10220
 msgid "background"
 msgstr "زمینه"
 
-#: includes/class-minn-admin-rest.php:10210
+#: includes/class-minn-admin-rest.php:10221
 msgid "gradient"
 msgstr "گرادیان"
 
-#: includes/class-minn-admin-rest.php:10211
+#: includes/class-minn-admin-rest.php:10222
 msgid "corner radius"
 msgstr "شعاع گوشه"
 
-#: includes/class-minn-admin-rest.php:10212
+#: includes/class-minn-admin-rest.php:10223
 msgid "border width"
 msgstr "عرض کناره"
 
-#: includes/class-minn-admin-rest.php:10213
+#: includes/class-minn-admin-rest.php:10224
 msgid "border color"
 msgstr "رنگ کناره"
 
-#: includes/class-minn-admin-rest.php:10215
+#: includes/class-minn-admin-rest.php:10226
 msgid "hover"
 msgstr "شناور"
 
-#: includes/class-minn-admin-rest.php:10215
+#: includes/class-minn-admin-rest.php:10226
 msgid "focus"
 msgstr "تمرکز"
 
-#: includes/class-minn-admin-rest.php:10215
+#: includes/class-minn-admin-rest.php:10226
 #: assets/js/app.js:28582
 msgid "active"
 msgstr "فعال"
 
-#: includes/class-minn-admin-rest.php:10215
+#: includes/class-minn-admin-rest.php:10226
 msgid "visited"
 msgstr "بازدیدشده"
 
-#: includes/class-minn-admin-rest.php:10217
+#: includes/class-minn-admin-rest.php:10228
 msgid "Background color"
 msgstr "رنگ پس‌زمینه"
 
-#: includes/class-minn-admin-rest.php:10218
+#: includes/class-minn-admin-rest.php:10229
 msgid "Text color"
 msgstr "رنگ متن"
 
-#: includes/class-minn-admin-rest.php:10219
+#: includes/class-minn-admin-rest.php:10230
 msgid "Background gradient"
 msgstr "گرادیان زمینه"
 
-#: includes/class-minn-admin-rest.php:10220
+#: includes/class-minn-admin-rest.php:10231
 msgid "Background image"
 msgstr "تصویر پس‌زمینه"
 
-#: includes/class-minn-admin-rest.php:10221
+#: includes/class-minn-admin-rest.php:10232
 #: assets/js/app.js:23116
 msgid "Block spacing"
 msgstr "فاصله بلوک"
 
-#: includes/class-minn-admin-rest.php:10222
+#: includes/class-minn-admin-rest.php:10233
 #: assets/js/app.js:23114
 msgid "Content width"
 msgstr "عرض محتوا"
 
-#: includes/class-minn-admin-rest.php:10223
+#: includes/class-minn-admin-rest.php:10234
 #: assets/js/app.js:23115
 #: assets/js/app.js:43916
 msgid "Wide width"
 msgstr "عرض عریض"
 
-#: includes/class-minn-admin-rest.php:10224
+#: includes/class-minn-admin-rest.php:10235
 msgid "Custom colors"
 msgstr "رنگ سفارشی"
 
-#: includes/class-minn-admin-rest.php:10225
+#: includes/class-minn-admin-rest.php:10236
 msgid "Theme palette"
 msgstr "پالت پوسته"
 
-#: includes/class-minn-admin-rest.php:10226
+#: includes/class-minn-admin-rest.php:10237
 msgid "Custom gradients"
 msgstr "گرادیان‌های سفارشی"
 
-#: includes/class-minn-admin-rest.php:10227
+#: includes/class-minn-admin-rest.php:10238
 msgid "Custom duotone filters"
 msgstr "صافی‌های دو رنگ سفارشی"
 
-#: includes/class-minn-admin-rest.php:10228
+#: includes/class-minn-admin-rest.php:10239
 msgid "Custom fonts"
 msgstr "فونت‌های سفارشی"
 
-#: includes/class-minn-admin-rest.php:10229
+#: includes/class-minn-admin-rest.php:10240
 msgid "Theme fonts"
 msgstr "فونت‌های پوسته"
 
-#: includes/class-minn-admin-rest.php:10230
+#: includes/class-minn-admin-rest.php:10241
 msgid "Custom text sizes"
 msgstr "اندازه‌های متن سفارشی"
 
-#: includes/class-minn-admin-rest.php:10231
+#: includes/class-minn-admin-rest.php:10242
 #: assets/js/app.js:23179
 msgid "Text size presets"
 msgstr "پیش‌تنظیم‌های اندازه متن"
 
-#: includes/class-minn-admin-rest.php:10232
+#: includes/class-minn-admin-rest.php:10243
 msgid "Custom spacing presets"
 msgstr "پیش‌تنظیم‌های فاصله سفارشی"
 
-#: includes/class-minn-admin-rest.php:10233
+#: includes/class-minn-admin-rest.php:10244
 msgid "Spacing presets"
 msgstr "پیش‌تنظیم‌های فاصله"
 
-#: includes/class-minn-admin-rest.php:10234
+#: includes/class-minn-admin-rest.php:10245
 msgid "Custom shadows"
 msgstr "سایه‌های سفارشی"
 
-#: includes/class-minn-admin-rest.php:10235
+#: includes/class-minn-admin-rest.php:10246
 msgid "Shadow presets"
 msgstr "پیش‌تنظیم‌های سایه"
 
-#: includes/class-minn-admin-rest.php:10236
+#: includes/class-minn-admin-rest.php:10247
 #: assets/js/app.js:31884
 msgid "Additional CSS"
 msgstr "css اضافی"
 
 #. translators: %s: top, right, bottom or left.
-#: includes/class-minn-admin-rest.php:10244
+#: includes/class-minn-admin-rest.php:10255
 msgid "Page padding (%s)"
 msgstr "فاصله داخلی برگه (%s)"
 
 #. translators: %s: a typography property such as font or line height.
-#: includes/class-minn-admin-rest.php:10249
+#: includes/class-minn-admin-rest.php:10260
 msgid "Body %s"
 msgstr "بدنه %s"
 
 #. translators: %s: a block's name.
-#: includes/class-minn-admin-rest.php:10269
+#: includes/class-minn-admin-rest.php:10280
 msgid "%s block"
 msgstr "بلوک %s"
 
 #. translators: %s: a theme.json settings path.
-#: includes/class-minn-admin-rest.php:10273
+#: includes/class-minn-admin-rest.php:10284
 msgid "Setting: %s"
 msgstr "تنظیم: %s"
 
 #. translators: %s: number of entries in an edited list.
 #. translators: %s: localized number of entries.
-#: includes/class-minn-admin-rest.php:10287
+#: includes/class-minn-admin-rest.php:10298
 #: assets/js/app.js:56265
 msgid "%s entry"
 msgid_plural "%s entries"
@@ -17008,336 +17010,336 @@ msgstr[1] "%s ورودی"
 
 #. translators: %s: a block's name.
 #. translators: %s: what was customized (e.g. "H1 font").
-#: includes/class-minn-admin-rest.php:10331
-#: includes/class-minn-admin-rest.php:10341
+#: includes/class-minn-admin-rest.php:10342
+#: includes/class-minn-admin-rest.php:10352
 msgid "%s reset to theme"
 msgstr "%s به پوسته بازگردانده شد"
 
 #. translators: 1: a block's name, 2: number of style settings.
-#: includes/class-minn-admin-rest.php:10334
+#: includes/class-minn-admin-rest.php:10345
 msgid "%1$s: %2$s setting"
 msgid_plural "%1$s: %2$s settings"
 msgstr[0] "%1$s: %2$s تنظیم"
 msgstr[1] "%1$s: %2$s تنظیم"
 
-#: includes/class-minn-admin-rest.php:10467
+#: includes/class-minn-admin-rest.php:10478
 msgid "Colors take a palette color, a hex value like #1a1a1a, or rgb()/hsl()."
 msgstr "رنگ‌ها یک رنگ پالت، یک مقدار هگز مانند #1a1a1a، یا rgb()/hsl() می‌گیرند."
 
-#: includes/class-minn-admin-rest.php:10472
+#: includes/class-minn-admin-rest.php:10483
 msgid "Fonts must be one of the families the theme (or Font Library) provides."
 msgstr "فونت‌ها باید یکی از خانواده‌هایی باشند که پوسته (یا کتابخانه فونت) فراهم می‌کند."
 
-#: includes/class-minn-admin-rest.php:10480
+#: includes/class-minn-admin-rest.php:10491
 msgid "Text sizes take a preset or a CSS length such as 18px or 1.125rem."
 msgstr "اندازه‌های متن یک پیش‌تنظیم یا یک طول CSS مانند 18px یا 1.125rem می‌گیرند."
 
-#: includes/class-minn-admin-rest.php:10485
+#: includes/class-minn-admin-rest.php:10496
 msgid "Line height takes a number such as 1.6."
 msgstr "ارتفاع خط عددی مانند 1.6 می‌گیرد."
 
-#: includes/class-minn-admin-rest.php:10493
+#: includes/class-minn-admin-rest.php:10504
 msgid "Widths and spacing take a CSS length such as 24px, 1.5rem or 5%."
 msgstr "عرض‌ها و فاصله‌ها یک طول CSS مانند 24px، 1.5rem یا 5% می‌گیرند."
 
-#: includes/class-minn-admin-rest.php:10495
+#: includes/class-minn-admin-rest.php:10506
 msgid "Unsupported value."
 msgstr "مقدار پشتیبانی نشده."
 
-#: includes/class-minn-admin-rest.php:10561
+#: includes/class-minn-admin-rest.php:10572
 msgid "Nothing to change."
 msgstr "چیزی برای تغییر نیست."
 
 #. translators: %s: a theme.json path.
-#: includes/class-minn-admin-rest.php:10571
+#: includes/class-minn-admin-rest.php:10582
 msgid "%s is not something Minn edits here."
 msgstr "%s چیزی نیست که Minn اینجا ویرایش کند."
 
-#: includes/class-minn-admin-rest.php:10574
+#: includes/class-minn-admin-rest.php:10585
 msgid "WordPress only stores layout width changes for someone who can post unfiltered HTML, which this account cannot on this site."
 msgstr "وردپرس تغییرات عرض چیدمان را فقط برای کسی ذخیره می‌کند که بتواند HTML پالایش‌نشده بفرستد، که این حساب در این سایت نمی‌تواند."
 
-#: includes/class-minn-admin-rest.php:10822
+#: includes/class-minn-admin-rest.php:10833
 msgid "That palette or typeset is not part of the active theme."
 msgstr "آن پالت یا مجموعه حروف بخشی از پوسته فعال نیست."
 
-#: includes/class-minn-admin-rest.php:10825
+#: includes/class-minn-admin-rest.php:10836
 msgid "WordPress only stores a palette or typeset for someone who can post unfiltered HTML, which this account cannot on this site."
 msgstr "وردپرس پالت یا مجموعه حروف را فقط برای کسی ذخیره می‌کند که بتواند HTML پالایش‌نشده بفرستد، که این حساب در این سایت نمی‌تواند."
 
-#: includes/class-minn-admin-rest.php:11207
-#: includes/class-minn-admin-rest.php:11253
-#: includes/class-minn-admin-rest.php:12159
-#: includes/class-minn-admin-rest.php:12365
+#: includes/class-minn-admin-rest.php:11218
+#: includes/class-minn-admin-rest.php:11264
+#: includes/class-minn-admin-rest.php:12170
+#: includes/class-minn-admin-rest.php:12376
 msgid "Install failed."
 msgstr "نصب ناموفق بود."
 
-#: includes/class-minn-admin-rest.php:11218
-#: includes/class-minn-admin-rest.php:12124
+#: includes/class-minn-admin-rest.php:11229
+#: includes/class-minn-admin-rest.php:12135
 msgid "No file uploaded."
 msgstr "هیچ پرونده‌ای بارگذاری نشد."
 
-#: includes/class-minn-admin-rest.php:11221
+#: includes/class-minn-admin-rest.php:11232
 msgid "Theme uploads must be .zip files."
 msgstr "بارگذاری پوسته باید پرونده .zip باشد."
 
-#: includes/class-minn-admin-rest.php:11231
-#: includes/class-minn-admin-rest.php:12137
+#: includes/class-minn-admin-rest.php:11242
+#: includes/class-minn-admin-rest.php:12148
 msgid "Could not store the upload."
 msgstr "بارگذاری ذخیره نشد."
 
-#: includes/class-minn-admin-rest.php:11338
+#: includes/class-minn-admin-rest.php:11349
 msgid "Plugin file is required."
 msgstr "پروندهٔ افزونه لازم است."
 
-#: includes/class-minn-admin-rest.php:11350
+#: includes/class-minn-admin-rest.php:11361
 #: includes/class-minn-admin.php:157
 msgid "Sorry, you are not allowed to manage this plugin."
 msgstr "با عرض پوزش، شما اجازهٔ مدیریت این افزونه را ندارید."
 
-#: includes/class-minn-admin-rest.php:11479
+#: includes/class-minn-admin-rest.php:11490
 msgid "Theme is required."
 msgstr "پوسته لازم است."
 
-#: includes/class-minn-admin-rest.php:11884
+#: includes/class-minn-admin-rest.php:11895
 #: assets/js/app.js:53553
 msgid "Changes"
 msgstr "تغییرات"
 
-#: includes/class-minn-admin-rest.php:11899
+#: includes/class-minn-admin-rest.php:11910
 msgid "Plugin slug is required."
 msgstr "نامک افزونه الزامی است."
 
-#: includes/class-minn-admin-rest.php:11974
+#: includes/class-minn-admin-rest.php:11985
 msgid "Build pages visually while Minn protects Breakdance-owned content and links straight to its builder. Download the plugin .zip from Breakdance."
 msgstr "صفحات را به صورت بصری بسازید در حالی که Minn از محتوای متعلق به Breakdance محافظت می کند و مستقیماً به سازنده آن پیوند می دهد. افزونه .zip را از Breakdance دانلود کنید."
 
-#: includes/class-minn-admin-rest.php:11986
+#: includes/class-minn-admin-rest.php:11997
 msgid "Build forms and manage their entries, notifications, feeds, and daily settings in Minn. Download the plugin .zip from your Gravity account."
 msgstr "فرم‌ها را بسازید و ورودی‌ها، اعلان‌ها، فیدها و تنظیمات روزانه آن‌ها را در Minn مدیریت کنید. افزونه .zip را از حساب Gravity خود دانلود کنید."
 
-#: includes/class-minn-admin-rest.php:11998
+#: includes/class-minn-admin-rest.php:12009
 msgid "Send and track WordPress email through the full Email surface in Minn. Download the plugin .zip from a qualifying Gravity account."
 msgstr "ایمیل WordPress را از طریق سطح کامل ایمیل در Minn ارسال و پیگیری کنید. افزونه .zip را از یک حساب واجد شرایط Gravity دانلود کنید."
 
-#: includes/class-minn-admin-rest.php:12010
+#: includes/class-minn-admin-rest.php:12021
 msgid "Manage the Perfmatters settings estate from Minn's Performance surface. Download the paid plugin .zip from Perfmatters."
 msgstr "تنظیمات Perfmatters را از سطح عملکرد Minn مدیریت کنید. افزونه پولی .zip را از Perfmatters دانلود کنید."
 
-#: includes/class-minn-admin-rest.php:12022
+#: includes/class-minn-admin-rest.php:12033
 msgid "Bring ACF PRO repeaters, flexible content, galleries, options pages, blocks, and field groups into Minn. Download the plugin .zip from ACF."
 msgstr "تکرارکننده‌های ACF PRO، محتوای انعطاف‌پذیر، گالری‌ها، صفحات گزینه‌ها، بلوک‌ها و گروه‌های فیلد را در Minn بیاورید. افزونه .zip را از ACF دانلود کنید."
 
-#: includes/class-minn-admin-rest.php:12034
+#: includes/class-minn-admin-rest.php:12045
 msgid "Manage Elementor form submissions in Minn while keeping Elementor-owned page content protected. Download the plugin .zip from Elementor."
 msgstr "فرم های ارسالی Elementor را در Minn مدیریت کنید و از محتوای صفحه متعلق به Elementor محافظت کنید. افزونه .zip را از Elementor دانلود کنید."
 
-#: includes/class-minn-admin-rest.php:12046
+#: includes/class-minn-admin-rest.php:12057
 msgid "Manage WPForms Pro entries, read and starred state, spam, trash, search, and form filters in Minn. Download the plugin .zip from WPForms."
 msgstr "ورودی‌های WPForms Pro، وضعیت خواندن و ستاره‌دار، هرزنامه، حذف‌شده‌ها، جستجو و فیلترهای فرم را در Minn مدیریت کنید. افزونه .zip را از WPForms دانلود کنید."
 
-#: includes/class-minn-admin-rest.php:12058
+#: includes/class-minn-admin-rest.php:12069
 msgid "Clear WP Rocket caches from Minn and monitor its license alongside other paid components. Download the plugin .zip from WP Rocket."
 msgstr "حافظه پنهان WP Rocket را از Minn پاک کنید و مجوز آن را در کنار سایر اجزای پولی نظارت کنید. افزونه .zip را از WP Rocket دانلود کنید."
 
-#: includes/class-minn-admin-rest.php:12070
+#: includes/class-minn-admin-rest.php:12081
 msgid "Feed AnalyticsWP traffic and drill-down data into Minn's Overview. Download the paid plugin .zip from AnalyticsWP."
 msgstr "ترافیک AnalyticsWP و داده های جامع را در نمای کلی Minn تغذیه کنید. افزونه پولی .zip را از AnalyticsWP دانلود کنید."
 
-#: includes/class-minn-admin-rest.php:12082
+#: includes/class-minn-admin-rest.php:12093
 msgid "Sell recurring products and services with WooCommerce. This paid extension is installed by uploading the .zip downloaded from WooCommerce.com."
 msgstr "فروش محصولات و خدمات تکراری با WooCommerce. این برنامه افزودنی پولی با آپلود .zip دانلود شده از WooCommerce.com نصب می شود."
 
-#: includes/class-minn-admin-rest.php:12094
+#: includes/class-minn-admin-rest.php:12105
 msgid "Sell memberships that unlock restricted content, products and discounts. This paid extension is installed by uploading the .zip downloaded from WooCommerce.com."
 msgstr "عضویت‌هایی بفروشید که محتوای محدود، محصولات و تخفیف‌ها را باز می‌کنند. این افزونهٔ پولی با بارگذاری پروندهٔ .zip دانلودشده از WooCommerce.com نصب می‌شود."
 
-#: includes/class-minn-admin-rest.php:12106
+#: includes/class-minn-admin-rest.php:12117
 msgid "Generate a full WordPress backup (files + database) and pull it off-site with the Disembark CLI or disembark.host."
 msgstr "یک پشتیبان کامل وردپرس (پرونده‌ها + پایگاه‌داده) بسازید و آن را با Disembark CLI یا disembark.host از سایت بیرون ببرید."
 
-#: includes/class-minn-admin-rest.php:12127
+#: includes/class-minn-admin-rest.php:12138
 msgid "Plugin uploads must be .zip files."
 msgstr "بارگذاری افزونه باید پرونده .zip باشد."
 
 #. translators: %s: the installed plugin or theme's name.
-#: includes/class-minn-admin-rest.php:12293
+#: includes/class-minn-admin-rest.php:12304
 msgid "%s is already installed."
 msgstr "%s از پیش نصب شده است."
 
-#: includes/class-minn-admin-rest.php:12344
+#: includes/class-minn-admin-rest.php:12355
 msgid "Provide a zip URL or a github owner/repo."
 msgstr "یک نشانی zip یا owner/repo گیت‌هاب بدهید."
 
-#: includes/class-minn-admin-rest.php:12386
+#: includes/class-minn-admin-rest.php:12397
 msgid "Invalid GitHub repository."
 msgstr "مخزن گیت‌هاب غیرمعتبر است."
 
-#: includes/class-minn-admin-rest.php:12405
+#: includes/class-minn-admin-rest.php:12416
 msgid "Could not read the latest GitHub release."
 msgstr "تازه‌ترین انتشار گیت‌هاب خوانده نشد."
 
-#: includes/class-minn-admin-rest.php:12426
+#: includes/class-minn-admin-rest.php:12437
 msgid "That release has no zip asset."
 msgstr "این انتشار هیچ پرونده zip ندارد."
 
-#: includes/class-minn-admin-rest.php:12440
+#: includes/class-minn-admin-rest.php:12451
 msgid "Install URL must be HTTPS."
 msgstr "نشانی نصب باید HTTPS باشد."
 
-#: includes/class-minn-admin-rest.php:12452
+#: includes/class-minn-admin-rest.php:12463
 msgid "That download host is not allowed."
 msgstr "این میزبان دریافت مجاز نیست."
 
-#: includes/class-minn-admin-rest.php:12458
+#: includes/class-minn-admin-rest.php:12469
 msgid "Install URL must point at a .zip file."
 msgstr "نشانی نصب باید به یک پرونده .zip اشاره کند."
 
-#: includes/class-minn-admin-rest.php:12537
+#: includes/class-minn-admin-rest.php:12548
 msgid "No update available for that plugin."
 msgstr "به‌روزرسانی‌ای برای این افزونه دردسترس نیست."
 
-#: includes/class-minn-admin-rest.php:12649
+#: includes/class-minn-admin-rest.php:12660
 msgid "WordPress is already up to date."
 msgstr "وردپرس هم‌اکنون به‌روز است."
 
-#: includes/class-minn-admin-rest.php:12657
+#: includes/class-minn-admin-rest.php:12668
 msgid "Core update failed."
 msgstr "به‌روزرسانی هسته ناموفق بود."
 
-#: includes/class-minn-admin-rest.php:12712
+#: includes/class-minn-admin-rest.php:12723
 msgid "This network is too large to upgrade from here. Run Network Admin → Upgrade Network instead."
 msgstr "این شبکه بزرگ‌تر از آن است که از اینجا ارتقا یابد. به‌جای آن مدیریت شبکه → ارتقای شبکه را اجرا کنید."
 
-#: includes/class-minn-admin-rest.php:12795
+#: includes/class-minn-admin-rest.php:12806
 msgid "No cache layer detected on this site."
 msgstr "هیچ لایه حافظه پنهانی در این سایت شناسایی نشد."
 
-#: includes/class-minn-admin-rest.php:12925
+#: includes/class-minn-admin-rest.php:12936
 msgid "That revision belongs to another post."
 msgstr "این رونوشت به نوشته دیگری تعلق دارد."
 
-#: includes/class-minn-admin-rest.php:12975
+#: includes/class-minn-admin-rest.php:12986
 msgid "You are not allowed to create this type of content."
 msgstr "شما اجازه ساختن این گونه محتوا را ندارید."
 
-#: includes/class-minn-admin-rest.php:13407
+#: includes/class-minn-admin-rest.php:13469
 msgid "The package could not be downloaded."
 msgstr "بسته دریافت نشد."
 
-#: includes/class-minn-admin-rest.php:13467
+#: includes/class-minn-admin-rest.php:13529
 msgid "Environment"
 msgstr "محیط"
 
-#: includes/class-minn-admin-rest.php:13468
+#: includes/class-minn-admin-rest.php:13530
 msgid "Site URL"
 msgstr "نشانی اینترنتی سایت"
 
-#: includes/class-minn-admin-rest.php:13469
+#: includes/class-minn-admin-rest.php:13531
 msgid "Home URL"
 msgstr "نشانی اینترنتی خانه"
 
-#: includes/class-minn-admin-rest.php:13473
+#: includes/class-minn-admin-rest.php:13535
 msgid "Login URL"
 msgstr "نشانی اینترنتی ورود"
 
-#: includes/class-minn-admin-rest.php:13474
+#: includes/class-minn-admin-rest.php:13536
 msgid "Multisite"
 msgstr "چندسایته"
 
 #. translators: %s: how many sites the multisite network contains.
-#: includes/class-minn-admin-rest.php:13476
+#: includes/class-minn-admin-rest.php:13538
 msgid "Yes (%s site)"
 msgid_plural "Yes (%s sites)"
 msgstr[0] "بله (%s سایت)"
 msgstr[1] "بله (%s سایت)"
 
-#: includes/class-minn-admin-rest.php:13479
+#: includes/class-minn-admin-rest.php:13541
 #: assets/js/app.js:31794
 msgid "Timezone"
 msgstr "زمان محلی"
 
-#: includes/class-minn-admin-rest.php:13480
+#: includes/class-minn-admin-rest.php:13542
 msgid "Permalinks"
 msgstr "پیوندهای یکتا"
 
-#: includes/class-minn-admin-rest.php:13480
+#: includes/class-minn-admin-rest.php:13542
 #: assets/js/app.js:31389
 msgid "Plain"
 msgstr "ساده"
 
-#: includes/class-minn-admin-rest.php:13481
-#: includes/class-minn-admin-rest.php:13734
-#: includes/class-minn-admin-rest.php:14166
+#: includes/class-minn-admin-rest.php:13543
+#: includes/class-minn-admin-rest.php:13796
+#: includes/class-minn-admin-rest.php:14228
 msgid "Debug mode"
 msgstr "حالت اشکال‌زدایی"
 
-#: includes/class-minn-admin-rest.php:13482
+#: includes/class-minn-admin-rest.php:13544
 msgid "On + log"
 msgstr "روشن + گزارش"
 
-#: includes/class-minn-admin-rest.php:13484
+#: includes/class-minn-admin-rest.php:13546
 msgid "Object cache"
 msgstr "آبجکت‌کش"
 
-#: includes/class-minn-admin-rest.php:13484
+#: includes/class-minn-admin-rest.php:13546
 msgid "External (persistent)"
 msgstr "خارجی (دائمی)"
 
-#: includes/class-minn-admin-rest.php:13484
+#: includes/class-minn-admin-rest.php:13546
 msgid "None (transient)"
 msgstr "هیچکدام (گذرا)"
 
-#: includes/class-minn-admin-rest.php:13485
+#: includes/class-minn-admin-rest.php:13547
 msgid "Disabled (external)"
 msgstr "غیرفعال‌ شده (خارجی)"
 
-#: includes/class-minn-admin-rest.php:13486
-#: includes/class-minn-admin-rest.php:13721
+#: includes/class-minn-admin-rest.php:13548
+#: includes/class-minn-admin-rest.php:13783
 msgid "Memory limit"
 msgstr "سقف حافظه"
 
-#: includes/class-minn-admin-rest.php:13486
-#: includes/class-minn-admin-rest.php:13487
-#: includes/class-minn-admin-rest.php:13645
+#: includes/class-minn-admin-rest.php:13548
+#: includes/class-minn-admin-rest.php:13549
+#: includes/class-minn-admin-rest.php:13707
 msgid "(default)"
 msgstr "(پیش‌فرض)"
 
-#: includes/class-minn-admin-rest.php:13487
+#: includes/class-minn-admin-rest.php:13549
 msgid "Max memory limit"
 msgstr "سقف بیشینه حافظه"
 
-#: includes/class-minn-admin-rest.php:13488
+#: includes/class-minn-admin-rest.php:13550
 msgid "Active theme"
 msgstr "پوسته فعال"
 
 #. translators: 1: theme name, 2: theme version, 3: parent theme name.
-#: includes/class-minn-admin-rest.php:13490
+#: includes/class-minn-admin-rest.php:13552
 msgid "%1$s %2$s (child of %3$s)"
 msgstr "%1$s %2$s (فرزند %3$s)"
 
-#: includes/class-minn-admin-rest.php:13492
+#: includes/class-minn-admin-rest.php:13554
 msgid "Active plugins"
 msgstr "افزونه‌های فعال"
 
 #. translators: 1: how many plugins are active, 2: how many must-use plugins are installed.
-#: includes/class-minn-admin-rest.php:13494
+#: includes/class-minn-admin-rest.php:13556
 msgid "%1$s + %2$s mu"
 msgstr "%1$s + %2$s mu"
 
-#: includes/class-minn-admin-rest.php:13509
+#: includes/class-minn-admin-rest.php:13571
 msgid "Interface (SAPI)"
 msgstr "رابط (SAPI)"
 
-#: includes/class-minn-admin-rest.php:13516
+#: includes/class-minn-admin-rest.php:13578
 msgid "Enabled (status hidden by the host)"
 msgstr "فعال شد (وضعیت را میزبان پنهان کرده است)"
 
-#: includes/class-minn-admin-rest.php:13516
+#: includes/class-minn-admin-rest.php:13578
 msgid "Not installed"
 msgstr "نصب نشده"
 
-#: includes/class-minn-admin-rest.php:13517
+#: includes/class-minn-admin-rest.php:13579
 #: includes/class-minn-admin-surfaces.php:517
 #: assets/js/app.js:1479
 #: assets/js/app.js:4258
@@ -17348,404 +17350,404 @@ msgid "Extensions"
 msgstr "افزودنی‌ها"
 
 #. translators: %s: how many cron events are scheduled.
-#: includes/class-minn-admin-rest.php:13629
+#: includes/class-minn-admin-rest.php:13691
 msgid "%s event"
 msgid_plural "%s events"
 msgstr[0] "%s رویداد"
 msgstr[1] "%s رویداد"
 
-#: includes/class-minn-admin-rest.php:13632
+#: includes/class-minn-admin-rest.php:13694
 msgid "next due now"
 msgstr "بعدی همین حالا"
 
 #. translators: %s: human-readable time until the next cron event (e.g. "4 mins").
-#: includes/class-minn-admin-rest.php:13634
+#: includes/class-minn-admin-rest.php:13696
 msgid "next in %s"
 msgstr "بعدی تا %s"
 
-#: includes/class-minn-admin-rest.php:13637
+#: includes/class-minn-admin-rest.php:13699
 #: assets/js/app.js:28894
 msgid "WP-Cron disabled (system cron expected)"
 msgstr "WP-Cron غیرفعال‌ شده (کرون سیستم انتظار می‌رود)"
 
-#: includes/class-minn-admin-rest.php:13640
+#: includes/class-minn-admin-rest.php:13702
 #: assets/js/app.js:29700
 msgid "Engine"
 msgstr "موتور"
 
-#: includes/class-minn-admin-rest.php:13644
+#: includes/class-minn-admin-rest.php:13706
 msgid "Charset"
 msgstr "مجموعه‌نویسه"
 
-#: includes/class-minn-admin-rest.php:13645
+#: includes/class-minn-admin-rest.php:13707
 msgid "Collation"
 msgstr "تطبیق"
 
-#: includes/class-minn-admin-rest.php:13647
+#: includes/class-minn-admin-rest.php:13709
 #: assets/js/app.js:29545
 #: assets/js/app.js:29836
 #: assets/js/app.js:29931
 msgid "Tables"
 msgstr "جدول‌ها"
 
-#: includes/class-minn-admin-rest.php:13649
+#: includes/class-minn-admin-rest.php:13711
 msgid "Expired transients"
 msgstr "گذراهای منقضی"
 
-#: includes/class-minn-admin-rest.php:13662
+#: includes/class-minn-admin-rest.php:13724
 msgid "Web server"
 msgstr "سرور وب"
 
-#: includes/class-minn-admin-rest.php:13663
+#: includes/class-minn-admin-rest.php:13725
 msgid "Protocol"
 msgstr "پروتکل"
 
-#: includes/class-minn-admin-rest.php:13665
+#: includes/class-minn-admin-rest.php:13727
 msgid "Operating system"
 msgstr "سیستم‌عامل"
 
-#: includes/class-minn-admin-rest.php:13666
+#: includes/class-minn-admin-rest.php:13728
 msgid "Architecture"
 msgstr "معماری"
 
-#: includes/class-minn-admin-rest.php:13667
+#: includes/class-minn-admin-rest.php:13729
 msgid "Server IP"
 msgstr "IP سرور"
 
-#: includes/class-minn-admin-rest.php:13668
-#: includes/class-minn-admin-rest.php:13743
+#: includes/class-minn-admin-rest.php:13730
+#: includes/class-minn-admin-rest.php:13805
 msgid "Uploads writable"
 msgstr "قابل نوشتن بودن بارگذاری‌ها"
 
-#: includes/class-minn-admin-rest.php:13669
+#: includes/class-minn-admin-rest.php:13731
 msgid "Disk free"
 msgstr "دیسک آزاد"
 
 #. translators: 1: free disk space, 2: total disk space.
-#: includes/class-minn-admin-rest.php:13671
+#: includes/class-minn-admin-rest.php:13733
 msgid "%1$s free of %2$s"
 msgstr "%1$s آزاد از %2$s"
 
-#: includes/class-minn-admin-rest.php:13689
+#: includes/class-minn-admin-rest.php:13751
 msgid "WordPress version"
 msgstr "نگارش وردپرس"
 
 #. translators: 1: installed WordPress version, 2: available WordPress version.
-#: includes/class-minn-admin-rest.php:13693
+#: includes/class-minn-admin-rest.php:13755
 msgid "%1$s installed — WordPress %2$s is available"
 msgstr "%1$s نصب شده — وردپرس %2$s دردسترس است"
 
 #. translators: %s: installed WordPress version.
 #. translators: %s: the PHP version in use.
-#: includes/class-minn-admin-rest.php:13695
-#: includes/class-minn-admin-rest.php:13703
+#: includes/class-minn-admin-rest.php:13757
+#: includes/class-minn-admin-rest.php:13765
 msgid "%s is current"
 msgstr "%s به‌روز است"
 
-#: includes/class-minn-admin-rest.php:13699
+#: includes/class-minn-admin-rest.php:13761
 msgid "PHP version"
 msgstr "نگارش php"
 
 #. translators: %s: the PHP version in use.
-#: includes/class-minn-admin-rest.php:13705
+#: includes/class-minn-admin-rest.php:13767
 msgid "%s is past its supported life — upgrade to 8.2+"
 msgstr "%s از عمر پشتیبانی گذشته — به 8.2+ ارتقا دهید"
 
-#: includes/class-minn-admin-rest.php:13709
+#: includes/class-minn-admin-rest.php:13771
 msgid "HTTPS"
 msgstr "HTTPS"
 
-#: includes/class-minn-admin-rest.php:13711
+#: includes/class-minn-admin-rest.php:13773
 msgid "Served over TLS"
 msgstr "روی TLS ارائه می‌شود"
 
-#: includes/class-minn-admin-rest.php:13711
+#: includes/class-minn-admin-rest.php:13773
 msgid "This request is not over HTTPS"
 msgstr "این درخواست روی HTTPS نیست"
 
-#: includes/class-minn-admin-rest.php:13715
+#: includes/class-minn-admin-rest.php:13777
 msgid "Persistent object cache"
 msgstr "آبجکت‌کش دائمی"
 
-#: includes/class-minn-admin-rest.php:13717
+#: includes/class-minn-admin-rest.php:13779
 msgid "A drop-in is active"
 msgstr "یک drop-in فعال است"
 
-#: includes/class-minn-admin-rest.php:13717
+#: includes/class-minn-admin-rest.php:13779
 msgid "Redis/Memcached would speed up repeat queries"
 msgstr "Redis/Memcached پرس‌وجوهای تکراری را تندتر می‌کند"
 
 #. translators: %s: the configured PHP memory limit (e.g. "256M").
-#: includes/class-minn-admin-rest.php:13724
+#: includes/class-minn-admin-rest.php:13786
 msgid "%s available to PHP"
 msgstr "%s دردسترس PHP"
 
-#: includes/class-minn-admin-rest.php:13728
+#: includes/class-minn-admin-rest.php:13790
 msgid "OPcache"
 msgstr "OPcache"
 
-#: includes/class-minn-admin-rest.php:13730
+#: includes/class-minn-admin-rest.php:13792
 msgid "Bytecode caching is on"
 msgstr "حافظه پنهان بایت‌کد روشن است"
 
-#: includes/class-minn-admin-rest.php:13730
+#: includes/class-minn-admin-rest.php:13792
 msgid "Bytecode caching is on; the host keeps its status private"
 msgstr "حافظه پنهان بایت‌کد روشن است؛ میزبان وضعیت آن را خصوصی نگه می‌دارد"
 
-#: includes/class-minn-admin-rest.php:13730
+#: includes/class-minn-admin-rest.php:13792
 msgid "Not enabled — pages recompile each request"
 msgstr "فعال نیست — برگه‌ها در هر درخواست دوباره کامپایل می‌شوند"
 
-#: includes/class-minn-admin-rest.php:13737
+#: includes/class-minn-admin-rest.php:13799
 msgid "WP_DEBUG is on in a production environment"
 msgstr "WP_DEBUG در محیط واقعی روشن است"
 
 #. translators: %s: the environment type (e.g. "staging").
-#: includes/class-minn-admin-rest.php:13739
+#: includes/class-minn-admin-rest.php:13801
 msgid "On (fine for %s)"
 msgstr "روشن (برای %s مناسب است)"
 
-#: includes/class-minn-admin-rest.php:13745
+#: includes/class-minn-admin-rest.php:13807
 msgid "The uploads directory accepts writes"
 msgstr "پوشه بارگذاری‌ها نوشتن را می‌پذیرد"
 
-#: includes/class-minn-admin-rest.php:13745
+#: includes/class-minn-admin-rest.php:13807
 msgid "Uploads directory is not writable"
 msgstr "پوشه بارگذاری‌ها قابل نوشتن نیست"
 
-#: includes/class-minn-admin-rest.php:13749
+#: includes/class-minn-admin-rest.php:13811
 msgid "Autoload size"
 msgstr "اندازه autoload"
 
 #. translators: 1: total autoloaded size (e.g. "412 KB"), 2: how many autoloaded options.
-#: includes/class-minn-admin-rest.php:13755
+#: includes/class-minn-admin-rest.php:13817
 msgid "%1$s across %2$s options — healthy"
 msgstr "%1$s در %2$s گزینه — سالم"
 
 #. translators: 1: total autoloaded size (e.g. "3.1 MB"), 2: how many autoloaded options.
 #. translators: 1: total autoloaded size, 2: number of autoloaded options.
-#: includes/class-minn-admin-rest.php:13757
+#: includes/class-minn-admin-rest.php:13819
 #: assets/js/app.js:28523
 #: assets/js/app.js:28879
 msgid "%1$s across %2$s options loads on every request — see the top offenders in the Database card"
 msgstr "%1$s در %2$s گزینه در هر درخواست بار می‌شود — سنگین‌ترین‌ها را در کارت پایگاه‌داده ببینید"
 
-#: includes/class-minn-admin-rest.php:13761
+#: includes/class-minn-admin-rest.php:13823
 msgid "Post types in Minn"
 msgstr "گونه‌های نوشته در Minn"
 
 #. translators: 1: how many post types are hidden, 2: their names, comma-separated.
-#: includes/class-minn-admin-rest.php:13771
+#: includes/class-minn-admin-rest.php:13833
 msgid "%2$s is not exposed over the REST API, so it cannot appear in Content — turn on Show in REST API"
 msgid_plural "%1$s post types are not exposed over the REST API, so they cannot appear in Content (%2$s) — turn on Show in REST API"
 msgstr[0] "%2$s از راه REST API در دسترس نیست، پس نمی‌تواند در محتوا ظاهر شود؛ نمایش در REST API را روشن کنید"
 msgstr[1] "%1$s گونه نوشته از راه REST API در دسترس نیستند، پس نمی‌توانند در محتوا ظاهر شوند (%2$s)؛ نمایش در REST API را روشن کنید"
 
-#: includes/class-minn-admin-rest.php:13782
+#: includes/class-minn-admin-rest.php:13844
 msgid "Every post type you created is available to Minn"
 msgstr "هر گونه نوشته‌ای که ساخته‌اید برای Minn دردسترس است"
 
 #. translators: %s: how many cron events are past their scheduled run time.
-#: includes/class-minn-admin-rest.php:13790
+#: includes/class-minn-admin-rest.php:13852
 msgid "%s overdue event — cron may be stalled"
 msgid_plural "%s overdue events — cron may be stalled"
 msgstr[0] "%s رویداد سررسید گذشته — ممکن است کرون گیر کرده باشد"
 msgstr[1] "%s رویداد سررسید گذشته — ممکن است کرون گیر کرده باشد"
 
-#: includes/class-minn-admin-rest.php:13791
+#: includes/class-minn-admin-rest.php:13853
 msgid "(WP-Cron is disabled; is the system cron running?)"
 msgstr "(WP-Cron غیرفعال است؛ آیا کرون سیستم در حال اجراست؟)"
 
 #. translators: %s: how many cron events are scheduled.
-#: includes/class-minn-admin-rest.php:13793
+#: includes/class-minn-admin-rest.php:13855
 msgid "%s scheduled event, none overdue"
 msgid_plural "%s scheduled events, none overdue"
 msgstr[0] "%s رویداد زمان‌بندی شده، هیچ‌کدام سررسید گذشته نیست"
 msgstr[1] "%s رویداد زمان‌بندی شده، هیچ‌کدام سررسید گذشته نیست"
 
-#: includes/class-minn-admin-rest.php:13835
+#: includes/class-minn-admin-rest.php:13897
 msgid "Loopback requests"
 msgstr "درخواست‌های حلقه بازگشتی"
 
-#: includes/class-minn-admin-rest.php:13838
+#: includes/class-minn-admin-rest.php:13900
 msgid "The site can reach itself (cron and scheduled posts depend on this)"
 msgstr "سایت می‌تواند به خودش برسد (کرون و نوشته‌های زمان‌بندی شده به این وابسته‌اند)"
 
-#: includes/class-minn-admin-rest.php:13839
+#: includes/class-minn-admin-rest.php:13901
 msgid "Loopback requests are failing"
 msgstr "درخواست‌های حلقه بازگشتی ناموفق‌اند"
 
-#: includes/class-minn-admin-rest.php:13845
+#: includes/class-minn-admin-rest.php:13907
 msgid "REST API self-check"
 msgstr "خودآزمایی REST API"
 
-#: includes/class-minn-admin-rest.php:13848
+#: includes/class-minn-admin-rest.php:13910
 msgid "The REST API answers external requests (Minn itself rides it)"
 msgstr "REST API به درخواست‌های خارجی پاسخ می‌دهد (خود Minn از آن استفاده می‌کند)"
 
-#: includes/class-minn-admin-rest.php:13849
+#: includes/class-minn-admin-rest.php:13911
 msgid "The REST API did not answer"
 msgstr "REST API پاسخی نداد"
 
 #. translators: %s: the backup plugin's name.
-#: includes/class-minn-admin-rest.php:13870
+#: includes/class-minn-admin-rest.php:13932
 msgid "%s is active but no backup has completed yet"
 msgstr "%s فعال است اما هنوز پشتیبانی تکمیل نشده"
 
 #. translators: %s: human-readable time since the failed backup (e.g. "3 hours").
-#: includes/class-minn-admin-rest.php:13874
+#: includes/class-minn-admin-rest.php:13936
 msgid "The last backup reported errors (%s ago)"
 msgstr "آخرین پشتیبان خطا گزارش کرد (%s پیش)"
 
 #. translators: %s: human-readable time since the last backup (e.g. "3 hours").
-#: includes/class-minn-admin-rest.php:13878
+#: includes/class-minn-admin-rest.php:13940
 msgid "Last backup completed %s ago"
 msgstr "آخرین پشتیبان %s پیش تکمیل شده"
 
 #. translators: %s: human-readable time since the last backup (e.g. "4 days").
-#: includes/class-minn-admin-rest.php:13882
+#: includes/class-minn-admin-rest.php:13944
 msgid "Last backup was %s ago — consider a fresher schedule"
 msgstr "آخرین پشتیبان %s پیش بود — زمان‌بندی تازه‌تری در نظر بگیرید"
 
 #. translators: %s: human-readable time since the last backup (e.g. "2 weeks").
-#: includes/class-minn-admin-rest.php:13886
+#: includes/class-minn-admin-rest.php:13948
 msgid "Last backup was %s ago"
 msgstr "آخرین پشتیبان %s پیش بود"
 
 #. translators: %s: how many licenses are expired.
-#: includes/class-minn-admin-rest.php:13996
+#: includes/class-minn-admin-rest.php:14058
 msgid "%s expired"
 msgstr "%s منقضی"
 
 #. translators: %s: how many licenses are invalid.
-#: includes/class-minn-admin-rest.php:13998
+#: includes/class-minn-admin-rest.php:14060
 msgid "%s invalid"
 msgstr "%s غیرمعتبر"
 
 #. translators: %s: how many licenses are missing.
-#: includes/class-minn-admin-rest.php:14000
+#: includes/class-minn-admin-rest.php:14062
 msgid "%s missing"
 msgstr "%s موجود نیست"
 
 #. translators: %s: how many licenses are in an unknown state.
-#: includes/class-minn-admin-rest.php:14002
+#: includes/class-minn-admin-rest.php:14064
 msgid "%s unknown"
 msgstr "%s ناشناخته"
 
-#: includes/class-minn-admin-rest.php:14015
+#: includes/class-minn-admin-rest.php:14077
 #: assets/js/app.js:25483
 msgid "Licenses"
 msgstr "پروانه‌ها"
 
 #. translators: 1: comma-separated problem counts (e.g. "2 expired, 1 missing"), 2: how many licensed components exist.
-#: includes/class-minn-admin-rest.php:14020
+#: includes/class-minn-admin-rest.php:14082
 msgid "%1$s of %2$s components; see the Licenses tab"
 msgstr "%1$s از %2$s جزء؛ زبانه پروانه‌ها را ببینید"
 
 #. translators: %s: how many licensed components exist.
-#: includes/class-minn-admin-rest.php:14022
+#: includes/class-minn-admin-rest.php:14084
 msgid "All %s components are licensed or connected"
 msgstr "همه %s جزء دارای پروانه یا متصل‌اند"
 
-#: includes/class-minn-admin-rest.php:14166
+#: includes/class-minn-admin-rest.php:14228
 msgid "Master switch for WordPress debugging."
 msgstr "کلید اصلی اشکال‌زدایی وردپرس."
 
-#: includes/class-minn-admin-rest.php:14167
+#: includes/class-minn-admin-rest.php:14229
 msgid "Log to file"
 msgstr "ثبت در پرونده"
 
-#: includes/class-minn-admin-rest.php:14167
+#: includes/class-minn-admin-rest.php:14229
 msgid "Write notices and errors to wp-content/debug.log."
 msgstr "نوشتن پیام‌ها و خطاها در wp-content/debug.log."
 
-#: includes/class-minn-admin-rest.php:14168
+#: includes/class-minn-admin-rest.php:14230
 msgid "Show errors on screen"
 msgstr "نمایش خطاها روی صفحه"
 
-#: includes/class-minn-admin-rest.php:14168
+#: includes/class-minn-admin-rest.php:14230
 msgid "Render errors in the page. Leave off in production and read the log instead."
 msgstr "خطاها را در برگه نشان می‌دهد. در محیط واقعی خاموش بگذارید و به‌جایش گزارش را بخوانید."
 
-#: includes/class-minn-admin-rest.php:14169
+#: includes/class-minn-admin-rest.php:14231
 msgid "Unminified assets"
 msgstr "دارایی‌های کوچک‌نشده"
 
-#: includes/class-minn-admin-rest.php:14169
+#: includes/class-minn-admin-rest.php:14231
 msgid "Load the full-length core and plugin JS/CSS."
 msgstr "بارگذاری نگارش کامل JS/CSS هسته و افزونه‌ها."
 
-#: includes/class-minn-admin-rest.php:14170
+#: includes/class-minn-admin-rest.php:14232
 msgid "Log database queries"
 msgstr "ثبت پرس‌وجوهای پایگاه‌داده"
 
-#: includes/class-minn-admin-rest.php:14170
+#: includes/class-minn-admin-rest.php:14232
 msgid "Record every query for inspection — a real performance cost; turn off when done."
 msgstr "هر پرس‌وجو را برای بررسی ثبت می‌کند — هزینه کارایی واقعی دارد؛ پس از پایان خاموش کنید."
 
 #. translators: %s: a wp-config.php constant name, such as WP_DEBUG_LOG.
-#: includes/class-minn-admin-rest.php:14531
+#: includes/class-minn-admin-rest.php:14593
 msgid "%s is set to a custom value in wp-config.php, so it can only be changed there."
 msgstr "%s در wp-config.php روی مقداری سفارشی تنظیم شده، پس فقط همان‌جا می‌توان تغییرش داد."
 
 #. translators: %s: a wp-config.php constant name, such as WP_DEBUG_LOG.
-#: includes/class-minn-admin-rest.php:14535
+#: includes/class-minn-admin-rest.php:14597
 msgid "%s is defined more than once in wp-config.php, so it can only be changed there."
 msgstr "%s بیش از یک بار در wp-config.php تعریف شده است، بنابراین فقط در همان‌جا می‌توان آن را تغییر داد."
 
 #. translators: %s: a wp-config.php constant name, such as WP_DEBUG_LOG.
-#: includes/class-minn-admin-rest.php:14539
+#: includes/class-minn-admin-rest.php:14601
 msgid "%s is set inside a condition in wp-config.php, so it can only be changed there."
 msgstr "%s داخل یک شرط در wp-config.php تنظیم شده است، بنابراین فقط در همان‌جا می‌توان آن را تغییر داد."
 
 #. translators: %s: a wp-config.php constant name, such as WP_DEBUG_LOG.
-#: includes/class-minn-admin-rest.php:14543
+#: includes/class-minn-admin-rest.php:14605
 msgid "%s is set after wp-config.php loads WordPress, so it never takes effect; move it above that line in wp-config.php."
 msgstr "%s پس از آنکه wp-config.php وردپرس را بارگذاری می‌کند تنظیم شده است، بنابراین هرگز اعمال نمی‌شود؛ آن را در wp-config.php به بالای آن خط منتقل کنید."
 
-#: includes/class-minn-admin-rest.php:14560
+#: includes/class-minn-admin-rest.php:14622
 msgid "Could not find a safe place to add the constant."
 msgstr "جای امنی برای افزودن ثابت پیدا نشد."
 
-#: includes/class-minn-admin-rest.php:14874
+#: includes/class-minn-admin-rest.php:14936
 msgid "That constant is not editable."
 msgstr "این ثابت قابل ویرایش نیست."
 
-#: includes/class-minn-admin-rest.php:14877
+#: includes/class-minn-admin-rest.php:14939
 msgid "File modifications are disabled on this site."
 msgstr "تغییر پرونده‌ها در این سایت غیرفعال است."
 
-#: includes/class-minn-admin-rest.php:14881
+#: includes/class-minn-admin-rest.php:14943
 msgid "wp-config.php is not writable."
 msgstr "wp-config.php قابل نوشتن نیست."
 
-#: includes/class-minn-admin-rest.php:14885
+#: includes/class-minn-admin-rest.php:14947
 msgid "Could not read wp-config.php."
 msgstr "wp-config.php خوانده نشد."
 
 #. translators: %s: a wp-config.php constant name, such as WP_DEBUG_LOG.
-#: includes/class-minn-admin-rest.php:14891
+#: includes/class-minn-admin-rest.php:14953
 msgid "The %s line in wp-config.php is not the one WordPress runs with, so it can only be changed there."
 msgstr "خط %s در wp-config.php همان خطی نیست که وردپرس با آن اجرا می‌شود، بنابراین فقط در همان‌جا می‌توان آن را تغییر داد."
 
-#: includes/class-minn-admin-rest.php:14903
+#: includes/class-minn-admin-rest.php:14965
 msgid "The change would break wp-config.php, so it was not saved."
 msgstr "این تغییر wp-config.php را می‌شکست، پس ذخیره نشد."
 
-#: includes/class-minn-admin-rest.php:14912
+#: includes/class-minn-admin-rest.php:14974
 msgid "Could not write a rollback copy of wp-config.php, so the change was not made."
 msgstr "رونوشت بازگشتی از wp-config.php نوشته نشد، پس تغییر اعمال نشد."
 
 #. translators: %s: the file name of the kept copy of wp-config.php.
-#: includes/class-minn-admin-rest.php:14922
+#: includes/class-minn-admin-rest.php:14984
 msgid "wp-config.php did not save completely and could not be put back. A copy of the original is kept as %s."
 msgstr "wp-config.php به‌طور کامل ذخیره نشد و بازگرداندن آن ممکن نشد. رونوشتی از فایل اصلی با نام %s نگه داشته شده است."
 
-#: includes/class-minn-admin-rest.php:14975
+#: includes/class-minn-admin-rest.php:15037
 msgid "wp-config.php did not save completely, so it was put back as it was. Nothing changed."
 msgstr "wp-config.php به‌طور کامل ذخیره نشد، پس به حالت قبلی بازگردانده شد. چیزی تغییر نکرد."
 
-#: includes/class-minn-admin-rest.php:14977
+#: includes/class-minn-admin-rest.php:15039
 msgid "wp-config.php did not save completely and could not be put back."
 msgstr "wp-config.php به‌طور کامل ذخیره نشد و بازگرداندن آن ممکن نشد."
 
@@ -17840,127 +17842,132 @@ msgstr "این PHP اکستنشن zip ندارد، بنابراین نمی‌ت�
 msgid "Minn Admin could not create %s."
 msgstr "Minn Admin نتوانست %s را ایجاد کند."
 
-#: includes/class-minn-admin-switch.php:204
+#: includes/class-minn-admin-switch.php:208
 msgid "Minn's release could not be downloaded."
 msgstr "دانلود نسخه‌ی Minn ممکن نشد."
 
-#: includes/class-minn-admin-switch.php:209
+#: includes/class-minn-admin-switch.php:213
 msgid "The minn.zip downloaded does not match the checksum its release publishes, so it is not used."
 msgstr "پرونده‌ی minn.zip دانلودشده با چک‌سامی که نسخه‌اش منتشر می‌کند مطابقت ندارد، بنابراین استفاده نمی‌شود."
 
-#: includes/class-minn-admin-switch.php:213
+#: includes/class-minn-admin-switch.php:217
 msgid "This minn.zip is not signed by a key Minn trusts, so it is not used."
 msgstr "این minn.zip با کلیدی که Minn به آن اعتماد دارد امضا نشده است، بنابراین استفاده نمی‌شود."
 
-#: includes/class-minn-admin-switch.php:218
+#: includes/class-minn-admin-switch.php:222
 msgid "Minn's release could not be opened."
 msgstr "باز کردن نسخه‌ی Minn ممکن نشد."
 
 #. translators: %s: a path inside the archive.
-#: includes/class-minn-admin-switch.php:227
+#: includes/class-minn-admin-switch.php:231
 msgid "Minn's release holds %s, outside its minn/ folder, so it is not used."
 msgstr "نسخه‌ی Minn شامل %s بیرون از پوشه‌ی minn/ آن است، بنابراین استفاده نمی‌شود."
 
-#: includes/class-minn-admin-switch.php:242
+#: includes/class-minn-admin-switch.php:246
 msgid "Minn's release is not a Minn Engine: its minn/ folder is incomplete."
 msgstr "نسخه‌ی Minn یک Minn Engine نیست: پوشه‌ی minn/ آن ناقص است."
 
 #. translators: 1: the Minn version a release archive holds, 2: the version its release names.
-#: includes/class-minn-admin-switch.php:271
+#: includes/class-minn-admin-switch.php:275
 msgid "The archive holds Minn %1$s, not the %2$s its release names, so it is not used."
 msgstr "بایگانی Minn %1$s را دارد، نه %2$s را که نام انتشار است، پس به کار نمی‌رود."
 
 #. translators: 1: a Minn version, 2: the oldest Minn version Minn Admin installs.
-#: includes/class-minn-admin-switch.php:276
+#: includes/class-minn-admin-switch.php:280
 msgid "Minn %1$s is older than Minn %2$s, the oldest release Minn Admin installs, so it is not used."
 msgstr "Minn %1$s کهنه‌تر از Minn %2$s است، کهنه‌ترین انتشاری که Minn Admin نصب می‌کند، پس به کار نمی‌رود."
 
-#: includes/class-minn-admin-switch.php:312
+#: includes/class-minn-admin-switch.php:316
 msgid "This Minn release is older than Minn Admin can install from WordPress; use its install.sh instead."
 msgstr "این نسخه‌ی Minn قدیمی‌تر از آن است که Minn Admin بتواند از داخل WordPress نصبش کند؛ به‌جای آن از install.sh همین نسخه استفاده کنید."
 
-#: includes/class-minn-admin-switch.php:519
+#: includes/class-minn-admin-switch.php:523
 msgid "That check has expired. Check the site again."
 msgstr "اعتبار آن بررسی تمام شده است. سایت را دوباره بررسی کنید."
 
-#: includes/class-minn-admin-switch.php:522
+#: includes/class-minn-admin-switch.php:526
 msgid "Preflight is RED for this site, so it stays on WordPress."
 msgstr "نتیجه‌ی پیش‌بررسی این سایت RED است، بنابراین سایت روی WordPress می‌ماند."
 
-#: includes/class-minn-admin-switch.php:525
+#: includes/class-minn-admin-switch.php:529
 msgid "Type the site's address to confirm."
 msgstr "برای تأیید، نشانی سایت را بنویسید."
 
 #. translators: 1: a folder path, 2: a command.
-#: includes/class-minn-admin-switch.php:530
+#: includes/class-minn-admin-switch.php:534
 #: assets/js/app.js:28318
 msgid "The web server cannot create %1$s for WordPress's own files. Switch from the command line instead: %2$s"
 msgstr "سرور وب نمی‌تواند %1$s را برای پرونده‌های هسته‌ی WordPress ایجاد کند. به‌جای آن، تغییر را از خط فرمان انجام دهید: %2$s"
 
-#: includes/class-minn-admin-switch.php:575
+#: includes/class-minn-admin-switch.php:540
+#: includes/class-minn-admin-switch.php:728
+msgid "A switch to Minn started on this site in the last hour and has not finished. Try again once it has, or after the hour."
+msgstr "در این سایت در ساعت گذشته تغییری به Minn آغاز شده و هنوز تمام نشده است. پس از پایان، یا بعد از یک ساعت، دوباره تلاش کنید."
+
+#: includes/class-minn-admin-switch.php:592
 msgid "That switch is not known here."
 msgstr "این تغییر اینجا شناخته‌شده نیست."
 
-#: includes/class-minn-admin-switch.php:688
+#: includes/class-minn-admin-switch.php:703
 msgid "Preflight is RED, so the site stays on WordPress. Pass --force to install anyway."
 msgstr "نتیجه‌ی پیش‌بررسی RED است، بنابراین سایت روی WordPress می‌ماند. برای نصب با این حال، گزینه‌ی --force را اضافه کنید."
 
 #. translators: %s: a folder path.
-#: includes/class-minn-admin-switch.php:694
+#: includes/class-minn-admin-switch.php:709
 msgid "Cannot put WordPress's own files in %s: it is not writable, or not empty. Choose a folder outside the site with --park=<dir>."
 msgstr "نمی‌توان پرونده‌های هسته‌ی WordPress را در %s گذاشت: قابل نوشتن نیست یا خالی نیست. با --park=<dir> پوشه‌ای بیرون از سایت انتخاب کنید."
 
 #. translators: 1: Minn's version, 2: the WordPress version Minn speaks, 3: the WordPress version this site runs.
-#: includes/class-minn-admin-switch.php:698
+#: includes/class-minn-admin-switch.php:713
 #: assets/js/app.js:28312
 msgid "Minn %1$s (speaks WordPress %2$s), signature verified. This site runs WordPress %3$s."
 msgstr "Minn %1$s (سازگار با WordPress %2$s)، امضا تأیید شد. این سایت WordPress %3$s را اجرا می‌کند."
 
 #. translators: %s: a folder path.
-#: includes/class-minn-admin-switch.php:700
+#: includes/class-minn-admin-switch.php:715
 msgid "WordPress's own files move to %s; `wp minn eject` brings them back."
 msgstr "پرونده‌های هسته‌ی WordPress به %s منتقل می‌شوند؛ `wp minn eject` آن‌ها را برمی‌گرداند."
 
-#: includes/class-minn-admin-switch.php:701
+#: includes/class-minn-admin-switch.php:716
 #: assets/js/app.js:28425
 msgid "Switch this site to Minn?"
 msgstr "این سایت به Minn تغییر داده شود؟"
 
-#: includes/class-minn-admin-switch.php:724
+#: includes/class-minn-admin-switch.php:746
 #: assets/js/app.js:28327
 #: assets/js/app.js:28465
 msgid "Minn was not installed; the site is still WordPress."
 msgstr "Minn نصب نشد؛ سایت هنوز WordPress است."
 
 #. translators: %s: Minn Admin's address.
-#: includes/class-minn-admin-switch.php:731
+#: includes/class-minn-admin-switch.php:753
 msgid "This site now runs on Minn. Minn Admin is at %s"
 msgstr "این سایت اکنون روی Minn اجرا می‌شود. Minn Admin در نشانی %s است"
 
 #. translators: %s: the site's address.
-#: includes/class-minn-admin-switch.php:750
+#: includes/class-minn-admin-switch.php:772
 msgid "Waiting for %s to answer as Minn…"
 msgstr "در انتظار پاسخ %s به‌عنوان Minn…"
 
-#: includes/class-minn-admin-switch.php:765
+#: includes/class-minn-admin-switch.php:787
 msgid "The site did not answer as Minn yet; flushing anyway. If it still shows WordPress in a minute, run: wp cache flush"
 msgstr "سایت هنوز به‌عنوان Minn پاسخ نداده است؛ با این حال در حال تخلیه است. اگر یک دقیقه دیگر هنوز WordPress را نشان می‌دهد، اجرا کنید: wp cache flush"
 
-#: includes/class-minn-admin-switch.php:776
+#: includes/class-minn-admin-switch.php:798
 msgid "Caches flushed (wp cache flush)."
 msgstr "حافظه‌های پنهان تخلیه شد (wp cache flush)."
 
-#: includes/class-minn-admin-switch.php:778
+#: includes/class-minn-admin-switch.php:800
 msgid "wp cache flush failed. If the host caches pages, purge its cache now."
 msgstr "wp cache flush ناموفق بود. اگر میزبان برگه‌ها را در حافظه پنهان نگه می‌دارد، اکنون آن را تخلیه کنید."
 
 #. translators: %s: Minn's version.
-#: includes/class-minn-admin-switch.php:816
+#: includes/class-minn-admin-switch.php:838
 msgid "Downloading Minn %s from the Minn update service…"
 msgstr "در حال دانلود Minn %s از سرویس به‌روزرسانی Minn…"
 
 #. translators: %s: a file path.
-#: includes/class-minn-admin-switch.php:816
+#: includes/class-minn-admin-switch.php:838
 msgid "Checking %s…"
 msgstr "در حال بررسی %s…"
 

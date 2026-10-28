@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Minn Admin\n"
 "Report-Msgid-Bugs-To: https://github.com/austinginder/minn-admin/issues\n"
-"PO-Revision-Date: 2026-10-28 21:37+0000\n"
+"PO-Revision-Date: 2026-10-28 23:34+0000\n"
 "Last-Translator: Minn Admin translation pipeline\n"
 "Language-Team: Japanese\n"
 "MIME-Version: 1.0\n"
@@ -43,7 +43,7 @@ msgstr "https://austinginder.com"
 #: includes/adapters/acf-field-groups.php:25
 #: includes/adapters/gravity-forms-builder.php:622
 #: includes/adapters/gravity-forms-confirmations.php:73
-#: includes/class-minn-admin-rest.php:10756
+#: includes/class-minn-admin-rest.php:10767
 #: includes/class-minn-admin.php:2240
 #: assets/js/app.js:23098
 #: assets/js/app.js:44438
@@ -65,7 +65,7 @@ msgstr "数値"
 
 #: includes/adapters/acf-field-groups.php:28
 #: includes/adapters/bookings-kit.php:127
-#: includes/adapters/gravity-smtp.php:333
+#: includes/adapters/gravity-smtp.php:366
 #: includes/adapters/jet-appointments.php:233
 #: includes/adapters/jet-booking.php:301
 #: includes/adapters/jet-reviews.php:195
@@ -194,7 +194,7 @@ msgstr "テンプレート"
 #: includes/adapters/gravity-forms.php:356
 #: includes/adapters/gravity-forms.php:418
 #: includes/adapters/gravity-forms.php:487
-#: includes/adapters/gravity-smtp.php:591
+#: includes/adapters/gravity-smtp.php:624
 #: includes/adapters/jet-appointments.php:270
 #: includes/adapters/jet-booking.php:322
 #: includes/adapters/jet-cct.php:268
@@ -540,7 +540,7 @@ msgstr "フィールド"
 #: includes/adapters/woocommerce-memberships.php:1752
 #: includes/adapters/wpcode.php:518
 #: includes/adapters/yith-gift-cards.php:356
-#: includes/class-minn-admin-rest.php:13643
+#: includes/class-minn-admin-rest.php:13705
 #: assets/js/app.js:992
 #: assets/js/app.js:13976
 #: assets/js/app.js:14485
@@ -641,9 +641,9 @@ msgstr "必須"
 #: includes/adapters/redirection.php:308
 #: includes/adapters/woocommerce-gift-cards.php:362
 #: includes/adapters/wp-migrate.php:308
-#: includes/class-minn-admin-rest.php:13477
-#: includes/class-minn-admin-rest.php:13664
-#: includes/class-minn-admin-rest.php:13668
+#: includes/class-minn-admin-rest.php:13539
+#: includes/class-minn-admin-rest.php:13726
+#: includes/class-minn-admin-rest.php:13730
 #: assets/js/app.js:8874
 #: assets/js/app.js:29980
 #: assets/js/app.js:29999
@@ -656,8 +656,8 @@ msgstr "いいえ"
 #: includes/adapters/woocommerce-gift-cards.php:362
 #: includes/adapters/woocommerce-gift-cards.php:391
 #: includes/adapters/wp-migrate.php:308
-#: includes/class-minn-admin-rest.php:13664
-#: includes/class-minn-admin-rest.php:13668
+#: includes/class-minn-admin-rest.php:13726
+#: includes/class-minn-admin-rest.php:13730
 #: assets/js/app.js:8874
 #: assets/js/app.js:29980
 #: assets/js/app.js:29999
@@ -923,14 +923,14 @@ msgstr[0] "画像 %d 枚"
 #. translators: %s: the environment type (e.g. "staging").
 #: includes/adapters/acf.php:2586
 #: includes/adapters/elementor-mcp.php:147
-#: includes/adapters/gravity-smtp.php:1001
+#: includes/adapters/gravity-smtp.php:1051
 #: includes/adapters/jet-smart-filters.php:81
 #: includes/adapters/novamira.php:216
 #: includes/adapters/simple-301-redirects.php:116
 #: includes/adapters/wp-freighter.php:641
 #: includes/adapters/wpvivid.php:326
-#: includes/class-minn-admin-rest.php:13483
-#: includes/class-minn-admin-rest.php:13739
+#: includes/class-minn-admin-rest.php:13545
+#: includes/class-minn-admin-rest.php:13801
 #: assets/js/app.js:5653
 msgid "Off"
 msgstr "オフ"
@@ -938,12 +938,12 @@ msgstr "オフ"
 #: includes/adapters/acf.php:2586
 #: includes/adapters/code-snippets.php:312
 #: includes/adapters/elementor-mcp.php:147
-#: includes/adapters/gravity-smtp.php:1001
+#: includes/adapters/gravity-smtp.php:1051
 #: includes/adapters/novamira.php:216
 #: includes/adapters/simple-301-redirects.php:116
 #: includes/adapters/wp-freighter.php:641
 #: includes/adapters/wpvivid.php:326
-#: includes/class-minn-admin-rest.php:13482
+#: includes/class-minn-admin-rest.php:13544
 #: assets/js/app.js:5653
 msgid "On"
 msgstr "オン"
@@ -982,11 +982,11 @@ msgstr "変更あり"
 #: includes/adapters/public-post-preview.php:55
 #: includes/adapters/public-post-preview.php:166
 #: includes/adapters/public-post-preview.php:177
-#: includes/class-minn-admin-rest.php:5358
-#: includes/class-minn-admin-rest.php:5450
-#: includes/class-minn-admin-rest.php:5483
-#: includes/class-minn-admin-rest.php:12966
-#: includes/class-minn-admin-rest.php:12971
+#: includes/class-minn-admin-rest.php:5369
+#: includes/class-minn-admin-rest.php:5461
+#: includes/class-minn-admin-rest.php:5494
+#: includes/class-minn-admin-rest.php:12977
+#: includes/class-minn-admin-rest.php:12982
 #: includes/kernel/class-minn-admin-kernel-panels.php:479
 msgid "Post not found."
 msgstr "投稿が見つかりません。"
@@ -1122,8 +1122,8 @@ msgid "Unknown settings tab."
 msgstr "不明な設定タブです。"
 
 #: includes/adapters/acpt.php:1318
-#: includes/class-minn-admin-rest.php:4115
-#: includes/class-minn-admin-rest.php:4534
+#: includes/class-minn-admin-rest.php:4119
+#: includes/class-minn-admin-rest.php:4545
 #: includes/class-minn-admin-surfaces.php:512
 #: assets/js/app.js:1470
 #: assets/js/app.js:4261
@@ -1369,7 +1369,7 @@ msgstr "イベント"
 #: includes/adapters/bricks.php:1774
 #: includes/adapters/forms-kit.php:80
 #: includes/adapters/gravity-forms.php:417
-#: includes/adapters/gravity-smtp.php:385
+#: includes/adapters/gravity-smtp.php:418
 #: includes/adapters/jet-reviews.php:126
 #: includes/adapters/latepoint.php:234
 #: includes/adapters/scrutoscope.php:898
@@ -1488,7 +1488,7 @@ msgstr "エクスポートを準備中…"
 #: includes/adapters/updraftplus.php:331
 #: includes/adapters/wp-migrate.php:366
 #: includes/adapters/wpvivid.php:382
-#: includes/class-minn-admin-rest.php:13890
+#: includes/class-minn-admin-rest.php:13952
 msgid "Backups"
 msgstr "バックアップ"
 
@@ -1504,7 +1504,7 @@ msgstr "エクスポート"
 #: includes/adapters/updraftplus.php:347
 #: includes/adapters/wp-migrate.php:382
 #: includes/adapters/wpvivid.php:396
-#: includes/class-minn-admin-rest.php:13648
+#: includes/class-minn-admin-rest.php:13710
 #: assets/js/app.js:993
 #: assets/js/app.js:28883
 #: assets/js/app.js:29699
@@ -1624,7 +1624,7 @@ msgstr "レベル"
 #: includes/adapters/all-in-one-security.php:190
 #: includes/adapters/bricks.php:1861
 #: includes/adapters/elementor-forms.php:227
-#: includes/adapters/gravity-forms.php:684
+#: includes/adapters/gravity-forms.php:685
 #: includes/adapters/novamira.php:668
 #: includes/adapters/wordfence.php:98
 #: includes/adapters/wp-activity-log.php:214
@@ -1760,13 +1760,13 @@ msgstr "価格"
 #: includes/adapters/amelia.php:161
 #: includes/adapters/amelia.php:222
 #: includes/adapters/bookly.php:136
-#: includes/adapters/gravity-forms.php:734
-#: includes/adapters/gravity-smtp.php:335
-#: includes/adapters/gravity-smtp.php:345
+#: includes/adapters/gravity-forms.php:735
+#: includes/adapters/gravity-smtp.php:368
+#: includes/adapters/gravity-smtp.php:378
 #: includes/adapters/latepoint.php:295
 #: includes/adapters/latepoint.php:499
 #: includes/adapters/woocommerce-memberships.php:1830
-#: includes/class-minn-admin-rest.php:11884
+#: includes/class-minn-admin-rest.php:11895
 #: assets/js/app.js:10109
 #: assets/js/app.js:10657
 #: assets/js/app.js:10807
@@ -1939,7 +1939,7 @@ msgid "WP Abilities"
 msgstr "WP Abilities"
 
 #: includes/adapters/aryo-activity-log.php:277
-#: includes/adapters/gravity-smtp.php:322
+#: includes/adapters/gravity-smtp.php:355
 #: includes/adapters/stream.php:261
 msgid "All sources"
 msgstr "すべてのソース"
@@ -1984,9 +1984,9 @@ msgstr "操作"
 #: includes/adapters/eps-301-redirects.php:246
 #: includes/adapters/fluent-forms.php:311
 #: includes/adapters/fluent-smtp.php:432
-#: includes/adapters/gravity-forms.php:677
-#: includes/adapters/gravity-smtp.php:310
-#: includes/adapters/gravity-smtp.php:318
+#: includes/adapters/gravity-forms.php:678
+#: includes/adapters/gravity-smtp.php:343
+#: includes/adapters/gravity-smtp.php:351
 #: includes/adapters/jet-reviews.php:161
 #: includes/adapters/rank-math-redirections.php:242
 #: includes/adapters/redirection.php:142
@@ -2116,8 +2116,8 @@ msgid "Plugin behaviour"
 msgstr "プラグインの動作"
 
 #: includes/adapters/asset-cleanup.php:147
-#: includes/adapters/gravity-smtp.php:1000
-#: includes/adapters/gravity-smtp.php:1236
+#: includes/adapters/gravity-smtp.php:1050
+#: includes/adapters/gravity-smtp.php:1297
 msgid "Test mode"
 msgstr "テストモード"
 
@@ -2330,9 +2330,9 @@ msgstr "BackWPup がバックアップを作成中です"
 #: includes/adapters/updraftplus.php:250
 #: includes/adapters/wordfence.php:275
 #: includes/adapters/wpvivid.php:303
-#: includes/class-minn-admin-rest.php:4370
-#: includes/class-minn-admin-rest.php:5309
-#: includes/class-minn-admin-rest.php:5903
+#: includes/class-minn-admin-rest.php:4379
+#: includes/class-minn-admin-rest.php:5320
+#: includes/class-minn-admin-rest.php:5914
 #: includes/kernel/class-minn-admin-kernel.php:2467
 msgid "%s ago"
 msgstr "%s前"
@@ -2558,8 +2558,8 @@ msgstr "メンバー"
 
 #: includes/adapters/bookings-kit.php:132
 #: includes/adapters/bookings-kit.php:282
-#: includes/adapters/gravity-smtp.php:311
-#: includes/adapters/gravity-smtp.php:604
+#: includes/adapters/gravity-smtp.php:344
+#: includes/adapters/gravity-smtp.php:637
 #: includes/adapters/jet-appointments.php:266
 #: assets/js/app.js:22121
 msgid "Service"
@@ -2625,7 +2625,7 @@ msgstr "不明なステータス"
 
 #: includes/adapters/bookings-kit.php:239
 #: includes/adapters/bookings-kit.php:320
-#: includes/class-minn-admin-rest.php:5902
+#: includes/class-minn-admin-rest.php:5913
 #: assets/js/app.js:38295
 msgid "Today"
 msgstr "今日"
@@ -2824,8 +2824,8 @@ msgid "Protecting"
 msgstr "保護中"
 
 #: includes/adapters/breakwater.php:215
-#: includes/class-minn-admin-rest.php:4123
-#: includes/class-minn-admin-rest.php:4490
+#: includes/class-minn-admin-rest.php:4127
+#: includes/class-minn-admin-rest.php:4499
 #: includes/class-minn-admin-surfaces.php:506
 #: assets/js/app.js:977
 #: assets/js/app.js:1447
@@ -2892,7 +2892,7 @@ msgstr "選択した送信内容を、それぞれのフォームへ戻します
 #: includes/adapters/breakwater.php:326
 #: includes/adapters/bricks.php:830
 #: includes/adapters/fluent-smtp.php:293
-#: includes/adapters/gravity-smtp.php:406
+#: includes/adapters/gravity-smtp.php:439
 #: includes/adapters/perfmatters.php:32
 #: includes/adapters/redirection.php:214
 #: assets/js/app.js:974
@@ -2994,10 +2994,10 @@ msgstr "そのファイルは Bricks のテンプレートエクスポートで�
 #: includes/adapters/jet-smart-filters.php:64
 #: includes/adapters/jet-theme-core.php:102
 #: includes/adapters/woocommerce-settings.php:179
-#: includes/class-minn-admin-rest.php:2340
-#: includes/class-minn-admin-rest.php:2457
-#: includes/class-minn-admin-rest.php:5243
-#: includes/class-minn-admin-rest.php:5297
+#: includes/class-minn-admin-rest.php:2344
+#: includes/class-minn-admin-rest.php:2461
+#: includes/class-minn-admin-rest.php:5254
+#: includes/class-minn-admin-rest.php:5308
 msgid "(no title)"
 msgstr "(タイトルなし)"
 
@@ -3430,7 +3430,7 @@ msgstr "メンテナンスモード"
 #: includes/adapters/pw-gift-cards.php:230
 #: includes/adapters/woocommerce-gift-cards.php:281
 #: includes/adapters/yith-gift-cards.php:296
-#: includes/class-minn-admin-rest.php:13516
+#: includes/class-minn-admin-rest.php:13578
 #: assets/js/app.js:31137
 #: assets/js/app.js:31170
 msgid "Disabled"
@@ -3529,7 +3529,7 @@ msgstr "すべての送信"
 #: includes/adapters/bricks.php:1772
 #: includes/adapters/bricks.php:1867
 #: includes/adapters/forms-kit.php:275
-#: includes/adapters/gravity-forms.php:731
+#: includes/adapters/gravity-forms.php:732
 #: assets/js/app.js:21739
 msgid "Submission"
 msgstr "送信内容"
@@ -3557,8 +3557,8 @@ msgstr "フォーム"
 #: includes/adapters/core-blocks.php:107
 #: includes/adapters/fluent-smtp.php:437
 #: includes/adapters/gravity-forms.php:100
-#: includes/adapters/gravity-smtp.php:372
-#: includes/adapters/gravity-smtp.php:605
+#: includes/adapters/gravity-smtp.php:405
+#: includes/adapters/gravity-smtp.php:638
 #: includes/adapters/jet-reviews.php:164
 #: includes/adapters/mail-kit.php:71
 #: includes/adapters/post-smtp.php:176
@@ -3756,7 +3756,7 @@ msgid "Check log"
 msgstr "チェックログ"
 
 #: includes/adapters/broken-link-checker.php:352
-#: includes/adapters/gravity-smtp.php:314
+#: includes/adapters/gravity-smtp.php:347
 #: assets/js/app.js:28947
 msgid "Log"
 msgstr "ログ"
@@ -3923,8 +3923,8 @@ msgid "(unknown sender)"
 msgstr "(不明な送信者)"
 
 #: includes/adapters/cf7-flamingo.php:272
-#: includes/adapters/post-smtp.php:208
-#: includes/adapters/wp-mail-logging.php:214
+#: includes/adapters/post-smtp.php:213
+#: includes/adapters/wp-mail-logging.php:219
 msgid "(no subject)"
 msgstr "(件名なし)"
 
@@ -4158,11 +4158,11 @@ msgstr "メッセージとサイトについて"
 #: includes/adapters/gravity-forms-confirmations.php:355
 #: includes/adapters/gravity-forms-confirmations.php:385
 #: includes/adapters/gravity-forms-notifications.php:793
-#: includes/adapters/gravity-forms.php:1030
-#: includes/adapters/gravity-forms.php:1113
-#: includes/adapters/gravity-forms.php:1177
-#: includes/adapters/gravity-forms.php:1200
-#: includes/adapters/gravity-forms.php:1600
+#: includes/adapters/gravity-forms.php:1033
+#: includes/adapters/gravity-forms.php:1116
+#: includes/adapters/gravity-forms.php:1180
+#: includes/adapters/gravity-forms.php:1203
+#: includes/adapters/gravity-forms.php:1603
 #: includes/adapters/wpforms-emails.php:155
 msgid "Form not found."
 msgstr "フォームが見つかりません。"
@@ -4200,10 +4200,10 @@ msgstr "CFDB7 を開く ↗"
 #: includes/adapters/fluent-forms.php:383
 #: includes/adapters/gravity-forms-entry-edit.php:277
 #: includes/adapters/gravity-forms.php:637
-#: includes/adapters/gravity-forms.php:780
-#: includes/adapters/gravity-forms.php:949
-#: includes/adapters/gravity-forms.php:999
-#: includes/adapters/gravity-forms.php:1026
+#: includes/adapters/gravity-forms.php:781
+#: includes/adapters/gravity-forms.php:952
+#: includes/adapters/gravity-forms.php:1002
+#: includes/adapters/gravity-forms.php:1029
 #: includes/adapters/wpforms.php:108
 #: includes/adapters/wpforms.php:341
 msgid "Entry not found."
@@ -4319,7 +4319,7 @@ msgid "Could not delete this account."
 msgstr "このアカウントを削除できませんでした。"
 
 #: includes/adapters/cleantalk.php:484
-#: includes/adapters/licenses.php:6938
+#: includes/adapters/licenses.php:6941
 msgid "Unknown action."
 msgstr "不明なアクションです。"
 
@@ -4419,7 +4419,7 @@ msgstr "範囲"
 #: includes/adapters/code-snippets.php:392
 #: includes/adapters/custom-css-js.php:677
 #: includes/adapters/fluent-snippets.php:156
-#: includes/adapters/gravity-smtp.php:370
+#: includes/adapters/gravity-smtp.php:403
 #: includes/adapters/snippets-kit.php:70
 #: includes/adapters/wpcode.php:537
 #: assets/js/app.js:30950
@@ -4504,7 +4504,7 @@ msgstr "スニペットを停止しました。"
 #: includes/adapters/jetpack-stats.php:254
 #: includes/adapters/matomo.php:329
 #: includes/adapters/monsterinsights.php:399
-#: includes/class-minn-admin-rest.php:3983
+#: includes/class-minn-admin-rest.php:3987
 #: assets/js/app.js:49641
 msgid "Top pages"
 msgstr "上位のページ"
@@ -4514,7 +4514,7 @@ msgstr "上位のページ"
 #: includes/adapters/jetpack-stats.php:256
 #: includes/adapters/matomo.php:331
 #: includes/adapters/monsterinsights.php:401
-#: includes/class-minn-admin-rest.php:4001
+#: includes/class-minn-admin-rest.php:4005
 msgid "Referrers"
 msgstr "リファラー"
 
@@ -4686,7 +4686,7 @@ msgid "/* your CSS */"
 msgstr "/* your CSS */"
 
 #: includes/adapters/custom-css-js.php:673
-#: includes/class-minn-admin-rest.php:13478
+#: includes/class-minn-admin-rest.php:13540
 #: assets/js/app.js:53790
 #: assets/js/app.js:53792
 #: assets/js/app.js:54042
@@ -4762,7 +4762,7 @@ msgstr "最終スキャン"
 
 #: includes/adapters/disembark.php:160
 #: includes/adapters/updraftplus.php:389
-#: includes/class-minn-admin-rest.php:14043
+#: includes/class-minn-admin-rest.php:14105
 #: includes/class-minn-admin-surfaces.php:518
 #: assets/js/app.js:1484
 msgid "Database"
@@ -5053,10 +5053,10 @@ msgid "That answer could not be read."
 msgstr "その回答を読み取れませんでした。"
 
 #: includes/adapters/elementor-forms-entry-edit.php:224
-#: includes/adapters/fluent-smtp.php:709
+#: includes/adapters/fluent-smtp.php:714
 #: includes/adapters/gravity-forms-entry-edit.php:214
-#: includes/adapters/gravity-smtp.php:879
-#: includes/adapters/gravity-smtp.php:1070
+#: includes/adapters/gravity-smtp.php:921
+#: includes/adapters/gravity-smtp.php:1120
 #: includes/adapters/network.php:644
 #: includes/adapters/network.php:1160
 #: includes/adapters/ninja-forms-entry-edit.php:203
@@ -5533,10 +5533,10 @@ msgid "Field Groups"
 msgstr "フィールドグループ"
 
 #: includes/adapters/fluent-forms-emails.php:243
-#: includes/adapters/gravity-smtp.php:386
+#: includes/adapters/gravity-smtp.php:419
 #: includes/adapters/woocommerce-gift-cards.php:362
-#: includes/class-minn-admin-rest.php:13485
-#: includes/class-minn-admin-rest.php:13516
+#: includes/class-minn-admin-rest.php:13547
+#: includes/class-minn-admin-rest.php:13578
 msgid "Enabled"
 msgstr "有効"
 
@@ -5545,7 +5545,7 @@ msgstr "有効"
 #: includes/adapters/fluent-forms-emails.php:246
 #: includes/adapters/fluent-smtp.php:251
 #: includes/adapters/fluent-smtp.php:280
-#: includes/adapters/gravity-smtp.php:1041
+#: includes/adapters/gravity-smtp.php:1091
 #: assets/js/app.js:57307
 #: assets/js/app.js:57319
 #: assets/js/app.js:57320
@@ -5555,7 +5555,7 @@ msgid "Send to"
 msgstr "送信先"
 
 #: includes/adapters/fluent-forms-emails.php:247
-#: includes/adapters/gravity-smtp.php:183
+#: includes/adapters/gravity-smtp.php:184
 #: assets/js/app.js:57352
 #: assets/js/app.js:58575
 #: assets/js/app.js:58883
@@ -5583,8 +5583,8 @@ msgstr "Bcc"
 #: includes/adapters/fluent-forms-emails.php:252
 #: includes/adapters/fluent-forms-emails.php:272
 #: includes/adapters/gift-cards-kit.php:135
-#: includes/adapters/gravity-smtp.php:181
-#: includes/adapters/gravity-smtp.php:369
+#: includes/adapters/gravity-smtp.php:182
+#: includes/adapters/gravity-smtp.php:402
 #: includes/adapters/jet-reviews.php:196
 #: includes/adapters/mail-kit.php:106
 #: includes/adapters/pw-gift-cards.php:298
@@ -5727,7 +5727,7 @@ msgid "Open FluentSMTP ↗"
 msgstr "FluentSMTP を開く ↗"
 
 #: includes/adapters/fluent-smtp.php:245
-#: includes/adapters/gravity-smtp.php:1037
+#: includes/adapters/gravity-smtp.php:1087
 msgid "Send a test email"
 msgstr "テストメールを送信"
 
@@ -5790,7 +5790,7 @@ msgstr "メールは記録されますが、実際には送信されません。
 
 #: includes/adapters/fluent-smtp.php:428
 #: includes/adapters/gravity-forms.php:355
-#: includes/adapters/gravity-smtp.php:592
+#: includes/adapters/gravity-smtp.php:625
 #: includes/adapters/mail-kit.php:67
 #: includes/adapters/post-smtp.php:167
 #: includes/adapters/site-mailer.php:97
@@ -5841,8 +5841,8 @@ msgid "This email holds a link whose key is hidden from you (a password reset li
 msgstr "このメールには、あなたには見えないキーを持つリンク (パスワードリセットリンク) が含まれているため、元の受信者にしか再送信できません。"
 
 #: includes/adapters/fluent-smtp.php:524
-#: includes/adapters/gravity-smtp.php:1443
-#: includes/adapters/post-smtp.php:267
+#: includes/adapters/gravity-smtp.php:1504
+#: includes/adapters/post-smtp.php:272
 msgid "No recipient address on record for this email."
 msgstr "このメールの宛先アドレスが記録されていません。"
 
@@ -5854,37 +5854,37 @@ msgstr "FluentSMTP がこの再送信を記録しなかったため、Minn は�
 msgid "The mailer reported the resend to "
 msgstr "メーラーの再送信結果: "
 
-#: includes/adapters/fluent-smtp.php:560
-#: includes/adapters/post-smtp.php:185
-#: includes/adapters/site-mailer.php:125
-#: includes/adapters/suremails.php:115
-#: includes/adapters/wp-mail-logging.php:193
-#: includes/adapters/wp-mail-logging.php:274
+#: includes/adapters/fluent-smtp.php:565
+#: includes/adapters/post-smtp.php:190
+#: includes/adapters/site-mailer.php:130
+#: includes/adapters/suremails.php:120
+#: includes/adapters/wp-mail-logging.php:198
+#: includes/adapters/wp-mail-logging.php:279
 msgid "Email not found"
 msgstr "メールが見つかりません"
 
-#: includes/adapters/fluent-smtp.php:634
+#: includes/adapters/fluent-smtp.php:639
 msgid "Log entry still exists after delete."
 msgstr "削除後もログが残っています。"
 
-#: includes/adapters/fluent-smtp.php:675
+#: includes/adapters/fluent-smtp.php:680
 msgid "That connection no longer exists."
 msgstr "その接続はすでに存在しません。"
 
-#: includes/adapters/fluent-smtp.php:682
+#: includes/adapters/fluent-smtp.php:687
 msgid "FluentSMTP is not fully loaded."
 msgstr "FluentSMTP が完全に読み込まれていません。"
 
-#: includes/adapters/fluent-smtp.php:711
+#: includes/adapters/fluent-smtp.php:716
 msgid "Test email sent to "
 msgstr "テストメールを送信しました: "
 
-#: includes/adapters/fluent-smtp.php:717
+#: includes/adapters/fluent-smtp.php:722
 msgid "FluentSMTP could not send the test email."
 msgstr "FluentSMTP がテストメールを送信できませんでした。"
 
 #. translators: %s: the site title.
-#: includes/adapters/fluent-smtp.php:726
+#: includes/adapters/fluent-smtp.php:731
 msgid "Fluent SMTP: Test Email - %s"
 msgstr "Fluent SMTP: テストメール - %s"
 
@@ -6070,12 +6070,12 @@ msgstr "フィールド "
 
 #: includes/adapters/forms-kit.php:244
 #: includes/adapters/forms-kit.php:251
-#: includes/adapters/gravity-forms.php:673
+#: includes/adapters/gravity-forms.php:674
 msgid "Submitted"
 msgstr "送信日時"
 
 #: includes/adapters/forms-kit.php:274
-#: includes/adapters/gravity-forms.php:730
+#: includes/adapters/gravity-forms.php:731
 msgid "Responses"
 msgstr "回答"
 
@@ -6150,7 +6150,7 @@ msgid "Recipient"
 msgstr "受取人"
 
 #: includes/adapters/gift-cards-kit.php:193
-#: includes/adapters/gravity-smtp.php:393
+#: includes/adapters/gravity-smtp.php:426
 #: includes/adapters/redirection.php:169
 #: includes/adapters/redirection.php:190
 msgid "Disable"
@@ -6161,7 +6161,7 @@ msgid "Disable this gift card? Its balance can no longer be spent."
 msgstr "このギフトカードを無効にしますか ? 残高は使えなくなります。"
 
 #: includes/adapters/gift-cards-kit.php:201
-#: includes/adapters/gravity-smtp.php:392
+#: includes/adapters/gravity-smtp.php:425
 #: includes/adapters/redirection.php:174
 #: includes/adapters/redirection.php:195
 msgid "Enable"
@@ -6345,7 +6345,7 @@ msgid "is"
 msgstr "である"
 
 #: includes/adapters/gravity-forms-builder.php:344
-#: includes/adapters/gravity-smtp.php:201
+#: includes/adapters/gravity-smtp.php:202
 #: assets/js/app.js:55655
 #: assets/js/app.js:57083
 msgid "is not"
@@ -6367,13 +6367,13 @@ msgid "contains"
 msgstr "含む"
 
 #: includes/adapters/gravity-forms-builder.php:348
-#: includes/adapters/gravity-smtp.php:208
+#: includes/adapters/gravity-smtp.php:209
 #: assets/js/app.js:57084
 msgid "starts with"
 msgstr "で始まる"
 
 #: includes/adapters/gravity-forms-builder.php:349
-#: includes/adapters/gravity-smtp.php:209
+#: includes/adapters/gravity-smtp.php:210
 #: assets/js/app.js:57084
 msgid "ends with"
 msgstr "で終わる"
@@ -6423,7 +6423,7 @@ msgid "User Login"
 msgstr "ユーザーログイン"
 
 #: includes/adapters/gravity-forms-builder.php:436
-#: includes/adapters/gravity-smtp.php:1499
+#: includes/adapters/gravity-smtp.php:1560
 #: includes/adapters/wpforms-emails.php:54
 #: assets/js/app.js:18969
 msgid "Other"
@@ -6479,7 +6479,7 @@ msgid "Mr., Mrs., Miss, Ms., Mx., Dr., Prof., Rev."
 msgstr "Mr., Mrs., Miss, Ms., Mx., Dr., Prof., Rev."
 
 #: includes/adapters/gravity-forms-builder.php:542
-#: includes/class-minn-admin-rest.php:13646
+#: includes/class-minn-admin-rest.php:13708
 msgid "Prefix"
 msgstr "プレフィックス"
 
@@ -6980,7 +6980,7 @@ msgstr "アドオン"
 msgid "Delete this feed permanently? The add-on stops running for its form."
 msgstr "このフィードを完全に削除しますか ? そのフォームでアドオンが動作しなくなります。"
 
-#: includes/adapters/gravity-forms.php:687
+#: includes/adapters/gravity-forms.php:688
 #: includes/adapters/latepoint.php:497
 #: assets/js/app.js:10773
 #: assets/js/app.js:11886
@@ -6990,272 +6990,274 @@ msgstr "このフィードを完全に削除しますか ? そのフォームで
 msgid "Payment"
 msgstr "支払い"
 
-#: includes/adapters/gravity-forms.php:785
+#: includes/adapters/gravity-forms.php:786
 msgid "Write a note first."
 msgstr "先にノートを入力してください。"
 
-#: includes/adapters/gravity-forms.php:959
+#: includes/adapters/gravity-forms.php:962
 msgid "You are not allowed to move entries to or from the trash."
 msgstr "エントリーをゴミ箱へ移動したり、ゴミ箱から復元したりする権限がありません。"
 
-#: includes/adapters/gravity-forms.php:974
+#: includes/adapters/gravity-forms.php:977
 msgid "Unknown entry status."
 msgstr "不明なエントリーステータスです。"
 
-#: includes/adapters/gravity-forms.php:983
+#: includes/adapters/gravity-forms.php:986
 msgid "Nothing to update."
 msgstr "更新する項目はありません。"
 
-#: includes/adapters/gravity-forms.php:1009
+#: includes/adapters/gravity-forms.php:1012
 msgid "The entry is already in the trash."
 msgstr "このエントリーはすでにゴミ箱にあります。"
 
 #. translators: %d: number of routing rules on the notification.
-#: includes/adapters/gravity-forms.php:1079
+#: includes/adapters/gravity-forms.php:1082
 msgid "Routing (%d rule)"
 msgid_plural "Routing (%d rules)"
 msgstr[0] "ルーティング (%d 件のルール)"
 
-#: includes/adapters/gravity-forms.php:1084
+#: includes/adapters/gravity-forms.php:1087
 msgid "Form is submitted"
 msgstr "フォームが送信されたとき"
 
-#: includes/adapters/gravity-forms.php:1085
+#: includes/adapters/gravity-forms.php:1088
 msgid "Draft is saved"
 msgstr "下書きが保存されたとき"
 
-#: includes/adapters/gravity-forms.php:1086
+#: includes/adapters/gravity-forms.php:1089
 msgid "Draft link is requested"
 msgstr "下書きリンクが申請されたとき"
 
-#: includes/adapters/gravity-forms.php:1294
-#: includes/adapters/gravity-forms.php:1314
+#: includes/adapters/gravity-forms.php:1297
+#: includes/adapters/gravity-forms.php:1317
 msgid "Feed not found."
 msgstr "フィードが見つかりません。"
 
-#: includes/adapters/gravity-forms.php:1297
-#: includes/adapters/gravity-forms.php:1317
+#: includes/adapters/gravity-forms.php:1300
+#: includes/adapters/gravity-forms.php:1320
 msgid "You cannot manage this add-on's feeds."
 msgstr "このアドオンのフィードは管理できません。"
 
-#: includes/adapters/gravity-forms.php:1302
+#: includes/adapters/gravity-forms.php:1305
 msgid "Gravity Forms refused the change."
 msgstr "Gravity Forms が変更を拒否しました。"
 
-#: includes/adapters/gravity-forms.php:1545
+#: includes/adapters/gravity-forms.php:1548
 #: assets/js/app.js:59903
 #: assets/js/app.js:59948
 msgid "Period"
 msgstr "期間"
 
-#: includes/adapters/gravity-forms.php:1613
+#: includes/adapters/gravity-forms.php:1616
 msgid "Give the form a title."
 msgstr "フォームにタイトルを付けてください。"
 
-#: includes/adapters/gravity-forms.php:1617
+#: includes/adapters/gravity-forms.php:1620
 msgid "Another form already uses that title."
 msgstr "別のフォームがすでにそのタイトルを使用しています。"
 
 #. translators: 1: the rejected value, 2: the setting key.
-#: includes/adapters/gravity-forms.php:1640
+#: includes/adapters/gravity-forms.php:1643
 msgid "\"%1$s\" is not one of the choices for %2$s."
 msgstr "「%1$s」は %2$s の選択肢にありません。"
 
-#: includes/adapters/gravity-smtp.php:189
+#: includes/adapters/gravity-smtp.php:190
 msgid "Source type"
 msgstr "ソースタイプ"
 
-#: includes/adapters/gravity-smtp.php:190
+#: includes/adapters/gravity-smtp.php:191
 msgid "To count"
 msgstr "宛先数"
 
-#: includes/adapters/gravity-smtp.php:191
+#: includes/adapters/gravity-smtp.php:192
 msgid "CC count"
 msgstr "CC 数"
 
-#: includes/adapters/gravity-smtp.php:192
+#: includes/adapters/gravity-smtp.php:193
 msgid "BCC count"
 msgstr "BCC 数"
 
-#: includes/adapters/gravity-smtp.php:193
+#: includes/adapters/gravity-smtp.php:194
 msgid "Has attachments"
 msgstr "添付ファイルあり"
 
-#: includes/adapters/gravity-smtp.php:195
+#: includes/adapters/gravity-smtp.php:196
 msgid "Content type"
 msgstr "コンテンツタイプ"
 
-#: includes/adapters/gravity-smtp.php:196
+#: includes/adapters/gravity-smtp.php:197
 msgid "Message size"
 msgstr "メッセージサイズ"
 
-#: includes/adapters/gravity-smtp.php:197
+#: includes/adapters/gravity-smtp.php:198
 msgid "Attachment size"
 msgstr "添付サイズ"
 
-#: includes/adapters/gravity-smtp.php:207
+#: includes/adapters/gravity-smtp.php:208
 msgid "does not contain"
 msgstr "を含まない"
 
-#: includes/adapters/gravity-smtp.php:236
+#: includes/adapters/gravity-smtp.php:237
 msgid "No conditions"
 msgstr "条件なし"
 
-#: includes/adapters/gravity-smtp.php:331
+#: includes/adapters/gravity-smtp.php:364
 msgid "Suppressions"
 msgstr "送信除外リスト"
 
-#: includes/adapters/gravity-smtp.php:334
+#: includes/adapters/gravity-smtp.php:367
 #: assets/js/app.js:12282
 msgid "Reason"
 msgstr "理由"
 
-#: includes/adapters/gravity-smtp.php:337
+#: includes/adapters/gravity-smtp.php:370
 msgid "Since"
 msgstr "開始日"
 
-#: includes/adapters/gravity-smtp.php:341
+#: includes/adapters/gravity-smtp.php:374
 msgid "Suppress email"
 msgstr "メール送信を停止"
 
-#: includes/adapters/gravity-smtp.php:344
+#: includes/adapters/gravity-smtp.php:377
 #: assets/js/app.js:57292
 #: assets/js/app.js:58560
 msgid "Email address"
 msgstr "メールアドレス"
 
-#: includes/adapters/gravity-smtp.php:345
+#: includes/adapters/gravity-smtp.php:378
 msgid "Why sending to this address is off"
 msgstr "このアドレスへの送信が停止されている理由"
 
-#: includes/adapters/gravity-smtp.php:349
+#: includes/adapters/gravity-smtp.php:382
 msgid "Reactivate (allow sending again)"
 msgstr "再有効化 (送信を再び許可)"
 
-#: includes/adapters/gravity-smtp.php:349
+#: includes/adapters/gravity-smtp.php:382
 msgid "Allow Gravity SMTP to send to this address again?"
 msgstr "Gravity SMTP がこのアドレスへ再び送信できるようにしますか ?"
 
-#: includes/adapters/gravity-smtp.php:356
-#: includes/adapters/gravity-smtp.php:1249
+#: includes/adapters/gravity-smtp.php:389
+#: includes/adapters/gravity-smtp.php:1310
 #: includes/class-minn-admin-logs.php:86
 msgid "Debug log"
 msgstr "デバッグログ"
 
-#: includes/adapters/gravity-smtp.php:379
-#: includes/adapters/gravity-smtp.php:1017
+#: includes/adapters/gravity-smtp.php:412
+#: includes/adapters/gravity-smtp.php:1067
 #: assets/js/app.js:57292
 msgid "Routing"
 msgstr "ルーティング"
 
-#: includes/adapters/gravity-smtp.php:383
+#: includes/adapters/gravity-smtp.php:416
 #: includes/adapters/rewrite-rules-inspector.php:195
 msgid "Rule"
 msgstr "ルール"
 
-#: includes/adapters/gravity-smtp.php:384
+#: includes/adapters/gravity-smtp.php:417
 msgid "Send with"
 msgstr "送信に使用"
 
-#: includes/adapters/gravity-smtp.php:394
+#: includes/adapters/gravity-smtp.php:427
 msgid "Delete rule"
 msgstr "ルールを削除"
 
-#: includes/adapters/gravity-smtp.php:394
+#: includes/adapters/gravity-smtp.php:427
 msgid "Delete this routing rule permanently?"
 msgstr "この振り分けルールを完全に削除しますか ?"
 
-#: includes/adapters/gravity-smtp.php:396
+#: includes/adapters/gravity-smtp.php:429
 msgid "Edit in Gravity SMTP ↗"
 msgstr "Gravity SMTP で編集 ↗"
 
-#: includes/adapters/gravity-smtp.php:405
+#: includes/adapters/gravity-smtp.php:438
 msgid "Sending"
 msgstr "送信"
 
-#: includes/adapters/gravity-smtp.php:602
+#: includes/adapters/gravity-smtp.php:635
 #: includes/adapters/wp-mail-logging.php:170
 #: assets/js/app.js:58291
 msgid "Attachments"
 msgstr "添付ファイル"
 
-#: includes/adapters/gravity-smtp.php:617
+#: includes/adapters/gravity-smtp.php:650
 #: includes/adapters/wp-mail-logging.php:177
 msgid "Headers"
 msgstr "ヘッダー"
 
-#: includes/adapters/gravity-smtp.php:617
+#: includes/adapters/gravity-smtp.php:650
 msgid "Stored headers"
 msgstr "保存されたヘッダー"
 
-#: includes/adapters/gravity-smtp.php:642
-#: includes/adapters/wp-mail-smtp.php:110
+#: includes/adapters/gravity-smtp.php:678
+#: includes/adapters/wp-mail-smtp.php:115
 msgid "Event not found"
 msgstr "イベントが見つかりません"
 
-#: includes/adapters/gravity-smtp.php:769
+#: includes/adapters/gravity-smtp.php:805
 msgid "Could not delete this log entry."
 msgstr "このログを削除できませんでした。"
 
-#: includes/adapters/gravity-smtp.php:777
+#: includes/adapters/gravity-smtp.php:813
 msgid "Resent to the original recipients."
 msgstr "元の宛先に再送信しました。"
 
-#: includes/adapters/gravity-smtp.php:778
+#: includes/adapters/gravity-smtp.php:814
 msgid "Resent, but another active mail plugin carried it, so the new send appears in that plugin’s log, not Gravity SMTP’s."
 msgstr "再送信しましたが、別の有効なメールプラグインが送ったため、新しい送信は Gravity SMTP ではなくそのプラグインのログに表示されます。"
 
-#: includes/adapters/gravity-smtp.php:827
+#: includes/adapters/gravity-smtp.php:869
 msgid "Suppressed address not found."
 msgstr "送信停止中のアドレスが見つかりません。"
 
-#: includes/adapters/gravity-smtp.php:863
+#: includes/adapters/gravity-smtp.php:905
 msgid "Reactivated — Gravity SMTP can send to "
 msgstr "再有効化しました — Gravity SMTP が送信できます: "
 
-#: includes/adapters/gravity-smtp.php:913
+#: includes/adapters/gravity-smtp.php:944
+#: includes/adapters/gravity-smtp.php:959
+#: includes/adapters/gravity-smtp.php:1009
 msgid "Routing rule not found."
 msgstr "振り分けルールが見つかりません。"
 
-#: includes/adapters/gravity-smtp.php:945
+#: includes/adapters/gravity-smtp.php:991
 msgid "Rule enabled."
 msgstr "ルールを有効化しました。"
 
-#: includes/adapters/gravity-smtp.php:954
+#: includes/adapters/gravity-smtp.php:1000
 msgid "Rule disabled."
 msgstr "ルールを無効化しました。"
 
-#: includes/adapters/gravity-smtp.php:969
+#: includes/adapters/gravity-smtp.php:1019
 msgid "Routing rule deleted."
 msgstr "振り分けルールを削除しました。"
 
-#: includes/adapters/gravity-smtp.php:998
+#: includes/adapters/gravity-smtp.php:1048
 msgid "Sending through"
 msgstr "送信経路"
 
-#: includes/adapters/gravity-smtp.php:1002
+#: includes/adapters/gravity-smtp.php:1052
 msgid "Emails are logged, not sent."
 msgstr "メールは記録され、送信されません。"
 
-#: includes/adapters/gravity-smtp.php:1014
+#: includes/adapters/gravity-smtp.php:1064
 msgid "Needs at least 2 active integrations to evaluate (same as Gravity SMTP)."
 msgstr "評価するには有効な連携が2つ以上必要です (Gravity SMTP と同じです)。"
 
-#: includes/adapters/gravity-smtp.php:1015
+#: includes/adapters/gravity-smtp.php:1065
 msgid "First matching rule wins, top to bottom."
 msgstr "上から順に、最初に一致したルールが適用されます。"
 
-#: includes/adapters/gravity-smtp.php:1015
+#: includes/adapters/gravity-smtp.php:1065
 msgid "No rules yet — add them in Gravity SMTP."
 msgstr "ルールはまだありません — Gravity SMTP で追加してください。"
 
 #. translators: 1: number of routing rules; 2: number of enabled rules.
-#: includes/adapters/gravity-smtp.php:1021
+#: includes/adapters/gravity-smtp.php:1071
 msgid "%1$d rule · %2$d on"
 msgid_plural "%1$d rules · %2$d on"
 msgstr[0] "ルール %1$d 件 · 有効 %2$d 件"
 
-#: includes/adapters/gravity-smtp.php:1025
+#: includes/adapters/gravity-smtp.php:1075
 #: includes/adapters/seo.php:205
 #: includes/adapters/seo.php:402
 #: includes/adapters/seo.php:637
@@ -7268,118 +7270,118 @@ msgstr[0] "ルール %1$d 件 · 有効 %2$d 件"
 msgid "None"
 msgstr "なし"
 
-#: includes/adapters/gravity-smtp.php:1041
+#: includes/adapters/gravity-smtp.php:1091
 msgid "you@example.com"
 msgstr "you@example.com"
 
-#: includes/adapters/gravity-smtp.php:1047
+#: includes/adapters/gravity-smtp.php:1097
 msgid "Edit routing rules ↗"
 msgstr "振り分けルールを編集 ↗"
 
-#: includes/adapters/gravity-smtp.php:1093
+#: includes/adapters/gravity-smtp.php:1143
 msgid "Test email from Minn Admin (Gravity SMTP)"
 msgstr "Minn Admin からのテストメール (Gravity SMTP)"
 
-#: includes/adapters/gravity-smtp.php:1099
+#: includes/adapters/gravity-smtp.php:1149
 msgid "The mailer reported the test could not be sent."
 msgstr "メーラーがテストメールを送信できないと報告しました。"
 
-#: includes/adapters/gravity-smtp.php:1105
+#: includes/adapters/gravity-smtp.php:1155
 msgid "Test email sent and logged."
 msgstr "テストメールを送信し、記録しました。"
 
-#: includes/adapters/gravity-smtp.php:1106
+#: includes/adapters/gravity-smtp.php:1156
 msgid "Test email sent, but another active mail plugin carried it, so it appears in that plugin’s log, not Gravity SMTP’s."
 msgstr "テストメールは送信されましたが、別の有効なメールプラグインが送ったため、Gravity SMTP ではなくそのプラグインのログに表示されます。"
 
-#: includes/adapters/gravity-smtp.php:1167
+#: includes/adapters/gravity-smtp.php:1228
 msgid "Custom SMTP"
 msgstr "カスタム SMTP"
 
-#: includes/adapters/gravity-smtp.php:1188
+#: includes/adapters/gravity-smtp.php:1249
 msgid "Sending service"
 msgstr "送信サービス"
 
-#: includes/adapters/gravity-smtp.php:1192
+#: includes/adapters/gravity-smtp.php:1253
 msgid "Primary service"
 msgstr "メインのサービス"
 
-#: includes/adapters/gravity-smtp.php:1195
+#: includes/adapters/gravity-smtp.php:1256
 msgid "Saving a different service reloads this tab with its settings."
 msgstr "別のサービスを保存すると、このタブがその設定で再読み込みされます。"
 
-#: includes/adapters/gravity-smtp.php:1234
+#: includes/adapters/gravity-smtp.php:1295
 msgid "Sending behavior"
 msgstr "送信の動作"
 
-#: includes/adapters/gravity-smtp.php:1240
-#: includes/adapters/mail-kit.php:246
+#: includes/adapters/gravity-smtp.php:1301
+#: includes/adapters/mail-kit.php:248
 msgid "Email log"
 msgstr "メールログ"
 
-#: includes/adapters/gravity-smtp.php:1242
+#: includes/adapters/gravity-smtp.php:1303
 msgid "Keep an email log"
 msgstr "メールログを保存"
 
-#: includes/adapters/gravity-smtp.php:1243
+#: includes/adapters/gravity-smtp.php:1304
 msgid "Store message bodies"
 msgstr "メール本文を保存"
 
-#: includes/adapters/gravity-smtp.php:1244
+#: includes/adapters/gravity-smtp.php:1305
 msgid "Store attachments"
 msgstr "添付ファイルを保存"
 
-#: includes/adapters/gravity-smtp.php:1245
-#: includes/adapters/gravity-smtp.php:1252
+#: includes/adapters/gravity-smtp.php:1306
+#: includes/adapters/gravity-smtp.php:1313
 msgid "Retention (days)"
 msgstr "保存期間 (日)"
 
-#: includes/adapters/gravity-smtp.php:1251
+#: includes/adapters/gravity-smtp.php:1312
 msgid "Keep a debug log"
 msgstr "デバッグログを保存"
 
-#: includes/adapters/gravity-smtp.php:1286
+#: includes/adapters/gravity-smtp.php:1347
 msgid "Unknown sending service."
 msgstr "不明な送信サービスです。"
 
-#: includes/adapters/gravity-smtp.php:1289
+#: includes/adapters/gravity-smtp.php:1350
 msgid "Switch the sending service on its own first, then edit its settings."
 msgstr "まず送信サービスだけを切り替えてから、その設定を編集してください。"
 
-#: includes/adapters/gravity-smtp.php:1368
+#: includes/adapters/gravity-smtp.php:1429
 msgid "Gravity SMTP reports this email cannot be resent (body or attachments were not stored)."
 msgstr "Gravity SMTP はこのメールを再送信できないと報告しました (本文または添付ファイルが保存されていません)。"
 
-#: includes/adapters/gravity-smtp.php:1460
+#: includes/adapters/gravity-smtp.php:1521
 #: includes/kernel/class-minn-admin-kernel.php:2138
 msgid "The mailer reported the message could not be sent."
 msgstr "メーラーがメールを送信できないと報告しました。"
 
-#: includes/adapters/gravity-smtp.php:1497
+#: includes/adapters/gravity-smtp.php:1558
 #: assets/js/app.js:969
 msgid "Sandboxed"
 msgstr "サンドボックス"
 
-#: includes/adapters/gravity-smtp.php:1498
+#: includes/adapters/gravity-smtp.php:1559
 #: assets/js/app.js:969
 msgid "Filtered"
 msgstr "フィルター済み"
 
-#: includes/adapters/gravity-smtp.php:1506
-#: includes/adapters/mail-kit.php:264
+#: includes/adapters/gravity-smtp.php:1567
+#: includes/adapters/mail-kit.php:266
 #: includes/adapters/redirection.php:444
 #: includes/adapters/status-chart.php:267
 msgid "Last 14 days"
 msgstr "過去14日間"
 
-#: includes/adapters/gravity-smtp.php:1507
+#: includes/adapters/gravity-smtp.php:1568
 #: includes/adapters/ottokit.php:160
 #: includes/adapters/ottokit.php:204
 #: assets/js/app.js:968
 msgid "Sent"
 msgstr "送信済み"
 
-#: includes/adapters/gravity-smtp.php:1508
+#: includes/adapters/gravity-smtp.php:1569
 #: includes/adapters/ottokit.php:328
 #: includes/adapters/wordfence.php:210
 #: assets/js/app.js:966
@@ -7605,7 +7607,7 @@ msgid "Published"
 msgstr "公開済み"
 
 #: includes/adapters/jet-cct.php:279
-#: includes/class-minn-admin-rest.php:4466
+#: includes/class-minn-admin-rest.php:4475
 #: assets/js/app.js:1496
 #: assets/js/app.js:7045
 msgid "Drafts"
@@ -9369,7 +9371,7 @@ msgid "The plugin is not loaded."
 msgstr "プラグインが読み込まれていません。"
 
 #: includes/adapters/licenses.php:6208
-#: includes/adapters/licenses.php:6962
+#: includes/adapters/licenses.php:6965
 msgid "Paste a key first."
 msgstr "先にキーを貼り付けてください。"
 
@@ -9422,24 +9424,24 @@ msgstr "ライセンスキー"
 msgid "core connector"
 msgstr "コアのコネクタ"
 
-#: includes/adapters/licenses.php:6943
+#: includes/adapters/licenses.php:6946
 msgid "No such action for this provider."
 msgstr "このプロバイダーにその操作はありません。"
 
-#: includes/adapters/licenses.php:6957
+#: includes/adapters/licenses.php:6960
 msgid "Fill in every field first."
 msgstr "先にすべての項目を入力してください。"
 
 #. translators: %s: PHP constant name defined in wp-config.php.
-#: includes/adapters/licenses.php:6996
+#: includes/adapters/licenses.php:6999
 msgid "This key is defined in wp-config (%s), which takes precedence. Change it there."
 msgstr "このキーは wp-config (%s) で定義されており、そちらが優先されます。そこで変更してください。"
 
-#: includes/adapters/licenses.php:7009
+#: includes/adapters/licenses.php:7012
 msgid "The plugin reported an error during the request."
 msgstr "プラグインがリクエスト中にエラーを報告しました。"
 
-#: includes/adapters/licenses.php:7081
+#: includes/adapters/licenses.php:7084
 msgid "Could not check for updates."
 msgstr "更新を確認できませんでした。"
 
@@ -9543,41 +9545,41 @@ msgstr "本文"
 msgid "Delivery"
 msgstr "配信"
 
-#: includes/adapters/mail-kit.php:176
+#: includes/adapters/mail-kit.php:178
 msgid "[hidden]"
 msgstr "[非表示]"
 
-#: includes/adapters/mail-kit.php:220
+#: includes/adapters/mail-kit.php:222
 msgid "Failure"
 msgstr "失敗"
 
-#: includes/adapters/mail-kit.php:221
+#: includes/adapters/mail-kit.php:223
 #: includes/adapters/ottokit.php:213
 msgid "Error"
 msgstr "エラー"
 
-#: includes/adapters/mail-kit.php:238
+#: includes/adapters/mail-kit.php:240
 msgid "All logged sends"
 msgstr "記録されたすべての送信"
 
-#: includes/adapters/mail-kit.php:255
+#: includes/adapters/mail-kit.php:257
 msgid "Logged emails"
 msgstr "記録されたメール"
 
 #. translators: %s: number of failed sends.
 #. translators: %s: the job label.
-#: includes/adapters/mail-kit.php:258
+#: includes/adapters/mail-kit.php:260
 #: assets/js/app.js:19483
 msgid "%s failed"
 msgid_plural "%s failed"
 msgstr[0] "失敗 %s 件"
 
-#: includes/adapters/mail-kit.php:289
+#: includes/adapters/mail-kit.php:291
 #: includes/adapters/rank-math-redirections.php:558
 msgid "Log entry deleted."
 msgstr "ログを削除しました。"
 
-#: includes/adapters/mail-kit.php:307
+#: includes/adapters/mail-kit.php:309
 msgid "Resent to "
 msgstr "再送信しました: "
 
@@ -9898,7 +9900,7 @@ msgid "You are not allowed to delete that site."
 msgstr "そのサイトを削除する権限がありません。"
 
 #: includes/adapters/network.php:1271
-#: includes/class-minn-admin-rest.php:11344
+#: includes/class-minn-admin-rest.php:11355
 msgid "That plugin is not installed."
 msgstr "そのプラグインはインストールされていません。"
 
@@ -9916,7 +9918,7 @@ msgid "That theme name is not valid."
 msgstr "そのテーマ名は無効です。"
 
 #: includes/adapters/network.php:1317
-#: includes/class-minn-admin-rest.php:11488
+#: includes/class-minn-admin-rest.php:11499
 msgid "That theme is not installed."
 msgstr "そのテーマはインストールされていません。"
 
@@ -11217,8 +11219,8 @@ msgid "REST"
 msgstr "REST"
 
 #: includes/adapters/scrutoscope.php:80
-#: includes/class-minn-admin-rest.php:13636
-#: includes/class-minn-admin-rest.php:13786
+#: includes/class-minn-admin-rest.php:13698
+#: includes/class-minn-admin-rest.php:13848
 #: assets/js/app.js:974
 msgid "Cron"
 msgstr "Cron"
@@ -11269,10 +11271,10 @@ msgid "Login"
 msgstr "ログイン"
 
 #: includes/adapters/scrutoscope.php:96
-#: includes/class-minn-admin-rest.php:10995
-#: includes/class-minn-admin-rest.php:11093
-#: includes/class-minn-admin-rest.php:13662
-#: includes/class-minn-admin-rest.php:13672
+#: includes/class-minn-admin-rest.php:11006
+#: includes/class-minn-admin-rest.php:11104
+#: includes/class-minn-admin-rest.php:13724
+#: includes/class-minn-admin-rest.php:13734
 #: assets/js/app.js:25584
 msgid "Unknown"
 msgstr "不明"
@@ -11365,8 +11367,8 @@ msgstr "タイムラインの区切り"
 #. translators: %s: number of background jobs waiting to run.
 #. translators: %s: number of comments awaiting moderation.
 #: includes/adapters/scrutoscope.php:450
-#: includes/class-minn-admin-rest.php:4131
-#: includes/class-minn-admin-rest.php:4498
+#: includes/class-minn-admin-rest.php:4135
+#: includes/class-minn-admin-rest.php:4507
 msgid "%s pending"
 msgstr "承認待ち %s 件"
 
@@ -11465,9 +11467,9 @@ msgid "Timeline + per-callback trace"
 msgstr "タイムライン + コールバックごとのトレース"
 
 #: includes/adapters/scrutoscope.php:548
-#: includes/class-minn-admin-rest.php:13466
-#: includes/class-minn-admin-rest.php:13508
-#: includes/class-minn-admin-rest.php:13641
+#: includes/class-minn-admin-rest.php:13528
+#: includes/class-minn-admin-rest.php:13570
+#: includes/class-minn-admin-rest.php:13703
 msgid "Version"
 msgstr "バージョン"
 
@@ -11931,7 +11933,7 @@ msgstr "重大度 (7日間)"
 
 #: includes/adapters/simple-history.php:177
 #: includes/adapters/sucuri.php:169
-#: includes/adapters/wp-mail-smtp.php:249
+#: includes/adapters/wp-mail-smtp.php:254
 msgid "Errors"
 msgstr "エラー"
 
@@ -11941,19 +11943,19 @@ msgid "%1$s · %2$s time"
 msgid_plural "%1$s · %2$s times"
 msgstr[0] "%1$s · %2$s 回"
 
-#: includes/adapters/site-mailer.php:185
+#: includes/adapters/site-mailer.php:190
 msgid "Open Site Mailer ↗"
 msgstr "Site Mailer を開く ↗"
 
-#: includes/adapters/site-mailer.php:190
+#: includes/adapters/site-mailer.php:195
 msgid "Site Mailer has not logged any sends yet"
 msgstr "Site Mailer にはまだ送信の記録がありません"
 
-#: includes/adapters/site-mailer.php:192
+#: includes/adapters/site-mailer.php:197
 msgid "All delivered"
 msgstr "すべて配信済み"
 
-#: includes/adapters/site-mailer.php:197
+#: includes/adapters/site-mailer.php:202
 #: includes/adapters/woocommerce-gift-cards.php:391
 msgid "Delivered"
 msgstr "配信済み"
@@ -12307,11 +12309,11 @@ msgstr "表示回数"
 msgid "Conversion"
 msgstr "コンバージョン"
 
-#: includes/adapters/suremails.php:159
+#: includes/adapters/suremails.php:164
 msgid "Open SureMails ↗"
 msgstr "SureMails を開く ↗"
 
-#: includes/adapters/suremails.php:163
+#: includes/adapters/suremails.php:168
 msgid "SureMails has not logged any sends yet"
 msgstr "SureMails にはまだ送信の記録がありません"
 
@@ -12709,11 +12711,11 @@ msgid "User Switching nonce URL for the current viewer, when allowed."
 msgstr "許可されている場合、現在の閲覧者向けの User Switching nonce URL です。"
 
 #: includes/adapters/wcpdf.php:137
-#: includes/class-minn-admin-rest.php:8590
-#: includes/class-minn-admin-rest.php:8827
-#: includes/class-minn-admin-rest.php:8869
-#: includes/class-minn-admin-rest.php:8999
-#: includes/class-minn-admin-rest.php:9035
+#: includes/class-minn-admin-rest.php:8601
+#: includes/class-minn-admin-rest.php:8838
+#: includes/class-minn-admin-rest.php:8880
+#: includes/class-minn-admin-rest.php:9010
+#: includes/class-minn-admin-rest.php:9046
 msgid "Order not found."
 msgstr "注文が見つかりません。"
 
@@ -12926,7 +12928,7 @@ msgstr "商品購入"
 
 #: includes/adapters/woocommerce-memberships.php:727
 #: includes/adapters/woocommerce-memberships.php:1531
-#: includes/class-minn-admin-rest.php:4659
+#: includes/class-minn-admin-rest.php:4670
 #: includes/class-minn-admin-surfaces.php:509
 #: assets/js/app.js:1463
 #: assets/js/app.js:4196
@@ -14412,7 +14414,7 @@ msgid "Open WP Mail Logging ↗"
 msgstr "WP Mail Logging を開く ↗"
 
 #: includes/adapters/wp-mail-logging.php:166
-#: includes/class-minn-admin-rest.php:13642
+#: includes/class-minn-admin-rest.php:13704
 msgid "Host"
 msgstr "ホスト"
 
@@ -14420,11 +14422,11 @@ msgstr "ホスト"
 msgid "Raw headers"
 msgstr "生のヘッダー"
 
-#: includes/adapters/wp-mail-logging.php:278
+#: includes/adapters/wp-mail-logging.php:283
 msgid "WP Mail Logging could not resend: "
 msgstr "WP Mail Logging が再送信できませんでした: "
 
-#: includes/adapters/wp-mail-logging.php:281
+#: includes/adapters/wp-mail-logging.php:286
 msgid "Handed back to the mailer — the new attempt appears as its own log entry."
 msgstr "メーラーに引き渡しました。新しい送信は別のログとして記録されます。"
 
@@ -14432,52 +14434,52 @@ msgstr "メーラーに引き渡しました。新しい送信は別のログと
 msgid "Initiator"
 msgstr "実行元"
 
-#: includes/adapters/wp-mail-smtp.php:189
+#: includes/adapters/wp-mail-smtp.php:194
 msgid "Errors (30 days)"
 msgstr "エラー (30日間)"
 
-#: includes/adapters/wp-mail-smtp.php:192
+#: includes/adapters/wp-mail-smtp.php:197
 msgid "Delivery problems this plugin recorded."
 msgstr "このプラグインが記録した配信の問題です。"
 
-#: includes/adapters/wp-mail-smtp.php:193
+#: includes/adapters/wp-mail-smtp.php:198
 msgid "No delivery errors recorded."
 msgstr "配信エラーは記録されていません。"
 
-#: includes/adapters/wp-mail-smtp.php:208
+#: includes/adapters/wp-mail-smtp.php:213
 msgid "Mailer"
 msgstr "メーラー"
 
-#: includes/adapters/wp-mail-smtp.php:209
+#: includes/adapters/wp-mail-smtp.php:214
 #: assets/js/app.js:12698
 msgid "Not set"
 msgstr "未設定"
 
-#: includes/adapters/wp-mail-smtp.php:211
+#: includes/adapters/wp-mail-smtp.php:216
 msgid "Sending through the web server, not an SMTP service."
 msgstr "SMTP サービスではなく、ウェブサーバー経由で送信しています。"
 
-#: includes/adapters/wp-mail-smtp.php:212
+#: includes/adapters/wp-mail-smtp.php:217
 msgid "Configured in WP Mail SMTP."
 msgstr "WP Mail SMTP で設定済みです。"
 
-#: includes/adapters/wp-mail-smtp.php:227
+#: includes/adapters/wp-mail-smtp.php:232
 msgid "Events logged"
 msgstr "記録されたイベント"
 
-#: includes/adapters/wp-mail-smtp.php:230
+#: includes/adapters/wp-mail-smtp.php:235
 msgid "Debug logging is on, so sends are recorded too."
 msgstr "デバッグログが有効なため、送信も記録されます。"
 
-#: includes/adapters/wp-mail-smtp.php:231
+#: includes/adapters/wp-mail-smtp.php:236
 msgid "Errors only. Turn on debug logging to record sends."
 msgstr "エラーのみ。送信も記録するにはデバッグログを有効にしてください。"
 
-#: includes/adapters/wp-mail-smtp.php:238
+#: includes/adapters/wp-mail-smtp.php:243
 msgid "Open WP Mail SMTP ↗"
 msgstr "WP Mail SMTP を開く ↗"
 
-#: includes/adapters/wp-mail-smtp.php:249
+#: includes/adapters/wp-mail-smtp.php:254
 #: assets/js/app.js:28665
 msgid "Debug"
 msgstr "デバッグ"
@@ -15882,7 +15884,7 @@ msgstr "これには保存済みのキー (API キーまたはライセンスキ
 msgid "Part of this change was not saved: it would have changed who can run this site, which your account can’t do."
 msgstr "この変更の一部は保存されませんでした。このサイトを運営できる人が変わるためで、お使いのアカウントではできません。"
 
-#: includes/class-minn-admin-fences.php:425
+#: includes/class-minn-admin-fences.php:428
 msgid "Minn Admin routes are lowercase."
 msgstr "Minn Admin のルートは小文字です。"
 
@@ -15891,7 +15893,7 @@ msgid "PHP error log"
 msgstr "PHP エラーログ"
 
 #: includes/class-minn-admin-logs.php:93
-#: includes/class-minn-admin-rest.php:14044
+#: includes/class-minn-admin-rest.php:14106
 msgid "Server"
 msgstr "サーバー"
 
@@ -15980,189 +15982,189 @@ msgstr "[タグ: %s]"
 msgid "Invalid notice id."
 msgstr "通知 ID が無効です。"
 
-#: includes/class-minn-admin-rest.php:1428
+#: includes/class-minn-admin-rest.php:1430
 msgid "Link to the payment in the payment provider's dashboard, as the order screen shows it."
 msgstr "支払いプロバイダーのダッシュボードにある支払いへのリンクです。注文画面に表示されるものと同じです。"
 
-#: includes/class-minn-admin-rest.php:2228
+#: includes/class-minn-admin-rest.php:2230
 msgid "Whether an autosave newer than the saved post exists (live post carrying unsaved edits)."
 msgstr "保存済みの投稿より新しい自動保存があるかどうか (未保存の編集がある投稿)。"
 
-#: includes/class-minn-admin-rest.php:2276
+#: includes/class-minn-admin-rest.php:2278
 msgid "The other user currently editing this post (core edit lock), or null."
 msgstr "この投稿を現在編集している他のユーザー (コアの編集ロック)。いない場合は null。"
 
 #. translators: 1: author display name, 2: post title.
-#: includes/class-minn-admin-rest.php:2546
-#: includes/class-minn-admin-rest.php:5249
-#: includes/class-minn-admin-rest.php:5464
+#: includes/class-minn-admin-rest.php:2550
+#: includes/class-minn-admin-rest.php:5260
+#: includes/class-minn-admin-rest.php:5475
 msgid "Someone"
 msgstr "だれか"
 
-#: includes/class-minn-admin-rest.php:2591
+#: includes/class-minn-admin-rest.php:2595
 msgid "That log lives outside this site, so Minn will not clear it."
 msgstr "そのログはこのサイトの外にあるため、Minn はクリアしません。"
 
-#: includes/class-minn-admin-rest.php:2599
+#: includes/class-minn-admin-rest.php:2603
 msgid "The debug log is not writable."
 msgstr "デバッグログは書き込みできません。"
 
-#: includes/class-minn-admin-rest.php:2603
+#: includes/class-minn-admin-rest.php:2607
 msgid "Could not clear the debug log."
 msgstr "デバッグログをクリアできませんでした。"
 
-#: includes/class-minn-admin-rest.php:2626
+#: includes/class-minn-admin-rest.php:2630
 msgid "That block does not offer image editing here."
 msgstr "そのブロックはここでの画像編集に対応していません。"
 
-#: includes/class-minn-admin-rest.php:2635
+#: includes/class-minn-admin-rest.php:2639
 msgid "One of those images cannot be used here."
 msgstr "それらの画像のうち1つはここでは使えません。"
 
-#: includes/class-minn-admin-rest.php:2649
+#: includes/class-minn-admin-rest.php:2653
 msgid "Pick at least one image."
 msgstr "画像を1枚以上選択してください。"
 
-#: includes/class-minn-admin-rest.php:2658
+#: includes/class-minn-admin-rest.php:2662
 msgid "That block could not be rebuilt for those images."
 msgstr "それらの画像でブロックを再構築できませんでした。"
 
-#: includes/class-minn-admin-rest.php:3001
+#: includes/class-minn-admin-rest.php:3005
 msgid "Expected an array of block markup strings."
 msgstr "ブロックのマークアップ文字列の配列が必要です。"
 
-#: includes/class-minn-admin-rest.php:3472
-#: includes/class-minn-admin-rest.php:3497
+#: includes/class-minn-admin-rest.php:3476
+#: includes/class-minn-admin-rest.php:3501
 msgid "That surface has no setup to run."
 msgstr "その画面に実行できるセットアップはありません。"
 
-#: includes/class-minn-admin-rest.php:3500
+#: includes/class-minn-admin-rest.php:3504
 msgid "This setup runs on the plugin's own screen."
 msgstr "このセットアップはプラグイン自身の画面で実行します。"
 
-#: includes/class-minn-admin-rest.php:3520
+#: includes/class-minn-admin-rest.php:3524
 msgid "The plugin reported an error during setup."
 msgstr "セットアップ中にプラグインがエラーを報告しました。"
 
-#: includes/class-minn-admin-rest.php:3575
+#: includes/class-minn-admin-rest.php:3579
 msgid "Pattern not found."
 msgstr "パターンが見つかりません。"
 
-#: includes/class-minn-admin-rest.php:3646
+#: includes/class-minn-admin-rest.php:3650
 msgid "A custom structure needs at least one tag, e.g. %postname%."
 msgstr "カスタム構造には少なくとも1つのタグが必要です (例: %postname%)。"
 
-#: includes/class-minn-admin-rest.php:3718
+#: includes/class-minn-admin-rest.php:3722
 msgid "The custom CSS was changed somewhere else after you opened it. Copy your edit, reload, and apply it again."
 msgstr "カスタム CSS は、開いた後に別の場所で変更されました。編集内容をコピーし、再読み込みしてから、もう一度適用してください。"
 
-#: includes/class-minn-admin-rest.php:3735
+#: includes/class-minn-admin-rest.php:3739
 msgid "curly brackets"
 msgstr "波括弧"
 
-#: includes/class-minn-admin-rest.php:3736
+#: includes/class-minn-admin-rest.php:3740
 msgid "parentheses"
 msgstr "丸括弧"
 
-#: includes/class-minn-admin-rest.php:3737
+#: includes/class-minn-admin-rest.php:3741
 msgid "square brackets"
 msgstr "角括弧"
 
 #. translators: %s: the bracket type that is unbalanced (e.g. "curly brackets").
-#: includes/class-minn-admin-rest.php:3742
+#: includes/class-minn-admin-rest.php:3746
 msgid "That CSS has unbalanced %s. Fix it and save again; nothing was changed."
 msgstr "その CSS の %s の対応が取れていません。修正して再度保存してください。変更は反映されていません。"
 
-#: includes/class-minn-admin-rest.php:3746
+#: includes/class-minn-admin-rest.php:3750
 msgid "That CSS has an unclosed comment. Fix it and save again; nothing was changed."
 msgstr "その CSS に閉じられていないコメントがあります。修正して保存し直してください。変更は保存されていません。"
 
 #. translators: 1: the window's first day (e.g. "Jun 3"). 2: its last day with the year (e.g. "Jul 2, 2026").
-#: includes/class-minn-admin-rest.php:3812
+#: includes/class-minn-admin-rest.php:3816
 msgid "%1$s – %2$s"
 msgstr "%1$s ～ %2$s"
 
 #. translators: %s: the date the week starts on (e.g. "Jun 3, 2026").
 #. translators: %s: the date the week starts on (e.g. "Jun 3").
-#: includes/class-minn-admin-rest.php:3815
-#: includes/class-minn-admin-rest.php:4211
-#: includes/class-minn-admin-rest.php:5095
+#: includes/class-minn-admin-rest.php:3819
+#: includes/class-minn-admin-rest.php:4220
+#: includes/class-minn-admin-rest.php:5106
 msgid "Week of %s"
 msgstr "%s の週"
 
-#: includes/class-minn-admin-rest.php:3850
-#: includes/class-minn-admin-rest.php:3935
-#: includes/class-minn-admin-rest.php:5158
+#: includes/class-minn-admin-rest.php:3854
+#: includes/class-minn-admin-rest.php:3939
+#: includes/class-minn-admin-rest.php:5169
 msgid "from must be on or before to."
 msgstr "開始日は終了日と同じか、それより前にしてください。"
 
-#: includes/class-minn-admin-rest.php:3862
+#: includes/class-minn-admin-rest.php:3866
 msgid "Custom ranges reach back two years at most."
 msgstr "カスタム期間は最大2年までさかのぼれます。"
 
-#: includes/class-minn-admin-rest.php:3865
-#: includes/class-minn-admin-rest.php:3939
+#: includes/class-minn-admin-rest.php:3869
+#: includes/class-minn-admin-rest.php:3943
 msgid "Pick a window of a year or less."
 msgstr "1年以内の期間を選んでください。"
 
-#: includes/class-minn-admin-rest.php:4085
-#: includes/class-minn-admin-rest.php:4446
+#: includes/class-minn-admin-rest.php:4089
+#: includes/class-minn-admin-rest.php:4455
 msgid "Published posts"
 msgstr "公開済みの投稿"
 
 #. translators: %s: number of draft posts.
 #. translators: %s: number of draft products.
-#: includes/class-minn-admin-rest.php:4091
-#: includes/class-minn-admin-rest.php:4452
-#: includes/class-minn-admin-rest.php:4669
+#: includes/class-minn-admin-rest.php:4095
+#: includes/class-minn-admin-rest.php:4461
+#: includes/class-minn-admin-rest.php:4680
 msgid "%s draft"
 msgid_plural "%s drafts"
 msgstr[0] "下書き %s 件"
 
-#: includes/class-minn-admin-rest.php:4092
-#: includes/class-minn-admin-rest.php:4101
-#: includes/class-minn-admin-rest.php:4453
-#: includes/class-minn-admin-rest.php:4480
-#: includes/class-minn-admin-rest.php:4670
-#: includes/class-minn-admin-rest.php:4709
+#: includes/class-minn-admin-rest.php:4096
+#: includes/class-minn-admin-rest.php:4105
+#: includes/class-minn-admin-rest.php:4462
+#: includes/class-minn-admin-rest.php:4489
+#: includes/class-minn-admin-rest.php:4681
+#: includes/class-minn-admin-rest.php:4720
 msgid "published"
 msgstr "公開済み"
 
-#: includes/class-minn-admin-rest.php:4099
-#: includes/class-minn-admin-rest.php:4478
+#: includes/class-minn-admin-rest.php:4103
+#: includes/class-minn-admin-rest.php:4487
 #: assets/js/app.js:1498
 #: assets/js/app.js:6942
 #: assets/js/app.js:6979
 msgid "Pages"
 msgstr "固定ページ"
 
-#: includes/class-minn-admin-rest.php:4117
-#: includes/class-minn-admin-rest.php:4536
-#: includes/class-minn-admin-rest.php:4691
+#: includes/class-minn-admin-rest.php:4121
+#: includes/class-minn-admin-rest.php:4547
+#: includes/class-minn-admin-rest.php:4702
 msgid "registered"
 msgstr "登録済み"
 
-#: includes/class-minn-admin-rest.php:4132
-#: includes/class-minn-admin-rest.php:4499
+#: includes/class-minn-admin-rest.php:4136
+#: includes/class-minn-admin-rest.php:4508
 msgid "approved"
 msgstr "承認済み"
 
-#: includes/class-minn-admin-rest.php:4139
-#: includes/class-minn-admin-rest.php:4522
+#: includes/class-minn-admin-rest.php:4143
+#: includes/class-minn-admin-rest.php:4532
 msgid "Media files"
 msgstr "メディアファイル"
 
 #. translators: %s: page-view count, already formatted.
-#: includes/class-minn-admin-rest.php:4238
+#: includes/class-minn-admin-rest.php:4247
 msgid "%s pageviews"
 msgstr "%s ページビュー"
 
 #. translators: 1: up or down arrow, 2: percentage change, 3: number of days, 4: pageviews clause.
-#: includes/class-minn-admin-rest.php:4241
+#: includes/class-minn-admin-rest.php:4250
 msgid "%1$s %2$s%% vs prior %3$sd · %4$s"
 msgstr "%1$s %2$s%% (直近 %3$s 日間との比較) · %4$s"
 
-#: includes/class-minn-admin-rest.php:4248
+#: includes/class-minn-admin-rest.php:4257
 #: assets/js/app.js:6314
 #: assets/js/app.js:6447
 #: assets/js/app.js:6536
@@ -16172,101 +16174,101 @@ msgid "Visitors"
 msgstr "訪問者"
 
 #. translators: 1: author display name, 2: post title.
-#: includes/class-minn-admin-rest.php:4309
-#: includes/class-minn-admin-rest.php:5249
+#: includes/class-minn-admin-rest.php:4318
+#: includes/class-minn-admin-rest.php:5260
 msgid "%1$s published “%2$s”"
 msgstr "%1$s が「%2$s」を公開しました"
 
 #. translators: 1: author display name, 2: post title.
-#: includes/class-minn-admin-rest.php:4312
+#: includes/class-minn-admin-rest.php:4321
 msgid "%1$s scheduled “%2$s”"
 msgstr "%1$s が「%2$s」を予約しました"
 
 #. translators: 1: author display name, 2: post title.
-#: includes/class-minn-admin-rest.php:4315
+#: includes/class-minn-admin-rest.php:4324
 msgid "%1$s drafted “%2$s”"
 msgstr "%1$s が「%2$s」を下書きしました"
 
-#: includes/class-minn-admin-rest.php:4468
+#: includes/class-minn-admin-rest.php:4477
 msgid "posts"
 msgstr "投稿"
 
-#: includes/class-minn-admin-rest.php:4509
+#: includes/class-minn-admin-rest.php:4518
 msgid "Pending comments"
 msgstr "承認待ちのコメント"
 
-#: includes/class-minn-admin-rest.php:4511
+#: includes/class-minn-admin-rest.php:4520
 msgid "awaiting review"
 msgstr "レビュー待ち"
 
-#: includes/class-minn-admin-rest.php:4555
+#: includes/class-minn-admin-rest.php:4566
 msgid "Sales this month"
 msgstr "今月の売上"
 
 #. translators: %s: formatted net sales.
 #. translators: %s: formatted net revenue.
-#: includes/class-minn-admin-rest.php:4558
+#: includes/class-minn-admin-rest.php:4569
 #: assets/js/app.js:12462
 msgid "net %s"
 msgstr "純売上 %s"
 
-#: includes/class-minn-admin-rest.php:4567
+#: includes/class-minn-admin-rest.php:4578
 #: assets/js/app.js:12461
 msgid "Orders this month"
 msgstr "今月の注文"
 
-#: includes/class-minn-admin-rest.php:4569
 #: includes/class-minn-admin-rest.php:4580
 #: includes/class-minn-admin-rest.php:4591
+#: includes/class-minn-admin-rest.php:4602
 msgid "this month"
 msgstr "今月"
 
-#: includes/class-minn-admin-rest.php:4578
+#: includes/class-minn-admin-rest.php:4589
 #: assets/js/app.js:12363
 msgid "Items sold"
 msgstr "販売点数"
 
-#: includes/class-minn-admin-rest.php:4589
+#: includes/class-minn-admin-rest.php:4600
 msgid "Average order"
 msgstr "平均注文額"
 
-#: includes/class-minn-admin-rest.php:4610
+#: includes/class-minn-admin-rest.php:4621
 msgid "All orders"
 msgstr "すべての注文"
 
 #. translators: %s: number of orders awaiting fulfillment.
-#: includes/class-minn-admin-rest.php:4613
+#: includes/class-minn-admin-rest.php:4624
 msgid "%s to fulfill"
 msgid_plural "%s to fulfill"
 msgstr[0] "%s件の出荷待ち"
 
-#: includes/class-minn-admin-rest.php:4622
+#: includes/class-minn-admin-rest.php:4633
 msgid "Awaiting payment"
 msgstr "支払い待ち"
 
-#: includes/class-minn-admin-rest.php:4624
+#: includes/class-minn-admin-rest.php:4635
 msgid "pending orders"
 msgstr "承認待ちの注文"
 
-#: includes/class-minn-admin-rest.php:4633
+#: includes/class-minn-admin-rest.php:4644
 msgid "To fulfill"
 msgstr "出荷待ち"
 
-#: includes/class-minn-admin-rest.php:4635
+#: includes/class-minn-admin-rest.php:4646
 msgid "processing"
 msgstr "処理中"
 
-#: includes/class-minn-admin-rest.php:4644
+#: includes/class-minn-admin-rest.php:4655
 #: assets/js/app.js:967
 #: assets/js/app.js:12614
 msgid "On hold"
 msgstr "承認待ち"
 
-#: includes/class-minn-admin-rest.php:4646
+#: includes/class-minn-admin-rest.php:4657
 msgid "orders"
 msgstr "注文"
 
-#: includes/class-minn-admin-rest.php:4689
+#: includes/class-minn-admin-rest.php:4700
 #: includes/class-minn-admin-surfaces.php:511
 #: assets/js/app.js:1468
 #: assets/js/app.js:4199
@@ -16274,7 +16276,7 @@ msgstr "注文"
 msgid "Customers"
 msgstr "顧客"
 
-#: includes/class-minn-admin-rest.php:4707
+#: includes/class-minn-admin-rest.php:4718
 #: includes/class-minn-admin-surfaces.php:510
 #: assets/js/app.js:1465
 #: assets/js/app.js:4202
@@ -16285,461 +16287,461 @@ msgstr "顧客"
 msgid "Coupons"
 msgstr "クーポン"
 
-#: includes/class-minn-admin-rest.php:4898
+#: includes/class-minn-admin-rest.php:4909
 msgid "You must be signed in."
 msgstr "ログインする必要があります。"
 
-#: includes/class-minn-admin-rest.php:4902
-#: includes/class-minn-admin-rest.php:4908
-#: includes/class-minn-admin-rest.php:4929
-#: includes/class-minn-admin-rest.php:4935
+#: includes/class-minn-admin-rest.php:4913
+#: includes/class-minn-admin-rest.php:4919
+#: includes/class-minn-admin-rest.php:4940
+#: includes/class-minn-admin-rest.php:4946
 msgid "No metrics provided."
 msgstr "指標が指定されていません。"
 
-#: includes/class-minn-admin-rest.php:5163
+#: includes/class-minn-admin-rest.php:5174
 msgid "Pick a window of 31 days or fewer."
 msgstr "期間は31日以内で指定してください。"
 
 #. translators: 1: comment author name, 2: post title.
-#: includes/class-minn-admin-rest.php:5293
+#: includes/class-minn-admin-rest.php:5304
 msgid "Comment from %1$s awaiting moderation on “%2$s”"
 msgstr "%1$s からのコメントが「%2$s」で承認待ちです"
 
 #. translators: 1: comment author name, 2: post title.
-#: includes/class-minn-admin-rest.php:5295
+#: includes/class-minn-admin-rest.php:5306
 msgid "%1$s commented on “%2$s”"
 msgstr "%1$s が「%2$s」にコメントしました"
 
-#: includes/class-minn-admin-rest.php:5296
+#: includes/class-minn-admin-rest.php:5307
 msgid "Anonymous"
 msgstr "匿名"
 
-#: includes/class-minn-admin-rest.php:5361
+#: includes/class-minn-admin-rest.php:5372
 msgid "That post is not in the trash."
 msgstr "その投稿はゴミ箱にありません。"
 
-#: includes/class-minn-admin-rest.php:5365
+#: includes/class-minn-admin-rest.php:5376
 msgid "You are not allowed to restore this item."
 msgstr "この項目を復元する権限がありません。"
 
-#: includes/class-minn-admin-rest.php:5368
+#: includes/class-minn-admin-rest.php:5379
 msgid "Could not restore the item."
 msgstr "項目を復元できませんでした。"
 
-#: includes/class-minn-admin-rest.php:5423
+#: includes/class-minn-admin-rest.php:5434
 #: assets/js/app.js:39987
 #: assets/js/app.js:40069
 msgid "Someone else"
 msgstr "ほかのユーザー"
 
 #. translators: %s: display name of the user who now holds the edit lock.
-#: includes/class-minn-admin-rest.php:5427
+#: includes/class-minn-admin-rest.php:5438
 msgid "%s took over editing. Your copy was not saved."
 msgstr "%s が編集を引き継ぎました。あなたのコピーは保存されていません。"
 
-#: includes/class-minn-admin-rest.php:5453
-#: includes/class-minn-admin-rest.php:5486
+#: includes/class-minn-admin-rest.php:5464
+#: includes/class-minn-admin-rest.php:5497
 msgid "You are not allowed to edit this item."
 msgstr "この項目を編集する権限がありません。"
 
-#: includes/class-minn-admin-rest.php:5499
+#: includes/class-minn-admin-rest.php:5510
 msgid "Good morning"
 msgstr "おはようございます"
 
-#: includes/class-minn-admin-rest.php:5502
+#: includes/class-minn-admin-rest.php:5513
 msgid "Good afternoon"
 msgstr "こんにちは"
 
-#: includes/class-minn-admin-rest.php:5504
+#: includes/class-minn-admin-rest.php:5515
 msgid "Good evening"
 msgstr "こんばんは"
 
 #. translators: %s: disk space used by uploads, already formatted.
-#: includes/class-minn-admin-rest.php:5586
+#: includes/class-minn-admin-rest.php:5597
 msgid "over %s used"
 msgstr "%s 超を使用中"
 
 #. translators: %s: disk space used by uploads, already formatted.
-#: includes/class-minn-admin-rest.php:5588
+#: includes/class-minn-admin-rest.php:5599
 msgid "%s used"
 msgstr "%s 使用中"
 
 #. translators: 1: plugin name, 2: version number.
-#: includes/class-minn-admin-rest.php:5762
+#: includes/class-minn-admin-rest.php:5773
 msgid "%1$s %2$s is available to install"
 msgstr "%1$s %2$s をインストールできます"
 
 #. translators: %d: how many translation packs have an update waiting.
-#: includes/class-minn-admin-rest.php:5787
+#: includes/class-minn-admin-rest.php:5798
 msgid "%d translation is available to update"
 msgid_plural "%d translations are available to update"
 msgstr[0] "%d 件の翻訳に更新があります"
 
 #. translators: 1: theme name, 2: version number.
-#: includes/class-minn-admin-rest.php:5817
+#: includes/class-minn-admin-rest.php:5828
 msgid "%1$s theme %2$s is available to install"
 msgstr "%1$s テーマ %2$s をインストールできます"
 
 #. translators: %s: WordPress version number.
 #. translators: %s: the WordPress version being offered.
-#: includes/class-minn-admin-rest.php:5838
+#: includes/class-minn-admin-rest.php:5849
 #: assets/js/app.js:1797
 msgid "WordPress %s is available"
 msgstr "WordPress %s が利用可能です"
 
 #. translators: %s: WordPress version number.
-#: includes/class-minn-admin-rest.php:5858
+#: includes/class-minn-admin-rest.php:5869
 msgid "WordPress updated itself to %s"
 msgstr "WordPress が %s に自動更新しました"
 
 #. translators: %s: the new user's display name.
-#: includes/class-minn-admin-rest.php:5886
+#: includes/class-minn-admin-rest.php:5897
 msgid "New user registered: %s"
 msgstr "新しいユーザーが登録されました: %s"
 
-#: includes/class-minn-admin-rest.php:5902
+#: includes/class-minn-admin-rest.php:5913
 msgid "Earlier"
 msgstr "それ以前"
 
-#: includes/class-minn-admin-rest.php:6936
+#: includes/class-minn-admin-rest.php:6947
 msgid "That language cannot be removed."
 msgstr "その言語は削除できません。"
 
-#: includes/class-minn-admin-rest.php:6940
+#: includes/class-minn-admin-rest.php:6951
 msgid "This is the site language, so it cannot be removed."
 msgstr "これはサイトの言語のため、削除できません。"
 
-#: includes/class-minn-admin-rest.php:6943
+#: includes/class-minn-admin-rest.php:6954
 msgid "A user has chosen this language, so it cannot be removed."
 msgstr "ユーザーがこの言語を選んでいるため、削除できません。"
 
-#: includes/class-minn-admin-rest.php:6946
+#: includes/class-minn-admin-rest.php:6957
 msgid "Another site on the network uses this language, so it cannot be removed."
 msgstr "サイトネットワーク上の別のサイトがこの言語を使っているため、削除できません。"
 
 #. translators: %s: a multilingual plugin's name, such as Polylang.
-#: includes/class-minn-admin-rest.php:6950
+#: includes/class-minn-admin-rest.php:6961
 msgid "%s serves this language to visitors, so it cannot be removed."
 msgstr "%s がこの言語を訪問者に提供しているため、削除できません。"
 
-#: includes/class-minn-admin-rest.php:6953
+#: includes/class-minn-admin-rest.php:6964
 msgid "This network has too many sites to check which languages they use, so languages cannot be removed here."
 msgstr "このサイトネットワークはサイトが多すぎて使用言語を確認できないため、ここでは言語を削除できません。"
 
 #. translators: %s: a multilingual plugin's name, such as Polylang.
-#: includes/class-minn-admin-rest.php:6957
+#: includes/class-minn-admin-rest.php:6968
 msgid "%s may serve any installed language to visitors, so languages cannot be removed here."
 msgstr "%s がインストール済みのどの言語でも訪問者に提供する可能性があるため、ここでは言語を削除できません。"
 
-#: includes/class-minn-admin-rest.php:6964
+#: includes/class-minn-admin-rest.php:6975
 msgid "That language is not installed on this site."
 msgstr "その言語はこのサイトにインストールされていません。"
 
-#: includes/class-minn-admin-rest.php:7059
+#: includes/class-minn-admin-rest.php:7070
 #: assets/js/app.js:27893
 msgid "Translation update failed."
 msgstr "翻訳の更新に失敗しました。"
 
-#: includes/class-minn-admin-rest.php:7118
+#: includes/class-minn-admin-rest.php:7129
 msgid "Automatic updates are turned off for this site."
 msgstr "このサイトでは自動更新が無効になっています。"
 
-#: includes/class-minn-admin-rest.php:7127
+#: includes/class-minn-admin-rest.php:7138
 msgid "Unknown plugin."
 msgstr "不明なプラグインです。"
 
-#: includes/class-minn-admin-rest.php:7127
+#: includes/class-minn-admin-rest.php:7138
 msgid "Unknown theme."
 msgstr "不明なテーマです。"
 
-#: includes/class-minn-admin-rest.php:7359
+#: includes/class-minn-admin-rest.php:7370
 msgid "No policies provided."
 msgstr "ポリシーが指定されていません。"
 
-#: includes/class-minn-admin-rest.php:7364
+#: includes/class-minn-admin-rest.php:7375
 msgid "Role defaults were changed somewhere else after you opened them. Reload to see the change, then make yours again."
 msgstr "権限グループの既定値は、開いた後に別の場所で変更されました。再読み込みして変更を確認してから、もう一度変更してください。"
 
-#: includes/class-minn-admin-rest.php:7373
+#: includes/class-minn-admin-rest.php:7384
 msgid "Unknown role."
 msgstr "不明な権限グループです。"
 
-#: includes/class-minn-admin-rest.php:7387
+#: includes/class-minn-admin-rest.php:7398
 msgid "Unknown sign-in policy."
 msgstr "不明なログインポリシーです。"
 
-#: includes/class-minn-admin-rest.php:7397
+#: includes/class-minn-admin-rest.php:7408
 msgid "Unknown toolbar policy."
 msgstr "不明なツールバーポリシーです。"
 
-#: includes/class-minn-admin-rest.php:7408
+#: includes/class-minn-admin-rest.php:7419
 msgid "That role cannot use Minn, so a Minn policy cannot apply to it."
 msgstr "その権限グループは Minn を使えないため、Minn のポリシーを適用できません。"
 
-#: includes/class-minn-admin-rest.php:7525
+#: includes/class-minn-admin-rest.php:7536
 msgid "The active theme does not support a custom logo."
 msgstr "有効なテーマはカスタムロゴに対応していません。"
 
-#: includes/class-minn-admin-rest.php:7530
+#: includes/class-minn-admin-rest.php:7541
 msgid "That attachment is not an image."
 msgstr "その添付ファイルは画像ではありません。"
 
-#: includes/class-minn-admin-rest.php:7536
+#: includes/class-minn-admin-rest.php:7547
 msgid "You cannot use that attachment."
 msgstr "その添付ファイルは使用できません。"
 
-#: includes/class-minn-admin-rest.php:7556
-#: includes/class-minn-admin-rest.php:7705
+#: includes/class-minn-admin-rest.php:7567
+#: includes/class-minn-admin-rest.php:7716
 msgid "That language is not installed, and you cannot install languages on this site."
 msgstr "その言語はインストールされておらず、このサイトで言語をインストールする権限もありません。"
 
-#: includes/class-minn-admin-rest.php:7562
-#: includes/class-minn-admin-rest.php:7711
+#: includes/class-minn-admin-rest.php:7573
+#: includes/class-minn-admin-rest.php:7722
 msgid "The language pack could not be downloaded. Check the site can reach wordpress.org and try again."
 msgstr "言語パックをダウンロードできませんでした。サイトから wordpress.org に接続できるか確認して、もう一度お試しください。"
 
-#: includes/class-minn-admin-rest.php:7745
+#: includes/class-minn-admin-rest.php:7756
 msgid "That integration is not registered."
 msgstr "その連携は登録されていません。"
 
-#: includes/class-minn-admin-rest.php:7897
+#: includes/class-minn-admin-rest.php:7908
 msgid "You cannot remove your own account from this site."
 msgstr "自分のアカウントをこのサイトから削除することはできません。"
 
-#: includes/class-minn-admin-rest.php:7905
+#: includes/class-minn-admin-rest.php:7916
 msgid "That account is not a member of this site."
 msgstr "そのアカウントはこのサイトのメンバーではありません。"
 
-#: includes/class-minn-admin-rest.php:7916
+#: includes/class-minn-admin-rest.php:7927
 msgid "Network administrators cannot be removed from a site here. Manage network administrators in Network Admin."
 msgstr "ネットワーク管理者をここでサイトから削除することはできません。ネットワーク管理者はネットワーク管理画面で管理してください。"
 
-#: includes/class-minn-admin-rest.php:7943
+#: includes/class-minn-admin-rest.php:7954
 msgid "That role cannot be assigned here."
 msgstr "その権限グループはここでは割り当てられません。"
 
-#: includes/class-minn-admin-rest.php:7964
+#: includes/class-minn-admin-rest.php:7975
 msgid "Enter the email address of the account you want to add. Only network administrators can add an account by username."
 msgstr "追加するアカウントのメール アドレスを入力します。ネットワーク管理者のみがユーザー名でアカウントを追加できます。"
 
-#: includes/class-minn-admin-rest.php:7971
+#: includes/class-minn-admin-rest.php:7982
 msgid "No account on this network matches that email address. New accounts are created by a network administrator."
 msgstr "このネットワーク上にはその電子メール アドレスに一致するアカウントはありません。新しいアカウントはネットワーク管理者によって作成されます。"
 
-#: includes/class-minn-admin-rest.php:7980
+#: includes/class-minn-admin-rest.php:7991
 msgid "That account is already a member of this site."
 msgstr "そのアカウントはすでにこのサイトのメンバーです。"
 
-#: includes/class-minn-admin-rest.php:7991
+#: includes/class-minn-admin-rest.php:8002
 msgid "You are not allowed to add that account."
 msgstr "そのアカウントを追加する権限がありません。"
 
-#: includes/class-minn-admin-rest.php:7999
+#: includes/class-minn-admin-rest.php:8010
 msgid "Network administrators are added to a site from Network Admin."
 msgstr "ネットワーク管理者は、ネットワーク管理からサイトに追加されます。"
 
-#: includes/class-minn-admin-rest.php:8011
-#: includes/class-minn-admin-rest.php:8072
+#: includes/class-minn-admin-rest.php:8022
+#: includes/class-minn-admin-rest.php:8083
 msgid "Invitation sent. The account holder has to confirm before they join this site."
 msgstr "招待状が送信されました。アカウント所有者は、このサイトに参加する前に確認する必要があります。"
 
 #. translators: Joining confirmation notification email subject. %s: Site title.
-#: includes/class-minn-admin-rest.php:8043
+#: includes/class-minn-admin-rest.php:8054
 msgid "[%s] Joining Confirmation"
 msgstr "[%s] 参加確認"
 
 #. translators: 1: Site title, 2: Site URL, 3: User role, 4: Activation URL.
-#: includes/class-minn-admin-rest.php:8046
+#: includes/class-minn-admin-rest.php:8057
 msgid "Hi,\n\nYou've been invited to join '%1$s' at\n%2$s with the role of %3$s.\n\nPlease click the following link to confirm the invite:\n%4$s"
 msgstr "こんにちは。\n\n「%1$s」(%2$s) に%3$s権限で参加する招待が届きました。\n\nこの招待を受け取るには、以下のリンクをクリックして承認してください。\n%4$s"
 
-#: includes/class-minn-admin-rest.php:8295
+#: includes/class-minn-admin-rest.php:8306
 msgid "Session not found"
 msgstr "セッションが見つかりません"
 
-#: includes/class-minn-admin-rest.php:8308
-#: includes/class-minn-admin-rest.php:8332
-#: includes/class-minn-admin-rest.php:8397
+#: includes/class-minn-admin-rest.php:8319
+#: includes/class-minn-admin-rest.php:8343
+#: includes/class-minn-admin-rest.php:8408
 msgid "User not found."
 msgstr "ユーザーが見つかりません。"
 
-#: includes/class-minn-admin-rest.php:8312
+#: includes/class-minn-admin-rest.php:8323
 msgid "You cannot reset a super admin password."
 msgstr "特権管理者のパスワードはリセットできません。"
 
-#: includes/class-minn-admin-rest.php:8316
+#: includes/class-minn-admin-rest.php:8327
 msgid "Could not send the reset email."
 msgstr "リセットメールを送信できませんでした。"
 
-#: includes/class-minn-admin-rest.php:8337
+#: includes/class-minn-admin-rest.php:8348
 msgid "You cannot send a super admin a password link."
 msgstr "特権管理者にパスワードのリンクを送ることはできません。"
 
-#: includes/class-minn-admin-rest.php:8347
+#: includes/class-minn-admin-rest.php:8358
 msgid "This site does not let this account set a password by email, so WordPress sent no email."
 msgstr "このサイトでは、このアカウントがメールでパスワードを設定できないため、WordPress はメールを送りませんでした。"
 
-#: includes/class-minn-admin-rest.php:8376
+#: includes/class-minn-admin-rest.php:8387
 msgid "A plugin on this site turned off the new-account email, so WordPress sent none."
 msgstr "このサイトのプラグインが新規アカウントのメールを停止したため、WordPress はメールを送りませんでした。"
 
-#: includes/class-minn-admin-rest.php:8382
+#: includes/class-minn-admin-rest.php:8393
 msgid "The account email could not be sent. Check that this site can send email."
 msgstr "アカウントのメールを送信できませんでした。このサイトがメールを送信できるか確認してください。"
 
-#: includes/class-minn-admin-rest.php:8402
-#: includes/class-minn-admin-rest.php:8537
-#: includes/class-minn-admin-rest.php:8599
+#: includes/class-minn-admin-rest.php:8413
+#: includes/class-minn-admin-rest.php:8548
+#: includes/class-minn-admin-rest.php:8610
 msgid "Subject and message are required."
 msgstr "件名とメッセージは必須です。"
 
-#: includes/class-minn-admin-rest.php:8405
+#: includes/class-minn-admin-rest.php:8416
 msgid "This user has no valid email address."
 msgstr "このユーザーには有効なメールアドレスがありません。"
 
-#: includes/class-minn-admin-rest.php:8456
+#: includes/class-minn-admin-rest.php:8467
 msgid "That form entry is not available."
 msgstr "そのフォームのエントリーは利用できません。"
 
-#: includes/class-minn-admin-rest.php:8467
+#: includes/class-minn-admin-rest.php:8478
 msgid "Your account can’t email people who submit this form."
 msgstr "あなたのアカウントでは、このフォームを送信した人にメールを送れません。"
 
-#: includes/class-minn-admin-rest.php:8525
+#: includes/class-minn-admin-rest.php:8536
 msgid "That address is not on this entry."
 msgstr "そのアドレスはこのエントリーにありません。"
 
-#: includes/class-minn-admin-rest.php:8532
+#: includes/class-minn-admin-rest.php:8543
 msgid "This entry has no email address to reply to."
 msgstr "このエントリーには、返信先のメールアドレスがありません。"
 
-#: includes/class-minn-admin-rest.php:8545
+#: includes/class-minn-admin-rest.php:8556
 msgid "there"
 msgstr "そちら"
 
-#: includes/class-minn-admin-rest.php:8565
+#: includes/class-minn-admin-rest.php:8576
 msgid "No such coupon."
 msgstr "そのようなクーポンはありません。"
 
-#: includes/class-minn-admin-rest.php:8586
-#: includes/class-minn-admin-rest.php:8865
-#: includes/class-minn-admin-rest.php:8995
-#: includes/class-minn-admin-rest.php:9031
+#: includes/class-minn-admin-rest.php:8597
+#: includes/class-minn-admin-rest.php:8876
+#: includes/class-minn-admin-rest.php:9006
+#: includes/class-minn-admin-rest.php:9042
 msgid "WooCommerce is not available."
 msgstr "WooCommerce が利用できません。"
 
-#: includes/class-minn-admin-rest.php:8594
+#: includes/class-minn-admin-rest.php:8605
 msgid "This order has no valid billing email."
 msgstr "この注文には有効な請求先メールアドレスがありません。"
 
 #. translators: 1: admin name, 2: subject
-#: includes/class-minn-admin-rest.php:8625
+#: includes/class-minn-admin-rest.php:8636
 msgid "Minn Admin email sent by %1$s: %2$s"
 msgstr "%1$s が Minn Admin から送信したメール: %2$s"
 
-#: includes/class-minn-admin-rest.php:8830
+#: includes/class-minn-admin-rest.php:8841
 msgid "This order is not in the Trash."
 msgstr "この注文はゴミ箱にありません。"
 
-#: includes/class-minn-admin-rest.php:8855
+#: includes/class-minn-admin-rest.php:8866
 msgid "The order could not be restored."
 msgstr "注文を復元できませんでした。"
 
-#: includes/class-minn-admin-rest.php:9039
-#: includes/class-minn-admin-rest.php:9052
+#: includes/class-minn-admin-rest.php:9050
+#: includes/class-minn-admin-rest.php:9063
 msgid "That email type is not available."
 msgstr "そのメールの種類は利用できません。"
 
-#: includes/class-minn-admin-rest.php:9042
+#: includes/class-minn-admin-rest.php:9053
 msgid "That email does not fit this order as it stands. WooCommerce sends it when an order reaches that status."
 msgstr "そのメールは、この注文の現状には合いません。WooCommerce は、注文がそのステータスに達したときに送信します。"
 
-#: includes/class-minn-admin-rest.php:9064
+#: includes/class-minn-admin-rest.php:9075
 msgid "This order has no note to the customer, so there is nothing to resend."
 msgstr "この注文には顧客向けメモがないため、再送信するものはありません。"
 
 #. translators: %s: a WooCommerce email's title, such as Processing order.
-#: includes/class-minn-admin-rest.php:9136
+#: includes/class-minn-admin-rest.php:9147
 msgid "WooCommerce sent no “%s” email: this order has no address for it, or a plugin on this site stopped it."
 msgstr "WooCommerce は「%s」メールを送信しませんでした: この注文にその送信先アドレスがないか、このサイトのプラグインが送信を止めました。"
 
 #. translators: %s: a WooCommerce email's title, such as Processing order.
-#: includes/class-minn-admin-rest.php:9144
+#: includes/class-minn-admin-rest.php:9155
 msgid "The “%s” email could not be sent. Check that this site can send email."
 msgstr "「%s」メールを送信できませんでした。このサイトがメールを送信できるか確認してください。"
 
 #. translators: 1: email title, 2: admin name
-#: includes/class-minn-admin-rest.php:9152
+#: includes/class-minn-admin-rest.php:9163
 msgid "“%1$s” email resent via Minn Admin by %2$s."
 msgstr "%2$s が Minn Admin から「%1$s」メールを再送信しました。"
 
-#: includes/class-minn-admin-rest.php:9180
+#: includes/class-minn-admin-rest.php:9191
 msgid "Your account needs an email address to send from."
 msgstr "あなたのアカウントには、送信元にできるメールアドレスが必要です。"
 
-#: includes/class-minn-admin-rest.php:9212
+#: includes/class-minn-admin-rest.php:9223
 msgid "wp_mail() could not send the message. Check your mail configuration."
 msgstr "wp_mail() がメッセージを送信できませんでした。メール設定を確認してください。"
 
-#: includes/class-minn-admin-rest.php:9355
-#: includes/class-minn-admin-rest.php:9377
+#: includes/class-minn-admin-rest.php:9366
+#: includes/class-minn-admin-rest.php:9388
 msgid "Theme not found."
 msgstr "テーマが見つかりません。"
 
-#: includes/class-minn-admin-rest.php:9366
+#: includes/class-minn-admin-rest.php:9377
 msgid "That theme is not enabled for this site. A network administrator can enable it."
 msgstr "そのテーマはこのサイトで有効化されていません。ネットワーク管理者が有効化できます。"
 
-#: includes/class-minn-admin-rest.php:9380
+#: includes/class-minn-admin-rest.php:9391
 msgid "The active theme (or its parent) cannot be deleted."
 msgstr "有効なテーマ (およびその親テーマ) は削除できません。"
 
-#: includes/class-minn-admin-rest.php:9451
+#: includes/class-minn-admin-rest.php:9462
 msgid "No update available for that theme."
 msgstr "そのテーマに利用可能な更新はありません。"
 
-#: includes/class-minn-admin-rest.php:9464
-#: includes/class-minn-admin-rest.php:12559
+#: includes/class-minn-admin-rest.php:9475
+#: includes/class-minn-admin-rest.php:12570
 msgid "Update failed."
 msgstr "更新に失敗しました。"
 
-#: includes/class-minn-admin-rest.php:9539
+#: includes/class-minn-admin-rest.php:9550
 msgid "Unknown taxonomy."
 msgstr "不明なタクソノミーです。"
 
-#: includes/class-minn-admin-rest.php:9542
+#: includes/class-minn-admin-rest.php:9553
 msgid "You cannot manage terms in this taxonomy."
 msgstr "このタクソノミーのタームを管理する権限がありません。"
 
-#: includes/class-minn-admin-rest.php:9545
+#: includes/class-minn-admin-rest.php:9556
 msgid "Pick a different term to merge into."
 msgstr "統合先には別のタームを選んでください。"
 
-#: includes/class-minn-admin-rest.php:9550
+#: includes/class-minn-admin-rest.php:9561
 msgid "Both terms must exist in this taxonomy."
 msgstr "両方のタームがこのタクソノミーに存在する必要があります。"
 
-#: includes/class-minn-admin-rest.php:9559
+#: includes/class-minn-admin-rest.php:9570
 msgid "This is the default term for its taxonomy, so it cannot be merged away. Merge other terms into it instead."
 msgstr "これはそのタクソノミーのデフォルトのタームなので、統合してなくすことはできません。代わりに、他のタームをこれへ統合してください。"
 
-#: includes/class-minn-admin-rest.php:9562
+#: includes/class-minn-admin-rest.php:9573
 msgid "You cannot merge these terms."
 msgstr "これらのタームは統合できません。"
 
-#: includes/class-minn-admin-rest.php:9576
+#: includes/class-minn-admin-rest.php:9587
 msgid "The merge did not complete."
 msgstr "統合が完了しませんでした。"
 
-#: includes/class-minn-admin-rest.php:10192
-#: includes/class-minn-admin-rest.php:10758
+#: includes/class-minn-admin-rest.php:10203
+#: includes/class-minn-admin-rest.php:10769
 #: assets/js/app.js:23100
 #: assets/js/app.js:23125
 msgid "Headings"
 msgstr "見出し"
 
-#: includes/class-minn-admin-rest.php:10193
-#: includes/class-minn-admin-rest.php:10757
+#: includes/class-minn-admin-rest.php:10204
+#: includes/class-minn-admin-rest.php:10768
 #: assets/js/app.js:23099
 #: assets/js/app.js:26777
 #: assets/js/app.js:27160
@@ -16747,207 +16749,207 @@ msgstr "見出し"
 msgid "Links"
 msgstr "リンク"
 
-#: includes/class-minn-admin-rest.php:10194
-#: includes/class-minn-admin-rest.php:10759
+#: includes/class-minn-admin-rest.php:10205
+#: includes/class-minn-admin-rest.php:10770
 #: assets/js/app.js:47859
 msgid "Buttons"
 msgstr "ボタン"
 
-#: includes/class-minn-admin-rest.php:10195
+#: includes/class-minn-admin-rest.php:10206
 #: assets/js/app.js:23103
 msgid "Captions"
 msgstr "キャプション"
 
-#: includes/class-minn-admin-rest.php:10196
+#: includes/class-minn-admin-rest.php:10207
 msgid "Citations"
 msgstr "引用"
 
-#: includes/class-minn-admin-rest.php:10199
+#: includes/class-minn-admin-rest.php:10210
 msgid "font"
 msgstr "フォント"
 
-#: includes/class-minn-admin-rest.php:10200
+#: includes/class-minn-admin-rest.php:10211
 msgid "size"
 msgstr "サイズ"
 
-#: includes/class-minn-admin-rest.php:10201
+#: includes/class-minn-admin-rest.php:10212
 msgid "line height"
 msgstr "行の高さ"
 
-#: includes/class-minn-admin-rest.php:10202
+#: includes/class-minn-admin-rest.php:10213
 msgid "weight"
 msgstr "太さ"
 
-#: includes/class-minn-admin-rest.php:10203
+#: includes/class-minn-admin-rest.php:10214
 msgid "style"
 msgstr "スタイル"
 
-#: includes/class-minn-admin-rest.php:10204
+#: includes/class-minn-admin-rest.php:10215
 msgid "letter spacing"
 msgstr "文字間隔"
 
-#: includes/class-minn-admin-rest.php:10205
+#: includes/class-minn-admin-rest.php:10216
 msgid "case"
 msgstr "大文字小文字"
 
-#: includes/class-minn-admin-rest.php:10206
+#: includes/class-minn-admin-rest.php:10217
 msgid "decoration"
 msgstr "装飾"
 
-#: includes/class-minn-admin-rest.php:10207
+#: includes/class-minn-admin-rest.php:10218
 msgid "columns"
 msgstr "カラム"
 
-#: includes/class-minn-admin-rest.php:10208
+#: includes/class-minn-admin-rest.php:10219
 msgid "color"
 msgstr "色"
 
-#: includes/class-minn-admin-rest.php:10209
+#: includes/class-minn-admin-rest.php:10220
 msgid "background"
 msgstr "背景"
 
-#: includes/class-minn-admin-rest.php:10210
+#: includes/class-minn-admin-rest.php:10221
 msgid "gradient"
 msgstr "グラデーション"
 
-#: includes/class-minn-admin-rest.php:10211
+#: includes/class-minn-admin-rest.php:10222
 msgid "corner radius"
 msgstr "角丸"
 
-#: includes/class-minn-admin-rest.php:10212
+#: includes/class-minn-admin-rest.php:10223
 msgid "border width"
 msgstr "枠線の幅"
 
-#: includes/class-minn-admin-rest.php:10213
+#: includes/class-minn-admin-rest.php:10224
 msgid "border color"
 msgstr "枠線の色"
 
-#: includes/class-minn-admin-rest.php:10215
+#: includes/class-minn-admin-rest.php:10226
 msgid "hover"
 msgstr "ホバー"
 
-#: includes/class-minn-admin-rest.php:10215
+#: includes/class-minn-admin-rest.php:10226
 msgid "focus"
 msgstr "フォーカス"
 
-#: includes/class-minn-admin-rest.php:10215
+#: includes/class-minn-admin-rest.php:10226
 #: assets/js/app.js:28582
 msgid "active"
 msgstr "有効"
 
-#: includes/class-minn-admin-rest.php:10215
+#: includes/class-minn-admin-rest.php:10226
 msgid "visited"
 msgstr "訪問済み"
 
-#: includes/class-minn-admin-rest.php:10217
+#: includes/class-minn-admin-rest.php:10228
 msgid "Background color"
 msgstr "背景色"
 
-#: includes/class-minn-admin-rest.php:10218
+#: includes/class-minn-admin-rest.php:10229
 msgid "Text color"
 msgstr "テキスト色"
 
-#: includes/class-minn-admin-rest.php:10219
+#: includes/class-minn-admin-rest.php:10230
 msgid "Background gradient"
 msgstr "背景のグラデーション"
 
-#: includes/class-minn-admin-rest.php:10220
+#: includes/class-minn-admin-rest.php:10231
 msgid "Background image"
 msgstr "背景画像"
 
-#: includes/class-minn-admin-rest.php:10221
+#: includes/class-minn-admin-rest.php:10232
 #: assets/js/app.js:23116
 msgid "Block spacing"
 msgstr "ブロック間隔"
 
-#: includes/class-minn-admin-rest.php:10222
+#: includes/class-minn-admin-rest.php:10233
 #: assets/js/app.js:23114
 msgid "Content width"
 msgstr "コンテンツ幅"
 
-#: includes/class-minn-admin-rest.php:10223
+#: includes/class-minn-admin-rest.php:10234
 #: assets/js/app.js:23115
 #: assets/js/app.js:43916
 msgid "Wide width"
 msgstr "ワイド幅"
 
-#: includes/class-minn-admin-rest.php:10224
+#: includes/class-minn-admin-rest.php:10235
 msgid "Custom colors"
 msgstr "カスタムカラー"
 
-#: includes/class-minn-admin-rest.php:10225
+#: includes/class-minn-admin-rest.php:10236
 msgid "Theme palette"
 msgstr "テーマのパレット"
 
-#: includes/class-minn-admin-rest.php:10226
+#: includes/class-minn-admin-rest.php:10237
 msgid "Custom gradients"
 msgstr "カスタムグラデーション"
 
-#: includes/class-minn-admin-rest.php:10227
+#: includes/class-minn-admin-rest.php:10238
 msgid "Custom duotone filters"
 msgstr "カスタムデュオトーンフィルター"
 
-#: includes/class-minn-admin-rest.php:10228
+#: includes/class-minn-admin-rest.php:10239
 msgid "Custom fonts"
 msgstr "カスタムフォント"
 
-#: includes/class-minn-admin-rest.php:10229
+#: includes/class-minn-admin-rest.php:10240
 msgid "Theme fonts"
 msgstr "テーマのフォント"
 
-#: includes/class-minn-admin-rest.php:10230
+#: includes/class-minn-admin-rest.php:10241
 msgid "Custom text sizes"
 msgstr "カスタムテキストサイズ"
 
-#: includes/class-minn-admin-rest.php:10231
+#: includes/class-minn-admin-rest.php:10242
 #: assets/js/app.js:23179
 msgid "Text size presets"
 msgstr "テキストサイズのプリセット"
 
-#: includes/class-minn-admin-rest.php:10232
+#: includes/class-minn-admin-rest.php:10243
 msgid "Custom spacing presets"
 msgstr "カスタムスペースプリセット"
 
-#: includes/class-minn-admin-rest.php:10233
+#: includes/class-minn-admin-rest.php:10244
 msgid "Spacing presets"
 msgstr "スペースのプリセット"
 
-#: includes/class-minn-admin-rest.php:10234
+#: includes/class-minn-admin-rest.php:10245
 msgid "Custom shadows"
 msgstr "カスタムの影"
 
-#: includes/class-minn-admin-rest.php:10235
+#: includes/class-minn-admin-rest.php:10246
 msgid "Shadow presets"
 msgstr "影のプリセット"
 
-#: includes/class-minn-admin-rest.php:10236
+#: includes/class-minn-admin-rest.php:10247
 #: assets/js/app.js:31884
 msgid "Additional CSS"
 msgstr "追加 CSS"
 
 #. translators: %s: top, right, bottom or left.
-#: includes/class-minn-admin-rest.php:10244
+#: includes/class-minn-admin-rest.php:10255
 msgid "Page padding (%s)"
 msgstr "ページのパディング (%s)"
 
 #. translators: %s: a typography property such as font or line height.
-#: includes/class-minn-admin-rest.php:10249
+#: includes/class-minn-admin-rest.php:10260
 msgid "Body %s"
 msgstr "ボディ %s"
 
 #. translators: %s: a block's name.
-#: includes/class-minn-admin-rest.php:10269
+#: includes/class-minn-admin-rest.php:10280
 msgid "%s block"
 msgstr "%s ブロック"
 
 #. translators: %s: a theme.json settings path.
-#: includes/class-minn-admin-rest.php:10273
+#: includes/class-minn-admin-rest.php:10284
 msgid "Setting: %s"
 msgstr "設定: %s"
 
 #. translators: %s: number of entries in an edited list.
 #. translators: %s: localized number of entries.
-#: includes/class-minn-admin-rest.php:10287
+#: includes/class-minn-admin-rest.php:10298
 #: assets/js/app.js:56265
 msgid "%s entry"
 msgid_plural "%s entries"
@@ -16955,334 +16957,334 @@ msgstr[0] "%s 件のエントリー"
 
 #. translators: %s: a block's name.
 #. translators: %s: what was customized (e.g. "H1 font").
-#: includes/class-minn-admin-rest.php:10331
-#: includes/class-minn-admin-rest.php:10341
+#: includes/class-minn-admin-rest.php:10342
+#: includes/class-minn-admin-rest.php:10352
 msgid "%s reset to theme"
 msgstr "%s をテーマにリセット"
 
 #. translators: 1: a block's name, 2: number of style settings.
-#: includes/class-minn-admin-rest.php:10334
+#: includes/class-minn-admin-rest.php:10345
 msgid "%1$s: %2$s setting"
 msgid_plural "%1$s: %2$s settings"
 msgstr[0] "%1$s: %2$s 件の設定"
 
-#: includes/class-minn-admin-rest.php:10467
+#: includes/class-minn-admin-rest.php:10478
 msgid "Colors take a palette color, a hex value like #1a1a1a, or rgb()/hsl()."
 msgstr "色にはパレットの色、#1a1a1a のような16進値、または rgb()/hsl() を指定します。"
 
-#: includes/class-minn-admin-rest.php:10472
+#: includes/class-minn-admin-rest.php:10483
 msgid "Fonts must be one of the families the theme (or Font Library) provides."
 msgstr "フォントはテーマ (またはフォントライブラリ) が提供するファミリーのいずれかである必要があります。"
 
-#: includes/class-minn-admin-rest.php:10480
+#: includes/class-minn-admin-rest.php:10491
 msgid "Text sizes take a preset or a CSS length such as 18px or 1.125rem."
 msgstr "テキストサイズにはプリセット、または 18px や 1.125rem のような CSS の長さを指定します。"
 
-#: includes/class-minn-admin-rest.php:10485
+#: includes/class-minn-admin-rest.php:10496
 msgid "Line height takes a number such as 1.6."
 msgstr "行の高さには 1.6 のような数値を指定します。"
 
-#: includes/class-minn-admin-rest.php:10493
+#: includes/class-minn-admin-rest.php:10504
 msgid "Widths and spacing take a CSS length such as 24px, 1.5rem or 5%."
 msgstr "幅とスペースには 24px、1.5rem、5% のような CSS の長さを指定します。"
 
-#: includes/class-minn-admin-rest.php:10495
+#: includes/class-minn-admin-rest.php:10506
 msgid "Unsupported value."
 msgstr "非サポートの値です。"
 
-#: includes/class-minn-admin-rest.php:10561
+#: includes/class-minn-admin-rest.php:10572
 msgid "Nothing to change."
 msgstr "変更するものがありません。"
 
 #. translators: %s: a theme.json path.
-#: includes/class-minn-admin-rest.php:10571
+#: includes/class-minn-admin-rest.php:10582
 msgid "%s is not something Minn edits here."
 msgstr "%s は Minn がここで編集するものではありません。"
 
-#: includes/class-minn-admin-rest.php:10574
+#: includes/class-minn-admin-rest.php:10585
 msgid "WordPress only stores layout width changes for someone who can post unfiltered HTML, which this account cannot on this site."
 msgstr "WordPress は、フィルタリングされていない HTML を投稿できるユーザーに対してのみ、レイアウト幅の変更を保存します。このアカウントには、このサイトでその権限がありません。"
 
-#: includes/class-minn-admin-rest.php:10822
+#: includes/class-minn-admin-rest.php:10833
 msgid "That palette or typeset is not part of the active theme."
 msgstr "そのパレットまたはタイプセットは有効なテーマの一部ではありません。"
 
-#: includes/class-minn-admin-rest.php:10825
+#: includes/class-minn-admin-rest.php:10836
 msgid "WordPress only stores a palette or typeset for someone who can post unfiltered HTML, which this account cannot on this site."
 msgstr "WordPress は、フィルタリングされていない HTML を投稿できるユーザーに対してのみ、パレットまたはタイプセットを保存します。このアカウントには、このサイトでその権限がありません。"
 
-#: includes/class-minn-admin-rest.php:11207
-#: includes/class-minn-admin-rest.php:11253
-#: includes/class-minn-admin-rest.php:12159
-#: includes/class-minn-admin-rest.php:12365
+#: includes/class-minn-admin-rest.php:11218
+#: includes/class-minn-admin-rest.php:11264
+#: includes/class-minn-admin-rest.php:12170
+#: includes/class-minn-admin-rest.php:12376
 msgid "Install failed."
 msgstr "インストールに失敗しました。"
 
-#: includes/class-minn-admin-rest.php:11218
-#: includes/class-minn-admin-rest.php:12124
+#: includes/class-minn-admin-rest.php:11229
+#: includes/class-minn-admin-rest.php:12135
 msgid "No file uploaded."
 msgstr "ファイルがアップロードされていません。"
 
-#: includes/class-minn-admin-rest.php:11221
+#: includes/class-minn-admin-rest.php:11232
 msgid "Theme uploads must be .zip files."
 msgstr "テーマのアップロードは .zip ファイルである必要があります。"
 
-#: includes/class-minn-admin-rest.php:11231
-#: includes/class-minn-admin-rest.php:12137
+#: includes/class-minn-admin-rest.php:11242
+#: includes/class-minn-admin-rest.php:12148
 msgid "Could not store the upload."
 msgstr "アップロードしたファイルを保存できませんでした。"
 
-#: includes/class-minn-admin-rest.php:11338
+#: includes/class-minn-admin-rest.php:11349
 msgid "Plugin file is required."
 msgstr "プラグインファイルは必須です。"
 
-#: includes/class-minn-admin-rest.php:11350
+#: includes/class-minn-admin-rest.php:11361
 #: includes/class-minn-admin.php:157
 msgid "Sorry, you are not allowed to manage this plugin."
 msgstr "このプラグインを管理する権限がありません。"
 
-#: includes/class-minn-admin-rest.php:11479
+#: includes/class-minn-admin-rest.php:11490
 msgid "Theme is required."
 msgstr "テーマは必須です。"
 
-#: includes/class-minn-admin-rest.php:11884
+#: includes/class-minn-admin-rest.php:11895
 #: assets/js/app.js:53553
 msgid "Changes"
 msgstr "変更点"
 
-#: includes/class-minn-admin-rest.php:11899
+#: includes/class-minn-admin-rest.php:11910
 msgid "Plugin slug is required."
 msgstr "プラグインのスラッグは必須です。"
 
-#: includes/class-minn-admin-rest.php:11974
+#: includes/class-minn-admin-rest.php:11985
 msgid "Build pages visually while Minn protects Breakdance-owned content and links straight to its builder. Download the plugin .zip from Breakdance."
 msgstr "MinnがBreakdanceが所有するコンテンツを保護し、そのビルダーに直接リンクしながら、ページを視覚的に構築します。Breakdanceからプラグイン.zipをダウンロードします。"
 
-#: includes/class-minn-admin-rest.php:11986
+#: includes/class-minn-admin-rest.php:11997
 msgid "Build forms and manage their entries, notifications, feeds, and daily settings in Minn. Download the plugin .zip from your Gravity account."
 msgstr "Minnでフォームを作成し、そのエントリ、通知、フィード、毎日の設定を管理します。 Gravity アカウントからプラグイン.zipをダウンロードします。"
 
-#: includes/class-minn-admin-rest.php:11998
+#: includes/class-minn-admin-rest.php:12009
 msgid "Send and track WordPress email through the full Email surface in Minn. Download the plugin .zip from a qualifying Gravity account."
 msgstr "Minnの完全な電子メール サーフェスを通じてWordPress電子メールを送信および追跡します。対象となる Gravity アカウントからプラグイン.zipをダウンロードします。"
 
-#: includes/class-minn-admin-rest.php:12010
+#: includes/class-minn-admin-rest.php:12021
 msgid "Manage the Perfmatters settings estate from Minn's Performance surface. Download the paid plugin .zip from Perfmatters."
 msgstr "Minnのパフォーマンス画面からPerfmatters設定資産を管理します。Perfmattersから有料プラグイン.zipをダウンロードします。"
 
-#: includes/class-minn-admin-rest.php:12022
+#: includes/class-minn-admin-rest.php:12033
 msgid "Bring ACF PRO repeaters, flexible content, galleries, options pages, blocks, and field groups into Minn. Download the plugin .zip from ACF."
 msgstr "ACF PROリピーター、フレキシブル コンテンツ、ギャラリー、オプション ページ、ブロック、フィールド グループをMinnに取り込みます。 ACF からプラグイン.zipをダウンロードします。"
 
-#: includes/class-minn-admin-rest.php:12034
+#: includes/class-minn-admin-rest.php:12045
 msgid "Manage Elementor form submissions in Minn while keeping Elementor-owned page content protected. Download the plugin .zip from Elementor."
 msgstr "Elementorが所有するページのコンテンツを保護しながら、MinnでElementorフォームの送信を管理します。Elementorからプラグイン.zipをダウンロードします。"
 
-#: includes/class-minn-admin-rest.php:12046
+#: includes/class-minn-admin-rest.php:12057
 msgid "Manage WPForms Pro entries, read and starred state, spam, trash, search, and form filters in Minn. Download the plugin .zip from WPForms."
 msgstr "WPForms Proエントリ、読み取りとスター付きの状態、スパム、ゴミ箱、検索、およびフォーム フィルターをMinnで管理します。WPFormsからプラグイン.zipをダウンロードします。"
 
-#: includes/class-minn-admin-rest.php:12058
+#: includes/class-minn-admin-rest.php:12069
 msgid "Clear WP Rocket caches from Minn and monitor its license alongside other paid components. Download the plugin .zip from WP Rocket."
 msgstr "MinnからWP Rocketキャッシュをクリアし、他の有料コンポーネントとともにそのライセンスを監視します。WP Rocketからプラグイン.zipをダウンロードします。"
 
-#: includes/class-minn-admin-rest.php:12070
+#: includes/class-minn-admin-rest.php:12081
 msgid "Feed AnalyticsWP traffic and drill-down data into Minn's Overview. Download the paid plugin .zip from AnalyticsWP."
 msgstr "AnalyticsWPトラフィックをフィードし、データをMinnの概要にドリルダウンします。AnalyticsWPから有料プラグイン.zipをダウンロードします。"
 
-#: includes/class-minn-admin-rest.php:12082
+#: includes/class-minn-admin-rest.php:12093
 msgid "Sell recurring products and services with WooCommerce. This paid extension is installed by uploading the .zip downloaded from WooCommerce.com."
 msgstr "WooCommerce を使用して定期的な商品やサービスを販売します。この有料拡張機能は、WooCommerce.comからダウンロードした.zipをアップロードすることでインストールされます。"
 
-#: includes/class-minn-admin-rest.php:12094
+#: includes/class-minn-admin-rest.php:12105
 msgid "Sell memberships that unlock restricted content, products and discounts. This paid extension is installed by uploading the .zip downloaded from WooCommerce.com."
 msgstr "制限されたコンテンツ、商品、割引を解除するメンバーシップを販売します。この有料拡張機能は、WooCommerce.com からダウンロードした .zip をアップロードしてインストールします。"
 
-#: includes/class-minn-admin-rest.php:12106
+#: includes/class-minn-admin-rest.php:12117
 msgid "Generate a full WordPress backup (files + database) and pull it off-site with the Disembark CLI or disembark.host."
 msgstr "WordPress のフルバックアップ (ファイル + データベース) を作成し、Disembark CLI または disembark.host でオフサイトに取得します。"
 
-#: includes/class-minn-admin-rest.php:12127
+#: includes/class-minn-admin-rest.php:12138
 msgid "Plugin uploads must be .zip files."
 msgstr "プラグインのアップロードは .zip ファイルである必要があります。"
 
 #. translators: %s: the installed plugin or theme's name.
-#: includes/class-minn-admin-rest.php:12293
+#: includes/class-minn-admin-rest.php:12304
 msgid "%s is already installed."
 msgstr "%s はすでにインストール済みです。"
 
-#: includes/class-minn-admin-rest.php:12344
+#: includes/class-minn-admin-rest.php:12355
 msgid "Provide a zip URL or a github owner/repo."
 msgstr "zip の URL または GitHub の owner/repo を指定してください。"
 
-#: includes/class-minn-admin-rest.php:12386
+#: includes/class-minn-admin-rest.php:12397
 msgid "Invalid GitHub repository."
 msgstr "GitHub リポジトリが無効です。"
 
-#: includes/class-minn-admin-rest.php:12405
+#: includes/class-minn-admin-rest.php:12416
 msgid "Could not read the latest GitHub release."
 msgstr "GitHub の最新リリースを読み取れませんでした。"
 
-#: includes/class-minn-admin-rest.php:12426
+#: includes/class-minn-admin-rest.php:12437
 msgid "That release has no zip asset."
 msgstr "そのリリースには zip アセットがありません。"
 
-#: includes/class-minn-admin-rest.php:12440
+#: includes/class-minn-admin-rest.php:12451
 msgid "Install URL must be HTTPS."
 msgstr "インストール URL は HTTPS である必要があります。"
 
-#: includes/class-minn-admin-rest.php:12452
+#: includes/class-minn-admin-rest.php:12463
 msgid "That download host is not allowed."
 msgstr "そのダウンロード元ホストは許可されていません。"
 
-#: includes/class-minn-admin-rest.php:12458
+#: includes/class-minn-admin-rest.php:12469
 msgid "Install URL must point at a .zip file."
 msgstr "インストール URL は .zip ファイルを指す必要があります。"
 
-#: includes/class-minn-admin-rest.php:12537
+#: includes/class-minn-admin-rest.php:12548
 msgid "No update available for that plugin."
 msgstr "そのプラグインに利用可能な更新はありません。"
 
-#: includes/class-minn-admin-rest.php:12649
+#: includes/class-minn-admin-rest.php:12660
 msgid "WordPress is already up to date."
 msgstr "WordPress はすでに最新です。"
 
-#: includes/class-minn-admin-rest.php:12657
+#: includes/class-minn-admin-rest.php:12668
 msgid "Core update failed."
 msgstr "コアの更新に失敗しました。"
 
-#: includes/class-minn-admin-rest.php:12712
+#: includes/class-minn-admin-rest.php:12723
 msgid "This network is too large to upgrade from here. Run Network Admin → Upgrade Network instead."
 msgstr "このサイトネットワークは大きすぎるため、ここからは更新できません。ネットワーク管理画面 → ネットワークのアップグレードを実行してください。"
 
-#: includes/class-minn-admin-rest.php:12795
+#: includes/class-minn-admin-rest.php:12806
 msgid "No cache layer detected on this site."
 msgstr "このサイトでキャッシュ層は検出されませんでした。"
 
-#: includes/class-minn-admin-rest.php:12925
+#: includes/class-minn-admin-rest.php:12936
 msgid "That revision belongs to another post."
 msgstr "そのリビジョンは別の投稿のものです。"
 
-#: includes/class-minn-admin-rest.php:12975
+#: includes/class-minn-admin-rest.php:12986
 msgid "You are not allowed to create this type of content."
 msgstr "この種類のコンテンツを作成する権限がありません。"
 
-#: includes/class-minn-admin-rest.php:13407
+#: includes/class-minn-admin-rest.php:13469
 msgid "The package could not be downloaded."
 msgstr "パッケージをダウンロードできませんでした。"
 
-#: includes/class-minn-admin-rest.php:13467
+#: includes/class-minn-admin-rest.php:13529
 msgid "Environment"
 msgstr "環境"
 
-#: includes/class-minn-admin-rest.php:13468
+#: includes/class-minn-admin-rest.php:13530
 msgid "Site URL"
 msgstr "サイト URL"
 
-#: includes/class-minn-admin-rest.php:13469
+#: includes/class-minn-admin-rest.php:13531
 msgid "Home URL"
 msgstr "ホーム URL"
 
-#: includes/class-minn-admin-rest.php:13473
+#: includes/class-minn-admin-rest.php:13535
 msgid "Login URL"
 msgstr "ログイン URL"
 
-#: includes/class-minn-admin-rest.php:13474
+#: includes/class-minn-admin-rest.php:13536
 msgid "Multisite"
 msgstr "マルチサイト"
 
 #. translators: %s: how many sites the multisite network contains.
-#: includes/class-minn-admin-rest.php:13476
+#: includes/class-minn-admin-rest.php:13538
 msgid "Yes (%s site)"
 msgid_plural "Yes (%s sites)"
 msgstr[0] "はい (%s サイト)"
 
-#: includes/class-minn-admin-rest.php:13479
+#: includes/class-minn-admin-rest.php:13541
 #: assets/js/app.js:31794
 msgid "Timezone"
 msgstr "タイムゾーン"
 
-#: includes/class-minn-admin-rest.php:13480
+#: includes/class-minn-admin-rest.php:13542
 msgid "Permalinks"
 msgstr "パーマリンク"
 
-#: includes/class-minn-admin-rest.php:13480
+#: includes/class-minn-admin-rest.php:13542
 #: assets/js/app.js:31389
 msgid "Plain"
 msgstr "基本"
 
-#: includes/class-minn-admin-rest.php:13481
-#: includes/class-minn-admin-rest.php:13734
-#: includes/class-minn-admin-rest.php:14166
+#: includes/class-minn-admin-rest.php:13543
+#: includes/class-minn-admin-rest.php:13796
+#: includes/class-minn-admin-rest.php:14228
 msgid "Debug mode"
 msgstr "デバッグモード"
 
-#: includes/class-minn-admin-rest.php:13482
+#: includes/class-minn-admin-rest.php:13544
 msgid "On + log"
 msgstr "オン + ログ"
 
-#: includes/class-minn-admin-rest.php:13484
+#: includes/class-minn-admin-rest.php:13546
 msgid "Object cache"
 msgstr "オブジェクトキャッシュ"
 
-#: includes/class-minn-admin-rest.php:13484
+#: includes/class-minn-admin-rest.php:13546
 msgid "External (persistent)"
 msgstr "外部 (永続)"
 
-#: includes/class-minn-admin-rest.php:13484
+#: includes/class-minn-admin-rest.php:13546
 msgid "None (transient)"
 msgstr "なし (トランジェント)"
 
-#: includes/class-minn-admin-rest.php:13485
+#: includes/class-minn-admin-rest.php:13547
 msgid "Disabled (external)"
 msgstr "無効 (外部)"
 
-#: includes/class-minn-admin-rest.php:13486
-#: includes/class-minn-admin-rest.php:13721
+#: includes/class-minn-admin-rest.php:13548
+#: includes/class-minn-admin-rest.php:13783
 msgid "Memory limit"
 msgstr "メモリ上限"
 
-#: includes/class-minn-admin-rest.php:13486
-#: includes/class-minn-admin-rest.php:13487
-#: includes/class-minn-admin-rest.php:13645
+#: includes/class-minn-admin-rest.php:13548
+#: includes/class-minn-admin-rest.php:13549
+#: includes/class-minn-admin-rest.php:13707
 msgid "(default)"
 msgstr "(デフォルト)"
 
-#: includes/class-minn-admin-rest.php:13487
+#: includes/class-minn-admin-rest.php:13549
 msgid "Max memory limit"
 msgstr "最大メモリ上限"
 
-#: includes/class-minn-admin-rest.php:13488
+#: includes/class-minn-admin-rest.php:13550
 msgid "Active theme"
 msgstr "現在のテーマ"
 
 #. translators: 1: theme name, 2: theme version, 3: parent theme name.
-#: includes/class-minn-admin-rest.php:13490
+#: includes/class-minn-admin-rest.php:13552
 msgid "%1$s %2$s (child of %3$s)"
 msgstr "%1$s %2$s (%3$s の子テーマ)"
 
-#: includes/class-minn-admin-rest.php:13492
+#: includes/class-minn-admin-rest.php:13554
 msgid "Active plugins"
 msgstr "使用中のプラグイン"
 
 #. translators: 1: how many plugins are active, 2: how many must-use plugins are installed.
-#: includes/class-minn-admin-rest.php:13494
+#: includes/class-minn-admin-rest.php:13556
 msgid "%1$s + %2$s mu"
 msgstr "%1$s + %2$s mu"
 
-#: includes/class-minn-admin-rest.php:13509
+#: includes/class-minn-admin-rest.php:13571
 msgid "Interface (SAPI)"
 msgstr "インターフェース (SAPI)"
 
-#: includes/class-minn-admin-rest.php:13516
+#: includes/class-minn-admin-rest.php:13578
 msgid "Enabled (status hidden by the host)"
 msgstr "有効（ホストが状態を非公開にしています）"
 
-#: includes/class-minn-admin-rest.php:13516
+#: includes/class-minn-admin-rest.php:13578
 msgid "Not installed"
 msgstr "未インストール"
 
-#: includes/class-minn-admin-rest.php:13517
+#: includes/class-minn-admin-rest.php:13579
 #: includes/class-minn-admin-surfaces.php:517
 #: assets/js/app.js:1479
 #: assets/js/app.js:4258
@@ -17293,400 +17295,400 @@ msgid "Extensions"
 msgstr "拡張機能"
 
 #. translators: %s: how many cron events are scheduled.
-#: includes/class-minn-admin-rest.php:13629
+#: includes/class-minn-admin-rest.php:13691
 msgid "%s event"
 msgid_plural "%s events"
 msgstr[0] "イベント %s 件"
 
-#: includes/class-minn-admin-rest.php:13632
+#: includes/class-minn-admin-rest.php:13694
 msgid "next due now"
 msgstr "次回は今すぐ"
 
 #. translators: %s: human-readable time until the next cron event (e.g. "4 mins").
-#: includes/class-minn-admin-rest.php:13634
+#: includes/class-minn-admin-rest.php:13696
 msgid "next in %s"
 msgstr "次回まで %s"
 
-#: includes/class-minn-admin-rest.php:13637
+#: includes/class-minn-admin-rest.php:13699
 #: assets/js/app.js:28894
 msgid "WP-Cron disabled (system cron expected)"
 msgstr "WP-Cron は無効です (システムの cron を想定)"
 
-#: includes/class-minn-admin-rest.php:13640
+#: includes/class-minn-admin-rest.php:13702
 #: assets/js/app.js:29700
 msgid "Engine"
 msgstr "エンジン"
 
-#: includes/class-minn-admin-rest.php:13644
+#: includes/class-minn-admin-rest.php:13706
 msgid "Charset"
 msgstr "文字セット"
 
-#: includes/class-minn-admin-rest.php:13645
+#: includes/class-minn-admin-rest.php:13707
 msgid "Collation"
 msgstr "照合順序"
 
-#: includes/class-minn-admin-rest.php:13647
+#: includes/class-minn-admin-rest.php:13709
 #: assets/js/app.js:29545
 #: assets/js/app.js:29836
 #: assets/js/app.js:29931
 msgid "Tables"
 msgstr "テーブル"
 
-#: includes/class-minn-admin-rest.php:13649
+#: includes/class-minn-admin-rest.php:13711
 msgid "Expired transients"
 msgstr "期限切れのトランジェント"
 
-#: includes/class-minn-admin-rest.php:13662
+#: includes/class-minn-admin-rest.php:13724
 msgid "Web server"
 msgstr "Web サーバー"
 
-#: includes/class-minn-admin-rest.php:13663
+#: includes/class-minn-admin-rest.php:13725
 msgid "Protocol"
 msgstr "プロトコル"
 
-#: includes/class-minn-admin-rest.php:13665
+#: includes/class-minn-admin-rest.php:13727
 msgid "Operating system"
 msgstr "オペレーティングシステム"
 
-#: includes/class-minn-admin-rest.php:13666
+#: includes/class-minn-admin-rest.php:13728
 msgid "Architecture"
 msgstr "アーキテクチャ"
 
-#: includes/class-minn-admin-rest.php:13667
+#: includes/class-minn-admin-rest.php:13729
 msgid "Server IP"
 msgstr "サーバー IP"
 
-#: includes/class-minn-admin-rest.php:13668
-#: includes/class-minn-admin-rest.php:13743
+#: includes/class-minn-admin-rest.php:13730
+#: includes/class-minn-admin-rest.php:13805
 msgid "Uploads writable"
 msgstr "アップロードの書き込み可否"
 
-#: includes/class-minn-admin-rest.php:13669
+#: includes/class-minn-admin-rest.php:13731
 msgid "Disk free"
 msgstr "ディスク空き容量"
 
 #. translators: 1: free disk space, 2: total disk space.
-#: includes/class-minn-admin-rest.php:13671
+#: includes/class-minn-admin-rest.php:13733
 msgid "%1$s free of %2$s"
 msgstr "%2$s 中 %1$s 空き"
 
-#: includes/class-minn-admin-rest.php:13689
+#: includes/class-minn-admin-rest.php:13751
 msgid "WordPress version"
 msgstr "WordPress バージョン"
 
 #. translators: 1: installed WordPress version, 2: available WordPress version.
-#: includes/class-minn-admin-rest.php:13693
+#: includes/class-minn-admin-rest.php:13755
 msgid "%1$s installed — WordPress %2$s is available"
 msgstr "%1$s をインストール済み — WordPress %2$s が利用可能です"
 
 #. translators: %s: installed WordPress version.
 #. translators: %s: the PHP version in use.
-#: includes/class-minn-admin-rest.php:13695
-#: includes/class-minn-admin-rest.php:13703
+#: includes/class-minn-admin-rest.php:13757
+#: includes/class-minn-admin-rest.php:13765
 msgid "%s is current"
 msgstr "%s は最新です"
 
-#: includes/class-minn-admin-rest.php:13699
+#: includes/class-minn-admin-rest.php:13761
 msgid "PHP version"
 msgstr "PHP バージョン"
 
 #. translators: %s: the PHP version in use.
-#: includes/class-minn-admin-rest.php:13705
+#: includes/class-minn-admin-rest.php:13767
 msgid "%s is past its supported life — upgrade to 8.2+"
 msgstr "%s はサポート期間を過ぎています — 8.2+ へアップグレードしてください"
 
-#: includes/class-minn-admin-rest.php:13709
+#: includes/class-minn-admin-rest.php:13771
 msgid "HTTPS"
 msgstr "HTTPS"
 
-#: includes/class-minn-admin-rest.php:13711
+#: includes/class-minn-admin-rest.php:13773
 msgid "Served over TLS"
 msgstr "TLS で配信中"
 
-#: includes/class-minn-admin-rest.php:13711
+#: includes/class-minn-admin-rest.php:13773
 msgid "This request is not over HTTPS"
 msgstr "このリクエストは HTTPS ではありません"
 
-#: includes/class-minn-admin-rest.php:13715
+#: includes/class-minn-admin-rest.php:13777
 msgid "Persistent object cache"
 msgstr "永続オブジェクトキャッシュ"
 
-#: includes/class-minn-admin-rest.php:13717
+#: includes/class-minn-admin-rest.php:13779
 msgid "A drop-in is active"
 msgstr "ドロップインが有効です"
 
-#: includes/class-minn-admin-rest.php:13717
+#: includes/class-minn-admin-rest.php:13779
 msgid "Redis/Memcached would speed up repeat queries"
 msgstr "Redis / Memcached で繰り返しのクエリを高速化できます"
 
 #. translators: %s: the configured PHP memory limit (e.g. "256M").
-#: includes/class-minn-admin-rest.php:13724
+#: includes/class-minn-admin-rest.php:13786
 msgid "%s available to PHP"
 msgstr "PHP が利用できる容量は %s"
 
-#: includes/class-minn-admin-rest.php:13728
+#: includes/class-minn-admin-rest.php:13790
 msgid "OPcache"
 msgstr "OPcache"
 
-#: includes/class-minn-admin-rest.php:13730
+#: includes/class-minn-admin-rest.php:13792
 msgid "Bytecode caching is on"
 msgstr "バイトコードキャッシュは有効です"
 
-#: includes/class-minn-admin-rest.php:13730
+#: includes/class-minn-admin-rest.php:13792
 msgid "Bytecode caching is on; the host keeps its status private"
 msgstr "バイトコードキャッシュは有効です。ホストは状態を非公開にしています"
 
-#: includes/class-minn-admin-rest.php:13730
+#: includes/class-minn-admin-rest.php:13792
 msgid "Not enabled — pages recompile each request"
 msgstr "無効です — ページはリクエストごとに再コンパイルされます"
 
-#: includes/class-minn-admin-rest.php:13737
+#: includes/class-minn-admin-rest.php:13799
 msgid "WP_DEBUG is on in a production environment"
 msgstr "本番環境で WP_DEBUG が有効です"
 
 #. translators: %s: the environment type (e.g. "staging").
-#: includes/class-minn-admin-rest.php:13739
+#: includes/class-minn-admin-rest.php:13801
 msgid "On (fine for %s)"
 msgstr "オン (%s では問題ありません)"
 
-#: includes/class-minn-admin-rest.php:13745
+#: includes/class-minn-admin-rest.php:13807
 msgid "The uploads directory accepts writes"
 msgstr "アップロード用ディレクトリは書き込み可能です"
 
-#: includes/class-minn-admin-rest.php:13745
+#: includes/class-minn-admin-rest.php:13807
 msgid "Uploads directory is not writable"
 msgstr "アップロード用ディレクトリは書き込みできません"
 
-#: includes/class-minn-admin-rest.php:13749
+#: includes/class-minn-admin-rest.php:13811
 msgid "Autoload size"
 msgstr "autoload のサイズ"
 
 #. translators: 1: total autoloaded size (e.g. "412 KB"), 2: how many autoloaded options.
-#: includes/class-minn-admin-rest.php:13755
+#: includes/class-minn-admin-rest.php:13817
 msgid "%1$s across %2$s options — healthy"
 msgstr "%2$s 件のオプションで %1$s — 健全です"
 
 #. translators: 1: total autoloaded size (e.g. "3.1 MB"), 2: how many autoloaded options.
 #. translators: 1: total autoloaded size, 2: number of autoloaded options.
-#: includes/class-minn-admin-rest.php:13757
+#: includes/class-minn-admin-rest.php:13819
 #: assets/js/app.js:28523
 #: assets/js/app.js:28879
 msgid "%1$s across %2$s options loads on every request — see the top offenders in the Database card"
 msgstr "%2$s 件のオプションで %1$s が毎回のリクエストで読み込まれます — データベースカードで上位の原因を確認してください"
 
-#: includes/class-minn-admin-rest.php:13761
+#: includes/class-minn-admin-rest.php:13823
 msgid "Post types in Minn"
 msgstr "Minn の投稿タイプ"
 
 #. translators: 1: how many post types are hidden, 2: their names, comma-separated.
-#: includes/class-minn-admin-rest.php:13771
+#: includes/class-minn-admin-rest.php:13833
 msgid "%2$s is not exposed over the REST API, so it cannot appear in Content — turn on Show in REST API"
 msgid_plural "%1$s post types are not exposed over the REST API, so they cannot appear in Content (%2$s) — turn on Show in REST API"
 msgstr[0] "%1$s 件の投稿タイプが REST API で公開されていないため、コンテンツに表示できません (%2$s) — 「REST API に表示」をオンにしてください"
 
-#: includes/class-minn-admin-rest.php:13782
+#: includes/class-minn-admin-rest.php:13844
 msgid "Every post type you created is available to Minn"
 msgstr "作成した投稿タイプはすべて Minn で利用できます"
 
 #. translators: %s: how many cron events are past their scheduled run time.
-#: includes/class-minn-admin-rest.php:13790
+#: includes/class-minn-admin-rest.php:13852
 msgid "%s overdue event — cron may be stalled"
 msgid_plural "%s overdue events — cron may be stalled"
 msgstr[0] "期限超過のイベントが %s 件 — cron が止まっている可能性があります"
 
-#: includes/class-minn-admin-rest.php:13791
+#: includes/class-minn-admin-rest.php:13853
 msgid "(WP-Cron is disabled; is the system cron running?)"
 msgstr "(WP-Cron は無効です。システムの cron は動いていますか ?)"
 
 #. translators: %s: how many cron events are scheduled.
-#: includes/class-minn-admin-rest.php:13793
+#: includes/class-minn-admin-rest.php:13855
 msgid "%s scheduled event, none overdue"
 msgid_plural "%s scheduled events, none overdue"
 msgstr[0] "予約済みイベント %s 件、期限超過なし"
 
-#: includes/class-minn-admin-rest.php:13835
+#: includes/class-minn-admin-rest.php:13897
 msgid "Loopback requests"
 msgstr "ループバックリクエスト"
 
-#: includes/class-minn-admin-rest.php:13838
+#: includes/class-minn-admin-rest.php:13900
 msgid "The site can reach itself (cron and scheduled posts depend on this)"
 msgstr "サイトは自身に到達できます (cron と予約投稿がこれに依存します)"
 
-#: includes/class-minn-admin-rest.php:13839
+#: includes/class-minn-admin-rest.php:13901
 msgid "Loopback requests are failing"
 msgstr "ループバックリクエストが失敗しています"
 
-#: includes/class-minn-admin-rest.php:13845
+#: includes/class-minn-admin-rest.php:13907
 msgid "REST API self-check"
 msgstr "REST API の自己チェック"
 
-#: includes/class-minn-admin-rest.php:13848
+#: includes/class-minn-admin-rest.php:13910
 msgid "The REST API answers external requests (Minn itself rides it)"
 msgstr "REST API は外部リクエストに応答します (Minn 自身もこれを使います)"
 
-#: includes/class-minn-admin-rest.php:13849
+#: includes/class-minn-admin-rest.php:13911
 msgid "The REST API did not answer"
 msgstr "REST API が応答しませんでした"
 
 #. translators: %s: the backup plugin's name.
-#: includes/class-minn-admin-rest.php:13870
+#: includes/class-minn-admin-rest.php:13932
 msgid "%s is active but no backup has completed yet"
 msgstr "%s は有効ですが、完了したバックアップはまだありません"
 
 #. translators: %s: human-readable time since the failed backup (e.g. "3 hours").
-#: includes/class-minn-admin-rest.php:13874
+#: includes/class-minn-admin-rest.php:13936
 msgid "The last backup reported errors (%s ago)"
 msgstr "前回のバックアップがエラーを報告しました (%s前)"
 
 #. translators: %s: human-readable time since the last backup (e.g. "3 hours").
-#: includes/class-minn-admin-rest.php:13878
+#: includes/class-minn-admin-rest.php:13940
 msgid "Last backup completed %s ago"
 msgstr "前回のバックアップは %s前に完了しました"
 
 #. translators: %s: human-readable time since the last backup (e.g. "4 days").
-#: includes/class-minn-admin-rest.php:13882
+#: includes/class-minn-admin-rest.php:13944
 msgid "Last backup was %s ago — consider a fresher schedule"
 msgstr "前回のバックアップは %s前です — より新しいスケジュールを検討してください"
 
 #. translators: %s: human-readable time since the last backup (e.g. "2 weeks").
-#: includes/class-minn-admin-rest.php:13886
+#: includes/class-minn-admin-rest.php:13948
 msgid "Last backup was %s ago"
 msgstr "前回のバックアップは %s前です"
 
 #. translators: %s: how many licenses are expired.
-#: includes/class-minn-admin-rest.php:13996
+#: includes/class-minn-admin-rest.php:14058
 msgid "%s expired"
 msgstr "期限切れ %s 件"
 
 #. translators: %s: how many licenses are invalid.
-#: includes/class-minn-admin-rest.php:13998
+#: includes/class-minn-admin-rest.php:14060
 msgid "%s invalid"
 msgstr "無効 %s 件"
 
 #. translators: %s: how many licenses are missing.
-#: includes/class-minn-admin-rest.php:14000
+#: includes/class-minn-admin-rest.php:14062
 msgid "%s missing"
 msgstr "未設定 %s 件"
 
 #. translators: %s: how many licenses are in an unknown state.
-#: includes/class-minn-admin-rest.php:14002
+#: includes/class-minn-admin-rest.php:14064
 msgid "%s unknown"
 msgstr "不明 %s 件"
 
-#: includes/class-minn-admin-rest.php:14015
+#: includes/class-minn-admin-rest.php:14077
 #: assets/js/app.js:25483
 msgid "Licenses"
 msgstr "ライセンス"
 
 #. translators: 1: comma-separated problem counts (e.g. "2 expired, 1 missing"), 2: how many licensed components exist.
-#: includes/class-minn-admin-rest.php:14020
+#: includes/class-minn-admin-rest.php:14082
 msgid "%1$s of %2$s components; see the Licenses tab"
 msgstr "%2$s 件中 %1$s。ライセンスタブを確認してください"
 
 #. translators: %s: how many licensed components exist.
-#: includes/class-minn-admin-rest.php:14022
+#: includes/class-minn-admin-rest.php:14084
 msgid "All %s components are licensed or connected"
 msgstr "コンポーネント %s 件はすべてライセンス済みまたは接続済みです"
 
-#: includes/class-minn-admin-rest.php:14166
+#: includes/class-minn-admin-rest.php:14228
 msgid "Master switch for WordPress debugging."
 msgstr "WordPress のデバッグ機能全体のスイッチです。"
 
-#: includes/class-minn-admin-rest.php:14167
+#: includes/class-minn-admin-rest.php:14229
 msgid "Log to file"
 msgstr "ファイルに記録"
 
-#: includes/class-minn-admin-rest.php:14167
+#: includes/class-minn-admin-rest.php:14229
 msgid "Write notices and errors to wp-content/debug.log."
 msgstr "通知とエラーを wp-content/debug.log に書き出します。"
 
-#: includes/class-minn-admin-rest.php:14168
+#: includes/class-minn-admin-rest.php:14230
 msgid "Show errors on screen"
 msgstr "画面にエラーを表示"
 
-#: includes/class-minn-admin-rest.php:14168
+#: includes/class-minn-admin-rest.php:14230
 msgid "Render errors in the page. Leave off in production and read the log instead."
 msgstr "ページ内にエラーを出力します。本番環境ではオフのままにして、ログを確認してください。"
 
-#: includes/class-minn-admin-rest.php:14169
+#: includes/class-minn-admin-rest.php:14231
 msgid "Unminified assets"
 msgstr "未圧縮のアセット"
 
-#: includes/class-minn-admin-rest.php:14169
+#: includes/class-minn-admin-rest.php:14231
 msgid "Load the full-length core and plugin JS/CSS."
 msgstr "コアとプラグインの JS/CSS を圧縮前のまま読み込みます。"
 
-#: includes/class-minn-admin-rest.php:14170
+#: includes/class-minn-admin-rest.php:14232
 msgid "Log database queries"
 msgstr "データベースクエリを記録"
 
-#: includes/class-minn-admin-rest.php:14170
+#: includes/class-minn-admin-rest.php:14232
 msgid "Record every query for inspection — a real performance cost; turn off when done."
 msgstr "調査のためすべてのクエリを記録します。パフォーマンスへの影響が大きいので、確認後はオフにしてください。"
 
 #. translators: %s: a wp-config.php constant name, such as WP_DEBUG_LOG.
-#: includes/class-minn-admin-rest.php:14531
+#: includes/class-minn-admin-rest.php:14593
 msgid "%s is set to a custom value in wp-config.php, so it can only be changed there."
 msgstr "%s は wp-config.php でカスタム値に設定されているため、そこでしか変更できません。"
 
 #. translators: %s: a wp-config.php constant name, such as WP_DEBUG_LOG.
-#: includes/class-minn-admin-rest.php:14535
+#: includes/class-minn-admin-rest.php:14597
 msgid "%s is defined more than once in wp-config.php, so it can only be changed there."
 msgstr "%s は wp-config.php で複数回定義されているため、そこでしか変更できません。"
 
 #. translators: %s: a wp-config.php constant name, such as WP_DEBUG_LOG.
-#: includes/class-minn-admin-rest.php:14539
+#: includes/class-minn-admin-rest.php:14601
 msgid "%s is set inside a condition in wp-config.php, so it can only be changed there."
 msgstr "%s は wp-config.php の条件分岐の中で設定されているため、そこでしか変更できません。"
 
 #. translators: %s: a wp-config.php constant name, such as WP_DEBUG_LOG.
-#: includes/class-minn-admin-rest.php:14543
+#: includes/class-minn-admin-rest.php:14605
 msgid "%s is set after wp-config.php loads WordPress, so it never takes effect; move it above that line in wp-config.php."
 msgstr "%s は wp-config.php が WordPress を読み込んだ後で設定されているため、有効になりません。wp-config.php のその行より上に移動してください。"
 
-#: includes/class-minn-admin-rest.php:14560
+#: includes/class-minn-admin-rest.php:14622
 msgid "Could not find a safe place to add the constant."
 msgstr "定数を安全に追加できる位置が見つかりませんでした。"
 
-#: includes/class-minn-admin-rest.php:14874
+#: includes/class-minn-admin-rest.php:14936
 msgid "That constant is not editable."
 msgstr "その定数は編集できません。"
 
-#: includes/class-minn-admin-rest.php:14877
+#: includes/class-minn-admin-rest.php:14939
 msgid "File modifications are disabled on this site."
 msgstr "このサイトではファイルの変更が無効になっています。"
 
-#: includes/class-minn-admin-rest.php:14881
+#: includes/class-minn-admin-rest.php:14943
 msgid "wp-config.php is not writable."
 msgstr "wp-config.php は書き込みできません。"
 
-#: includes/class-minn-admin-rest.php:14885
+#: includes/class-minn-admin-rest.php:14947
 msgid "Could not read wp-config.php."
 msgstr "wp-config.php を読み取れませんでした。"
 
 #. translators: %s: a wp-config.php constant name, such as WP_DEBUG_LOG.
-#: includes/class-minn-admin-rest.php:14891
+#: includes/class-minn-admin-rest.php:14953
 msgid "The %s line in wp-config.php is not the one WordPress runs with, so it can only be changed there."
 msgstr "wp-config.php の %s の行は WordPress が実際に使っている行ではないため、そこでしか変更できません。"
 
-#: includes/class-minn-admin-rest.php:14903
+#: includes/class-minn-admin-rest.php:14965
 msgid "The change would break wp-config.php, so it was not saved."
 msgstr "この変更は wp-config.php を壊すため、保存しませんでした。"
 
-#: includes/class-minn-admin-rest.php:14912
+#: includes/class-minn-admin-rest.php:14974
 msgid "Could not write a rollback copy of wp-config.php, so the change was not made."
 msgstr "wp-config.php のロールバック用コピーを書き込めなかったため、変更しませんでした。"
 
 #. translators: %s: the file name of the kept copy of wp-config.php.
-#: includes/class-minn-admin-rest.php:14922
+#: includes/class-minn-admin-rest.php:14984
 msgid "wp-config.php did not save completely and could not be put back. A copy of the original is kept as %s."
 msgstr "wp-config.php の保存が完了せず、元に戻すこともできませんでした。元のファイルのコピーは %s として保管されています。"
 
-#: includes/class-minn-admin-rest.php:14975
+#: includes/class-minn-admin-rest.php:15037
 msgid "wp-config.php did not save completely, so it was put back as it was. Nothing changed."
 msgstr "wp-config.php の保存が完了しなかったため、元の状態に戻しました。何も変更されていません。"
 
-#: includes/class-minn-admin-rest.php:14977
+#: includes/class-minn-admin-rest.php:15039
 msgid "wp-config.php did not save completely and could not be put back."
 msgstr "wp-config.php の保存が完了せず、元に戻すこともできませんでした。"
 
@@ -17781,127 +17783,132 @@ msgstr "この PHP には zip 拡張機能がないため、Minn のリリース
 msgid "Minn Admin could not create %s."
 msgstr "Minn Admin は %s を作成できませんでした。"
 
-#: includes/class-minn-admin-switch.php:204
+#: includes/class-minn-admin-switch.php:208
 msgid "Minn's release could not be downloaded."
 msgstr "Minn のリリースをダウンロードできませんでした。"
 
-#: includes/class-minn-admin-switch.php:209
+#: includes/class-minn-admin-switch.php:213
 msgid "The minn.zip downloaded does not match the checksum its release publishes, so it is not used."
 msgstr "ダウンロードした minn.zip がリリースで公開されているチェックサムと一致しないため、使用しません。"
 
-#: includes/class-minn-admin-switch.php:213
+#: includes/class-minn-admin-switch.php:217
 msgid "This minn.zip is not signed by a key Minn trusts, so it is not used."
 msgstr "この minn.zip は Minn が信頼するキーで署名されていないため、使用しません。"
 
-#: includes/class-minn-admin-switch.php:218
+#: includes/class-minn-admin-switch.php:222
 msgid "Minn's release could not be opened."
 msgstr "Minn のリリースを開けませんでした。"
 
 #. translators: %s: a path inside the archive.
-#: includes/class-minn-admin-switch.php:227
+#: includes/class-minn-admin-switch.php:231
 msgid "Minn's release holds %s, outside its minn/ folder, so it is not used."
 msgstr "Minn のリリースに minn/ フォルダー外の %s が含まれているため、使用しません。"
 
-#: includes/class-minn-admin-switch.php:242
+#: includes/class-minn-admin-switch.php:246
 msgid "Minn's release is not a Minn Engine: its minn/ folder is incomplete."
 msgstr "Minn のリリースは Minn Engine ではありません。minn/ フォルダーが不完全です。"
 
 #. translators: 1: the Minn version a release archive holds, 2: the version its release names.
-#: includes/class-minn-admin-switch.php:271
+#: includes/class-minn-admin-switch.php:275
 msgid "The archive holds Minn %1$s, not the %2$s its release names, so it is not used."
 msgstr "このアーカイブに入っているのは Minn %1$s であり、リリースが名乗る %2$s ではないため、使用されません。"
 
 #. translators: 1: a Minn version, 2: the oldest Minn version Minn Admin installs.
-#: includes/class-minn-admin-switch.php:276
+#: includes/class-minn-admin-switch.php:280
 msgid "Minn %1$s is older than Minn %2$s, the oldest release Minn Admin installs, so it is not used."
 msgstr "Minn %1$s は、Minn Admin がインストールする最も古いリリースである Minn %2$s より古いため、使用されません。"
 
-#: includes/class-minn-admin-switch.php:312
+#: includes/class-minn-admin-switch.php:316
 msgid "This Minn release is older than Minn Admin can install from WordPress; use its install.sh instead."
 msgstr "この Minn のリリースは古いため、Minn Admin で WordPress からインストールすることはできません。代わりに付属の install.sh を使用してください。"
 
-#: includes/class-minn-admin-switch.php:519
+#: includes/class-minn-admin-switch.php:523
 msgid "That check has expired. Check the site again."
 msgstr "そのチェックは期限切れです。もう一度サイトをチェックしてください。"
 
-#: includes/class-minn-admin-switch.php:522
+#: includes/class-minn-admin-switch.php:526
 msgid "Preflight is RED for this site, so it stays on WordPress."
 msgstr "このサイトのプリフライトは RED のため、WordPress のままになります。"
 
-#: includes/class-minn-admin-switch.php:525
+#: includes/class-minn-admin-switch.php:529
 msgid "Type the site's address to confirm."
 msgstr "確認のため、サイトのアドレスを入力してください。"
 
 #. translators: 1: a folder path, 2: a command.
-#: includes/class-minn-admin-switch.php:530
+#: includes/class-minn-admin-switch.php:534
 #: assets/js/app.js:28318
 msgid "The web server cannot create %1$s for WordPress's own files. Switch from the command line instead: %2$s"
 msgstr "Web サーバーが WordPress 本体のファイル用に %1$s を作成できません。代わりにコマンドラインから切り替えてください: %2$s"
 
-#: includes/class-minn-admin-switch.php:575
+#: includes/class-minn-admin-switch.php:540
+#: includes/class-minn-admin-switch.php:728
+msgid "A switch to Minn started on this site in the last hour and has not finished. Try again once it has, or after the hour."
+msgstr "このサイトで過去1時間以内に Minn への切り替えが始まり、まだ終わっていません。終わってから、または1時間後にもう一度試してください。"
+
+#: includes/class-minn-admin-switch.php:592
 msgid "That switch is not known here."
 msgstr "その切り替えはここでは認識されていません。"
 
-#: includes/class-minn-admin-switch.php:688
+#: includes/class-minn-admin-switch.php:703
 msgid "Preflight is RED, so the site stays on WordPress. Pass --force to install anyway."
 msgstr "プリフライトが RED のため、サイトは WordPress のままです。それでもインストールするには --force を指定してください。"
 
 #. translators: %s: a folder path.
-#: includes/class-minn-admin-switch.php:694
+#: includes/class-minn-admin-switch.php:709
 msgid "Cannot put WordPress's own files in %s: it is not writable, or not empty. Choose a folder outside the site with --park=<dir>."
 msgstr "WordPress 本体のファイルを %s に置けません。書き込み可能でないか、空ではありません。--park=<dir> でサイト外のフォルダーを指定してください。"
 
 #. translators: 1: Minn's version, 2: the WordPress version Minn speaks, 3: the WordPress version this site runs.
-#: includes/class-minn-admin-switch.php:698
+#: includes/class-minn-admin-switch.php:713
 #: assets/js/app.js:28312
 msgid "Minn %1$s (speaks WordPress %2$s), signature verified. This site runs WordPress %3$s."
 msgstr "Minn %1$s（WordPress %2$s 互換）、署名を検証しました。このサイトは WordPress %3$s で動作しています。"
 
 #. translators: %s: a folder path.
-#: includes/class-minn-admin-switch.php:700
+#: includes/class-minn-admin-switch.php:715
 msgid "WordPress's own files move to %s; `wp minn eject` brings them back."
 msgstr "WordPress 本体のファイルは %s に移動します。`wp minn eject` で元に戻せます。"
 
-#: includes/class-minn-admin-switch.php:701
+#: includes/class-minn-admin-switch.php:716
 #: assets/js/app.js:28425
 msgid "Switch this site to Minn?"
 msgstr "このサイトを Minn に切り替えますか？"
 
-#: includes/class-minn-admin-switch.php:724
+#: includes/class-minn-admin-switch.php:746
 #: assets/js/app.js:28327
 #: assets/js/app.js:28465
 msgid "Minn was not installed; the site is still WordPress."
 msgstr "Minn はインストールされませんでした。サイトは WordPress のままです。"
 
 #. translators: %s: Minn Admin's address.
-#: includes/class-minn-admin-switch.php:731
+#: includes/class-minn-admin-switch.php:753
 msgid "This site now runs on Minn. Minn Admin is at %s"
 msgstr "このサイトは Minn で動作するようになりました。Minn Admin の場所: %s"
 
 #. translators: %s: the site's address.
-#: includes/class-minn-admin-switch.php:750
+#: includes/class-minn-admin-switch.php:772
 msgid "Waiting for %s to answer as Minn…"
 msgstr "%s が Minn として応答するのを待っています…"
 
-#: includes/class-minn-admin-switch.php:765
+#: includes/class-minn-admin-switch.php:787
 msgid "The site did not answer as Minn yet; flushing anyway. If it still shows WordPress in a minute, run: wp cache flush"
 msgstr "サイトはまだ Minn として応答していません。それでもキャッシュを消去します。1 分後も WordPress が表示される場合は、次を実行してください: wp cache flush"
 
-#: includes/class-minn-admin-switch.php:776
+#: includes/class-minn-admin-switch.php:798
 msgid "Caches flushed (wp cache flush)."
 msgstr "キャッシュを消去しました (wp cache flush)。"
 
-#: includes/class-minn-admin-switch.php:778
+#: includes/class-minn-admin-switch.php:800
 msgid "wp cache flush failed. If the host caches pages, purge its cache now."
 msgstr "wp cache flush に失敗しました。ホストがページをキャッシュしている場合は、今すぐそのキャッシュを消去してください。"
 
 #. translators: %s: Minn's version.
-#: includes/class-minn-admin-switch.php:816
+#: includes/class-minn-admin-switch.php:838
 msgid "Downloading Minn %s from the Minn update service…"
 msgstr "Minn アップデートサービスから Minn %s をダウンロードしています…"
 
 #. translators: %s: a file path.
-#: includes/class-minn-admin-switch.php:816
+#: includes/class-minn-admin-switch.php:838
 msgid "Checking %s…"
 msgstr "%s を確認しています…"
 

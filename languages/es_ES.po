@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Minn Admin\n"
 "Report-Msgid-Bugs-To: https://github.com/austinginder/minn-admin/issues\n"
-"PO-Revision-Date: 2026-10-28 21:39+0000\n"
+"PO-Revision-Date: 2026-10-28 23:34+0000\n"
 "Last-Translator: Minn Admin translation pipeline\n"
 "Language-Team: Spanish (Spain)\n"
 "MIME-Version: 1.0\n"
@@ -43,7 +43,7 @@ msgstr "https://austinginder.com"
 #: includes/adapters/acf-field-groups.php:25
 #: includes/adapters/gravity-forms-builder.php:622
 #: includes/adapters/gravity-forms-confirmations.php:73
-#: includes/class-minn-admin-rest.php:10756
+#: includes/class-minn-admin-rest.php:10767
 #: includes/class-minn-admin.php:2240
 #: assets/js/app.js:23098
 #: assets/js/app.js:44438
@@ -65,7 +65,7 @@ msgstr "Número"
 
 #: includes/adapters/acf-field-groups.php:28
 #: includes/adapters/bookings-kit.php:127
-#: includes/adapters/gravity-smtp.php:333
+#: includes/adapters/gravity-smtp.php:366
 #: includes/adapters/jet-appointments.php:233
 #: includes/adapters/jet-booking.php:301
 #: includes/adapters/jet-reviews.php:195
@@ -194,7 +194,7 @@ msgstr "Plantilla"
 #: includes/adapters/gravity-forms.php:356
 #: includes/adapters/gravity-forms.php:418
 #: includes/adapters/gravity-forms.php:487
-#: includes/adapters/gravity-smtp.php:591
+#: includes/adapters/gravity-smtp.php:624
 #: includes/adapters/jet-appointments.php:270
 #: includes/adapters/jet-booking.php:322
 #: includes/adapters/jet-cct.php:268
@@ -540,7 +540,7 @@ msgstr "Campo"
 #: includes/adapters/woocommerce-memberships.php:1752
 #: includes/adapters/wpcode.php:518
 #: includes/adapters/yith-gift-cards.php:356
-#: includes/class-minn-admin-rest.php:13643
+#: includes/class-minn-admin-rest.php:13705
 #: assets/js/app.js:992
 #: assets/js/app.js:13976
 #: assets/js/app.js:14485
@@ -641,9 +641,9 @@ msgstr "Obligatorio"
 #: includes/adapters/redirection.php:308
 #: includes/adapters/woocommerce-gift-cards.php:362
 #: includes/adapters/wp-migrate.php:308
-#: includes/class-minn-admin-rest.php:13477
-#: includes/class-minn-admin-rest.php:13664
-#: includes/class-minn-admin-rest.php:13668
+#: includes/class-minn-admin-rest.php:13539
+#: includes/class-minn-admin-rest.php:13726
+#: includes/class-minn-admin-rest.php:13730
 #: assets/js/app.js:8874
 #: assets/js/app.js:29980
 #: assets/js/app.js:29999
@@ -656,8 +656,8 @@ msgstr "No"
 #: includes/adapters/woocommerce-gift-cards.php:362
 #: includes/adapters/woocommerce-gift-cards.php:391
 #: includes/adapters/wp-migrate.php:308
-#: includes/class-minn-admin-rest.php:13664
-#: includes/class-minn-admin-rest.php:13668
+#: includes/class-minn-admin-rest.php:13726
+#: includes/class-minn-admin-rest.php:13730
 #: assets/js/app.js:8874
 #: assets/js/app.js:29980
 #: assets/js/app.js:29999
@@ -929,14 +929,14 @@ msgstr[1] "%d imágenes"
 #. translators: %s: the environment type (e.g. "staging").
 #: includes/adapters/acf.php:2586
 #: includes/adapters/elementor-mcp.php:147
-#: includes/adapters/gravity-smtp.php:1001
+#: includes/adapters/gravity-smtp.php:1051
 #: includes/adapters/jet-smart-filters.php:81
 #: includes/adapters/novamira.php:216
 #: includes/adapters/simple-301-redirects.php:116
 #: includes/adapters/wp-freighter.php:641
 #: includes/adapters/wpvivid.php:326
-#: includes/class-minn-admin-rest.php:13483
-#: includes/class-minn-admin-rest.php:13739
+#: includes/class-minn-admin-rest.php:13545
+#: includes/class-minn-admin-rest.php:13801
 #: assets/js/app.js:5653
 msgid "Off"
 msgstr "Desactivado"
@@ -944,12 +944,12 @@ msgstr "Desactivado"
 #: includes/adapters/acf.php:2586
 #: includes/adapters/code-snippets.php:312
 #: includes/adapters/elementor-mcp.php:147
-#: includes/adapters/gravity-smtp.php:1001
+#: includes/adapters/gravity-smtp.php:1051
 #: includes/adapters/novamira.php:216
 #: includes/adapters/simple-301-redirects.php:116
 #: includes/adapters/wp-freighter.php:641
 #: includes/adapters/wpvivid.php:326
-#: includes/class-minn-admin-rest.php:13482
+#: includes/class-minn-admin-rest.php:13544
 #: assets/js/app.js:5653
 msgid "On"
 msgstr "Activado"
@@ -990,11 +990,11 @@ msgstr "cambiado"
 #: includes/adapters/public-post-preview.php:55
 #: includes/adapters/public-post-preview.php:166
 #: includes/adapters/public-post-preview.php:177
-#: includes/class-minn-admin-rest.php:5358
-#: includes/class-minn-admin-rest.php:5450
-#: includes/class-minn-admin-rest.php:5483
-#: includes/class-minn-admin-rest.php:12966
-#: includes/class-minn-admin-rest.php:12971
+#: includes/class-minn-admin-rest.php:5369
+#: includes/class-minn-admin-rest.php:5461
+#: includes/class-minn-admin-rest.php:5494
+#: includes/class-minn-admin-rest.php:12977
+#: includes/class-minn-admin-rest.php:12982
 #: includes/kernel/class-minn-admin-kernel-panels.php:479
 msgid "Post not found."
 msgstr "Entrada no encontrada."
@@ -1131,8 +1131,8 @@ msgid "Unknown settings tab."
 msgstr "Pestaña de ajustes desconocida."
 
 #: includes/adapters/acpt.php:1318
-#: includes/class-minn-admin-rest.php:4115
-#: includes/class-minn-admin-rest.php:4534
+#: includes/class-minn-admin-rest.php:4119
+#: includes/class-minn-admin-rest.php:4545
 #: includes/class-minn-admin-surfaces.php:512
 #: assets/js/app.js:1470
 #: assets/js/app.js:4261
@@ -1384,7 +1384,7 @@ msgstr "Evento"
 #: includes/adapters/bricks.php:1774
 #: includes/adapters/forms-kit.php:80
 #: includes/adapters/gravity-forms.php:417
-#: includes/adapters/gravity-smtp.php:385
+#: includes/adapters/gravity-smtp.php:418
 #: includes/adapters/jet-reviews.php:126
 #: includes/adapters/latepoint.php:234
 #: includes/adapters/scrutoscope.php:898
@@ -1503,7 +1503,7 @@ msgstr "Preparando la exportación…"
 #: includes/adapters/updraftplus.php:331
 #: includes/adapters/wp-migrate.php:366
 #: includes/adapters/wpvivid.php:382
-#: includes/class-minn-admin-rest.php:13890
+#: includes/class-minn-admin-rest.php:13952
 msgid "Backups"
 msgstr "Copias de seguridad"
 
@@ -1519,7 +1519,7 @@ msgstr "Exportar"
 #: includes/adapters/updraftplus.php:347
 #: includes/adapters/wp-migrate.php:382
 #: includes/adapters/wpvivid.php:396
-#: includes/class-minn-admin-rest.php:13648
+#: includes/class-minn-admin-rest.php:13710
 #: assets/js/app.js:993
 #: assets/js/app.js:28883
 #: assets/js/app.js:29699
@@ -1642,7 +1642,7 @@ msgstr "Nivel"
 #: includes/adapters/all-in-one-security.php:190
 #: includes/adapters/bricks.php:1861
 #: includes/adapters/elementor-forms.php:227
-#: includes/adapters/gravity-forms.php:684
+#: includes/adapters/gravity-forms.php:685
 #: includes/adapters/novamira.php:668
 #: includes/adapters/wordfence.php:98
 #: includes/adapters/wp-activity-log.php:214
@@ -1778,13 +1778,13 @@ msgstr "Precio"
 #: includes/adapters/amelia.php:161
 #: includes/adapters/amelia.php:222
 #: includes/adapters/bookly.php:136
-#: includes/adapters/gravity-forms.php:734
-#: includes/adapters/gravity-smtp.php:335
-#: includes/adapters/gravity-smtp.php:345
+#: includes/adapters/gravity-forms.php:735
+#: includes/adapters/gravity-smtp.php:368
+#: includes/adapters/gravity-smtp.php:378
 #: includes/adapters/latepoint.php:295
 #: includes/adapters/latepoint.php:499
 #: includes/adapters/woocommerce-memberships.php:1830
-#: includes/class-minn-admin-rest.php:11884
+#: includes/class-minn-admin-rest.php:11895
 #: assets/js/app.js:10109
 #: assets/js/app.js:10657
 #: assets/js/app.js:10807
@@ -1957,7 +1957,7 @@ msgid "WP Abilities"
 msgstr "WP Abilities"
 
 #: includes/adapters/aryo-activity-log.php:277
-#: includes/adapters/gravity-smtp.php:322
+#: includes/adapters/gravity-smtp.php:355
 #: includes/adapters/stream.php:261
 msgid "All sources"
 msgstr "Todas las fuentes"
@@ -2002,9 +2002,9 @@ msgstr "Acción"
 #: includes/adapters/eps-301-redirects.php:246
 #: includes/adapters/fluent-forms.php:311
 #: includes/adapters/fluent-smtp.php:432
-#: includes/adapters/gravity-forms.php:677
-#: includes/adapters/gravity-smtp.php:310
-#: includes/adapters/gravity-smtp.php:318
+#: includes/adapters/gravity-forms.php:678
+#: includes/adapters/gravity-smtp.php:343
+#: includes/adapters/gravity-smtp.php:351
 #: includes/adapters/jet-reviews.php:161
 #: includes/adapters/rank-math-redirections.php:242
 #: includes/adapters/redirection.php:142
@@ -2134,8 +2134,8 @@ msgid "Plugin behaviour"
 msgstr "Comportamiento del plugin"
 
 #: includes/adapters/asset-cleanup.php:147
-#: includes/adapters/gravity-smtp.php:1000
-#: includes/adapters/gravity-smtp.php:1236
+#: includes/adapters/gravity-smtp.php:1050
+#: includes/adapters/gravity-smtp.php:1297
 msgid "Test mode"
 msgstr "Modo de pruebas"
 
@@ -2348,9 +2348,9 @@ msgstr "BackWPup está creando una copia de seguridad"
 #: includes/adapters/updraftplus.php:250
 #: includes/adapters/wordfence.php:275
 #: includes/adapters/wpvivid.php:303
-#: includes/class-minn-admin-rest.php:4370
-#: includes/class-minn-admin-rest.php:5309
-#: includes/class-minn-admin-rest.php:5903
+#: includes/class-minn-admin-rest.php:4379
+#: includes/class-minn-admin-rest.php:5320
+#: includes/class-minn-admin-rest.php:5914
 #: includes/kernel/class-minn-admin-kernel.php:2467
 msgid "%s ago"
 msgstr "hace %s"
@@ -2576,8 +2576,8 @@ msgstr "Personas"
 
 #: includes/adapters/bookings-kit.php:132
 #: includes/adapters/bookings-kit.php:282
-#: includes/adapters/gravity-smtp.php:311
-#: includes/adapters/gravity-smtp.php:604
+#: includes/adapters/gravity-smtp.php:344
+#: includes/adapters/gravity-smtp.php:637
 #: includes/adapters/jet-appointments.php:266
 #: assets/js/app.js:22121
 msgid "Service"
@@ -2643,7 +2643,7 @@ msgstr "Estado desconocido"
 
 #: includes/adapters/bookings-kit.php:239
 #: includes/adapters/bookings-kit.php:320
-#: includes/class-minn-admin-rest.php:5902
+#: includes/class-minn-admin-rest.php:5913
 #: assets/js/app.js:38295
 msgid "Today"
 msgstr "Hoy"
@@ -2843,8 +2843,8 @@ msgid "Protecting"
 msgstr "Protegiendo"
 
 #: includes/adapters/breakwater.php:215
-#: includes/class-minn-admin-rest.php:4123
-#: includes/class-minn-admin-rest.php:4490
+#: includes/class-minn-admin-rest.php:4127
+#: includes/class-minn-admin-rest.php:4499
 #: includes/class-minn-admin-surfaces.php:506
 #: assets/js/app.js:977
 #: assets/js/app.js:1447
@@ -2911,7 +2911,7 @@ msgstr "¿Devolver los envíos seleccionados a sus formularios?"
 #: includes/adapters/breakwater.php:326
 #: includes/adapters/bricks.php:830
 #: includes/adapters/fluent-smtp.php:293
-#: includes/adapters/gravity-smtp.php:406
+#: includes/adapters/gravity-smtp.php:439
 #: includes/adapters/perfmatters.php:32
 #: includes/adapters/redirection.php:214
 #: assets/js/app.js:974
@@ -3013,10 +3013,10 @@ msgstr "Ese archivo no es una exportación de plantilla de Bricks."
 #: includes/adapters/jet-smart-filters.php:64
 #: includes/adapters/jet-theme-core.php:102
 #: includes/adapters/woocommerce-settings.php:179
-#: includes/class-minn-admin-rest.php:2340
-#: includes/class-minn-admin-rest.php:2457
-#: includes/class-minn-admin-rest.php:5243
-#: includes/class-minn-admin-rest.php:5297
+#: includes/class-minn-admin-rest.php:2344
+#: includes/class-minn-admin-rest.php:2461
+#: includes/class-minn-admin-rest.php:5254
+#: includes/class-minn-admin-rest.php:5308
 msgid "(no title)"
 msgstr "(sin título)"
 
@@ -3450,7 +3450,7 @@ msgstr "Modo de mantenimiento"
 #: includes/adapters/pw-gift-cards.php:230
 #: includes/adapters/woocommerce-gift-cards.php:281
 #: includes/adapters/yith-gift-cards.php:296
-#: includes/class-minn-admin-rest.php:13516
+#: includes/class-minn-admin-rest.php:13578
 #: assets/js/app.js:31137
 #: assets/js/app.js:31170
 msgid "Disabled"
@@ -3549,7 +3549,7 @@ msgstr "Todos los envíos"
 #: includes/adapters/bricks.php:1772
 #: includes/adapters/bricks.php:1867
 #: includes/adapters/forms-kit.php:275
-#: includes/adapters/gravity-forms.php:731
+#: includes/adapters/gravity-forms.php:732
 #: assets/js/app.js:21739
 msgid "Submission"
 msgstr "Envío"
@@ -3577,8 +3577,8 @@ msgstr "Formulario"
 #: includes/adapters/core-blocks.php:107
 #: includes/adapters/fluent-smtp.php:437
 #: includes/adapters/gravity-forms.php:100
-#: includes/adapters/gravity-smtp.php:372
-#: includes/adapters/gravity-smtp.php:605
+#: includes/adapters/gravity-smtp.php:405
+#: includes/adapters/gravity-smtp.php:638
 #: includes/adapters/jet-reviews.php:164
 #: includes/adapters/mail-kit.php:71
 #: includes/adapters/post-smtp.php:176
@@ -3776,7 +3776,7 @@ msgid "Check log"
 msgstr "Registro de comprobaciones"
 
 #: includes/adapters/broken-link-checker.php:352
-#: includes/adapters/gravity-smtp.php:314
+#: includes/adapters/gravity-smtp.php:347
 #: assets/js/app.js:28947
 msgid "Log"
 msgstr "Registro"
@@ -3946,8 +3946,8 @@ msgid "(unknown sender)"
 msgstr "(remitente desconocido)"
 
 #: includes/adapters/cf7-flamingo.php:272
-#: includes/adapters/post-smtp.php:208
-#: includes/adapters/wp-mail-logging.php:214
+#: includes/adapters/post-smtp.php:213
+#: includes/adapters/wp-mail-logging.php:219
 msgid "(no subject)"
 msgstr "(sin asunto)"
 
@@ -4181,11 +4181,11 @@ msgstr "Acerca del mensaje y del sitio"
 #: includes/adapters/gravity-forms-confirmations.php:355
 #: includes/adapters/gravity-forms-confirmations.php:385
 #: includes/adapters/gravity-forms-notifications.php:793
-#: includes/adapters/gravity-forms.php:1030
-#: includes/adapters/gravity-forms.php:1113
-#: includes/adapters/gravity-forms.php:1177
-#: includes/adapters/gravity-forms.php:1200
-#: includes/adapters/gravity-forms.php:1600
+#: includes/adapters/gravity-forms.php:1033
+#: includes/adapters/gravity-forms.php:1116
+#: includes/adapters/gravity-forms.php:1180
+#: includes/adapters/gravity-forms.php:1203
+#: includes/adapters/gravity-forms.php:1603
 #: includes/adapters/wpforms-emails.php:155
 msgid "Form not found."
 msgstr "Formulario no encontrado."
@@ -4223,10 +4223,10 @@ msgstr "Abrir CFDB7 ↗"
 #: includes/adapters/fluent-forms.php:383
 #: includes/adapters/gravity-forms-entry-edit.php:277
 #: includes/adapters/gravity-forms.php:637
-#: includes/adapters/gravity-forms.php:780
-#: includes/adapters/gravity-forms.php:949
-#: includes/adapters/gravity-forms.php:999
-#: includes/adapters/gravity-forms.php:1026
+#: includes/adapters/gravity-forms.php:781
+#: includes/adapters/gravity-forms.php:952
+#: includes/adapters/gravity-forms.php:1002
+#: includes/adapters/gravity-forms.php:1029
 #: includes/adapters/wpforms.php:108
 #: includes/adapters/wpforms.php:341
 msgid "Entry not found."
@@ -4342,7 +4342,7 @@ msgid "Could not delete this account."
 msgstr "No se ha podido borrar esta cuenta."
 
 #: includes/adapters/cleantalk.php:484
-#: includes/adapters/licenses.php:6938
+#: includes/adapters/licenses.php:6941
 msgid "Unknown action."
 msgstr "Acción desconocida."
 
@@ -4442,7 +4442,7 @@ msgstr "Ámbito"
 #: includes/adapters/code-snippets.php:392
 #: includes/adapters/custom-css-js.php:677
 #: includes/adapters/fluent-snippets.php:156
-#: includes/adapters/gravity-smtp.php:370
+#: includes/adapters/gravity-smtp.php:403
 #: includes/adapters/snippets-kit.php:70
 #: includes/adapters/wpcode.php:537
 #: assets/js/app.js:30950
@@ -4527,7 +4527,7 @@ msgstr "Fragmento desactivado."
 #: includes/adapters/jetpack-stats.php:254
 #: includes/adapters/matomo.php:329
 #: includes/adapters/monsterinsights.php:399
-#: includes/class-minn-admin-rest.php:3983
+#: includes/class-minn-admin-rest.php:3987
 #: assets/js/app.js:49641
 msgid "Top pages"
 msgstr "Páginas principales"
@@ -4537,7 +4537,7 @@ msgstr "Páginas principales"
 #: includes/adapters/jetpack-stats.php:256
 #: includes/adapters/matomo.php:331
 #: includes/adapters/monsterinsights.php:401
-#: includes/class-minn-admin-rest.php:4001
+#: includes/class-minn-admin-rest.php:4005
 msgid "Referrers"
 msgstr "Referentes"
 
@@ -4710,7 +4710,7 @@ msgid "/* your CSS */"
 msgstr "/* tu CSS */"
 
 #: includes/adapters/custom-css-js.php:673
-#: includes/class-minn-admin-rest.php:13478
+#: includes/class-minn-admin-rest.php:13540
 #: assets/js/app.js:53790
 #: assets/js/app.js:53792
 #: assets/js/app.js:54042
@@ -4786,7 +4786,7 @@ msgstr "Último análisis"
 
 #: includes/adapters/disembark.php:160
 #: includes/adapters/updraftplus.php:389
-#: includes/class-minn-admin-rest.php:14043
+#: includes/class-minn-admin-rest.php:14105
 #: includes/class-minn-admin-surfaces.php:518
 #: assets/js/app.js:1484
 msgid "Database"
@@ -5078,10 +5078,10 @@ msgid "That answer could not be read."
 msgstr "No se ha podido leer esa respuesta."
 
 #: includes/adapters/elementor-forms-entry-edit.php:224
-#: includes/adapters/fluent-smtp.php:709
+#: includes/adapters/fluent-smtp.php:714
 #: includes/adapters/gravity-forms-entry-edit.php:214
-#: includes/adapters/gravity-smtp.php:879
-#: includes/adapters/gravity-smtp.php:1070
+#: includes/adapters/gravity-smtp.php:921
+#: includes/adapters/gravity-smtp.php:1120
 #: includes/adapters/network.php:644
 #: includes/adapters/network.php:1160
 #: includes/adapters/ninja-forms-entry-edit.php:203
@@ -5558,10 +5558,10 @@ msgid "Field Groups"
 msgstr "Grupos de campos"
 
 #: includes/adapters/fluent-forms-emails.php:243
-#: includes/adapters/gravity-smtp.php:386
+#: includes/adapters/gravity-smtp.php:419
 #: includes/adapters/woocommerce-gift-cards.php:362
-#: includes/class-minn-admin-rest.php:13485
-#: includes/class-minn-admin-rest.php:13516
+#: includes/class-minn-admin-rest.php:13547
+#: includes/class-minn-admin-rest.php:13578
 msgid "Enabled"
 msgstr "Activado"
 
@@ -5570,7 +5570,7 @@ msgstr "Activado"
 #: includes/adapters/fluent-forms-emails.php:246
 #: includes/adapters/fluent-smtp.php:251
 #: includes/adapters/fluent-smtp.php:280
-#: includes/adapters/gravity-smtp.php:1041
+#: includes/adapters/gravity-smtp.php:1091
 #: assets/js/app.js:57307
 #: assets/js/app.js:57319
 #: assets/js/app.js:57320
@@ -5580,7 +5580,7 @@ msgid "Send to"
 msgstr "Enviar a"
 
 #: includes/adapters/fluent-forms-emails.php:247
-#: includes/adapters/gravity-smtp.php:183
+#: includes/adapters/gravity-smtp.php:184
 #: assets/js/app.js:57352
 #: assets/js/app.js:58575
 #: assets/js/app.js:58883
@@ -5608,8 +5608,8 @@ msgstr "Bcc"
 #: includes/adapters/fluent-forms-emails.php:252
 #: includes/adapters/fluent-forms-emails.php:272
 #: includes/adapters/gift-cards-kit.php:135
-#: includes/adapters/gravity-smtp.php:181
-#: includes/adapters/gravity-smtp.php:369
+#: includes/adapters/gravity-smtp.php:182
+#: includes/adapters/gravity-smtp.php:402
 #: includes/adapters/jet-reviews.php:196
 #: includes/adapters/mail-kit.php:106
 #: includes/adapters/pw-gift-cards.php:298
@@ -5753,7 +5753,7 @@ msgid "Open FluentSMTP ↗"
 msgstr "Abrir FluentSMTP ↗"
 
 #: includes/adapters/fluent-smtp.php:245
-#: includes/adapters/gravity-smtp.php:1037
+#: includes/adapters/gravity-smtp.php:1087
 msgid "Send a test email"
 msgstr "Enviar un correo de prueba"
 
@@ -5816,7 +5816,7 @@ msgstr "Los correos se registran pero no se envían. Para sitios de pruebas y st
 
 #: includes/adapters/fluent-smtp.php:428
 #: includes/adapters/gravity-forms.php:355
-#: includes/adapters/gravity-smtp.php:592
+#: includes/adapters/gravity-smtp.php:625
 #: includes/adapters/mail-kit.php:67
 #: includes/adapters/post-smtp.php:167
 #: includes/adapters/site-mailer.php:97
@@ -5868,8 +5868,8 @@ msgid "This email holds a link whose key is hidden from you (a password reset li
 msgstr "Este correo electrónico contiene un enlace cuya clave está oculta para ti (un enlace de restablecimiento de la contraseña), así que solo se puede reenviar a quien se le envió."
 
 #: includes/adapters/fluent-smtp.php:524
-#: includes/adapters/gravity-smtp.php:1443
-#: includes/adapters/post-smtp.php:267
+#: includes/adapters/gravity-smtp.php:1504
+#: includes/adapters/post-smtp.php:272
 msgid "No recipient address on record for this email."
 msgstr "No hay ninguna dirección de destinatario registrada para este correo."
 
@@ -5881,37 +5881,37 @@ msgstr "FluentSMTP no ha registrado este reenvío, así que Minn no puede saber 
 msgid "The mailer reported the resend to "
 msgstr "El servicio de correo ha informado del reenvío a "
 
-#: includes/adapters/fluent-smtp.php:560
-#: includes/adapters/post-smtp.php:185
-#: includes/adapters/site-mailer.php:125
-#: includes/adapters/suremails.php:115
-#: includes/adapters/wp-mail-logging.php:193
-#: includes/adapters/wp-mail-logging.php:274
+#: includes/adapters/fluent-smtp.php:565
+#: includes/adapters/post-smtp.php:190
+#: includes/adapters/site-mailer.php:130
+#: includes/adapters/suremails.php:120
+#: includes/adapters/wp-mail-logging.php:198
+#: includes/adapters/wp-mail-logging.php:279
 msgid "Email not found"
 msgstr "Correo no encontrado"
 
-#: includes/adapters/fluent-smtp.php:634
+#: includes/adapters/fluent-smtp.php:639
 msgid "Log entry still exists after delete."
 msgstr "El registro sigue existiendo tras el borrado."
 
-#: includes/adapters/fluent-smtp.php:675
+#: includes/adapters/fluent-smtp.php:680
 msgid "That connection no longer exists."
 msgstr "Esa conexión ya no existe."
 
-#: includes/adapters/fluent-smtp.php:682
+#: includes/adapters/fluent-smtp.php:687
 msgid "FluentSMTP is not fully loaded."
 msgstr "FluentSMTP no está cargado por completo."
 
-#: includes/adapters/fluent-smtp.php:711
+#: includes/adapters/fluent-smtp.php:716
 msgid "Test email sent to "
 msgstr "Correo de prueba enviado a "
 
-#: includes/adapters/fluent-smtp.php:717
+#: includes/adapters/fluent-smtp.php:722
 msgid "FluentSMTP could not send the test email."
 msgstr "FluentSMTP no ha podido enviar el correo de prueba."
 
 #. translators: %s: the site title.
-#: includes/adapters/fluent-smtp.php:726
+#: includes/adapters/fluent-smtp.php:731
 msgid "Fluent SMTP: Test Email - %s"
 msgstr "Fluent SMTP: Correo de prueba - %s"
 
@@ -6097,12 +6097,12 @@ msgstr "Campo "
 
 #: includes/adapters/forms-kit.php:244
 #: includes/adapters/forms-kit.php:251
-#: includes/adapters/gravity-forms.php:673
+#: includes/adapters/gravity-forms.php:674
 msgid "Submitted"
 msgstr "Enviado"
 
 #: includes/adapters/forms-kit.php:274
-#: includes/adapters/gravity-forms.php:730
+#: includes/adapters/gravity-forms.php:731
 msgid "Responses"
 msgstr "Respuestas"
 
@@ -6177,7 +6177,7 @@ msgid "Recipient"
 msgstr "Destinatario"
 
 #: includes/adapters/gift-cards-kit.php:193
-#: includes/adapters/gravity-smtp.php:393
+#: includes/adapters/gravity-smtp.php:426
 #: includes/adapters/redirection.php:169
 #: includes/adapters/redirection.php:190
 msgid "Disable"
@@ -6188,7 +6188,7 @@ msgid "Disable this gift card? Its balance can no longer be spent."
 msgstr "¿Desactivar esta tarjeta regalo? Su saldo ya no se podrá gastar."
 
 #: includes/adapters/gift-cards-kit.php:201
-#: includes/adapters/gravity-smtp.php:392
+#: includes/adapters/gravity-smtp.php:425
 #: includes/adapters/redirection.php:174
 #: includes/adapters/redirection.php:195
 msgid "Enable"
@@ -6373,7 +6373,7 @@ msgid "is"
 msgstr "es"
 
 #: includes/adapters/gravity-forms-builder.php:344
-#: includes/adapters/gravity-smtp.php:201
+#: includes/adapters/gravity-smtp.php:202
 #: assets/js/app.js:55655
 #: assets/js/app.js:57083
 msgid "is not"
@@ -6395,13 +6395,13 @@ msgid "contains"
 msgstr "contiene"
 
 #: includes/adapters/gravity-forms-builder.php:348
-#: includes/adapters/gravity-smtp.php:208
+#: includes/adapters/gravity-smtp.php:209
 #: assets/js/app.js:57084
 msgid "starts with"
 msgstr "empieza por"
 
 #: includes/adapters/gravity-forms-builder.php:349
-#: includes/adapters/gravity-smtp.php:209
+#: includes/adapters/gravity-smtp.php:210
 #: assets/js/app.js:57084
 msgid "ends with"
 msgstr "termina en"
@@ -6451,7 +6451,7 @@ msgid "User Login"
 msgstr "Acceso del usuario"
 
 #: includes/adapters/gravity-forms-builder.php:436
-#: includes/adapters/gravity-smtp.php:1499
+#: includes/adapters/gravity-smtp.php:1560
 #: includes/adapters/wpforms-emails.php:54
 #: assets/js/app.js:18969
 msgid "Other"
@@ -6507,7 +6507,7 @@ msgid "Mr., Mrs., Miss, Ms., Mx., Dr., Prof., Rev."
 msgstr "Sr., Sra., Srta., Sra., Mx., Dr., Prof., Rvdo."
 
 #: includes/adapters/gravity-forms-builder.php:542
-#: includes/class-minn-admin-rest.php:13646
+#: includes/class-minn-admin-rest.php:13708
 msgid "Prefix"
 msgstr "Prefijo"
 
@@ -7008,7 +7008,7 @@ msgstr "Complemento"
 msgid "Delete this feed permanently? The add-on stops running for its form."
 msgstr "¿Borrar este feed permanentemente? La extensión dejará de ejecutarse en su formulario."
 
-#: includes/adapters/gravity-forms.php:687
+#: includes/adapters/gravity-forms.php:688
 #: includes/adapters/latepoint.php:497
 #: assets/js/app.js:10773
 #: assets/js/app.js:11886
@@ -7018,274 +7018,276 @@ msgstr "¿Borrar este feed permanentemente? La extensión dejará de ejecutarse 
 msgid "Payment"
 msgstr "Pago"
 
-#: includes/adapters/gravity-forms.php:785
+#: includes/adapters/gravity-forms.php:786
 msgid "Write a note first."
 msgstr "Escribe primero una nota."
 
-#: includes/adapters/gravity-forms.php:959
+#: includes/adapters/gravity-forms.php:962
 msgid "You are not allowed to move entries to or from the trash."
 msgstr "No tienes permisos para mover entradas hacia o desde la papelera."
 
-#: includes/adapters/gravity-forms.php:974
+#: includes/adapters/gravity-forms.php:977
 msgid "Unknown entry status."
 msgstr "Estado de la entrada desconocido."
 
-#: includes/adapters/gravity-forms.php:983
+#: includes/adapters/gravity-forms.php:986
 msgid "Nothing to update."
 msgstr "No hay nada que actualizar."
 
-#: includes/adapters/gravity-forms.php:1009
+#: includes/adapters/gravity-forms.php:1012
 msgid "The entry is already in the trash."
 msgstr "La entrada ya está en la papelera."
 
 #. translators: %d: number of routing rules on the notification.
-#: includes/adapters/gravity-forms.php:1079
+#: includes/adapters/gravity-forms.php:1082
 msgid "Routing (%d rule)"
 msgid_plural "Routing (%d rules)"
 msgstr[0] "Enrutado (%d regla)"
 msgstr[1] "Enrutado (%d reglas)"
 
-#: includes/adapters/gravity-forms.php:1084
+#: includes/adapters/gravity-forms.php:1087
 msgid "Form is submitted"
 msgstr "Se envía el formulario"
 
-#: includes/adapters/gravity-forms.php:1085
+#: includes/adapters/gravity-forms.php:1088
 msgid "Draft is saved"
 msgstr "Se guarda el borrador"
 
-#: includes/adapters/gravity-forms.php:1086
+#: includes/adapters/gravity-forms.php:1089
 msgid "Draft link is requested"
 msgstr "Se solicita el enlace del borrador"
 
-#: includes/adapters/gravity-forms.php:1294
-#: includes/adapters/gravity-forms.php:1314
+#: includes/adapters/gravity-forms.php:1297
+#: includes/adapters/gravity-forms.php:1317
 msgid "Feed not found."
 msgstr "Feed no encontrado."
 
-#: includes/adapters/gravity-forms.php:1297
-#: includes/adapters/gravity-forms.php:1317
+#: includes/adapters/gravity-forms.php:1300
+#: includes/adapters/gravity-forms.php:1320
 msgid "You cannot manage this add-on's feeds."
 msgstr "No puedes gestionar los feeds de este add-on."
 
-#: includes/adapters/gravity-forms.php:1302
+#: includes/adapters/gravity-forms.php:1305
 msgid "Gravity Forms refused the change."
 msgstr "Gravity Forms ha rechazado el cambio."
 
-#: includes/adapters/gravity-forms.php:1545
+#: includes/adapters/gravity-forms.php:1548
 #: assets/js/app.js:59903
 #: assets/js/app.js:59948
 msgid "Period"
 msgstr "Periodo"
 
-#: includes/adapters/gravity-forms.php:1613
+#: includes/adapters/gravity-forms.php:1616
 msgid "Give the form a title."
 msgstr "Ponle un título al formulario."
 
-#: includes/adapters/gravity-forms.php:1617
+#: includes/adapters/gravity-forms.php:1620
 msgid "Another form already uses that title."
 msgstr "Otro formulario ya usa ese título."
 
 #. translators: 1: the rejected value, 2: the setting key.
-#: includes/adapters/gravity-forms.php:1640
+#: includes/adapters/gravity-forms.php:1643
 msgid "\"%1$s\" is not one of the choices for %2$s."
 msgstr "\"%1$s\" no es una de las opciones de %2$s."
 
-#: includes/adapters/gravity-smtp.php:189
+#: includes/adapters/gravity-smtp.php:190
 msgid "Source type"
 msgstr "Tipo de fuente"
 
-#: includes/adapters/gravity-smtp.php:190
+#: includes/adapters/gravity-smtp.php:191
 msgid "To count"
 msgstr "Cantidad de destinatarios"
 
-#: includes/adapters/gravity-smtp.php:191
+#: includes/adapters/gravity-smtp.php:192
 msgid "CC count"
 msgstr "Cantidad de CC"
 
-#: includes/adapters/gravity-smtp.php:192
+#: includes/adapters/gravity-smtp.php:193
 msgid "BCC count"
 msgstr "Cantidad de CCO"
 
-#: includes/adapters/gravity-smtp.php:193
+#: includes/adapters/gravity-smtp.php:194
 msgid "Has attachments"
 msgstr "Tiene adjuntos"
 
-#: includes/adapters/gravity-smtp.php:195
+#: includes/adapters/gravity-smtp.php:196
 msgid "Content type"
 msgstr "Tipo de contenido"
 
-#: includes/adapters/gravity-smtp.php:196
+#: includes/adapters/gravity-smtp.php:197
 msgid "Message size"
 msgstr "Tamaño del mensaje"
 
-#: includes/adapters/gravity-smtp.php:197
+#: includes/adapters/gravity-smtp.php:198
 msgid "Attachment size"
 msgstr "Tamaño de los adjuntos"
 
-#: includes/adapters/gravity-smtp.php:207
+#: includes/adapters/gravity-smtp.php:208
 msgid "does not contain"
 msgstr "no contiene"
 
-#: includes/adapters/gravity-smtp.php:236
+#: includes/adapters/gravity-smtp.php:237
 msgid "No conditions"
 msgstr "Sin condiciones"
 
-#: includes/adapters/gravity-smtp.php:331
+#: includes/adapters/gravity-smtp.php:364
 msgid "Suppressions"
 msgstr "Supresiones"
 
-#: includes/adapters/gravity-smtp.php:334
+#: includes/adapters/gravity-smtp.php:367
 #: assets/js/app.js:12282
 msgid "Reason"
 msgstr "Motivo"
 
-#: includes/adapters/gravity-smtp.php:337
+#: includes/adapters/gravity-smtp.php:370
 msgid "Since"
 msgstr "Desde"
 
-#: includes/adapters/gravity-smtp.php:341
+#: includes/adapters/gravity-smtp.php:374
 msgid "Suppress email"
 msgstr "Suprimir el correo"
 
-#: includes/adapters/gravity-smtp.php:344
+#: includes/adapters/gravity-smtp.php:377
 #: assets/js/app.js:57292
 #: assets/js/app.js:58560
 msgid "Email address"
 msgstr "Dirección de correo electrónico"
 
-#: includes/adapters/gravity-smtp.php:345
+#: includes/adapters/gravity-smtp.php:378
 msgid "Why sending to this address is off"
 msgstr "Por qué está desactivado el envío a esta dirección"
 
-#: includes/adapters/gravity-smtp.php:349
+#: includes/adapters/gravity-smtp.php:382
 msgid "Reactivate (allow sending again)"
 msgstr "Reactivar (permitir el envío de nuevo)"
 
-#: includes/adapters/gravity-smtp.php:349
+#: includes/adapters/gravity-smtp.php:382
 msgid "Allow Gravity SMTP to send to this address again?"
 msgstr "¿Permitir que Gravity SMTP vuelva a enviar a esta dirección?"
 
-#: includes/adapters/gravity-smtp.php:356
-#: includes/adapters/gravity-smtp.php:1249
+#: includes/adapters/gravity-smtp.php:389
+#: includes/adapters/gravity-smtp.php:1310
 #: includes/class-minn-admin-logs.php:86
 msgid "Debug log"
 msgstr "Registro de depuración"
 
-#: includes/adapters/gravity-smtp.php:379
-#: includes/adapters/gravity-smtp.php:1017
+#: includes/adapters/gravity-smtp.php:412
+#: includes/adapters/gravity-smtp.php:1067
 #: assets/js/app.js:57292
 msgid "Routing"
 msgstr "Enrutamiento"
 
-#: includes/adapters/gravity-smtp.php:383
+#: includes/adapters/gravity-smtp.php:416
 #: includes/adapters/rewrite-rules-inspector.php:195
 msgid "Rule"
 msgstr "Regla"
 
-#: includes/adapters/gravity-smtp.php:384
+#: includes/adapters/gravity-smtp.php:417
 msgid "Send with"
 msgstr "Enviar con"
 
-#: includes/adapters/gravity-smtp.php:394
+#: includes/adapters/gravity-smtp.php:427
 msgid "Delete rule"
 msgstr "Borrar la regla"
 
-#: includes/adapters/gravity-smtp.php:394
+#: includes/adapters/gravity-smtp.php:427
 msgid "Delete this routing rule permanently?"
 msgstr "¿Borrar esta regla de enrutamiento permanentemente?"
 
-#: includes/adapters/gravity-smtp.php:396
+#: includes/adapters/gravity-smtp.php:429
 msgid "Edit in Gravity SMTP ↗"
 msgstr "Editar en Gravity SMTP ↗"
 
-#: includes/adapters/gravity-smtp.php:405
+#: includes/adapters/gravity-smtp.php:438
 msgid "Sending"
 msgstr "Envío"
 
-#: includes/adapters/gravity-smtp.php:602
+#: includes/adapters/gravity-smtp.php:635
 #: includes/adapters/wp-mail-logging.php:170
 #: assets/js/app.js:58291
 msgid "Attachments"
 msgstr "Adjuntos"
 
-#: includes/adapters/gravity-smtp.php:617
+#: includes/adapters/gravity-smtp.php:650
 #: includes/adapters/wp-mail-logging.php:177
 msgid "Headers"
 msgstr "Cabeceras"
 
-#: includes/adapters/gravity-smtp.php:617
+#: includes/adapters/gravity-smtp.php:650
 msgid "Stored headers"
 msgstr "Cabeceras guardadas"
 
-#: includes/adapters/gravity-smtp.php:642
-#: includes/adapters/wp-mail-smtp.php:110
+#: includes/adapters/gravity-smtp.php:678
+#: includes/adapters/wp-mail-smtp.php:115
 msgid "Event not found"
 msgstr "Evento no encontrado"
 
-#: includes/adapters/gravity-smtp.php:769
+#: includes/adapters/gravity-smtp.php:805
 msgid "Could not delete this log entry."
 msgstr "No se ha podido borrar este registro."
 
-#: includes/adapters/gravity-smtp.php:777
+#: includes/adapters/gravity-smtp.php:813
 msgid "Resent to the original recipients."
 msgstr "Reenviado a los destinatarios originales."
 
-#: includes/adapters/gravity-smtp.php:778
+#: includes/adapters/gravity-smtp.php:814
 msgid "Resent, but another active mail plugin carried it, so the new send appears in that plugin’s log, not Gravity SMTP’s."
 msgstr "Reenviado, pero otro plugin de correo activo lo ha transportado, así que el nuevo envío aparece en el registro de ese plugin, no en el de Gravity SMTP."
 
-#: includes/adapters/gravity-smtp.php:827
+#: includes/adapters/gravity-smtp.php:869
 msgid "Suppressed address not found."
 msgstr "Dirección suprimida no encontrada."
 
-#: includes/adapters/gravity-smtp.php:863
+#: includes/adapters/gravity-smtp.php:905
 msgid "Reactivated — Gravity SMTP can send to "
 msgstr "Reactivada: Gravity SMTP ya puede enviar a "
 
-#: includes/adapters/gravity-smtp.php:913
+#: includes/adapters/gravity-smtp.php:944
+#: includes/adapters/gravity-smtp.php:959
+#: includes/adapters/gravity-smtp.php:1009
 msgid "Routing rule not found."
 msgstr "Regla de enrutamiento no encontrada."
 
-#: includes/adapters/gravity-smtp.php:945
+#: includes/adapters/gravity-smtp.php:991
 msgid "Rule enabled."
 msgstr "Regla activada."
 
-#: includes/adapters/gravity-smtp.php:954
+#: includes/adapters/gravity-smtp.php:1000
 msgid "Rule disabled."
 msgstr "Regla desactivada."
 
-#: includes/adapters/gravity-smtp.php:969
+#: includes/adapters/gravity-smtp.php:1019
 msgid "Routing rule deleted."
 msgstr "Regla de enrutamiento borrada."
 
-#: includes/adapters/gravity-smtp.php:998
+#: includes/adapters/gravity-smtp.php:1048
 msgid "Sending through"
 msgstr "Enviando a través de"
 
-#: includes/adapters/gravity-smtp.php:1002
+#: includes/adapters/gravity-smtp.php:1052
 msgid "Emails are logged, not sent."
 msgstr "Los correos se registran, no se envían."
 
-#: includes/adapters/gravity-smtp.php:1014
+#: includes/adapters/gravity-smtp.php:1064
 msgid "Needs at least 2 active integrations to evaluate (same as Gravity SMTP)."
 msgstr "Necesita al menos 2 integraciones activas para evaluarse (igual que Gravity SMTP)."
 
-#: includes/adapters/gravity-smtp.php:1015
+#: includes/adapters/gravity-smtp.php:1065
 msgid "First matching rule wins, top to bottom."
 msgstr "Gana la primera regla que coincida, de arriba a abajo."
 
-#: includes/adapters/gravity-smtp.php:1015
+#: includes/adapters/gravity-smtp.php:1065
 msgid "No rules yet — add them in Gravity SMTP."
 msgstr "Aún no hay reglas: añádelas en Gravity SMTP."
 
 #. translators: 1: number of routing rules; 2: number of enabled rules.
-#: includes/adapters/gravity-smtp.php:1021
+#: includes/adapters/gravity-smtp.php:1071
 msgid "%1$d rule · %2$d on"
 msgid_plural "%1$d rules · %2$d on"
 msgstr[0] "Reglas: %1$d · Activado: %2$d"
 msgstr[1] "Reglas: %1$d · Activado: %2$d"
 
-#: includes/adapters/gravity-smtp.php:1025
+#: includes/adapters/gravity-smtp.php:1075
 #: includes/adapters/seo.php:205
 #: includes/adapters/seo.php:402
 #: includes/adapters/seo.php:637
@@ -7298,118 +7300,118 @@ msgstr[1] "Reglas: %1$d · Activado: %2$d"
 msgid "None"
 msgstr "Ninguno"
 
-#: includes/adapters/gravity-smtp.php:1041
+#: includes/adapters/gravity-smtp.php:1091
 msgid "you@example.com"
 msgstr "you@example.com"
 
-#: includes/adapters/gravity-smtp.php:1047
+#: includes/adapters/gravity-smtp.php:1097
 msgid "Edit routing rules ↗"
 msgstr "Editar las reglas de enrutamiento ↗"
 
-#: includes/adapters/gravity-smtp.php:1093
+#: includes/adapters/gravity-smtp.php:1143
 msgid "Test email from Minn Admin (Gravity SMTP)"
 msgstr "Correo de prueba de Minn Admin (Gravity SMTP)"
 
-#: includes/adapters/gravity-smtp.php:1099
+#: includes/adapters/gravity-smtp.php:1149
 msgid "The mailer reported the test could not be sent."
 msgstr "El servicio de correo ha informado de que no se ha podido enviar la prueba."
 
-#: includes/adapters/gravity-smtp.php:1105
+#: includes/adapters/gravity-smtp.php:1155
 msgid "Test email sent and logged."
 msgstr "Correo de prueba enviado y registrado."
 
-#: includes/adapters/gravity-smtp.php:1106
+#: includes/adapters/gravity-smtp.php:1156
 msgid "Test email sent, but another active mail plugin carried it, so it appears in that plugin’s log, not Gravity SMTP’s."
 msgstr "Correo de prueba enviado, pero otro plugin de correo activo lo ha transportado, así que aparece en el registro de ese plugin, no en el de Gravity SMTP."
 
-#: includes/adapters/gravity-smtp.php:1167
+#: includes/adapters/gravity-smtp.php:1228
 msgid "Custom SMTP"
 msgstr "SMTP personalizado"
 
-#: includes/adapters/gravity-smtp.php:1188
+#: includes/adapters/gravity-smtp.php:1249
 msgid "Sending service"
 msgstr "Servicio de envío"
 
-#: includes/adapters/gravity-smtp.php:1192
+#: includes/adapters/gravity-smtp.php:1253
 msgid "Primary service"
 msgstr "Servicio principal"
 
-#: includes/adapters/gravity-smtp.php:1195
+#: includes/adapters/gravity-smtp.php:1256
 msgid "Saving a different service reloads this tab with its settings."
 msgstr "Al guardar otro servicio se recarga esta pestaña con sus ajustes."
 
-#: includes/adapters/gravity-smtp.php:1234
+#: includes/adapters/gravity-smtp.php:1295
 msgid "Sending behavior"
 msgstr "Comportamiento de envío"
 
-#: includes/adapters/gravity-smtp.php:1240
-#: includes/adapters/mail-kit.php:246
+#: includes/adapters/gravity-smtp.php:1301
+#: includes/adapters/mail-kit.php:248
 msgid "Email log"
 msgstr "Registro de correos"
 
-#: includes/adapters/gravity-smtp.php:1242
+#: includes/adapters/gravity-smtp.php:1303
 msgid "Keep an email log"
 msgstr "Mantener un registro de correos"
 
-#: includes/adapters/gravity-smtp.php:1243
+#: includes/adapters/gravity-smtp.php:1304
 msgid "Store message bodies"
 msgstr "Guardar el cuerpo de los mensajes"
 
-#: includes/adapters/gravity-smtp.php:1244
+#: includes/adapters/gravity-smtp.php:1305
 msgid "Store attachments"
 msgstr "Guardar los adjuntos"
 
-#: includes/adapters/gravity-smtp.php:1245
-#: includes/adapters/gravity-smtp.php:1252
+#: includes/adapters/gravity-smtp.php:1306
+#: includes/adapters/gravity-smtp.php:1313
 msgid "Retention (days)"
 msgstr "Retención (días)"
 
-#: includes/adapters/gravity-smtp.php:1251
+#: includes/adapters/gravity-smtp.php:1312
 msgid "Keep a debug log"
 msgstr "Mantener un registro de depuración"
 
-#: includes/adapters/gravity-smtp.php:1286
+#: includes/adapters/gravity-smtp.php:1347
 msgid "Unknown sending service."
 msgstr "Servicio de envío desconocido."
 
-#: includes/adapters/gravity-smtp.php:1289
+#: includes/adapters/gravity-smtp.php:1350
 msgid "Switch the sending service on its own first, then edit its settings."
 msgstr "Cambia primero el servicio de envío por separado y luego edita sus ajustes."
 
-#: includes/adapters/gravity-smtp.php:1368
+#: includes/adapters/gravity-smtp.php:1429
 msgid "Gravity SMTP reports this email cannot be resent (body or attachments were not stored)."
 msgstr "Gravity SMTP informa de que este correo no se puede reenviar (no se guardaron el cuerpo ni los adjuntos)."
 
-#: includes/adapters/gravity-smtp.php:1460
+#: includes/adapters/gravity-smtp.php:1521
 #: includes/kernel/class-minn-admin-kernel.php:2138
 msgid "The mailer reported the message could not be sent."
 msgstr "El servicio de correo ha informado de que no se ha podido enviar el mensaje."
 
-#: includes/adapters/gravity-smtp.php:1497
+#: includes/adapters/gravity-smtp.php:1558
 #: assets/js/app.js:969
 msgid "Sandboxed"
 msgstr "Entorno de pruebas"
 
-#: includes/adapters/gravity-smtp.php:1498
+#: includes/adapters/gravity-smtp.php:1559
 #: assets/js/app.js:969
 msgid "Filtered"
 msgstr "Filtrado"
 
-#: includes/adapters/gravity-smtp.php:1506
-#: includes/adapters/mail-kit.php:264
+#: includes/adapters/gravity-smtp.php:1567
+#: includes/adapters/mail-kit.php:266
 #: includes/adapters/redirection.php:444
 #: includes/adapters/status-chart.php:267
 msgid "Last 14 days"
 msgstr "Últimos 14 días"
 
-#: includes/adapters/gravity-smtp.php:1507
+#: includes/adapters/gravity-smtp.php:1568
 #: includes/adapters/ottokit.php:160
 #: includes/adapters/ottokit.php:204
 #: assets/js/app.js:968
 msgid "Sent"
 msgstr "Enviado"
 
-#: includes/adapters/gravity-smtp.php:1508
+#: includes/adapters/gravity-smtp.php:1569
 #: includes/adapters/ottokit.php:328
 #: includes/adapters/wordfence.php:210
 #: assets/js/app.js:966
@@ -7637,7 +7639,7 @@ msgid "Published"
 msgstr "Publicada"
 
 #: includes/adapters/jet-cct.php:279
-#: includes/class-minn-admin-rest.php:4466
+#: includes/class-minn-admin-rest.php:4475
 #: assets/js/app.js:1496
 #: assets/js/app.js:7045
 msgid "Drafts"
@@ -9407,7 +9409,7 @@ msgid "The plugin is not loaded."
 msgstr "El plugin no está cargado."
 
 #: includes/adapters/licenses.php:6208
-#: includes/adapters/licenses.php:6962
+#: includes/adapters/licenses.php:6965
 msgid "Paste a key first."
 msgstr "Pega antes una clave."
 
@@ -9460,24 +9462,24 @@ msgstr "Clave de licencia"
 msgid "core connector"
 msgstr "conector del núcleo"
 
-#: includes/adapters/licenses.php:6943
+#: includes/adapters/licenses.php:6946
 msgid "No such action for this provider."
 msgstr "No existe esa acción para este proveedor."
 
-#: includes/adapters/licenses.php:6957
+#: includes/adapters/licenses.php:6960
 msgid "Fill in every field first."
 msgstr "Rellena antes todos los campos."
 
 #. translators: %s: PHP constant name defined in wp-config.php.
-#: includes/adapters/licenses.php:6996
+#: includes/adapters/licenses.php:6999
 msgid "This key is defined in wp-config (%s), which takes precedence. Change it there."
 msgstr "Esta clave está definida en wp-config (%s), que tiene prioridad. Cámbiala allí."
 
-#: includes/adapters/licenses.php:7009
+#: includes/adapters/licenses.php:7012
 msgid "The plugin reported an error during the request."
 msgstr "El plugin ha informado de un error durante la petición."
 
-#: includes/adapters/licenses.php:7081
+#: includes/adapters/licenses.php:7084
 msgid "Could not check for updates."
 msgstr "No se han podido comprobar las actualizaciones."
 
@@ -9581,42 +9583,42 @@ msgstr "Cuerpo"
 msgid "Delivery"
 msgstr "Entrega"
 
-#: includes/adapters/mail-kit.php:176
+#: includes/adapters/mail-kit.php:178
 msgid "[hidden]"
 msgstr "[oculto]"
 
-#: includes/adapters/mail-kit.php:220
+#: includes/adapters/mail-kit.php:222
 msgid "Failure"
 msgstr "Fallo"
 
-#: includes/adapters/mail-kit.php:221
+#: includes/adapters/mail-kit.php:223
 #: includes/adapters/ottokit.php:213
 msgid "Error"
 msgstr "Error"
 
-#: includes/adapters/mail-kit.php:238
+#: includes/adapters/mail-kit.php:240
 msgid "All logged sends"
 msgstr "Todos los envíos registrados"
 
-#: includes/adapters/mail-kit.php:255
+#: includes/adapters/mail-kit.php:257
 msgid "Logged emails"
 msgstr "Correos registrados"
 
 #. translators: %s: number of failed sends.
 #. translators: %s: the job label.
-#: includes/adapters/mail-kit.php:258
+#: includes/adapters/mail-kit.php:260
 #: assets/js/app.js:19483
 msgid "%s failed"
 msgid_plural "%s failed"
 msgstr[0] "%s fallido"
 msgstr[1] "%s fallidos"
 
-#: includes/adapters/mail-kit.php:289
+#: includes/adapters/mail-kit.php:291
 #: includes/adapters/rank-math-redirections.php:558
 msgid "Log entry deleted."
 msgstr "Registro borrado."
 
-#: includes/adapters/mail-kit.php:307
+#: includes/adapters/mail-kit.php:309
 msgid "Resent to "
 msgstr "Reenviado a "
 
@@ -9937,7 +9939,7 @@ msgid "You are not allowed to delete that site."
 msgstr "No tienes permiso para borrar ese sitio."
 
 #: includes/adapters/network.php:1271
-#: includes/class-minn-admin-rest.php:11344
+#: includes/class-minn-admin-rest.php:11355
 msgid "That plugin is not installed."
 msgstr "Ese plugin no está instalado."
 
@@ -9955,7 +9957,7 @@ msgid "That theme name is not valid."
 msgstr "Ese nombre de tema no es válido."
 
 #: includes/adapters/network.php:1317
-#: includes/class-minn-admin-rest.php:11488
+#: includes/class-minn-admin-rest.php:11499
 msgid "That theme is not installed."
 msgstr "Ese tema no está instalado."
 
@@ -11262,8 +11264,8 @@ msgid "REST"
 msgstr "REST"
 
 #: includes/adapters/scrutoscope.php:80
-#: includes/class-minn-admin-rest.php:13636
-#: includes/class-minn-admin-rest.php:13786
+#: includes/class-minn-admin-rest.php:13698
+#: includes/class-minn-admin-rest.php:13848
 #: assets/js/app.js:974
 msgid "Cron"
 msgstr "Cron"
@@ -11314,10 +11316,10 @@ msgid "Login"
 msgstr "Acceder"
 
 #: includes/adapters/scrutoscope.php:96
-#: includes/class-minn-admin-rest.php:10995
-#: includes/class-minn-admin-rest.php:11093
-#: includes/class-minn-admin-rest.php:13662
-#: includes/class-minn-admin-rest.php:13672
+#: includes/class-minn-admin-rest.php:11006
+#: includes/class-minn-admin-rest.php:11104
+#: includes/class-minn-admin-rest.php:13724
+#: includes/class-minn-admin-rest.php:13734
 #: assets/js/app.js:25584
 msgid "Unknown"
 msgstr "Desconocido"
@@ -11411,8 +11413,8 @@ msgstr "Hitos de la línea temporal"
 #. translators: %s: number of background jobs waiting to run.
 #. translators: %s: number of comments awaiting moderation.
 #: includes/adapters/scrutoscope.php:450
-#: includes/class-minn-admin-rest.php:4131
-#: includes/class-minn-admin-rest.php:4498
+#: includes/class-minn-admin-rest.php:4135
+#: includes/class-minn-admin-rest.php:4507
 msgid "%s pending"
 msgstr "%s pendientes"
 
@@ -11511,9 +11513,9 @@ msgid "Timeline + per-callback trace"
 msgstr "Línea de tiempo + traza por callback"
 
 #: includes/adapters/scrutoscope.php:548
-#: includes/class-minn-admin-rest.php:13466
-#: includes/class-minn-admin-rest.php:13508
-#: includes/class-minn-admin-rest.php:13641
+#: includes/class-minn-admin-rest.php:13528
+#: includes/class-minn-admin-rest.php:13570
+#: includes/class-minn-admin-rest.php:13703
 msgid "Version"
 msgstr "Versión"
 
@@ -11977,7 +11979,7 @@ msgstr "Gravedad (7 d)"
 
 #: includes/adapters/simple-history.php:177
 #: includes/adapters/sucuri.php:169
-#: includes/adapters/wp-mail-smtp.php:249
+#: includes/adapters/wp-mail-smtp.php:254
 msgid "Errors"
 msgstr "Errores"
 
@@ -11988,19 +11990,19 @@ msgid_plural "%1$s · %2$s times"
 msgstr[0] "%1$s · %2$s vez"
 msgstr[1] "%1$s · %2$s veces"
 
-#: includes/adapters/site-mailer.php:185
+#: includes/adapters/site-mailer.php:190
 msgid "Open Site Mailer ↗"
 msgstr "Abrir Site Mailer ↗"
 
-#: includes/adapters/site-mailer.php:190
+#: includes/adapters/site-mailer.php:195
 msgid "Site Mailer has not logged any sends yet"
 msgstr "Site Mailer aún no ha registrado ningún envío"
 
-#: includes/adapters/site-mailer.php:192
+#: includes/adapters/site-mailer.php:197
 msgid "All delivered"
 msgstr "Todos entregados"
 
-#: includes/adapters/site-mailer.php:197
+#: includes/adapters/site-mailer.php:202
 #: includes/adapters/woocommerce-gift-cards.php:391
 msgid "Delivered"
 msgstr "Entregado"
@@ -12354,11 +12356,11 @@ msgstr "Vistas"
 msgid "Conversion"
 msgstr "Conversión"
 
-#: includes/adapters/suremails.php:159
+#: includes/adapters/suremails.php:164
 msgid "Open SureMails ↗"
 msgstr "Abrir SureMails ↗"
 
-#: includes/adapters/suremails.php:163
+#: includes/adapters/suremails.php:168
 msgid "SureMails has not logged any sends yet"
 msgstr "SureMails aún no ha registrado ningún envío"
 
@@ -12756,11 +12758,11 @@ msgid "User Switching nonce URL for the current viewer, when allowed."
 msgstr "URL con nonce de User Switching para el visitante actual, cuando está permitido."
 
 #: includes/adapters/wcpdf.php:137
-#: includes/class-minn-admin-rest.php:8590
-#: includes/class-minn-admin-rest.php:8827
-#: includes/class-minn-admin-rest.php:8869
-#: includes/class-minn-admin-rest.php:8999
-#: includes/class-minn-admin-rest.php:9035
+#: includes/class-minn-admin-rest.php:8601
+#: includes/class-minn-admin-rest.php:8838
+#: includes/class-minn-admin-rest.php:8880
+#: includes/class-minn-admin-rest.php:9010
+#: includes/class-minn-admin-rest.php:9046
 msgid "Order not found."
 msgstr "Pedido no encontrado."
 
@@ -12973,7 +12975,7 @@ msgstr "Compra de producto"
 
 #: includes/adapters/woocommerce-memberships.php:727
 #: includes/adapters/woocommerce-memberships.php:1531
-#: includes/class-minn-admin-rest.php:4659
+#: includes/class-minn-admin-rest.php:4670
 #: includes/class-minn-admin-surfaces.php:509
 #: assets/js/app.js:1463
 #: assets/js/app.js:4196
@@ -14460,7 +14462,7 @@ msgid "Open WP Mail Logging ↗"
 msgstr "Abrir WP Mail Logging ↗"
 
 #: includes/adapters/wp-mail-logging.php:166
-#: includes/class-minn-admin-rest.php:13642
+#: includes/class-minn-admin-rest.php:13704
 msgid "Host"
 msgstr "Host"
 
@@ -14468,11 +14470,11 @@ msgstr "Host"
 msgid "Raw headers"
 msgstr "Cabeceras sin procesar"
 
-#: includes/adapters/wp-mail-logging.php:278
+#: includes/adapters/wp-mail-logging.php:283
 msgid "WP Mail Logging could not resend: "
 msgstr "WP Mail Logging no ha podido reenviar: "
 
-#: includes/adapters/wp-mail-logging.php:281
+#: includes/adapters/wp-mail-logging.php:286
 msgid "Handed back to the mailer — the new attempt appears as its own log entry."
 msgstr "Devuelto al servicio de correo: el nuevo intento aparece como su propio registro."
 
@@ -14480,52 +14482,52 @@ msgstr "Devuelto al servicio de correo: el nuevo intento aparece como su propio 
 msgid "Initiator"
 msgstr "Iniciador"
 
-#: includes/adapters/wp-mail-smtp.php:189
+#: includes/adapters/wp-mail-smtp.php:194
 msgid "Errors (30 days)"
 msgstr "Errores (30 días)"
 
-#: includes/adapters/wp-mail-smtp.php:192
+#: includes/adapters/wp-mail-smtp.php:197
 msgid "Delivery problems this plugin recorded."
 msgstr "Problemas de entrega que ha registrado este plugin."
 
-#: includes/adapters/wp-mail-smtp.php:193
+#: includes/adapters/wp-mail-smtp.php:198
 msgid "No delivery errors recorded."
 msgstr "No se han registrado errores de entrega."
 
-#: includes/adapters/wp-mail-smtp.php:208
+#: includes/adapters/wp-mail-smtp.php:213
 msgid "Mailer"
 msgstr "Sistema de envío"
 
-#: includes/adapters/wp-mail-smtp.php:209
+#: includes/adapters/wp-mail-smtp.php:214
 #: assets/js/app.js:12698
 msgid "Not set"
 msgstr "No establecido"
 
-#: includes/adapters/wp-mail-smtp.php:211
+#: includes/adapters/wp-mail-smtp.php:216
 msgid "Sending through the web server, not an SMTP service."
 msgstr "Envío a través del servidor web, no de un servicio SMTP."
 
-#: includes/adapters/wp-mail-smtp.php:212
+#: includes/adapters/wp-mail-smtp.php:217
 msgid "Configured in WP Mail SMTP."
 msgstr "Configurado en WP Mail SMTP."
 
-#: includes/adapters/wp-mail-smtp.php:227
+#: includes/adapters/wp-mail-smtp.php:232
 msgid "Events logged"
 msgstr "Eventos registrados"
 
-#: includes/adapters/wp-mail-smtp.php:230
+#: includes/adapters/wp-mail-smtp.php:235
 msgid "Debug logging is on, so sends are recorded too."
 msgstr "El registro de depuración está activado, así que los envíos también se registran."
 
-#: includes/adapters/wp-mail-smtp.php:231
+#: includes/adapters/wp-mail-smtp.php:236
 msgid "Errors only. Turn on debug logging to record sends."
 msgstr "Solo errores. Activa el registro de depuración para registrar los envíos."
 
-#: includes/adapters/wp-mail-smtp.php:238
+#: includes/adapters/wp-mail-smtp.php:243
 msgid "Open WP Mail SMTP ↗"
 msgstr "Abrir WP Mail SMTP ↗"
 
-#: includes/adapters/wp-mail-smtp.php:249
+#: includes/adapters/wp-mail-smtp.php:254
 #: assets/js/app.js:28665
 msgid "Debug"
 msgstr "Depuración"
@@ -15931,7 +15933,7 @@ msgstr "Esto contiene una clave guardada (una clave de API o de licencia) y Minn
 msgid "Part of this change was not saved: it would have changed who can run this site, which your account can’t do."
 msgstr "Parte de este cambio no se ha guardado: habría cambiado quién puede administrar este sitio, y tu cuenta no puede hacerlo."
 
-#: includes/class-minn-admin-fences.php:425
+#: includes/class-minn-admin-fences.php:428
 msgid "Minn Admin routes are lowercase."
 msgstr "Las rutas de Minn Admin van en minúsculas."
 
@@ -15940,7 +15942,7 @@ msgid "PHP error log"
 msgstr "Registro de errores de PHP"
 
 #: includes/class-minn-admin-logs.php:93
-#: includes/class-minn-admin-rest.php:14044
+#: includes/class-minn-admin-rest.php:14106
 msgid "Server"
 msgstr "Servidor"
 
@@ -16029,190 +16031,190 @@ msgstr "[etiqueta: %s]"
 msgid "Invalid notice id."
 msgstr "ID de aviso no válido."
 
-#: includes/class-minn-admin-rest.php:1428
+#: includes/class-minn-admin-rest.php:1430
 msgid "Link to the payment in the payment provider's dashboard, as the order screen shows it."
 msgstr "Enlace al pago en el panel del proveedor de pago, tal como lo muestra la pantalla del pedido."
 
-#: includes/class-minn-admin-rest.php:2228
+#: includes/class-minn-admin-rest.php:2230
 msgid "Whether an autosave newer than the saved post exists (live post carrying unsaved edits)."
 msgstr "Si existe un autoguardado más reciente que la entrada guardada (entrada en vivo con cambios sin guardar)."
 
-#: includes/class-minn-admin-rest.php:2276
+#: includes/class-minn-admin-rest.php:2278
 msgid "The other user currently editing this post (core edit lock), or null."
 msgstr "El otro usuario que está editando esta entrada (bloqueo de edición del núcleo), o null."
 
 #. translators: 1: author display name, 2: post title.
-#: includes/class-minn-admin-rest.php:2546
-#: includes/class-minn-admin-rest.php:5249
-#: includes/class-minn-admin-rest.php:5464
+#: includes/class-minn-admin-rest.php:2550
+#: includes/class-minn-admin-rest.php:5260
+#: includes/class-minn-admin-rest.php:5475
 msgid "Someone"
 msgstr "Alguien"
 
-#: includes/class-minn-admin-rest.php:2591
+#: includes/class-minn-admin-rest.php:2595
 msgid "That log lives outside this site, so Minn will not clear it."
 msgstr "Ese registro está fuera de este sitio, así que Minn no lo limpiará."
 
-#: includes/class-minn-admin-rest.php:2599
+#: includes/class-minn-admin-rest.php:2603
 msgid "The debug log is not writable."
 msgstr "El registro de depuración no tiene permisos de escritura."
 
-#: includes/class-minn-admin-rest.php:2603
+#: includes/class-minn-admin-rest.php:2607
 msgid "Could not clear the debug log."
 msgstr "No se ha podido vaciar el registro de depuración."
 
-#: includes/class-minn-admin-rest.php:2626
+#: includes/class-minn-admin-rest.php:2630
 msgid "That block does not offer image editing here."
 msgstr "Ese bloque no ofrece edición de imágenes aquí."
 
-#: includes/class-minn-admin-rest.php:2635
+#: includes/class-minn-admin-rest.php:2639
 msgid "One of those images cannot be used here."
 msgstr "Una de esas imágenes no se puede usar aquí."
 
-#: includes/class-minn-admin-rest.php:2649
+#: includes/class-minn-admin-rest.php:2653
 msgid "Pick at least one image."
 msgstr "Elige al menos una imagen."
 
-#: includes/class-minn-admin-rest.php:2658
+#: includes/class-minn-admin-rest.php:2662
 msgid "That block could not be rebuilt for those images."
 msgstr "Ese bloque no se ha podido reconstruir con esas imágenes."
 
-#: includes/class-minn-admin-rest.php:3001
+#: includes/class-minn-admin-rest.php:3005
 msgid "Expected an array of block markup strings."
 msgstr "Se esperaba un array de cadenas de marcado de bloque."
 
-#: includes/class-minn-admin-rest.php:3472
-#: includes/class-minn-admin-rest.php:3497
+#: includes/class-minn-admin-rest.php:3476
+#: includes/class-minn-admin-rest.php:3501
 msgid "That surface has no setup to run."
 msgstr "Esa superficie no tiene ninguna configuración que ejecutar."
 
-#: includes/class-minn-admin-rest.php:3500
+#: includes/class-minn-admin-rest.php:3504
 msgid "This setup runs on the plugin's own screen."
 msgstr "Esta configuración se ejecuta en la pantalla del propio plugin."
 
-#: includes/class-minn-admin-rest.php:3520
+#: includes/class-minn-admin-rest.php:3524
 msgid "The plugin reported an error during setup."
 msgstr "El plugin ha informado de un error durante la configuración."
 
-#: includes/class-minn-admin-rest.php:3575
+#: includes/class-minn-admin-rest.php:3579
 msgid "Pattern not found."
 msgstr "Patrón no encontrado."
 
-#: includes/class-minn-admin-rest.php:3646
+#: includes/class-minn-admin-rest.php:3650
 msgid "A custom structure needs at least one tag, e.g. %postname%."
 msgstr "Una estructura personalizada necesita al menos una etiqueta, p. ej. %postname%."
 
-#: includes/class-minn-admin-rest.php:3718
+#: includes/class-minn-admin-rest.php:3722
 msgid "The custom CSS was changed somewhere else after you opened it. Copy your edit, reload, and apply it again."
 msgstr "El CSS personalizado se ha cambiado en otro lugar después de que lo abrieras. Copia tu cambio, recarga y vuelve a aplicarlo."
 
-#: includes/class-minn-admin-rest.php:3735
+#: includes/class-minn-admin-rest.php:3739
 msgid "curly brackets"
 msgstr "llaves"
 
-#: includes/class-minn-admin-rest.php:3736
+#: includes/class-minn-admin-rest.php:3740
 msgid "parentheses"
 msgstr "paréntesis"
 
-#: includes/class-minn-admin-rest.php:3737
+#: includes/class-minn-admin-rest.php:3741
 msgid "square brackets"
 msgstr "corchetes"
 
 #. translators: %s: the bracket type that is unbalanced (e.g. "curly brackets").
-#: includes/class-minn-admin-rest.php:3742
+#: includes/class-minn-admin-rest.php:3746
 msgid "That CSS has unbalanced %s. Fix it and save again; nothing was changed."
 msgstr "Ese CSS tiene %s sin equilibrar. Corrígelo y vuelve a guardar; no se ha cambiado nada."
 
-#: includes/class-minn-admin-rest.php:3746
+#: includes/class-minn-admin-rest.php:3750
 msgid "That CSS has an unclosed comment. Fix it and save again; nothing was changed."
 msgstr "Ese CSS tiene un comentario sin cerrar. Corrígelo y guarda de nuevo; no se ha cambiado nada."
 
 #. translators: 1: the window's first day (e.g. "Jun 3"). 2: its last day with the year (e.g. "Jul 2, 2026").
-#: includes/class-minn-admin-rest.php:3812
+#: includes/class-minn-admin-rest.php:3816
 msgid "%1$s – %2$s"
 msgstr "%1$s – %2$s"
 
 #. translators: %s: the date the week starts on (e.g. "Jun 3, 2026").
 #. translators: %s: the date the week starts on (e.g. "Jun 3").
-#: includes/class-minn-admin-rest.php:3815
-#: includes/class-minn-admin-rest.php:4211
-#: includes/class-minn-admin-rest.php:5095
+#: includes/class-minn-admin-rest.php:3819
+#: includes/class-minn-admin-rest.php:4220
+#: includes/class-minn-admin-rest.php:5106
 msgid "Week of %s"
 msgstr "Semana del %s"
 
-#: includes/class-minn-admin-rest.php:3850
-#: includes/class-minn-admin-rest.php:3935
-#: includes/class-minn-admin-rest.php:5158
+#: includes/class-minn-admin-rest.php:3854
+#: includes/class-minn-admin-rest.php:3939
+#: includes/class-minn-admin-rest.php:5169
 msgid "from must be on or before to."
 msgstr "«from» debe ser igual o anterior a «to»."
 
-#: includes/class-minn-admin-rest.php:3862
+#: includes/class-minn-admin-rest.php:3866
 msgid "Custom ranges reach back two years at most."
 msgstr "Los intervalos personalizados llegan como máximo a dos años atrás."
 
-#: includes/class-minn-admin-rest.php:3865
-#: includes/class-minn-admin-rest.php:3939
+#: includes/class-minn-admin-rest.php:3869
+#: includes/class-minn-admin-rest.php:3943
 msgid "Pick a window of a year or less."
 msgstr "Elige un intervalo de un año o menos."
 
-#: includes/class-minn-admin-rest.php:4085
-#: includes/class-minn-admin-rest.php:4446
+#: includes/class-minn-admin-rest.php:4089
+#: includes/class-minn-admin-rest.php:4455
 msgid "Published posts"
 msgstr "Entradas publicadas"
 
 #. translators: %s: number of draft posts.
 #. translators: %s: number of draft products.
-#: includes/class-minn-admin-rest.php:4091
-#: includes/class-minn-admin-rest.php:4452
-#: includes/class-minn-admin-rest.php:4669
+#: includes/class-minn-admin-rest.php:4095
+#: includes/class-minn-admin-rest.php:4461
+#: includes/class-minn-admin-rest.php:4680
 msgid "%s draft"
 msgid_plural "%s drafts"
 msgstr[0] "%s borrador"
 msgstr[1] "%s borradores"
 
-#: includes/class-minn-admin-rest.php:4092
-#: includes/class-minn-admin-rest.php:4101
-#: includes/class-minn-admin-rest.php:4453
-#: includes/class-minn-admin-rest.php:4480
-#: includes/class-minn-admin-rest.php:4670
-#: includes/class-minn-admin-rest.php:4709
+#: includes/class-minn-admin-rest.php:4096
+#: includes/class-minn-admin-rest.php:4105
+#: includes/class-minn-admin-rest.php:4462
+#: includes/class-minn-admin-rest.php:4489
+#: includes/class-minn-admin-rest.php:4681
+#: includes/class-minn-admin-rest.php:4720
 msgid "published"
 msgstr "publicadas"
 
-#: includes/class-minn-admin-rest.php:4099
-#: includes/class-minn-admin-rest.php:4478
+#: includes/class-minn-admin-rest.php:4103
+#: includes/class-minn-admin-rest.php:4487
 #: assets/js/app.js:1498
 #: assets/js/app.js:6942
 #: assets/js/app.js:6979
 msgid "Pages"
 msgstr "Páginas"
 
-#: includes/class-minn-admin-rest.php:4117
-#: includes/class-minn-admin-rest.php:4536
-#: includes/class-minn-admin-rest.php:4691
+#: includes/class-minn-admin-rest.php:4121
+#: includes/class-minn-admin-rest.php:4547
+#: includes/class-minn-admin-rest.php:4702
 msgid "registered"
 msgstr "registrados"
 
-#: includes/class-minn-admin-rest.php:4132
-#: includes/class-minn-admin-rest.php:4499
+#: includes/class-minn-admin-rest.php:4136
+#: includes/class-minn-admin-rest.php:4508
 msgid "approved"
 msgstr "Aprobado"
 
-#: includes/class-minn-admin-rest.php:4139
-#: includes/class-minn-admin-rest.php:4522
+#: includes/class-minn-admin-rest.php:4143
+#: includes/class-minn-admin-rest.php:4532
 msgid "Media files"
 msgstr "Archivos de medios"
 
 #. translators: %s: page-view count, already formatted.
-#: includes/class-minn-admin-rest.php:4238
+#: includes/class-minn-admin-rest.php:4247
 msgid "%s pageviews"
 msgstr "%s páginas vistas"
 
 #. translators: 1: up or down arrow, 2: percentage change, 3: number of days, 4: pageviews clause.
-#: includes/class-minn-admin-rest.php:4241
+#: includes/class-minn-admin-rest.php:4250
 msgid "%1$s %2$s%% vs prior %3$sd · %4$s"
 msgstr "%1$s %2$s%% frente a los %3$s d anteriores · %4$s"
 
-#: includes/class-minn-admin-rest.php:4248
+#: includes/class-minn-admin-rest.php:4257
 #: assets/js/app.js:6314
 #: assets/js/app.js:6447
 #: assets/js/app.js:6536
@@ -16222,102 +16224,102 @@ msgid "Visitors"
 msgstr "Visitantes"
 
 #. translators: 1: author display name, 2: post title.
-#: includes/class-minn-admin-rest.php:4309
-#: includes/class-minn-admin-rest.php:5249
+#: includes/class-minn-admin-rest.php:4318
+#: includes/class-minn-admin-rest.php:5260
 msgid "%1$s published “%2$s”"
 msgstr "%1$s ha publicado “%2$s”"
 
 #. translators: 1: author display name, 2: post title.
-#: includes/class-minn-admin-rest.php:4312
+#: includes/class-minn-admin-rest.php:4321
 msgid "%1$s scheduled “%2$s”"
 msgstr "%1$s ha programado “%2$s”"
 
 #. translators: 1: author display name, 2: post title.
-#: includes/class-minn-admin-rest.php:4315
+#: includes/class-minn-admin-rest.php:4324
 msgid "%1$s drafted “%2$s”"
 msgstr "%1$s ha guardado “%2$s” como borrador"
 
-#: includes/class-minn-admin-rest.php:4468
+#: includes/class-minn-admin-rest.php:4477
 msgid "posts"
 msgstr "entradas"
 
-#: includes/class-minn-admin-rest.php:4509
+#: includes/class-minn-admin-rest.php:4518
 msgid "Pending comments"
 msgstr "Comentarios pendientes"
 
-#: includes/class-minn-admin-rest.php:4511
+#: includes/class-minn-admin-rest.php:4520
 msgid "awaiting review"
 msgstr "pendiente de revisión"
 
-#: includes/class-minn-admin-rest.php:4555
+#: includes/class-minn-admin-rest.php:4566
 msgid "Sales this month"
 msgstr "Ventas de este mes"
 
 #. translators: %s: formatted net sales.
 #. translators: %s: formatted net revenue.
-#: includes/class-minn-admin-rest.php:4558
+#: includes/class-minn-admin-rest.php:4569
 #: assets/js/app.js:12462
 msgid "net %s"
 msgstr "Neto: %s"
 
-#: includes/class-minn-admin-rest.php:4567
+#: includes/class-minn-admin-rest.php:4578
 #: assets/js/app.js:12461
 msgid "Orders this month"
 msgstr "Pedidos de este mes"
 
-#: includes/class-minn-admin-rest.php:4569
 #: includes/class-minn-admin-rest.php:4580
 #: includes/class-minn-admin-rest.php:4591
+#: includes/class-minn-admin-rest.php:4602
 msgid "this month"
 msgstr "este mes"
 
-#: includes/class-minn-admin-rest.php:4578
+#: includes/class-minn-admin-rest.php:4589
 #: assets/js/app.js:12363
 msgid "Items sold"
 msgstr "Artículos vendidos"
 
-#: includes/class-minn-admin-rest.php:4589
+#: includes/class-minn-admin-rest.php:4600
 msgid "Average order"
 msgstr "Pedido medio"
 
-#: includes/class-minn-admin-rest.php:4610
+#: includes/class-minn-admin-rest.php:4621
 msgid "All orders"
 msgstr "Todos los pedidos"
 
 #. translators: %s: number of orders awaiting fulfillment.
-#: includes/class-minn-admin-rest.php:4613
+#: includes/class-minn-admin-rest.php:4624
 msgid "%s to fulfill"
 msgid_plural "%s to fulfill"
 msgstr[0] "%s por completar"
 msgstr[1] "%s por completar"
 
-#: includes/class-minn-admin-rest.php:4622
+#: includes/class-minn-admin-rest.php:4633
 msgid "Awaiting payment"
 msgstr "Pendiente de pago"
 
-#: includes/class-minn-admin-rest.php:4624
+#: includes/class-minn-admin-rest.php:4635
 msgid "pending orders"
 msgstr "pedidos pendientes"
 
-#: includes/class-minn-admin-rest.php:4633
+#: includes/class-minn-admin-rest.php:4644
 msgid "To fulfill"
 msgstr "Por completar"
 
-#: includes/class-minn-admin-rest.php:4635
+#: includes/class-minn-admin-rest.php:4646
 msgid "processing"
 msgstr "procesando"
 
-#: includes/class-minn-admin-rest.php:4644
+#: includes/class-minn-admin-rest.php:4655
 #: assets/js/app.js:967
 #: assets/js/app.js:12614
 msgid "On hold"
 msgstr "En espera"
 
-#: includes/class-minn-admin-rest.php:4646
+#: includes/class-minn-admin-rest.php:4657
 msgid "orders"
 msgstr "pedidos"
 
-#: includes/class-minn-admin-rest.php:4689
+#: includes/class-minn-admin-rest.php:4700
 #: includes/class-minn-admin-surfaces.php:511
 #: assets/js/app.js:1468
 #: assets/js/app.js:4199
@@ -16325,7 +16327,7 @@ msgstr "pedidos"
 msgid "Customers"
 msgstr "Clientes"
 
-#: includes/class-minn-admin-rest.php:4707
+#: includes/class-minn-admin-rest.php:4718
 #: includes/class-minn-admin-surfaces.php:510
 #: assets/js/app.js:1465
 #: assets/js/app.js:4202
@@ -16336,463 +16338,463 @@ msgstr "Clientes"
 msgid "Coupons"
 msgstr "Cupones"
 
-#: includes/class-minn-admin-rest.php:4898
+#: includes/class-minn-admin-rest.php:4909
 msgid "You must be signed in."
 msgstr "Debe iniciar sesión."
 
-#: includes/class-minn-admin-rest.php:4902
-#: includes/class-minn-admin-rest.php:4908
-#: includes/class-minn-admin-rest.php:4929
-#: includes/class-minn-admin-rest.php:4935
+#: includes/class-minn-admin-rest.php:4913
+#: includes/class-minn-admin-rest.php:4919
+#: includes/class-minn-admin-rest.php:4940
+#: includes/class-minn-admin-rest.php:4946
 msgid "No metrics provided."
 msgstr "No se han proporcionado métricas."
 
-#: includes/class-minn-admin-rest.php:5163
+#: includes/class-minn-admin-rest.php:5174
 msgid "Pick a window of 31 days or fewer."
 msgstr "Elige un intervalo de 31 días o menos."
 
 #. translators: 1: comment author name, 2: post title.
-#: includes/class-minn-admin-rest.php:5293
+#: includes/class-minn-admin-rest.php:5304
 msgid "Comment from %1$s awaiting moderation on “%2$s”"
 msgstr "Comentario de %1$s pendiente de moderación en “%2$s”"
 
 #. translators: 1: comment author name, 2: post title.
-#: includes/class-minn-admin-rest.php:5295
+#: includes/class-minn-admin-rest.php:5306
 msgid "%1$s commented on “%2$s”"
 msgstr "%1$s ha comentado en “%2$s”"
 
-#: includes/class-minn-admin-rest.php:5296
+#: includes/class-minn-admin-rest.php:5307
 msgid "Anonymous"
 msgstr "Anónimo"
 
-#: includes/class-minn-admin-rest.php:5361
+#: includes/class-minn-admin-rest.php:5372
 msgid "That post is not in the trash."
 msgstr "Esa entrada no está en la papelera."
 
-#: includes/class-minn-admin-rest.php:5365
+#: includes/class-minn-admin-rest.php:5376
 msgid "You are not allowed to restore this item."
 msgstr "No tienes permisos para restaurar este elemento."
 
-#: includes/class-minn-admin-rest.php:5368
+#: includes/class-minn-admin-rest.php:5379
 msgid "Could not restore the item."
 msgstr "No se ha podido restaurar el elemento."
 
-#: includes/class-minn-admin-rest.php:5423
+#: includes/class-minn-admin-rest.php:5434
 #: assets/js/app.js:39987
 #: assets/js/app.js:40069
 msgid "Someone else"
 msgstr "Otra persona"
 
 #. translators: %s: display name of the user who now holds the edit lock.
-#: includes/class-minn-admin-rest.php:5427
+#: includes/class-minn-admin-rest.php:5438
 msgid "%s took over editing. Your copy was not saved."
 msgstr "%s ha tomado el control de la edición. Tu copia no se ha guardado."
 
-#: includes/class-minn-admin-rest.php:5453
-#: includes/class-minn-admin-rest.php:5486
+#: includes/class-minn-admin-rest.php:5464
+#: includes/class-minn-admin-rest.php:5497
 msgid "You are not allowed to edit this item."
 msgstr "No tienes permisos para editar este elemento."
 
-#: includes/class-minn-admin-rest.php:5499
+#: includes/class-minn-admin-rest.php:5510
 msgid "Good morning"
 msgstr "Buenos días"
 
-#: includes/class-minn-admin-rest.php:5502
+#: includes/class-minn-admin-rest.php:5513
 msgid "Good afternoon"
 msgstr "Buenas tardes"
 
-#: includes/class-minn-admin-rest.php:5504
+#: includes/class-minn-admin-rest.php:5515
 msgid "Good evening"
 msgstr "Buenas noches"
 
 #. translators: %s: disk space used by uploads, already formatted.
-#: includes/class-minn-admin-rest.php:5586
+#: includes/class-minn-admin-rest.php:5597
 msgid "over %s used"
 msgstr "más de %s usados"
 
 #. translators: %s: disk space used by uploads, already formatted.
-#: includes/class-minn-admin-rest.php:5588
+#: includes/class-minn-admin-rest.php:5599
 msgid "%s used"
 msgstr "%s usados"
 
 #. translators: 1: plugin name, 2: version number.
-#: includes/class-minn-admin-rest.php:5762
+#: includes/class-minn-admin-rest.php:5773
 msgid "%1$s %2$s is available to install"
 msgstr "%1$s %2$s está disponible para instalar"
 
 #. translators: %d: how many translation packs have an update waiting.
-#: includes/class-minn-admin-rest.php:5787
+#: includes/class-minn-admin-rest.php:5798
 msgid "%d translation is available to update"
 msgid_plural "%d translations are available to update"
 msgstr[0] "%d traducción está disponible para actualizar"
 msgstr[1] "%d traducciones están disponibles para actualizar"
 
 #. translators: 1: theme name, 2: version number.
-#: includes/class-minn-admin-rest.php:5817
+#: includes/class-minn-admin-rest.php:5828
 msgid "%1$s theme %2$s is available to install"
 msgstr "El tema %1$s %2$s está disponible para instalar"
 
 #. translators: %s: WordPress version number.
 #. translators: %s: the WordPress version being offered.
-#: includes/class-minn-admin-rest.php:5838
+#: includes/class-minn-admin-rest.php:5849
 #: assets/js/app.js:1797
 msgid "WordPress %s is available"
 msgstr "WordPress %s está disponible"
 
 #. translators: %s: WordPress version number.
-#: includes/class-minn-admin-rest.php:5858
+#: includes/class-minn-admin-rest.php:5869
 msgid "WordPress updated itself to %s"
 msgstr "WordPress se ha actualizado a %s"
 
 #. translators: %s: the new user's display name.
-#: includes/class-minn-admin-rest.php:5886
+#: includes/class-minn-admin-rest.php:5897
 msgid "New user registered: %s"
 msgstr "Nuevo usuario registrado: %s"
 
-#: includes/class-minn-admin-rest.php:5902
+#: includes/class-minn-admin-rest.php:5913
 msgid "Earlier"
 msgstr "Anteriores"
 
-#: includes/class-minn-admin-rest.php:6936
+#: includes/class-minn-admin-rest.php:6947
 msgid "That language cannot be removed."
 msgstr "Ese idioma no se puede eliminar."
 
-#: includes/class-minn-admin-rest.php:6940
+#: includes/class-minn-admin-rest.php:6951
 msgid "This is the site language, so it cannot be removed."
 msgstr "Este es el idioma del sitio, así que no se puede eliminar."
 
-#: includes/class-minn-admin-rest.php:6943
+#: includes/class-minn-admin-rest.php:6954
 msgid "A user has chosen this language, so it cannot be removed."
 msgstr "Un usuario ha elegido este idioma, así que no se puede eliminar."
 
-#: includes/class-minn-admin-rest.php:6946
+#: includes/class-minn-admin-rest.php:6957
 msgid "Another site on the network uses this language, so it cannot be removed."
 msgstr "Otro sitio de la red usa este idioma, así que no se puede eliminar."
 
 #. translators: %s: a multilingual plugin's name, such as Polylang.
-#: includes/class-minn-admin-rest.php:6950
+#: includes/class-minn-admin-rest.php:6961
 msgid "%s serves this language to visitors, so it cannot be removed."
 msgstr "%s ofrece este idioma a los visitantes, así que no se puede eliminar."
 
-#: includes/class-minn-admin-rest.php:6953
+#: includes/class-minn-admin-rest.php:6964
 msgid "This network has too many sites to check which languages they use, so languages cannot be removed here."
 msgstr "Esta red tiene demasiados sitios para comprobar qué idiomas usan, así que los idiomas no se pueden eliminar aquí."
 
 #. translators: %s: a multilingual plugin's name, such as Polylang.
-#: includes/class-minn-admin-rest.php:6957
+#: includes/class-minn-admin-rest.php:6968
 msgid "%s may serve any installed language to visitors, so languages cannot be removed here."
 msgstr "%s puede ofrecer cualquier idioma instalado a los visitantes, así que aquí no se pueden eliminar idiomas."
 
-#: includes/class-minn-admin-rest.php:6964
+#: includes/class-minn-admin-rest.php:6975
 msgid "That language is not installed on this site."
 msgstr "Ese idioma no está instalado en este sitio."
 
-#: includes/class-minn-admin-rest.php:7059
+#: includes/class-minn-admin-rest.php:7070
 #: assets/js/app.js:27893
 msgid "Translation update failed."
 msgstr "La actualización de la traducción ha fallado."
 
-#: includes/class-minn-admin-rest.php:7118
+#: includes/class-minn-admin-rest.php:7129
 msgid "Automatic updates are turned off for this site."
 msgstr "Las actualizaciones automáticas están desactivadas en este sitio."
 
-#: includes/class-minn-admin-rest.php:7127
+#: includes/class-minn-admin-rest.php:7138
 msgid "Unknown plugin."
 msgstr "Plugin desconocido."
 
-#: includes/class-minn-admin-rest.php:7127
+#: includes/class-minn-admin-rest.php:7138
 msgid "Unknown theme."
 msgstr "Tema desconocido."
 
-#: includes/class-minn-admin-rest.php:7359
+#: includes/class-minn-admin-rest.php:7370
 msgid "No policies provided."
 msgstr "No se han proporcionado políticas."
 
-#: includes/class-minn-admin-rest.php:7364
+#: includes/class-minn-admin-rest.php:7375
 msgid "Role defaults were changed somewhere else after you opened them. Reload to see the change, then make yours again."
 msgstr "Los valores por defecto del perfil se han cambiado en otro lugar después de que los abrieras. Recarga para ver el cambio y luego vuelve a hacer el tuyo."
 
-#: includes/class-minn-admin-rest.php:7373
+#: includes/class-minn-admin-rest.php:7384
 msgid "Unknown role."
 msgstr "Perfil desconocido."
 
-#: includes/class-minn-admin-rest.php:7387
+#: includes/class-minn-admin-rest.php:7398
 msgid "Unknown sign-in policy."
 msgstr "Política de inicio de sesión desconocida."
 
-#: includes/class-minn-admin-rest.php:7397
+#: includes/class-minn-admin-rest.php:7408
 msgid "Unknown toolbar policy."
 msgstr "Política de barra de herramientas desconocida."
 
-#: includes/class-minn-admin-rest.php:7408
+#: includes/class-minn-admin-rest.php:7419
 msgid "That role cannot use Minn, so a Minn policy cannot apply to it."
 msgstr "Ese perfil no puede usar Minn, así que no se le puede aplicar una política de Minn."
 
-#: includes/class-minn-admin-rest.php:7525
+#: includes/class-minn-admin-rest.php:7536
 msgid "The active theme does not support a custom logo."
 msgstr "El tema activo no es compatible con un logotipo personalizado."
 
-#: includes/class-minn-admin-rest.php:7530
+#: includes/class-minn-admin-rest.php:7541
 msgid "That attachment is not an image."
 msgstr "Ese adjunto no es una imagen."
 
-#: includes/class-minn-admin-rest.php:7536
+#: includes/class-minn-admin-rest.php:7547
 msgid "You cannot use that attachment."
 msgstr "No puedes usar ese adjunto."
 
-#: includes/class-minn-admin-rest.php:7556
-#: includes/class-minn-admin-rest.php:7705
+#: includes/class-minn-admin-rest.php:7567
+#: includes/class-minn-admin-rest.php:7716
 msgid "That language is not installed, and you cannot install languages on this site."
 msgstr "Ese idioma no está instalado y no puedes instalar idiomas en este sitio."
 
-#: includes/class-minn-admin-rest.php:7562
-#: includes/class-minn-admin-rest.php:7711
+#: includes/class-minn-admin-rest.php:7573
+#: includes/class-minn-admin-rest.php:7722
 msgid "The language pack could not be downloaded. Check the site can reach wordpress.org and try again."
 msgstr "No se ha podido descargar el paquete de idioma. Comprueba que el sitio puede conectar con wordpress.org e inténtalo de nuevo."
 
-#: includes/class-minn-admin-rest.php:7745
+#: includes/class-minn-admin-rest.php:7756
 msgid "That integration is not registered."
 msgstr "Esa integración no está registrada."
 
-#: includes/class-minn-admin-rest.php:7897
+#: includes/class-minn-admin-rest.php:7908
 msgid "You cannot remove your own account from this site."
 msgstr "No puedes eliminar tu propia cuenta de este sitio."
 
-#: includes/class-minn-admin-rest.php:7905
+#: includes/class-minn-admin-rest.php:7916
 msgid "That account is not a member of this site."
 msgstr "Esa cuenta no es miembro de este sitio."
 
-#: includes/class-minn-admin-rest.php:7916
+#: includes/class-minn-admin-rest.php:7927
 msgid "Network administrators cannot be removed from a site here. Manage network administrators in Network Admin."
 msgstr "Los administradores de red no se pueden eliminar de un sitio desde aquí. Gestiónalos en la administración de red."
 
-#: includes/class-minn-admin-rest.php:7943
+#: includes/class-minn-admin-rest.php:7954
 msgid "That role cannot be assigned here."
 msgstr "Ese perfil no se puede asignar aquí."
 
-#: includes/class-minn-admin-rest.php:7964
+#: includes/class-minn-admin-rest.php:7975
 msgid "Enter the email address of the account you want to add. Only network administrators can add an account by username."
 msgstr "Introduce la dirección de correo electrónico de la cuenta que quieres añadir. Solo los administradores de la red pueden añadir una cuenta por nombre de usuario."
 
-#: includes/class-minn-admin-rest.php:7971
+#: includes/class-minn-admin-rest.php:7982
 msgid "No account on this network matches that email address. New accounts are created by a network administrator."
 msgstr "Ninguna cuenta de esta red coincide con esa dirección de correo electrónico. Un administrador de la red crea las cuentas nuevas."
 
-#: includes/class-minn-admin-rest.php:7980
+#: includes/class-minn-admin-rest.php:7991
 msgid "That account is already a member of this site."
 msgstr "Esa cuenta ya es miembro de este sitio."
 
-#: includes/class-minn-admin-rest.php:7991
+#: includes/class-minn-admin-rest.php:8002
 msgid "You are not allowed to add that account."
 msgstr "No tienes permisos para añadir esa cuenta."
 
-#: includes/class-minn-admin-rest.php:7999
+#: includes/class-minn-admin-rest.php:8010
 msgid "Network administrators are added to a site from Network Admin."
 msgstr "Los administradores de la red se añaden a un sitio desde Administración de la red."
 
-#: includes/class-minn-admin-rest.php:8011
-#: includes/class-minn-admin-rest.php:8072
+#: includes/class-minn-admin-rest.php:8022
+#: includes/class-minn-admin-rest.php:8083
 msgid "Invitation sent. The account holder has to confirm before they join this site."
 msgstr "Invitación enviada. El titular de la cuenta debe confirmarla antes de unirse a este sitio."
 
 #. translators: Joining confirmation notification email subject. %s: Site title.
-#: includes/class-minn-admin-rest.php:8043
+#: includes/class-minn-admin-rest.php:8054
 msgid "[%s] Joining Confirmation"
 msgstr "[%s] Confirmación de unirse"
 
 #. translators: 1: Site title, 2: Site URL, 3: User role, 4: Activation URL.
-#: includes/class-minn-admin-rest.php:8046
+#: includes/class-minn-admin-rest.php:8057
 #, minn-reviewed
 msgid "Hi,\n\nYou've been invited to join '%1$s' at\n%2$s with the role of %3$s.\n\nPlease click the following link to confirm the invite:\n%4$s"
 msgstr "Hola,\n\nTe han invitado a unirte a '%1$s' en\n%2$s con el rol de %3$s.\n\nHaz clic en el siguiente enlace para confirmar la invitación:\n%4$s"
 
-#: includes/class-minn-admin-rest.php:8295
+#: includes/class-minn-admin-rest.php:8306
 msgid "Session not found"
 msgstr "Sesión no encontrada"
 
-#: includes/class-minn-admin-rest.php:8308
-#: includes/class-minn-admin-rest.php:8332
-#: includes/class-minn-admin-rest.php:8397
+#: includes/class-minn-admin-rest.php:8319
+#: includes/class-minn-admin-rest.php:8343
+#: includes/class-minn-admin-rest.php:8408
 msgid "User not found."
 msgstr "Usuario no encontrado."
 
-#: includes/class-minn-admin-rest.php:8312
+#: includes/class-minn-admin-rest.php:8323
 msgid "You cannot reset a super admin password."
 msgstr "No se puede restablecer la contraseña de un superadministrador."
 
-#: includes/class-minn-admin-rest.php:8316
+#: includes/class-minn-admin-rest.php:8327
 msgid "Could not send the reset email."
 msgstr "No se ha podido enviar el correo de restablecimiento."
 
-#: includes/class-minn-admin-rest.php:8337
+#: includes/class-minn-admin-rest.php:8348
 msgid "You cannot send a super admin a password link."
 msgstr "No puedes enviar un enlace de contraseña a un superadministrador."
 
-#: includes/class-minn-admin-rest.php:8347
+#: includes/class-minn-admin-rest.php:8358
 msgid "This site does not let this account set a password by email, so WordPress sent no email."
 msgstr "Este sitio no permite que esta cuenta establezca una contraseña por correo electrónico, así que WordPress no ha enviado ningún correo."
 
-#: includes/class-minn-admin-rest.php:8376
+#: includes/class-minn-admin-rest.php:8387
 msgid "A plugin on this site turned off the new-account email, so WordPress sent none."
 msgstr "Un plugin de este sitio ha desactivado el correo de cuenta nueva, así que WordPress no ha enviado ninguno."
 
-#: includes/class-minn-admin-rest.php:8382
+#: includes/class-minn-admin-rest.php:8393
 msgid "The account email could not be sent. Check that this site can send email."
 msgstr "No se ha podido enviar el correo de la cuenta. Comprueba que este sitio pueda enviar correo."
 
-#: includes/class-minn-admin-rest.php:8402
-#: includes/class-minn-admin-rest.php:8537
-#: includes/class-minn-admin-rest.php:8599
+#: includes/class-minn-admin-rest.php:8413
+#: includes/class-minn-admin-rest.php:8548
+#: includes/class-minn-admin-rest.php:8610
 msgid "Subject and message are required."
 msgstr "El asunto y el mensaje son obligatorios."
 
-#: includes/class-minn-admin-rest.php:8405
+#: includes/class-minn-admin-rest.php:8416
 msgid "This user has no valid email address."
 msgstr "Este usuario no tiene una dirección de correo válida."
 
-#: includes/class-minn-admin-rest.php:8456
+#: includes/class-minn-admin-rest.php:8467
 msgid "That form entry is not available."
 msgstr "Esa entrada del formulario no está disponible."
 
-#: includes/class-minn-admin-rest.php:8467
+#: includes/class-minn-admin-rest.php:8478
 msgid "Your account can’t email people who submit this form."
 msgstr "Tu cuenta no puede enviar correo electrónico a la gente que envía este formulario."
 
-#: includes/class-minn-admin-rest.php:8525
+#: includes/class-minn-admin-rest.php:8536
 msgid "That address is not on this entry."
 msgstr "Esa dirección no está en esta entrada."
 
-#: includes/class-minn-admin-rest.php:8532
+#: includes/class-minn-admin-rest.php:8543
 msgid "This entry has no email address to reply to."
 msgstr "Esta entrada no tiene una dirección de correo electrónico a la que responder."
 
-#: includes/class-minn-admin-rest.php:8545
+#: includes/class-minn-admin-rest.php:8556
 msgid "there"
 msgstr "allí"
 
-#: includes/class-minn-admin-rest.php:8565
+#: includes/class-minn-admin-rest.php:8576
 msgid "No such coupon."
 msgstr "No existe ese cupón."
 
-#: includes/class-minn-admin-rest.php:8586
-#: includes/class-minn-admin-rest.php:8865
-#: includes/class-minn-admin-rest.php:8995
-#: includes/class-minn-admin-rest.php:9031
+#: includes/class-minn-admin-rest.php:8597
+#: includes/class-minn-admin-rest.php:8876
+#: includes/class-minn-admin-rest.php:9006
+#: includes/class-minn-admin-rest.php:9042
 msgid "WooCommerce is not available."
 msgstr "WooCommerce no está disponible."
 
-#: includes/class-minn-admin-rest.php:8594
+#: includes/class-minn-admin-rest.php:8605
 msgid "This order has no valid billing email."
 msgstr "Este pedido no tiene un correo de facturación válido."
 
 #. translators: 1: admin name, 2: subject
-#: includes/class-minn-admin-rest.php:8625
+#: includes/class-minn-admin-rest.php:8636
 msgid "Minn Admin email sent by %1$s: %2$s"
 msgstr "Correo de Minn Admin enviado por %1$s: %2$s"
 
-#: includes/class-minn-admin-rest.php:8830
+#: includes/class-minn-admin-rest.php:8841
 msgid "This order is not in the Trash."
 msgstr "Este pedido no está en la papelera."
 
-#: includes/class-minn-admin-rest.php:8855
+#: includes/class-minn-admin-rest.php:8866
 msgid "The order could not be restored."
 msgstr "No se ha podido restaurar el pedido."
 
-#: includes/class-minn-admin-rest.php:9039
-#: includes/class-minn-admin-rest.php:9052
+#: includes/class-minn-admin-rest.php:9050
+#: includes/class-minn-admin-rest.php:9063
 msgid "That email type is not available."
 msgstr "Ese tipo de correo no está disponible."
 
-#: includes/class-minn-admin-rest.php:9042
+#: includes/class-minn-admin-rest.php:9053
 msgid "That email does not fit this order as it stands. WooCommerce sends it when an order reaches that status."
 msgstr "Ese correo electrónico no encaja con este pedido tal como está. WooCommerce lo envía cuando un pedido alcanza ese estado."
 
-#: includes/class-minn-admin-rest.php:9064
+#: includes/class-minn-admin-rest.php:9075
 msgid "This order has no note to the customer, so there is nothing to resend."
 msgstr "Este pedido no tiene ninguna nota para el cliente, así que no hay nada que reenviar."
 
 #. translators: %s: a WooCommerce email's title, such as Processing order.
-#: includes/class-minn-admin-rest.php:9136
+#: includes/class-minn-admin-rest.php:9147
 msgid "WooCommerce sent no “%s” email: this order has no address for it, or a plugin on this site stopped it."
 msgstr "WooCommerce no ha enviado ningún correo electrónico «%s»: este pedido no tiene una dirección para él o un plugin de este sitio lo ha detenido."
 
 #. translators: %s: a WooCommerce email's title, such as Processing order.
-#: includes/class-minn-admin-rest.php:9144
+#: includes/class-minn-admin-rest.php:9155
 msgid "The “%s” email could not be sent. Check that this site can send email."
 msgstr "No se ha podido enviar el correo electrónico «%s». Comprueba que este sitio pueda enviar correo."
 
 #. translators: 1: email title, 2: admin name
-#: includes/class-minn-admin-rest.php:9152
+#: includes/class-minn-admin-rest.php:9163
 msgid "“%1$s” email resent via Minn Admin by %2$s."
 msgstr "%2$s ha reenviado el correo “%1$s” desde Minn Admin."
 
-#: includes/class-minn-admin-rest.php:9180
+#: includes/class-minn-admin-rest.php:9191
 msgid "Your account needs an email address to send from."
 msgstr "Tu cuenta necesita un correo electrónico desde el que enviar."
 
-#: includes/class-minn-admin-rest.php:9212
+#: includes/class-minn-admin-rest.php:9223
 msgid "wp_mail() could not send the message. Check your mail configuration."
 msgstr "wp_mail() no ha podido enviar el mensaje. Revisa tu configuración de correo."
 
-#: includes/class-minn-admin-rest.php:9355
-#: includes/class-minn-admin-rest.php:9377
+#: includes/class-minn-admin-rest.php:9366
+#: includes/class-minn-admin-rest.php:9388
 msgid "Theme not found."
 msgstr "No se ha encontrado el tema."
 
-#: includes/class-minn-admin-rest.php:9366
+#: includes/class-minn-admin-rest.php:9377
 msgid "That theme is not enabled for this site. A network administrator can enable it."
 msgstr "Ese tema no está activado para este sitio. Un administrador de red puede activarlo."
 
-#: includes/class-minn-admin-rest.php:9380
+#: includes/class-minn-admin-rest.php:9391
 msgid "The active theme (or its parent) cannot be deleted."
 msgstr "El tema activo (o su tema padre) no se puede borrar."
 
-#: includes/class-minn-admin-rest.php:9451
+#: includes/class-minn-admin-rest.php:9462
 msgid "No update available for that theme."
 msgstr "No hay actualizaciones disponibles para ese tema."
 
-#: includes/class-minn-admin-rest.php:9464
-#: includes/class-minn-admin-rest.php:12559
+#: includes/class-minn-admin-rest.php:9475
+#: includes/class-minn-admin-rest.php:12570
 msgid "Update failed."
 msgstr "La actualización ha fallado."
 
-#: includes/class-minn-admin-rest.php:9539
+#: includes/class-minn-admin-rest.php:9550
 msgid "Unknown taxonomy."
 msgstr "Taxonomía desconocida."
 
-#: includes/class-minn-admin-rest.php:9542
+#: includes/class-minn-admin-rest.php:9553
 msgid "You cannot manage terms in this taxonomy."
 msgstr "No puedes gestionar los términos de esta taxonomía."
 
-#: includes/class-minn-admin-rest.php:9545
+#: includes/class-minn-admin-rest.php:9556
 msgid "Pick a different term to merge into."
 msgstr "Elige otro término con el que fusionar."
 
-#: includes/class-minn-admin-rest.php:9550
+#: includes/class-minn-admin-rest.php:9561
 msgid "Both terms must exist in this taxonomy."
 msgstr "Ambos términos deben existir en esta taxonomía."
 
-#: includes/class-minn-admin-rest.php:9559
+#: includes/class-minn-admin-rest.php:9570
 msgid "This is the default term for its taxonomy, so it cannot be merged away. Merge other terms into it instead."
 msgstr "Este es el término por defecto de su taxonomía, así que no se puede fusionar dentro de otro. Fusiona los demás términos en este."
 
-#: includes/class-minn-admin-rest.php:9562
+#: includes/class-minn-admin-rest.php:9573
 msgid "You cannot merge these terms."
 msgstr "No puedes fusionar estos términos."
 
-#: includes/class-minn-admin-rest.php:9576
+#: includes/class-minn-admin-rest.php:9587
 msgid "The merge did not complete."
 msgstr "La fusión no se ha completado."
 
-#: includes/class-minn-admin-rest.php:10192
-#: includes/class-minn-admin-rest.php:10758
+#: includes/class-minn-admin-rest.php:10203
+#: includes/class-minn-admin-rest.php:10769
 #: assets/js/app.js:23100
 #: assets/js/app.js:23125
 msgid "Headings"
 msgstr "Encabezados"
 
-#: includes/class-minn-admin-rest.php:10193
-#: includes/class-minn-admin-rest.php:10757
+#: includes/class-minn-admin-rest.php:10204
+#: includes/class-minn-admin-rest.php:10768
 #: assets/js/app.js:23099
 #: assets/js/app.js:26777
 #: assets/js/app.js:27160
@@ -16800,207 +16802,207 @@ msgstr "Encabezados"
 msgid "Links"
 msgstr "Enlaces"
 
-#: includes/class-minn-admin-rest.php:10194
-#: includes/class-minn-admin-rest.php:10759
+#: includes/class-minn-admin-rest.php:10205
+#: includes/class-minn-admin-rest.php:10770
 #: assets/js/app.js:47859
 msgid "Buttons"
 msgstr "Botones"
 
-#: includes/class-minn-admin-rest.php:10195
+#: includes/class-minn-admin-rest.php:10206
 #: assets/js/app.js:23103
 msgid "Captions"
 msgstr "Pies de foto"
 
-#: includes/class-minn-admin-rest.php:10196
+#: includes/class-minn-admin-rest.php:10207
 msgid "Citations"
 msgstr "Citas"
 
-#: includes/class-minn-admin-rest.php:10199
+#: includes/class-minn-admin-rest.php:10210
 msgid "font"
 msgstr "fuente"
 
-#: includes/class-minn-admin-rest.php:10200
+#: includes/class-minn-admin-rest.php:10211
 msgid "size"
 msgstr "tamaño"
 
-#: includes/class-minn-admin-rest.php:10201
+#: includes/class-minn-admin-rest.php:10212
 msgid "line height"
 msgstr "altura de línea"
 
-#: includes/class-minn-admin-rest.php:10202
+#: includes/class-minn-admin-rest.php:10213
 msgid "weight"
 msgstr "grosor"
 
-#: includes/class-minn-admin-rest.php:10203
+#: includes/class-minn-admin-rest.php:10214
 msgid "style"
 msgstr "estilo"
 
-#: includes/class-minn-admin-rest.php:10204
+#: includes/class-minn-admin-rest.php:10215
 msgid "letter spacing"
 msgstr "espaciado entre letras"
 
-#: includes/class-minn-admin-rest.php:10205
+#: includes/class-minn-admin-rest.php:10216
 msgid "case"
 msgstr "mayúsculas"
 
-#: includes/class-minn-admin-rest.php:10206
+#: includes/class-minn-admin-rest.php:10217
 msgid "decoration"
 msgstr "decoración"
 
-#: includes/class-minn-admin-rest.php:10207
+#: includes/class-minn-admin-rest.php:10218
 msgid "columns"
 msgstr "columnas"
 
-#: includes/class-minn-admin-rest.php:10208
+#: includes/class-minn-admin-rest.php:10219
 msgid "color"
 msgstr "color"
 
-#: includes/class-minn-admin-rest.php:10209
+#: includes/class-minn-admin-rest.php:10220
 msgid "background"
 msgstr "fondo"
 
-#: includes/class-minn-admin-rest.php:10210
+#: includes/class-minn-admin-rest.php:10221
 msgid "gradient"
 msgstr "degradado"
 
-#: includes/class-minn-admin-rest.php:10211
+#: includes/class-minn-admin-rest.php:10222
 msgid "corner radius"
 msgstr "radio de esquina"
 
-#: includes/class-minn-admin-rest.php:10212
+#: includes/class-minn-admin-rest.php:10223
 msgid "border width"
 msgstr "grosor del borde"
 
-#: includes/class-minn-admin-rest.php:10213
+#: includes/class-minn-admin-rest.php:10224
 msgid "border color"
 msgstr "Color del borde"
 
-#: includes/class-minn-admin-rest.php:10215
+#: includes/class-minn-admin-rest.php:10226
 msgid "hover"
 msgstr "hover"
 
-#: includes/class-minn-admin-rest.php:10215
+#: includes/class-minn-admin-rest.php:10226
 msgid "focus"
 msgstr "foco"
 
-#: includes/class-minn-admin-rest.php:10215
+#: includes/class-minn-admin-rest.php:10226
 #: assets/js/app.js:28582
 msgid "active"
 msgstr "Activo"
 
-#: includes/class-minn-admin-rest.php:10215
+#: includes/class-minn-admin-rest.php:10226
 msgid "visited"
 msgstr "visitado"
 
-#: includes/class-minn-admin-rest.php:10217
+#: includes/class-minn-admin-rest.php:10228
 msgid "Background color"
 msgstr "Color de fondo"
 
-#: includes/class-minn-admin-rest.php:10218
+#: includes/class-minn-admin-rest.php:10229
 msgid "Text color"
 msgstr "Color de texto"
 
-#: includes/class-minn-admin-rest.php:10219
+#: includes/class-minn-admin-rest.php:10230
 msgid "Background gradient"
 msgstr "Degradado de fondo"
 
-#: includes/class-minn-admin-rest.php:10220
+#: includes/class-minn-admin-rest.php:10231
 msgid "Background image"
 msgstr "Imagen de fondo"
 
-#: includes/class-minn-admin-rest.php:10221
+#: includes/class-minn-admin-rest.php:10232
 #: assets/js/app.js:23116
 msgid "Block spacing"
 msgstr "Espaciado de bloques"
 
-#: includes/class-minn-admin-rest.php:10222
+#: includes/class-minn-admin-rest.php:10233
 #: assets/js/app.js:23114
 msgid "Content width"
 msgstr "Anchura del contenido"
 
-#: includes/class-minn-admin-rest.php:10223
+#: includes/class-minn-admin-rest.php:10234
 #: assets/js/app.js:23115
 #: assets/js/app.js:43916
 msgid "Wide width"
 msgstr "Anchura ancha"
 
-#: includes/class-minn-admin-rest.php:10224
+#: includes/class-minn-admin-rest.php:10235
 msgid "Custom colors"
 msgstr "Colores personalizados"
 
-#: includes/class-minn-admin-rest.php:10225
+#: includes/class-minn-admin-rest.php:10236
 msgid "Theme palette"
 msgstr "Paleta del tema"
 
-#: includes/class-minn-admin-rest.php:10226
+#: includes/class-minn-admin-rest.php:10237
 msgid "Custom gradients"
 msgstr "Degradados personalizados"
 
-#: includes/class-minn-admin-rest.php:10227
+#: includes/class-minn-admin-rest.php:10238
 msgid "Custom duotone filters"
 msgstr "Filtros duotono personalizados"
 
-#: includes/class-minn-admin-rest.php:10228
+#: includes/class-minn-admin-rest.php:10239
 msgid "Custom fonts"
 msgstr "Fuentes personalizadas"
 
-#: includes/class-minn-admin-rest.php:10229
+#: includes/class-minn-admin-rest.php:10240
 msgid "Theme fonts"
 msgstr "Fuentes del tema"
 
-#: includes/class-minn-admin-rest.php:10230
+#: includes/class-minn-admin-rest.php:10241
 msgid "Custom text sizes"
 msgstr "Tamaños de texto personalizados"
 
-#: includes/class-minn-admin-rest.php:10231
+#: includes/class-minn-admin-rest.php:10242
 #: assets/js/app.js:23179
 msgid "Text size presets"
 msgstr "Tamaños de texto preestablecidos"
 
-#: includes/class-minn-admin-rest.php:10232
+#: includes/class-minn-admin-rest.php:10243
 msgid "Custom spacing presets"
 msgstr "Espaciados preestablecidos personalizados"
 
-#: includes/class-minn-admin-rest.php:10233
+#: includes/class-minn-admin-rest.php:10244
 msgid "Spacing presets"
 msgstr "Espaciados preestablecidos"
 
-#: includes/class-minn-admin-rest.php:10234
+#: includes/class-minn-admin-rest.php:10245
 msgid "Custom shadows"
 msgstr "Sombras personalizadas"
 
-#: includes/class-minn-admin-rest.php:10235
+#: includes/class-minn-admin-rest.php:10246
 msgid "Shadow presets"
 msgstr "Sombras preestablecidas"
 
-#: includes/class-minn-admin-rest.php:10236
+#: includes/class-minn-admin-rest.php:10247
 #: assets/js/app.js:31884
 msgid "Additional CSS"
 msgstr "CSS adicional"
 
 #. translators: %s: top, right, bottom or left.
-#: includes/class-minn-admin-rest.php:10244
+#: includes/class-minn-admin-rest.php:10255
 msgid "Page padding (%s)"
 msgstr "Relleno de página (%s)"
 
 #. translators: %s: a typography property such as font or line height.
-#: includes/class-minn-admin-rest.php:10249
+#: includes/class-minn-admin-rest.php:10260
 msgid "Body %s"
 msgstr "Cuerpo %s"
 
 #. translators: %s: a block's name.
-#: includes/class-minn-admin-rest.php:10269
+#: includes/class-minn-admin-rest.php:10280
 msgid "%s block"
 msgstr "Bloque %s"
 
 #. translators: %s: a theme.json settings path.
-#: includes/class-minn-admin-rest.php:10273
+#: includes/class-minn-admin-rest.php:10284
 msgid "Setting: %s"
 msgstr "Ajuste: %s"
 
 #. translators: %s: number of entries in an edited list.
 #. translators: %s: localized number of entries.
-#: includes/class-minn-admin-rest.php:10287
+#: includes/class-minn-admin-rest.php:10298
 #: assets/js/app.js:56265
 msgid "%s entry"
 msgid_plural "%s entries"
@@ -17009,336 +17011,336 @@ msgstr[1] "%s entradas"
 
 #. translators: %s: a block's name.
 #. translators: %s: what was customized (e.g. "H1 font").
-#: includes/class-minn-admin-rest.php:10331
-#: includes/class-minn-admin-rest.php:10341
+#: includes/class-minn-admin-rest.php:10342
+#: includes/class-minn-admin-rest.php:10352
 msgid "%s reset to theme"
 msgstr "%s restablecido al tema"
 
 #. translators: 1: a block's name, 2: number of style settings.
-#: includes/class-minn-admin-rest.php:10334
+#: includes/class-minn-admin-rest.php:10345
 msgid "%1$s: %2$s setting"
 msgid_plural "%1$s: %2$s settings"
 msgstr[0] "%1$s: %2$s ajuste"
 msgstr[1] "%1$s: %2$s ajustes"
 
-#: includes/class-minn-admin-rest.php:10467
+#: includes/class-minn-admin-rest.php:10478
 msgid "Colors take a palette color, a hex value like #1a1a1a, or rgb()/hsl()."
 msgstr "Los colores admiten un color de la paleta, un valor hexadecimal como #1a1a1a, o rgb()/hsl()."
 
-#: includes/class-minn-admin-rest.php:10472
+#: includes/class-minn-admin-rest.php:10483
 msgid "Fonts must be one of the families the theme (or Font Library) provides."
 msgstr "Las fuentes deben ser una de las familias que proporciona el tema (o la Biblioteca de fuentes)."
 
-#: includes/class-minn-admin-rest.php:10480
+#: includes/class-minn-admin-rest.php:10491
 msgid "Text sizes take a preset or a CSS length such as 18px or 1.125rem."
 msgstr "Los tamaños de texto admiten un preestablecido o una longitud CSS como 18px o 1.125rem."
 
-#: includes/class-minn-admin-rest.php:10485
+#: includes/class-minn-admin-rest.php:10496
 msgid "Line height takes a number such as 1.6."
 msgstr "La altura de línea admite un número como 1.6."
 
-#: includes/class-minn-admin-rest.php:10493
+#: includes/class-minn-admin-rest.php:10504
 msgid "Widths and spacing take a CSS length such as 24px, 1.5rem or 5%."
 msgstr "Las anchuras y el espaciado admiten una longitud CSS como 24px, 1.5rem o 5%."
 
-#: includes/class-minn-admin-rest.php:10495
+#: includes/class-minn-admin-rest.php:10506
 msgid "Unsupported value."
 msgstr "Valor no compatible."
 
-#: includes/class-minn-admin-rest.php:10561
+#: includes/class-minn-admin-rest.php:10572
 msgid "Nothing to change."
 msgstr "Nada que cambiar."
 
 #. translators: %s: a theme.json path.
-#: includes/class-minn-admin-rest.php:10571
+#: includes/class-minn-admin-rest.php:10582
 msgid "%s is not something Minn edits here."
 msgstr "%s no es algo que Minn edite aquí."
 
-#: includes/class-minn-admin-rest.php:10574
+#: includes/class-minn-admin-rest.php:10585
 msgid "WordPress only stores layout width changes for someone who can post unfiltered HTML, which this account cannot on this site."
 msgstr "WordPress solo guarda los cambios de anchura de la estructura para quien puede publicar HTML sin filtrar, y esta cuenta no puede en este sitio."
 
-#: includes/class-minn-admin-rest.php:10822
+#: includes/class-minn-admin-rest.php:10833
 msgid "That palette or typeset is not part of the active theme."
 msgstr "Esa paleta o conjunto tipográfico no forma parte del tema activo."
 
-#: includes/class-minn-admin-rest.php:10825
+#: includes/class-minn-admin-rest.php:10836
 msgid "WordPress only stores a palette or typeset for someone who can post unfiltered HTML, which this account cannot on this site."
 msgstr "WordPress solo guarda una paleta o un conjunto tipográfico para quien puede publicar HTML sin filtrar, y esta cuenta no puede en este sitio."
 
-#: includes/class-minn-admin-rest.php:11207
-#: includes/class-minn-admin-rest.php:11253
-#: includes/class-minn-admin-rest.php:12159
-#: includes/class-minn-admin-rest.php:12365
+#: includes/class-minn-admin-rest.php:11218
+#: includes/class-minn-admin-rest.php:11264
+#: includes/class-minn-admin-rest.php:12170
+#: includes/class-minn-admin-rest.php:12376
 msgid "Install failed."
 msgstr "La instalación ha fallado."
 
-#: includes/class-minn-admin-rest.php:11218
-#: includes/class-minn-admin-rest.php:12124
+#: includes/class-minn-admin-rest.php:11229
+#: includes/class-minn-admin-rest.php:12135
 msgid "No file uploaded."
 msgstr "No se ha subido ningún archivo."
 
-#: includes/class-minn-admin-rest.php:11221
+#: includes/class-minn-admin-rest.php:11232
 msgid "Theme uploads must be .zip files."
 msgstr "Los temas se deben subir en archivos .zip."
 
-#: includes/class-minn-admin-rest.php:11231
-#: includes/class-minn-admin-rest.php:12137
+#: includes/class-minn-admin-rest.php:11242
+#: includes/class-minn-admin-rest.php:12148
 msgid "Could not store the upload."
 msgstr "No se ha podido guardar la subida."
 
-#: includes/class-minn-admin-rest.php:11338
+#: includes/class-minn-admin-rest.php:11349
 msgid "Plugin file is required."
 msgstr "El archivo del plugin es obligatorio."
 
-#: includes/class-minn-admin-rest.php:11350
+#: includes/class-minn-admin-rest.php:11361
 #: includes/class-minn-admin.php:157
 msgid "Sorry, you are not allowed to manage this plugin."
 msgstr "Lo siento, no tienes permisos para gestionar este plugin."
 
-#: includes/class-minn-admin-rest.php:11479
+#: includes/class-minn-admin-rest.php:11490
 msgid "Theme is required."
 msgstr "El tema es obligatorio."
 
-#: includes/class-minn-admin-rest.php:11884
+#: includes/class-minn-admin-rest.php:11895
 #: assets/js/app.js:53553
 msgid "Changes"
 msgstr "Cambios"
 
-#: includes/class-minn-admin-rest.php:11899
+#: includes/class-minn-admin-rest.php:11910
 msgid "Plugin slug is required."
 msgstr "El slug del plugin es obligatorio."
 
-#: includes/class-minn-admin-rest.php:11974
+#: includes/class-minn-admin-rest.php:11985
 msgid "Build pages visually while Minn protects Breakdance-owned content and links straight to its builder. Download the plugin .zip from Breakdance."
 msgstr "Crea páginas visualmente mientras Minn protege el contenido propiedad de Breakdance y enlaza directamente con su maquetador. Descarga el archivo .zip del plugin desde Breakdance."
 
-#: includes/class-minn-admin-rest.php:11986
+#: includes/class-minn-admin-rest.php:11997
 msgid "Build forms and manage their entries, notifications, feeds, and daily settings in Minn. Download the plugin .zip from your Gravity account."
 msgstr "Crea formularios y gestiona sus entradas, avisos, feeds y ajustes diarios en Minn. Descarga el archivo .zip del plugin desde tu cuenta de Gravity."
 
-#: includes/class-minn-admin-rest.php:11998
+#: includes/class-minn-admin-rest.php:12009
 msgid "Send and track WordPress email through the full Email surface in Minn. Download the plugin .zip from a qualifying Gravity account."
 msgstr "Envía y controla el correo de WordPress mediante la superficie completa de Correo electrónico en Minn. Descarga el archivo .zip del plugin desde una cuenta de Gravity válida."
 
-#: includes/class-minn-admin-rest.php:12010
+#: includes/class-minn-admin-rest.php:12021
 msgid "Manage the Perfmatters settings estate from Minn's Performance surface. Download the paid plugin .zip from Perfmatters."
 msgstr "Gestiona todos los ajustes de Perfmatters desde la superficie Rendimiento de Minn. Descarga el archivo .zip del plugin de pago desde Perfmatters."
 
-#: includes/class-minn-admin-rest.php:12022
+#: includes/class-minn-admin-rest.php:12033
 msgid "Bring ACF PRO repeaters, flexible content, galleries, options pages, blocks, and field groups into Minn. Download the plugin .zip from ACF."
 msgstr "Incorpora a Minn los repetidores, el contenido flexible, las galerías, las páginas de opciones, los bloques y los grupos de campos de ACF PRO. Descarga el archivo .zip del plugin desde ACF."
 
-#: includes/class-minn-admin-rest.php:12034
+#: includes/class-minn-admin-rest.php:12045
 msgid "Manage Elementor form submissions in Minn while keeping Elementor-owned page content protected. Download the plugin .zip from Elementor."
 msgstr "Gestiona los envíos de formularios de Elementor en Minn mientras mantienes protegido el contenido de las páginas propiedad de Elementor. Descarga el archivo .zip del plugin desde Elementor."
 
-#: includes/class-minn-admin-rest.php:12046
+#: includes/class-minn-admin-rest.php:12057
 msgid "Manage WPForms Pro entries, read and starred state, spam, trash, search, and form filters in Minn. Download the plugin .zip from WPForms."
 msgstr "Gestiona en Minn las entradas de WPForms Pro, el estado de lectura y destacado, el spam, la papelera, la búsqueda y los filtros de formularios. Descarga el archivo .zip del plugin desde WPForms."
 
-#: includes/class-minn-admin-rest.php:12058
+#: includes/class-minn-admin-rest.php:12069
 msgid "Clear WP Rocket caches from Minn and monitor its license alongside other paid components. Download the plugin .zip from WP Rocket."
 msgstr "Vacía las cachés de WP Rocket desde Minn y supervisa su licencia junto con otros componentes de pago. Descarga el archivo .zip del plugin desde WP Rocket."
 
-#: includes/class-minn-admin-rest.php:12070
+#: includes/class-minn-admin-rest.php:12081
 msgid "Feed AnalyticsWP traffic and drill-down data into Minn's Overview. Download the paid plugin .zip from AnalyticsWP."
 msgstr "Envía el tráfico y los datos detallados de AnalyticsWP al Resumen de Minn. Descarga el archivo .zip del plugin de pago desde AnalyticsWP."
 
-#: includes/class-minn-admin-rest.php:12082
+#: includes/class-minn-admin-rest.php:12093
 msgid "Sell recurring products and services with WooCommerce. This paid extension is installed by uploading the .zip downloaded from WooCommerce.com."
 msgstr "Vende productos y servicios recurrentes con WooCommerce. Esta extensión de pago se instala subiendo el archivo .zip descargado de WooCommerce.com."
 
-#: includes/class-minn-admin-rest.php:12094
+#: includes/class-minn-admin-rest.php:12105
 msgid "Sell memberships that unlock restricted content, products and discounts. This paid extension is installed by uploading the .zip downloaded from WooCommerce.com."
 msgstr "Vende membresías que desbloquean contenido, productos y descuentos restringidos. Esta extensión de pago se instala subiendo el .zip descargado de WooCommerce.com."
 
-#: includes/class-minn-admin-rest.php:12106
+#: includes/class-minn-admin-rest.php:12117
 msgid "Generate a full WordPress backup (files + database) and pull it off-site with the Disembark CLI or disembark.host."
 msgstr "Genera una copia de seguridad completa de WordPress (archivos + base de datos) y sácala del sitio con la CLI de Disembark o disembark.host."
 
-#: includes/class-minn-admin-rest.php:12127
+#: includes/class-minn-admin-rest.php:12138
 msgid "Plugin uploads must be .zip files."
 msgstr "Los plugins se deben subir en archivos .zip."
 
 #. translators: %s: the installed plugin or theme's name.
-#: includes/class-minn-admin-rest.php:12293
+#: includes/class-minn-admin-rest.php:12304
 msgid "%s is already installed."
 msgstr "%s ya está instalado."
 
-#: includes/class-minn-admin-rest.php:12344
+#: includes/class-minn-admin-rest.php:12355
 msgid "Provide a zip URL or a github owner/repo."
 msgstr "Indica una URL de zip o un owner/repo de GitHub."
 
-#: includes/class-minn-admin-rest.php:12386
+#: includes/class-minn-admin-rest.php:12397
 msgid "Invalid GitHub repository."
 msgstr "Repositorio de GitHub no válido."
 
-#: includes/class-minn-admin-rest.php:12405
+#: includes/class-minn-admin-rest.php:12416
 msgid "Could not read the latest GitHub release."
 msgstr "No se ha podido leer la última versión publicada en GitHub."
 
-#: includes/class-minn-admin-rest.php:12426
+#: includes/class-minn-admin-rest.php:12437
 msgid "That release has no zip asset."
 msgstr "Esa versión no tiene ningún recurso zip."
 
-#: includes/class-minn-admin-rest.php:12440
+#: includes/class-minn-admin-rest.php:12451
 msgid "Install URL must be HTTPS."
 msgstr "La URL de instalación debe ser HTTPS."
 
-#: includes/class-minn-admin-rest.php:12452
+#: includes/class-minn-admin-rest.php:12463
 msgid "That download host is not allowed."
 msgstr "Ese host de descarga no está permitido."
 
-#: includes/class-minn-admin-rest.php:12458
+#: includes/class-minn-admin-rest.php:12469
 msgid "Install URL must point at a .zip file."
 msgstr "La URL de instalación debe apuntar a un archivo .zip."
 
-#: includes/class-minn-admin-rest.php:12537
+#: includes/class-minn-admin-rest.php:12548
 msgid "No update available for that plugin."
 msgstr "No hay actualizaciones disponibles para ese plugin."
 
-#: includes/class-minn-admin-rest.php:12649
+#: includes/class-minn-admin-rest.php:12660
 msgid "WordPress is already up to date."
 msgstr "WordPress ya está actualizado."
 
-#: includes/class-minn-admin-rest.php:12657
+#: includes/class-minn-admin-rest.php:12668
 msgid "Core update failed."
 msgstr "La actualización del núcleo ha fallado."
 
-#: includes/class-minn-admin-rest.php:12712
+#: includes/class-minn-admin-rest.php:12723
 msgid "This network is too large to upgrade from here. Run Network Admin → Upgrade Network instead."
 msgstr "Esta red es demasiado grande para actualizarla desde aquí. Usa Administración de red → Actualizar la red."
 
-#: includes/class-minn-admin-rest.php:12795
+#: includes/class-minn-admin-rest.php:12806
 msgid "No cache layer detected on this site."
 msgstr "No se ha detectado ninguna capa de caché en este sitio."
 
-#: includes/class-minn-admin-rest.php:12925
+#: includes/class-minn-admin-rest.php:12936
 msgid "That revision belongs to another post."
 msgstr "Esa revisión pertenece a otra entrada."
 
-#: includes/class-minn-admin-rest.php:12975
+#: includes/class-minn-admin-rest.php:12986
 msgid "You are not allowed to create this type of content."
 msgstr "No tienes permisos para crear este tipo de contenido."
 
-#: includes/class-minn-admin-rest.php:13407
+#: includes/class-minn-admin-rest.php:13469
 msgid "The package could not be downloaded."
 msgstr "No se ha podido descargar el paquete."
 
-#: includes/class-minn-admin-rest.php:13467
+#: includes/class-minn-admin-rest.php:13529
 msgid "Environment"
 msgstr "Entorno"
 
-#: includes/class-minn-admin-rest.php:13468
+#: includes/class-minn-admin-rest.php:13530
 msgid "Site URL"
 msgstr "URL del sitio"
 
-#: includes/class-minn-admin-rest.php:13469
+#: includes/class-minn-admin-rest.php:13531
 msgid "Home URL"
 msgstr "URL de inicio"
 
-#: includes/class-minn-admin-rest.php:13473
+#: includes/class-minn-admin-rest.php:13535
 msgid "Login URL"
 msgstr "URL de acceso"
 
-#: includes/class-minn-admin-rest.php:13474
+#: includes/class-minn-admin-rest.php:13536
 msgid "Multisite"
 msgstr "Multisitio"
 
 #. translators: %s: how many sites the multisite network contains.
-#: includes/class-minn-admin-rest.php:13476
+#: includes/class-minn-admin-rest.php:13538
 msgid "Yes (%s site)"
 msgid_plural "Yes (%s sites)"
 msgstr[0] "Sí (%s sitio)"
 msgstr[1] "Sí (%s sitios)"
 
-#: includes/class-minn-admin-rest.php:13479
+#: includes/class-minn-admin-rest.php:13541
 #: assets/js/app.js:31794
 msgid "Timezone"
 msgstr "Zona horaria"
 
-#: includes/class-minn-admin-rest.php:13480
+#: includes/class-minn-admin-rest.php:13542
 msgid "Permalinks"
 msgstr "Enlaces permanentes"
 
-#: includes/class-minn-admin-rest.php:13480
+#: includes/class-minn-admin-rest.php:13542
 #: assets/js/app.js:31389
 msgid "Plain"
 msgstr "Simple"
 
-#: includes/class-minn-admin-rest.php:13481
-#: includes/class-minn-admin-rest.php:13734
-#: includes/class-minn-admin-rest.php:14166
+#: includes/class-minn-admin-rest.php:13543
+#: includes/class-minn-admin-rest.php:13796
+#: includes/class-minn-admin-rest.php:14228
 msgid "Debug mode"
 msgstr "Modo de depuración"
 
-#: includes/class-minn-admin-rest.php:13482
+#: includes/class-minn-admin-rest.php:13544
 msgid "On + log"
 msgstr "Activado + registro"
 
-#: includes/class-minn-admin-rest.php:13484
+#: includes/class-minn-admin-rest.php:13546
 msgid "Object cache"
 msgstr "Caché de objetos"
 
-#: includes/class-minn-admin-rest.php:13484
+#: includes/class-minn-admin-rest.php:13546
 msgid "External (persistent)"
 msgstr "Externo (persistente)"
 
-#: includes/class-minn-admin-rest.php:13484
+#: includes/class-minn-admin-rest.php:13546
 msgid "None (transient)"
 msgstr "Ninguno (transient)"
 
-#: includes/class-minn-admin-rest.php:13485
+#: includes/class-minn-admin-rest.php:13547
 msgid "Disabled (external)"
 msgstr "Desactivado (externo)"
 
-#: includes/class-minn-admin-rest.php:13486
-#: includes/class-minn-admin-rest.php:13721
+#: includes/class-minn-admin-rest.php:13548
+#: includes/class-minn-admin-rest.php:13783
 msgid "Memory limit"
 msgstr "Límite de memoria"
 
-#: includes/class-minn-admin-rest.php:13486
-#: includes/class-minn-admin-rest.php:13487
-#: includes/class-minn-admin-rest.php:13645
+#: includes/class-minn-admin-rest.php:13548
+#: includes/class-minn-admin-rest.php:13549
+#: includes/class-minn-admin-rest.php:13707
 msgid "(default)"
 msgstr "(por defecto)"
 
-#: includes/class-minn-admin-rest.php:13487
+#: includes/class-minn-admin-rest.php:13549
 msgid "Max memory limit"
 msgstr "Límite máximo de memoria"
 
-#: includes/class-minn-admin-rest.php:13488
+#: includes/class-minn-admin-rest.php:13550
 msgid "Active theme"
 msgstr "Tema activo"
 
 #. translators: 1: theme name, 2: theme version, 3: parent theme name.
-#: includes/class-minn-admin-rest.php:13490
+#: includes/class-minn-admin-rest.php:13552
 msgid "%1$s %2$s (child of %3$s)"
 msgstr "%1$s %2$s (hijo de %3$s)"
 
-#: includes/class-minn-admin-rest.php:13492
+#: includes/class-minn-admin-rest.php:13554
 msgid "Active plugins"
 msgstr "Plugins activos"
 
 #. translators: 1: how many plugins are active, 2: how many must-use plugins are installed.
-#: includes/class-minn-admin-rest.php:13494
+#: includes/class-minn-admin-rest.php:13556
 msgid "%1$s + %2$s mu"
 msgstr "%1$s + %2$s mu"
 
-#: includes/class-minn-admin-rest.php:13509
+#: includes/class-minn-admin-rest.php:13571
 msgid "Interface (SAPI)"
 msgstr "Interfaz (SAPI)"
 
-#: includes/class-minn-admin-rest.php:13516
+#: includes/class-minn-admin-rest.php:13578
 msgid "Enabled (status hidden by the host)"
 msgstr "Activado (estado oculto por el alojamiento)"
 
-#: includes/class-minn-admin-rest.php:13516
+#: includes/class-minn-admin-rest.php:13578
 msgid "Not installed"
 msgstr "No instalado"
 
-#: includes/class-minn-admin-rest.php:13517
+#: includes/class-minn-admin-rest.php:13579
 #: includes/class-minn-admin-surfaces.php:517
 #: assets/js/app.js:1479
 #: assets/js/app.js:4258
@@ -17349,404 +17351,404 @@ msgid "Extensions"
 msgstr "Extensiones"
 
 #. translators: %s: how many cron events are scheduled.
-#: includes/class-minn-admin-rest.php:13629
+#: includes/class-minn-admin-rest.php:13691
 msgid "%s event"
 msgid_plural "%s events"
 msgstr[0] "%s evento"
 msgstr[1] "%s eventos"
 
-#: includes/class-minn-admin-rest.php:13632
+#: includes/class-minn-admin-rest.php:13694
 msgid "next due now"
 msgstr "siguiente ahora"
 
 #. translators: %s: human-readable time until the next cron event (e.g. "4 mins").
-#: includes/class-minn-admin-rest.php:13634
+#: includes/class-minn-admin-rest.php:13696
 msgid "next in %s"
 msgstr "siguiente en %s"
 
-#: includes/class-minn-admin-rest.php:13637
+#: includes/class-minn-admin-rest.php:13699
 #: assets/js/app.js:28894
 msgid "WP-Cron disabled (system cron expected)"
 msgstr "WP-Cron desactivado (se espera un cron del sistema)"
 
-#: includes/class-minn-admin-rest.php:13640
+#: includes/class-minn-admin-rest.php:13702
 #: assets/js/app.js:29700
 msgid "Engine"
 msgstr "Motor"
 
-#: includes/class-minn-admin-rest.php:13644
+#: includes/class-minn-admin-rest.php:13706
 msgid "Charset"
 msgstr "Juego de caracteres"
 
-#: includes/class-minn-admin-rest.php:13645
+#: includes/class-minn-admin-rest.php:13707
 msgid "Collation"
 msgstr "Cotejamiento"
 
-#: includes/class-minn-admin-rest.php:13647
+#: includes/class-minn-admin-rest.php:13709
 #: assets/js/app.js:29545
 #: assets/js/app.js:29836
 #: assets/js/app.js:29931
 msgid "Tables"
 msgstr "Tablas"
 
-#: includes/class-minn-admin-rest.php:13649
+#: includes/class-minn-admin-rest.php:13711
 msgid "Expired transients"
 msgstr "Transients caducados"
 
-#: includes/class-minn-admin-rest.php:13662
+#: includes/class-minn-admin-rest.php:13724
 msgid "Web server"
 msgstr "Servidor web"
 
-#: includes/class-minn-admin-rest.php:13663
+#: includes/class-minn-admin-rest.php:13725
 msgid "Protocol"
 msgstr "Protocolo"
 
-#: includes/class-minn-admin-rest.php:13665
+#: includes/class-minn-admin-rest.php:13727
 msgid "Operating system"
 msgstr "Sistema operativo"
 
-#: includes/class-minn-admin-rest.php:13666
+#: includes/class-minn-admin-rest.php:13728
 msgid "Architecture"
 msgstr "Arquitectura"
 
-#: includes/class-minn-admin-rest.php:13667
+#: includes/class-minn-admin-rest.php:13729
 msgid "Server IP"
 msgstr "IP del servidor"
 
-#: includes/class-minn-admin-rest.php:13668
-#: includes/class-minn-admin-rest.php:13743
+#: includes/class-minn-admin-rest.php:13730
+#: includes/class-minn-admin-rest.php:13805
 msgid "Uploads writable"
 msgstr "Subidas con escritura"
 
-#: includes/class-minn-admin-rest.php:13669
+#: includes/class-minn-admin-rest.php:13731
 msgid "Disk free"
 msgstr "Disco libre"
 
 #. translators: 1: free disk space, 2: total disk space.
-#: includes/class-minn-admin-rest.php:13671
+#: includes/class-minn-admin-rest.php:13733
 msgid "%1$s free of %2$s"
 msgstr "%1$s libres de %2$s"
 
-#: includes/class-minn-admin-rest.php:13689
+#: includes/class-minn-admin-rest.php:13751
 msgid "WordPress version"
 msgstr "Versión de WordPress"
 
 #. translators: 1: installed WordPress version, 2: available WordPress version.
-#: includes/class-minn-admin-rest.php:13693
+#: includes/class-minn-admin-rest.php:13755
 msgid "%1$s installed — WordPress %2$s is available"
 msgstr "%1$s instalado: WordPress %2$s está disponible"
 
 #. translators: %s: installed WordPress version.
 #. translators: %s: the PHP version in use.
-#: includes/class-minn-admin-rest.php:13695
-#: includes/class-minn-admin-rest.php:13703
+#: includes/class-minn-admin-rest.php:13757
+#: includes/class-minn-admin-rest.php:13765
 msgid "%s is current"
 msgstr "%s está actualizado"
 
-#: includes/class-minn-admin-rest.php:13699
+#: includes/class-minn-admin-rest.php:13761
 msgid "PHP version"
 msgstr "Versión de PHP"
 
 #. translators: %s: the PHP version in use.
-#: includes/class-minn-admin-rest.php:13705
+#: includes/class-minn-admin-rest.php:13767
 msgid "%s is past its supported life — upgrade to 8.2+"
 msgstr "%s ha superado su vida útil compatible: actualiza a 8.2+"
 
-#: includes/class-minn-admin-rest.php:13709
+#: includes/class-minn-admin-rest.php:13771
 msgid "HTTPS"
 msgstr "HTTPS"
 
-#: includes/class-minn-admin-rest.php:13711
+#: includes/class-minn-admin-rest.php:13773
 msgid "Served over TLS"
 msgstr "Servido por TLS"
 
-#: includes/class-minn-admin-rest.php:13711
+#: includes/class-minn-admin-rest.php:13773
 msgid "This request is not over HTTPS"
 msgstr "Esta petición no va por HTTPS"
 
-#: includes/class-minn-admin-rest.php:13715
+#: includes/class-minn-admin-rest.php:13777
 msgid "Persistent object cache"
 msgstr "Caché de objetos persistente"
 
-#: includes/class-minn-admin-rest.php:13717
+#: includes/class-minn-admin-rest.php:13779
 msgid "A drop-in is active"
 msgstr "Hay un drop-in activo"
 
-#: includes/class-minn-admin-rest.php:13717
+#: includes/class-minn-admin-rest.php:13779
 msgid "Redis/Memcached would speed up repeat queries"
 msgstr "Redis/Memcached aceleraría las consultas repetidas"
 
 #. translators: %s: the configured PHP memory limit (e.g. "256M").
-#: includes/class-minn-admin-rest.php:13724
+#: includes/class-minn-admin-rest.php:13786
 msgid "%s available to PHP"
 msgstr "%s disponibles para PHP"
 
-#: includes/class-minn-admin-rest.php:13728
+#: includes/class-minn-admin-rest.php:13790
 msgid "OPcache"
 msgstr "OPcache"
 
-#: includes/class-minn-admin-rest.php:13730
+#: includes/class-minn-admin-rest.php:13792
 msgid "Bytecode caching is on"
 msgstr "La caché de bytecode está activada"
 
-#: includes/class-minn-admin-rest.php:13730
+#: includes/class-minn-admin-rest.php:13792
 msgid "Bytecode caching is on; the host keeps its status private"
 msgstr "La caché de bytecode está activada; el alojamiento mantiene su estado en privado"
 
-#: includes/class-minn-admin-rest.php:13730
+#: includes/class-minn-admin-rest.php:13792
 msgid "Not enabled — pages recompile each request"
 msgstr "No activado: las páginas se recompilan en cada petición"
 
-#: includes/class-minn-admin-rest.php:13737
+#: includes/class-minn-admin-rest.php:13799
 msgid "WP_DEBUG is on in a production environment"
 msgstr "WP_DEBUG está activado en un entorno de producción"
 
 #. translators: %s: the environment type (e.g. "staging").
-#: includes/class-minn-admin-rest.php:13739
+#: includes/class-minn-admin-rest.php:13801
 msgid "On (fine for %s)"
 msgstr "Activado (adecuado para %s)"
 
-#: includes/class-minn-admin-rest.php:13745
+#: includes/class-minn-admin-rest.php:13807
 msgid "The uploads directory accepts writes"
 msgstr "El directorio de archivos subidos admite escritura"
 
-#: includes/class-minn-admin-rest.php:13745
+#: includes/class-minn-admin-rest.php:13807
 msgid "Uploads directory is not writable"
 msgstr "El directorio de archivos subidos no admite escritura"
 
-#: includes/class-minn-admin-rest.php:13749
+#: includes/class-minn-admin-rest.php:13811
 msgid "Autoload size"
 msgstr "Tamaño de autoload"
 
 #. translators: 1: total autoloaded size (e.g. "412 KB"), 2: how many autoloaded options.
-#: includes/class-minn-admin-rest.php:13755
+#: includes/class-minn-admin-rest.php:13817
 msgid "%1$s across %2$s options — healthy"
 msgstr "%1$s en %2$s opciones: saludable"
 
 #. translators: 1: total autoloaded size (e.g. "3.1 MB"), 2: how many autoloaded options.
 #. translators: 1: total autoloaded size, 2: number of autoloaded options.
-#: includes/class-minn-admin-rest.php:13757
+#: includes/class-minn-admin-rest.php:13819
 #: assets/js/app.js:28523
 #: assets/js/app.js:28879
 msgid "%1$s across %2$s options loads on every request — see the top offenders in the Database card"
 msgstr "%1$s en %2$s opciones se cargan en cada petición: consulta los mayores responsables en la tarjeta de Base de datos"
 
-#: includes/class-minn-admin-rest.php:13761
+#: includes/class-minn-admin-rest.php:13823
 msgid "Post types in Minn"
 msgstr "Tipos de contenido en Minn"
 
 #. translators: 1: how many post types are hidden, 2: their names, comma-separated.
-#: includes/class-minn-admin-rest.php:13771
+#: includes/class-minn-admin-rest.php:13833
 msgid "%2$s is not exposed over the REST API, so it cannot appear in Content — turn on Show in REST API"
 msgid_plural "%1$s post types are not exposed over the REST API, so they cannot appear in Content (%2$s) — turn on Show in REST API"
 msgstr[0] "%2$s no está expuesto por la REST API, así que no puede aparecer en Contenido: activa Mostrar en la REST API"
 msgstr[1] "%1$s tipos de contenido no están expuestos por la REST API, así que no pueden aparecer en Contenido (%2$s): activa Mostrar en la REST API"
 
-#: includes/class-minn-admin-rest.php:13782
+#: includes/class-minn-admin-rest.php:13844
 msgid "Every post type you created is available to Minn"
 msgstr "Todos los tipos de contenido que has creado están disponibles en Minn"
 
 #. translators: %s: how many cron events are past their scheduled run time.
-#: includes/class-minn-admin-rest.php:13790
+#: includes/class-minn-admin-rest.php:13852
 msgid "%s overdue event — cron may be stalled"
 msgid_plural "%s overdue events — cron may be stalled"
 msgstr[0] "%s evento vencido: el cron puede estar parado"
 msgstr[1] "%s eventos vencidos: el cron puede estar parado"
 
-#: includes/class-minn-admin-rest.php:13791
+#: includes/class-minn-admin-rest.php:13853
 msgid "(WP-Cron is disabled; is the system cron running?)"
 msgstr "(WP-Cron está desactivado; ¿está en marcha el cron del sistema?)"
 
 #. translators: %s: how many cron events are scheduled.
-#: includes/class-minn-admin-rest.php:13793
+#: includes/class-minn-admin-rest.php:13855
 msgid "%s scheduled event, none overdue"
 msgid_plural "%s scheduled events, none overdue"
 msgstr[0] "%s evento programado, ninguno vencido"
 msgstr[1] "%s eventos programados, ninguno vencido"
 
-#: includes/class-minn-admin-rest.php:13835
+#: includes/class-minn-admin-rest.php:13897
 msgid "Loopback requests"
 msgstr "Peticiones loopback"
 
-#: includes/class-minn-admin-rest.php:13838
+#: includes/class-minn-admin-rest.php:13900
 msgid "The site can reach itself (cron and scheduled posts depend on this)"
 msgstr "El sitio puede alcanzarse a sí mismo (el cron y las entradas programadas dependen de esto)"
 
-#: includes/class-minn-admin-rest.php:13839
+#: includes/class-minn-admin-rest.php:13901
 msgid "Loopback requests are failing"
 msgstr "Las peticiones loopback están fallando"
 
-#: includes/class-minn-admin-rest.php:13845
+#: includes/class-minn-admin-rest.php:13907
 msgid "REST API self-check"
 msgstr "Autocomprobación de la REST API"
 
-#: includes/class-minn-admin-rest.php:13848
+#: includes/class-minn-admin-rest.php:13910
 msgid "The REST API answers external requests (Minn itself rides it)"
 msgstr "La REST API responde a peticiones externas (Minn mismo la usa)"
 
-#: includes/class-minn-admin-rest.php:13849
+#: includes/class-minn-admin-rest.php:13911
 msgid "The REST API did not answer"
 msgstr "La REST API no ha respondido"
 
 #. translators: %s: the backup plugin's name.
-#: includes/class-minn-admin-rest.php:13870
+#: includes/class-minn-admin-rest.php:13932
 msgid "%s is active but no backup has completed yet"
 msgstr "%s está activo pero aún no se ha completado ninguna copia de seguridad"
 
 #. translators: %s: human-readable time since the failed backup (e.g. "3 hours").
-#: includes/class-minn-admin-rest.php:13874
+#: includes/class-minn-admin-rest.php:13936
 msgid "The last backup reported errors (%s ago)"
 msgstr "La última copia de seguridad informó de errores (hace %s)"
 
 #. translators: %s: human-readable time since the last backup (e.g. "3 hours").
-#: includes/class-minn-admin-rest.php:13878
+#: includes/class-minn-admin-rest.php:13940
 msgid "Last backup completed %s ago"
 msgstr "Última copia de seguridad completada hace %s"
 
 #. translators: %s: human-readable time since the last backup (e.g. "4 days").
-#: includes/class-minn-admin-rest.php:13882
+#: includes/class-minn-admin-rest.php:13944
 msgid "Last backup was %s ago — consider a fresher schedule"
 msgstr "La última copia de seguridad fue hace %s: considera una programación más frecuente"
 
 #. translators: %s: human-readable time since the last backup (e.g. "2 weeks").
-#: includes/class-minn-admin-rest.php:13886
+#: includes/class-minn-admin-rest.php:13948
 msgid "Last backup was %s ago"
 msgstr "La última copia de seguridad fue hace %s"
 
 #. translators: %s: how many licenses are expired.
-#: includes/class-minn-admin-rest.php:13996
+#: includes/class-minn-admin-rest.php:14058
 msgid "%s expired"
 msgstr "%s caducada"
 
 #. translators: %s: how many licenses are invalid.
-#: includes/class-minn-admin-rest.php:13998
+#: includes/class-minn-admin-rest.php:14060
 msgid "%s invalid"
 msgstr "%s no válida"
 
 #. translators: %s: how many licenses are missing.
-#: includes/class-minn-admin-rest.php:14000
+#: includes/class-minn-admin-rest.php:14062
 msgid "%s missing"
 msgstr "%s ausente"
 
 #. translators: %s: how many licenses are in an unknown state.
-#: includes/class-minn-admin-rest.php:14002
+#: includes/class-minn-admin-rest.php:14064
 msgid "%s unknown"
 msgstr "%s desconocida"
 
-#: includes/class-minn-admin-rest.php:14015
+#: includes/class-minn-admin-rest.php:14077
 #: assets/js/app.js:25483
 msgid "Licenses"
 msgstr "Licencias"
 
 #. translators: 1: comma-separated problem counts (e.g. "2 expired, 1 missing"), 2: how many licensed components exist.
-#: includes/class-minn-admin-rest.php:14020
+#: includes/class-minn-admin-rest.php:14082
 msgid "%1$s of %2$s components; see the Licenses tab"
 msgstr "%1$s de %2$s componentes; consulta la pestaña Licencias"
 
 #. translators: %s: how many licensed components exist.
-#: includes/class-minn-admin-rest.php:14022
+#: includes/class-minn-admin-rest.php:14084
 msgid "All %s components are licensed or connected"
 msgstr "Los %s componentes están licenciados o conectados"
 
-#: includes/class-minn-admin-rest.php:14166
+#: includes/class-minn-admin-rest.php:14228
 msgid "Master switch for WordPress debugging."
 msgstr "Interruptor principal de la depuración de WordPress."
 
-#: includes/class-minn-admin-rest.php:14167
+#: includes/class-minn-admin-rest.php:14229
 msgid "Log to file"
 msgstr "Registrar en un archivo"
 
-#: includes/class-minn-admin-rest.php:14167
+#: includes/class-minn-admin-rest.php:14229
 msgid "Write notices and errors to wp-content/debug.log."
 msgstr "Escribir los avisos y errores en wp-content/debug.log."
 
-#: includes/class-minn-admin-rest.php:14168
+#: includes/class-minn-admin-rest.php:14230
 msgid "Show errors on screen"
 msgstr "Mostrar los errores en pantalla"
 
-#: includes/class-minn-admin-rest.php:14168
+#: includes/class-minn-admin-rest.php:14230
 msgid "Render errors in the page. Leave off in production and read the log instead."
 msgstr "Muestra los errores en la página. Déjalo desactivado en producción y consulta el registro."
 
-#: includes/class-minn-admin-rest.php:14169
+#: includes/class-minn-admin-rest.php:14231
 msgid "Unminified assets"
 msgstr "Recursos sin minificar"
 
-#: includes/class-minn-admin-rest.php:14169
+#: includes/class-minn-admin-rest.php:14231
 msgid "Load the full-length core and plugin JS/CSS."
 msgstr "Cargar el JS/CSS completo del núcleo y de los plugins."
 
-#: includes/class-minn-admin-rest.php:14170
+#: includes/class-minn-admin-rest.php:14232
 msgid "Log database queries"
 msgstr "Registrar las consultas a la base de datos"
 
-#: includes/class-minn-admin-rest.php:14170
+#: includes/class-minn-admin-rest.php:14232
 msgid "Record every query for inspection — a real performance cost; turn off when done."
 msgstr "Registra todas las consultas para inspeccionarlas: tiene un coste real de rendimiento; desactívalo al terminar."
 
 #. translators: %s: a wp-config.php constant name, such as WP_DEBUG_LOG.
-#: includes/class-minn-admin-rest.php:14531
+#: includes/class-minn-admin-rest.php:14593
 msgid "%s is set to a custom value in wp-config.php, so it can only be changed there."
 msgstr "%s está definido con un valor personalizado en wp-config.php, así que solo se puede cambiar ahí."
 
 #. translators: %s: a wp-config.php constant name, such as WP_DEBUG_LOG.
-#: includes/class-minn-admin-rest.php:14535
+#: includes/class-minn-admin-rest.php:14597
 msgid "%s is defined more than once in wp-config.php, so it can only be changed there."
 msgstr "La constante %s está definida más de una vez en wp-config.php, así que solo se puede cambiar allí."
 
 #. translators: %s: a wp-config.php constant name, such as WP_DEBUG_LOG.
-#: includes/class-minn-admin-rest.php:14539
+#: includes/class-minn-admin-rest.php:14601
 msgid "%s is set inside a condition in wp-config.php, so it can only be changed there."
 msgstr "La constante %s se define dentro de una condición en wp-config.php, así que solo se puede cambiar allí."
 
 #. translators: %s: a wp-config.php constant name, such as WP_DEBUG_LOG.
-#: includes/class-minn-admin-rest.php:14543
+#: includes/class-minn-admin-rest.php:14605
 msgid "%s is set after wp-config.php loads WordPress, so it never takes effect; move it above that line in wp-config.php."
 msgstr "La constante %s se define después de que wp-config.php cargue WordPress, así que nunca llega a aplicarse; muévela por encima de esa línea en wp-config.php."
 
-#: includes/class-minn-admin-rest.php:14560
+#: includes/class-minn-admin-rest.php:14622
 msgid "Could not find a safe place to add the constant."
 msgstr "No se ha encontrado un lugar seguro donde añadir la constante."
 
-#: includes/class-minn-admin-rest.php:14874
+#: includes/class-minn-admin-rest.php:14936
 msgid "That constant is not editable."
 msgstr "Esa constante no es editable."
 
-#: includes/class-minn-admin-rest.php:14877
+#: includes/class-minn-admin-rest.php:14939
 msgid "File modifications are disabled on this site."
 msgstr "Las modificaciones de archivos están desactivadas en este sitio."
 
-#: includes/class-minn-admin-rest.php:14881
+#: includes/class-minn-admin-rest.php:14943
 msgid "wp-config.php is not writable."
 msgstr "wp-config.php no admite escritura."
 
-#: includes/class-minn-admin-rest.php:14885
+#: includes/class-minn-admin-rest.php:14947
 msgid "Could not read wp-config.php."
 msgstr "No se ha podido leer wp-config.php."
 
 #. translators: %s: a wp-config.php constant name, such as WP_DEBUG_LOG.
-#: includes/class-minn-admin-rest.php:14891
+#: includes/class-minn-admin-rest.php:14953
 msgid "The %s line in wp-config.php is not the one WordPress runs with, so it can only be changed there."
 msgstr "La línea de %s en wp-config.php no es la que usa WordPress, así que solo se puede cambiar allí."
 
-#: includes/class-minn-admin-rest.php:14903
+#: includes/class-minn-admin-rest.php:14965
 msgid "The change would break wp-config.php, so it was not saved."
 msgstr "El cambio rompería wp-config.php, así que no se ha guardado."
 
-#: includes/class-minn-admin-rest.php:14912
+#: includes/class-minn-admin-rest.php:14974
 msgid "Could not write a rollback copy of wp-config.php, so the change was not made."
 msgstr "No se ha podido escribir una copia de reserva de wp-config.php, así que no se ha hecho el cambio."
 
 #. translators: %s: the file name of the kept copy of wp-config.php.
-#: includes/class-minn-admin-rest.php:14922
+#: includes/class-minn-admin-rest.php:14984
 msgid "wp-config.php did not save completely and could not be put back. A copy of the original is kept as %s."
 msgstr "wp-config.php no se ha guardado por completo y no se ha podido restaurar. Se conserva una copia del original como %s."
 
-#: includes/class-minn-admin-rest.php:14975
+#: includes/class-minn-admin-rest.php:15037
 msgid "wp-config.php did not save completely, so it was put back as it was. Nothing changed."
 msgstr "wp-config.php no se ha guardado por completo, así que se ha restaurado tal como estaba. No ha cambiado nada."
 
-#: includes/class-minn-admin-rest.php:14977
+#: includes/class-minn-admin-rest.php:15039
 msgid "wp-config.php did not save completely and could not be put back."
 msgstr "wp-config.php no se ha guardado por completo y no se ha podido restaurar."
 
@@ -17841,127 +17843,132 @@ msgstr "Esta instalación de PHP no tiene la extensión zip, así que no se pued
 msgid "Minn Admin could not create %s."
 msgstr "Minn Admin no ha podido crear %s."
 
-#: includes/class-minn-admin-switch.php:204
+#: includes/class-minn-admin-switch.php:208
 msgid "Minn's release could not be downloaded."
 msgstr "No se ha podido descargar la versión de Minn."
 
-#: includes/class-minn-admin-switch.php:209
+#: includes/class-minn-admin-switch.php:213
 msgid "The minn.zip downloaded does not match the checksum its release publishes, so it is not used."
 msgstr "El minn.zip descargado no coincide con la suma de comprobación que publica su versión, así que no se usa."
 
-#: includes/class-minn-admin-switch.php:213
+#: includes/class-minn-admin-switch.php:217
 msgid "This minn.zip is not signed by a key Minn trusts, so it is not used."
 msgstr "Este minn.zip no está firmado con una clave en la que Minn confíe, así que no se usa."
 
-#: includes/class-minn-admin-switch.php:218
+#: includes/class-minn-admin-switch.php:222
 msgid "Minn's release could not be opened."
 msgstr "No se ha podido abrir la versión de Minn."
 
 #. translators: %s: a path inside the archive.
-#: includes/class-minn-admin-switch.php:227
+#: includes/class-minn-admin-switch.php:231
 msgid "Minn's release holds %s, outside its minn/ folder, so it is not used."
 msgstr "La versión de Minn contiene %s, fuera de su carpeta minn/, así que no se usa."
 
-#: includes/class-minn-admin-switch.php:242
+#: includes/class-minn-admin-switch.php:246
 msgid "Minn's release is not a Minn Engine: its minn/ folder is incomplete."
 msgstr "La versión de Minn no es un Minn Engine: su carpeta minn/ está incompleta."
 
 #. translators: 1: the Minn version a release archive holds, 2: the version its release names.
-#: includes/class-minn-admin-switch.php:271
+#: includes/class-minn-admin-switch.php:275
 msgid "The archive holds Minn %1$s, not the %2$s its release names, so it is not used."
 msgstr "El archivo contiene Minn %1$s, no el %2$s que indica su versión, así que no se usa."
 
 #. translators: 1: a Minn version, 2: the oldest Minn version Minn Admin installs.
-#: includes/class-minn-admin-switch.php:276
+#: includes/class-minn-admin-switch.php:280
 msgid "Minn %1$s is older than Minn %2$s, the oldest release Minn Admin installs, so it is not used."
 msgstr "Minn %1$s es más antiguo que Minn %2$s, la versión más antigua que Minn Admin instala, así que no se usa."
 
-#: includes/class-minn-admin-switch.php:312
+#: includes/class-minn-admin-switch.php:316
 msgid "This Minn release is older than Minn Admin can install from WordPress; use its install.sh instead."
 msgstr "Esta versión de Minn es demasiado antigua para que Minn Admin la instale desde WordPress; usa su install.sh en su lugar."
 
-#: includes/class-minn-admin-switch.php:519
+#: includes/class-minn-admin-switch.php:523
 msgid "That check has expired. Check the site again."
 msgstr "Esa comprobación ha caducado. Vuelve a comprobar el sitio."
 
-#: includes/class-minn-admin-switch.php:522
+#: includes/class-minn-admin-switch.php:526
 msgid "Preflight is RED for this site, so it stays on WordPress."
 msgstr "La comprobación previa está en ROJO para este sitio, así que sigue en WordPress."
 
-#: includes/class-minn-admin-switch.php:525
+#: includes/class-minn-admin-switch.php:529
 msgid "Type the site's address to confirm."
 msgstr "Escribe la dirección del sitio para confirmar."
 
 #. translators: 1: a folder path, 2: a command.
-#: includes/class-minn-admin-switch.php:530
+#: includes/class-minn-admin-switch.php:534
 #: assets/js/app.js:28318
 msgid "The web server cannot create %1$s for WordPress's own files. Switch from the command line instead: %2$s"
 msgstr "El servidor web no puede crear %1$s para los archivos propios de WordPress. Haz el cambio desde la línea de comandos: %2$s"
 
-#: includes/class-minn-admin-switch.php:575
+#: includes/class-minn-admin-switch.php:540
+#: includes/class-minn-admin-switch.php:728
+msgid "A switch to Minn started on this site in the last hour and has not finished. Try again once it has, or after the hour."
+msgstr "Un cambio a Minn comenzó en este sitio en la última hora y aún no ha terminado. Vuelve a intentarlo cuando haya terminado, o después de una hora."
+
+#: includes/class-minn-admin-switch.php:592
 msgid "That switch is not known here."
 msgstr "Aquí no se conoce ese cambio."
 
-#: includes/class-minn-admin-switch.php:688
+#: includes/class-minn-admin-switch.php:703
 msgid "Preflight is RED, so the site stays on WordPress. Pass --force to install anyway."
 msgstr "La comprobación previa está en ROJO, así que el sitio sigue en WordPress. Añade --force para instalar de todos modos."
 
 #. translators: %s: a folder path.
-#: includes/class-minn-admin-switch.php:694
+#: includes/class-minn-admin-switch.php:709
 msgid "Cannot put WordPress's own files in %s: it is not writable, or not empty. Choose a folder outside the site with --park=<dir>."
 msgstr "No se pueden poner los archivos propios de WordPress en %s: la carpeta no tiene permisos de escritura o no está vacía. Elige una carpeta fuera del sitio con --park=<dir>."
 
 #. translators: 1: Minn's version, 2: the WordPress version Minn speaks, 3: the WordPress version this site runs.
-#: includes/class-minn-admin-switch.php:698
+#: includes/class-minn-admin-switch.php:713
 #: assets/js/app.js:28312
 msgid "Minn %1$s (speaks WordPress %2$s), signature verified. This site runs WordPress %3$s."
 msgstr "Minn %1$s (compatible con WordPress %2$s), firma verificada. Este sitio usa WordPress %3$s."
 
 #. translators: %s: a folder path.
-#: includes/class-minn-admin-switch.php:700
+#: includes/class-minn-admin-switch.php:715
 msgid "WordPress's own files move to %s; `wp minn eject` brings them back."
 msgstr "Los archivos propios de WordPress se mueven a %s; `wp minn eject` los restaura."
 
-#: includes/class-minn-admin-switch.php:701
+#: includes/class-minn-admin-switch.php:716
 #: assets/js/app.js:28425
 msgid "Switch this site to Minn?"
 msgstr "¿Cambiar este sitio a Minn?"
 
-#: includes/class-minn-admin-switch.php:724
+#: includes/class-minn-admin-switch.php:746
 #: assets/js/app.js:28327
 #: assets/js/app.js:28465
 msgid "Minn was not installed; the site is still WordPress."
 msgstr "Minn no se ha instalado; el sitio sigue en WordPress."
 
 #. translators: %s: Minn Admin's address.
-#: includes/class-minn-admin-switch.php:731
+#: includes/class-minn-admin-switch.php:753
 msgid "This site now runs on Minn. Minn Admin is at %s"
 msgstr "Este sitio ya funciona con Minn. Minn Admin está en %s"
 
 #. translators: %s: the site's address.
-#: includes/class-minn-admin-switch.php:750
+#: includes/class-minn-admin-switch.php:772
 msgid "Waiting for %s to answer as Minn…"
 msgstr "Esperando a que %s responda como Minn…"
 
-#: includes/class-minn-admin-switch.php:765
+#: includes/class-minn-admin-switch.php:787
 msgid "The site did not answer as Minn yet; flushing anyway. If it still shows WordPress in a minute, run: wp cache flush"
 msgstr "El sitio aún no ha respondido como Minn; se vacía la caché de todos modos. Si dentro de un minuto sigue mostrando WordPress, ejecuta: wp cache flush"
 
-#: includes/class-minn-admin-switch.php:776
+#: includes/class-minn-admin-switch.php:798
 msgid "Caches flushed (wp cache flush)."
 msgstr "Cachés vaciadas (wp cache flush)."
 
-#: includes/class-minn-admin-switch.php:778
+#: includes/class-minn-admin-switch.php:800
 msgid "wp cache flush failed. If the host caches pages, purge its cache now."
 msgstr "wp cache flush ha fallado. Si el alojamiento cachea las páginas, purga su caché ahora."
 
 #. translators: %s: Minn's version.
-#: includes/class-minn-admin-switch.php:816
+#: includes/class-minn-admin-switch.php:838
 msgid "Downloading Minn %s from the Minn update service…"
 msgstr "Descargando Minn %s desde el servicio de actualizaciones de Minn…"
 
 #. translators: %s: a file path.
-#: includes/class-minn-admin-switch.php:816
+#: includes/class-minn-admin-switch.php:838
 msgid "Checking %s…"
 msgstr "Comprobando %s…"
 
