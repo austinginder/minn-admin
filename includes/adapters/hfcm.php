@@ -40,7 +40,9 @@ function minn_admin_hfcm_item( $row ) {
 	return array(
 		'id'           => (int) $row['script_id'],
 		'name'         => isset( $row['name'] ) ? (string) $row['name'] : '',
-		'code'         => isset( $row['snippet'] ) ? (string) $row['snippet'] : '',
+		// Stored as HFCM's own form stores it (htmlentities) and read back as
+		// its renderer and edit screen read it.
+		'code'         => isset( $row['snippet'] ) ? html_entity_decode( (string) $row['snippet'] ) : '',
 		'snippet_type' => $type,
 		'location'     => $location,
 		'device_type'  => isset( $row['device_type'] ) ? (string) $row['device_type'] : 'both',
@@ -225,7 +227,17 @@ function minn_admin_hfcm_edit( array $item, WP_REST_Request $request ) {
 		$data['status'] = $body['active'] ? 'active' : 'inactive';
 	}
 	$masked = Minn_Admin_Egress::refuse_masks( $data, array( 'name' => $item['name'], 'snippet' => $item['code'] ) );
-	return $masked ? $masked : $data;
+	if ( $masked ) {
+		return $masked;
+	}
+	// HFCM's storage contract: its form stores htmlentities( $snippet ) and
+	// its renderer echoes html_entity_decode() of it, so a snippet stored as
+	// typed lost every entity its author meant ("&amp;&amp;" in a script ran
+	// as "&&").
+	if ( isset( $data['snippet'] ) ) {
+		$data['snippet'] = htmlentities( $data['snippet'] );
+	}
+	return $data;
 }
 
 /** Whether the stored row reads as written (the timestamps aside). */
@@ -235,7 +247,8 @@ function minn_admin_hfcm_saved( $fresh, $data ) {
 	}
 	$read = array( 'name' => 'name', 'snippet' => 'code', 'snippet_type' => 'snippet_type', 'location' => 'location', 'device_type' => 'device_type' );
 	foreach ( $read as $col => $key ) {
-		if ( array_key_exists( $col, $data ) && (string) $data[ $col ] !== (string) $fresh[ $key ] ) {
+		$want = 'snippet' === $col && array_key_exists( $col, $data ) ? html_entity_decode( (string) $data[ $col ] ) : ( $data[ $col ] ?? null );
+		if ( array_key_exists( $col, $data ) && (string) $want !== (string) $fresh[ $key ] ) {
 			return false;
 		}
 	}
@@ -293,7 +306,7 @@ minn_admin_resource( 'hfcm/snippets', function () {
 				$who = minn_admin_hfcm_who();
 				return Minn_Admin_Kernel_SQL::insert( 'hfcm_scripts', array(
 					'name'               => $name,
-					'snippet'            => isset( $body['code'] ) ? (string) $body['code'] : '',
+					'snippet'            => isset( $body['code'] ) ? htmlentities( (string) $body['code'] ) : '',
 					'snippet_type'       => isset( $body['snippet_type'] ) && in_array( $body['snippet_type'], MINN_ADMIN_HFCM_TYPES, true ) ? $body['snippet_type'] : 'html',
 					'device_type'        => isset( $body['device_type'] ) && in_array( $body['device_type'], MINN_ADMIN_HFCM_DEVICES, true ) ? $body['device_type'] : 'both',
 					'location'           => isset( $body['location'] ) && in_array( $body['location'], MINN_ADMIN_HFCM_LOCATIONS, true ) ? $body['location'] : 'header',

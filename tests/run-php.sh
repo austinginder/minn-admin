@@ -130,11 +130,11 @@ run security-v046-prerc-fields single --user=admin
 run security-v046-prerc-forms single --user=admin
 # 301 Redirects, Simple 301 Redirects and PowerPress stay inactive on the lab; the swap loads them, and the suite passed to --require switches Rank Math's redirections module on, for this process only.
 MINN_SWAP_ADD=eps-301-redirects/eps-301-redirects.php,simple-301-redirects/wp-simple-301-redirects.php,powerpress/powerpress.php run security-v046-prerc-misc single --user=admin --require=tests/lib/plugin-swap.php --require=tests/security-v046-prerc-misc.test.php
-MINN_SWAP_ADD=custom-css-js/custom-css-js.php run security-v046-registry-writes single --user=admin --require=tests/lib/plugin-swap.php
+MINN_SWAP_ADD=custom-css-js/custom-css-js.php,header-footer-code-manager/99robots-header-footer-code-manager.php run security-v046-registry-writes single --user=admin --require=tests/lib/plugin-swap.php
 run security-v046-rc-browser single --user=admin
 run security-v046-rc-core single --user=admin
-# Custom CSS & JS, 301 Redirects and Simple 301 Redirects stay inactive on the lab; the swap loads them for this process only.
-MINN_SWAP_ADD=custom-css-js/custom-css-js.php,eps-301-redirects/eps-301-redirects.php,simple-301-redirects/wp-simple-301-redirects.php run security-v046-rc-egress single --user=admin --require=tests/lib/plugin-swap.php
+# Custom CSS & JS, Header Footer Code Manager, 301 Redirects and Simple 301 Redirects stay inactive on the lab; the swap loads them for this process only.
+MINN_SWAP_ADD=custom-css-js/custom-css-js.php,header-footer-code-manager/99robots-header-footer-code-manager.php,eps-301-redirects/eps-301-redirects.php,simple-301-redirects/wp-simple-301-redirects.php run security-v046-rc-egress single --user=admin --require=tests/lib/plugin-swap.php
 run security-v046-rc-fields single --user=admin
 # Safe Redirect Manager stays inactive on the lab; the swap loads it for this process only.
 MINN_SWAP_ADD=safe-redirect-manager/safe-redirect-manager.php run security-v046-rc-adapters single --user=admin --require=tests/lib/plugin-swap.php
@@ -161,6 +161,8 @@ run security-v047-rc-lows single --user=admin
 # WPCode stays inactive on the lab; the swap loads it for this process only. The suite defines DISALLOW_FILE_EDIT at its end.
 MINN_SWAP_ADD=insert-headers-and-footers/ihaf.php run security-v047-rc-adapters single --user=admin --require=tests/lib/plugin-swap.php
 run security-v048-registry single --user=admin
+# Header Footer Code Manager stays inactive on the lab; the swap loads it for this process only.
+MINN_SWAP_ADD=header-footer-code-manager/99robots-header-footer-code-manager.php run hfcm-storage single --user=admin --require=tests/lib/plugin-swap.php
 # The SEO panel's per-type switch, once per provider: Yoast resident, the rest swapped in for this process only.
 run seo-box-gate single --user=admin
 MINN_SEO_SWAP=rank-math run seo-box-gate single --user=admin --require=tests/lib/seo-swap.php
