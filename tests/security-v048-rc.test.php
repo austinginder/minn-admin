@@ -133,4 +133,17 @@ wp_set_current_user( $admin[0]->ID );
 	}
 } )();
 
+/*
+ * 08-L1: Otter Blocks keeps a Stripe secret key, an OpenAI key and its
+ * reCAPTCHA and Turnstile secrets as plain option rows, none declared, so the
+ * database browser showed them and the egress mask never looked for them.
+ */
+( function () use ( $check ) {
+	$names = Minn_Admin_Kernel_Secrets::option_names();
+	foreach ( array( 'themeisle_stripe_api_key', 'themeisle_open_ai_api_key', 'themeisle_google_captcha_api_secret_key', 'themeisle_cloudflare_turnstile_secret_key' ) as $row ) {
+		$check( "08-L1 {$row} is declared a secret", in_array( $row, $names, true ) );
+	}
+	$check( '08-L1 control: the browser-side map key is not', ! in_array( 'themeisle_google_map_block_api_key', $names, true ) );
+} )();
+
 $summary();
