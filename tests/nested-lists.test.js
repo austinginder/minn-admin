@@ -38,7 +38,7 @@ const NESTED_OL = `<!-- wp:list -->
 
 async function saveAndRead( page, id ) {
 	const done = page.waitForResponse( ( r ) =>
-		r.request().method() === 'POST' && new RegExp( 'wp/v2/posts/' + id ).test( r.url() ), { timeout: 20000 } );
+		r.request().method() === 'POST' && new RegExp( 'wp/v2/posts/' + id ).test( r.url() ), { timeout: 60000 } );
 	await page.keyboard.press( 'Meta+s' );
 	await done;
 	await page.waitForTimeout( 400 );

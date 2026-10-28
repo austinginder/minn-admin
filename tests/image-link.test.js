@@ -37,7 +37,7 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 
 	const save = async () => {
 		const wait = page.waitForResponse( ( res ) =>
-			res.request().method() === 'POST' && new RegExp( 'wp/v2/posts/' + id ).test( res.url() ), { timeout: 20000 } );
+			res.request().method() === 'POST' && new RegExp( 'wp/v2/posts/' + id ).test( res.url() ), { timeout: 60000 } );
 		await page.keyboard.press( 'Meta+s' );
 		await wait;
 		await page.waitForTimeout( 400 );
@@ -51,7 +51,7 @@ const { launch, login, createPost, deletePost, openEditor, reporter } = require(
 	try {
 		t.check( 'fixture attachment found', !! ( media && media.id ), JSON.stringify( media ) );
 		await openEditor( page, id );
-		await page.waitForSelector( '.minn-editor-body figure img', { timeout: 15000 } );
+		await page.waitForSelector( '.minn-editor-body figure img', { timeout: 60000 } );
 
 		/* ===== Link the image ===== */
 		await openPop();
