@@ -147,15 +147,35 @@ function minn_admin_mail_mask_reset_keys( $body ) {
 
 /**
  * Whether this user reads logged mail whole. On a single site, someone who
- * can edit users (and so reset any password already); a log a plugin opens
- * to other roles shows them reset links with the key hidden. On a network,
- * the install's owner only (on a multi-network install a secondary
- * network's super admin could otherwise read the main network's resets).
+ * can edit every administrator (and so reset any password already); a log a
+ * plugin opens to other roles shows them reset links with the key hidden.
+ * edit_users alone is not that: WooCommerce grants it to a Shop Manager and
+ * narrows edit_user to customers, so an administrator's reset key would be
+ * theirs to read. On a network, the install's owner only (on a
+ * multi-network install a secondary network's super admin could otherwise
+ * read the main network's resets).
  *
  * @return bool
  */
 function minn_admin_mail_bodies_open() {
-	return is_multisite() ? Minn_Admin::install_owner() : current_user_can( 'edit_users' );
+	if ( is_multisite() ) {
+		return Minn_Admin::install_owner();
+	}
+	if ( ! current_user_can( 'edit_users' ) ) {
+		return false;
+	}
+	static $open = array();
+	$uid = get_current_user_id();
+	if ( ! isset( $open[ $uid ] ) ) {
+		$open[ $uid ] = true;
+		foreach ( get_users( array( 'role' => 'administrator', 'fields' => 'ID' ) ) as $admin ) {
+			if ( ! current_user_can( 'edit_user', (int) $admin ) ) {
+				$open[ $uid ] = false;
+				break;
+			}
+		}
+	}
+	return $open[ $uid ];
 }
 
 /** The Failure section of a detail, the error as a code row and any rows after it. */

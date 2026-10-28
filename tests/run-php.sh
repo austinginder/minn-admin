@@ -160,6 +160,7 @@ run security-v047-rc-core single --user=admin
 run security-v047-rc-lows single --user=admin
 # WPCode stays inactive on the lab; the swap loads it for this process only. The suite defines DISALLOW_FILE_EDIT at its end.
 MINN_SWAP_ADD=insert-headers-and-footers/ihaf.php run security-v047-rc-adapters single --user=admin --require=tests/lib/plugin-swap.php
+run security-v048-registry single --user=admin
 
 # A network, from a site that is not the main one.
 run route-gates subsite --user=admin
