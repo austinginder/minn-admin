@@ -558,12 +558,35 @@ function minn_admin_gfn_preview_tags( $form ) {
 		'created_by:ID', 'created_by:id', 'created_by:user_login',
 	);
 	foreach ( (array) rgar( $form, 'fields' ) as $field ) {
-		if ( is_object( $field ) && '' !== (string) $field->id ) {
+		// A password field's tag stays a placeholder (a repeater holding one
+		// too), as Gravity Forms' entry screen and {all_fields} skip it.
+		if ( is_object( $field ) && '' !== (string) $field->id && ! minn_admin_gfn_holds_password( $field ) ) {
 			$tags[] = ':' . $field->id;
 			$tags[] = ':' . $field->id . '.*';
 		}
 	}
 	return $tags;
+}
+
+/**
+ * Whether a field is a password field or holds one (a repeater's).
+ *
+ * @param object $field GF_Field.
+ * @return bool
+ */
+function minn_admin_gfn_holds_password( $field ) {
+	if ( ! is_object( $field ) ) {
+		return false;
+	}
+	if ( 'password' === $field->type || ( method_exists( $field, 'get_input_type' ) && 'password' === $field->get_input_type() ) ) {
+		return true;
+	}
+	foreach ( (array) ( $field->fields ?? array() ) as $sub ) {
+		if ( minn_admin_gfn_holds_password( $sub ) ) {
+			return true;
+		}
+	}
+	return false;
 }
 
 /**
@@ -658,6 +681,19 @@ function minn_admin_gfn_guarded( $entry, $render ) {
 	$entry['source_url'] = '';
 	// The submitter's allowed fields are already filled (minn_admin_gfn_prepare()).
 	$entry['created_by'] = '';
+	// With gform_encrypt_password on, the entry holds a submitter's password,
+	// decrypted. Its tag is a placeholder already, but Gravity Forms scans
+	// the answers it puts in again, so one could carry the tag back.
+	$form = class_exists( 'GFAPI' ) ? GFAPI::get_form( (int) rgar( $entry, 'form_id' ) ) : null;
+	foreach ( is_array( $form ) ? (array) rgar( $form, 'fields' ) : array() as $field ) {
+		if ( minn_admin_gfn_holds_password( $field ) ) {
+			foreach ( array_keys( $entry ) as $k ) {
+				if ( (string) $k === (string) $field->id || 0 === strpos( (string) $k, $field->id . '.' ) ) {
+					$entry[ $k ] = '';
+				}
+			}
+		}
+	}
 	$hook = 'gform_replace_merge_tags';
 	$held = isset( $wp_filter[ $hook ] ) && $wp_filter[ $hook ] instanceof WP_Hook ? $wp_filter[ $hook ] : null;
 	$only = new WP_Hook();

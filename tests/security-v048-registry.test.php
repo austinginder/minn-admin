@@ -229,4 +229,51 @@ wp_set_current_user( $admin[0]->ID );
 	}
 } )();
 
+/*
+ * GF-1: a notification or confirmation preview resolved a password field's
+ * tag from the latest entry, which with gform_encrypt_password on holds the
+ * submitter's password decrypted; Gravity Forms' entry screen and
+ * {all_fields} skip it.
+ */
+( function () use ( $check ) {
+	if ( ! class_exists( 'GFAPI' ) || ! function_exists( 'minn_admin_gfn_preview_tags' ) ) {
+		echo "SKIP  GF-1 Gravity Forms inactive\n";
+		return;
+	}
+	$form_id = GFAPI::add_form( array(
+		'title'         => 'minn v048 password preview ' . wp_rand(),
+		'fields'        => array(
+			array( 'id' => 1, 'type' => 'text', 'label' => 'Answer' ),
+			array( 'id' => 2, 'type' => 'password', 'label' => 'Password' ),
+		),
+		'notifications' => array(
+			'n1' => array( 'id' => 'n1', 'name' => 'Admin', 'to' => '{admin_email}', 'toType' => 'email', 'event' => 'form_submission', 'subject' => 'New', 'message' => '{all_fields}', 'isActive' => true ),
+		),
+		'confirmations' => array(
+			'c1' => array( 'id' => 'c1', 'name' => 'Default', 'type' => 'message', 'message' => 'Thanks', 'isDefault' => true ),
+		),
+	) );
+	if ( is_wp_error( $form_id ) ) {
+		echo "SKIP  GF-1 form not created\n";
+		return;
+	}
+	$entry_id = GFAPI::add_entry( array( 'form_id' => $form_id, '1' => 'carried {Password:2}', '2' => 'MinnPlainSecret048' ) );
+	try {
+		$r = new WP_REST_Request( 'POST', "/minn-admin/v1/gf/notifications/{$form_id}:n1/preview" );
+		$r->set_header( 'content-type', 'application/json' );
+		$r->set_body( wp_json_encode( array( 'subject' => 'S {Password:2}', 'message' => 'A {Password:2} B {:2} C {Answer:1} D {all_fields}' ) ) );
+		$res = rest_do_request( $r );
+		$out = wp_json_encode( $res->get_data() );
+		$check( 'GF-1 the preview rendered from the entry (premise)', 200 === $res->get_status() && false !== strpos( $out, 'carried' ), $res->get_status() . ' ' . substr( $out, 0, 160 ) );
+		$check( 'GF-1 no password reaches a notification preview, typed or carried in an answer', false === strpos( $out, 'MinnPlainSecret048' ), substr( $out, 0, 300 ) );
+		$r = new WP_REST_Request( 'POST', "/minn-admin/v1/gf/confirmations/{$form_id}:c1/preview" );
+		$r->set_header( 'content-type', 'application/json' );
+		$r->set_body( wp_json_encode( array( 'message' => 'X {Password:2} Y {:2}' ) ) );
+		$out = wp_json_encode( rest_do_request( $r )->get_data() );
+		$check( 'GF-1 no password reaches a confirmation preview', false === strpos( $out, 'MinnPlainSecret048' ), substr( $out, 0, 200 ) );
+	} finally {
+		GFAPI::delete_form( $form_id );
+	}
+} )();
+
 $summary();
