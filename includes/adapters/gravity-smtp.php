@@ -244,7 +244,28 @@ function minn_admin_gsmtp_condition_summary( $conditions ) {
 	return $out;
 }
 
-/** Display rows for the Routing list view, index-stable for REST actions. */
+/**
+ * A routing rule's id: their recipes carry none, and a position names
+ * another rule once one is added or removed in their screen or another tab,
+ * so the id is drawn from what the rule is (its name, service and
+ * conditions; not its on/off switch, which the actions change).
+ */
+function minn_admin_gsmtp_routing_id( array $recipe ) {
+	unset( $recipe['enabled'] );
+	return 1 + ( crc32( (string) wp_json_encode( $recipe ) ) % 2147483646 );
+}
+
+/** The position of the rule with this id, or null. */
+function minn_admin_gsmtp_routing_index( array $recipes, $id ) {
+	foreach ( $recipes as $i => $recipe ) {
+		if ( is_array( $recipe ) && minn_admin_gsmtp_routing_id( $recipe ) === (int) $id ) {
+			return $i;
+		}
+	}
+	return null;
+}
+
+/** Display rows for the Routing list view, each under its rule's own id. */
 function minn_admin_gsmtp_routing_rows() {
 	$recipes = minn_admin_gsmtp_routing_recipes();
 	$items   = array();
@@ -260,7 +281,7 @@ function minn_admin_gsmtp_routing_rows() {
 		}
 		$connector = isset( $recipe['connector'] ) ? (string) $recipe['connector'] : '';
 		$items[]   = array(
-			'id'         => $i + 1,
+			'id'         => minn_admin_gsmtp_routing_id( $recipe ),
 			'name'       => isset( $recipe['name'] ) && $recipe['name'] !== ''
 				? (string) $recipe['name']
 				: ( 'Rule ' . ( $i + 1 ) ),
@@ -636,8 +657,11 @@ minn_admin_resource( 'gravity-smtp/events', function () {
 			},
 			// The raw tables hold every message body, which the detail
 			// shows only to the preview cap: the database browser shows
-			// them only to someone who holds it too.
-			'table'  => 'minn_admin_gsmtp_can_preview',
+			// them only to someone who holds it too, and who reads mail
+			// whole (the browser cannot hide a reset link's key).
+			'table'  => function () {
+				return minn_admin_gsmtp_can_preview() && minn_admin_mail_bodies_open();
+			},
 		),
 		'labels'  => array( 'not_found' => __( 'Event not found', 'minn-admin' ) ),
 		'source'  => array(
@@ -788,7 +812,13 @@ minn_admin_resource( 'gravity-smtp/events', function () {
 minn_admin_resource( 'gravity-smtp/debug', function () {
 	return array(
 		'active' => 'minn_admin_gravity_smtp_active',
-		'gates'  => array( 'view' => minn_admin_gsmtp_gate( 'VIEW_DEBUG_LOG' ) ),
+		'gates'  => array(
+			'view'  => minn_admin_gsmtp_gate( 'VIEW_DEBUG_LOG' ),
+			// A line can hold a message whole; the browser shows it raw.
+			'table' => function () {
+				return current_user_can( minn_admin_gsmtp_cap( 'VIEW_DEBUG_LOG' ) ) && minn_admin_mail_bodies_open();
+			},
+		),
 		'source' => array(
 			'table'   => 'gravitysmtp_debug_log',
 			'key'     => 'id',
@@ -897,7 +927,11 @@ minn_admin_resource( 'gravity-smtp/routing', function () {
 	$flip  = function ( $on ) {
 		return function ( $id ) use ( $on ) {
 			$recipes = minn_admin_gsmtp_routing_recipes();
-			$recipes[ $id - 1 ]['enabled'] = $on;
+			$at      = minn_admin_gsmtp_routing_index( $recipes, $id );
+			if ( null === $at ) {
+				return new WP_Error( 'rest_not_found', __( 'Routing rule not found.', 'minn-admin' ), array( 'status' => 404 ) );
+			}
+			$recipes[ $at ]['enabled'] = $on;
 			minn_admin_gsmtp_routing_save( $recipes );
 			return $recipes;
 		};
@@ -958,7 +992,11 @@ minn_admin_resource( 'gravity-smtp/routing', function () {
 				'gate'   => 'edit',
 				'run'    => function ( $id ) {
 					$recipes = minn_admin_gsmtp_routing_recipes();
-					array_splice( $recipes, $id - 1, 1 );
+					$at      = minn_admin_gsmtp_routing_index( $recipes, $id );
+					if ( null === $at ) {
+						return new WP_Error( 'rest_not_found', __( 'Routing rule not found.', 'minn-admin' ), array( 'status' => 404 ) );
+					}
+					array_splice( $recipes, $at, 1 );
 					minn_admin_gsmtp_routing_save( $recipes );
 					return $recipes;
 				},
@@ -1124,6 +1162,17 @@ foreach ( array( 'sending' => 'INTEGRATIONS', 'general' => 'GENERAL_SETTINGS' ) 
 		},
 		'read'     => function ( $f, $ctx ) {
 			return $ctx['memo']['shape']['values'][ $f['key'] ] ?? '';
+		},
+		// General's test mode, email log and debug log each have their own
+		// edit cap on their screen, beyond the tab's.
+		'may'      => function ( $f ) {
+			$caps = array( 'test_mode' => 'EDIT_TEST_MODE', 'event_log_' => 'EDIT_EMAIL_LOG_SETTINGS', 'save_' => 'EDIT_EMAIL_LOG_SETTINGS', 'debug_log_' => 'EDIT_DEBUG_LOG_SETTINGS' );
+			foreach ( $caps as $prefix => $cap ) {
+				if ( 0 === strpos( (string) $f['key'], $prefix ) ) {
+					return current_user_can( minn_admin_gsmtp_cap( $cap ) );
+				}
+			}
+			return true;
 		},
 		'validate' => 'minn_admin_gsmtp_settings_prepare',
 		'write'    => function ( $vals ) use ( $minn_gsmtp_tab ) {

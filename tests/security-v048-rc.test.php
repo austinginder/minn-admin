@@ -146,4 +146,111 @@ wp_set_current_user( $admin[0]->ID );
 	$check( '08-L1 control: the browser-side map key is not', ! in_array( 'themeisle_google_map_block_api_key', $names, true ) );
 } )();
 
+/*
+ * 09-L5: Gravity SMTP routing rules were addressed by their position, so a
+ * rule added in their screen (or another tab) between the list and a click
+ * moved every position, and Disable or Delete landed on a different rule.
+ */
+( function () use ( $check ) {
+	if ( ! function_exists( 'minn_admin_gsmtp_routing_recipes' ) || ! minn_admin_gravity_smtp_active() || ! minn_admin_gsmtp_routing_available() ) {
+		echo "SKIP  09-L5 Gravity SMTP routing inactive\n";
+		return;
+	}
+	$was = minn_admin_gsmtp_routing_recipes();
+	try {
+		$a = array( 'name' => 'minn-rc A', 'enabled' => true, 'connector' => 'generic', 'conditions' => array( 'conjunct' => 'or', 'rules' => array() ) );
+		$b = array( 'name' => 'minn-rc B', 'enabled' => true, 'connector' => 'generic', 'conditions' => array( 'conjunct' => 'or', 'rules' => array() ) );
+		minn_admin_gsmtp_routing_save( array( $a, $b ) );
+		$rows = rest_do_request( new WP_REST_Request( 'GET', '/minn-admin/v1/gravity-smtp/routing' ) )->get_data();
+		$rows = $rows['items'] ?? $rows;
+		$bid  = null;
+		foreach ( (array) $rows as $row ) {
+			if ( 'minn-rc B' === ( $row['name'] ?? '' ) ) {
+				$bid = (int) $row['id'];
+			}
+		}
+		// Their screen adds a rule at the top after the list was read.
+		$c = array( 'name' => 'minn-rc C', 'enabled' => true, 'connector' => 'generic', 'conditions' => array( 'conjunct' => 'or', 'rules' => array() ) );
+		minn_admin_gsmtp_routing_save( array( $c, $a, $b ) );
+		$r     = rest_do_request( new WP_REST_Request( 'POST', "/minn-admin/v1/gravity-smtp/routing/{$bid}/disable" ) );
+		$after = array();
+		foreach ( minn_admin_gsmtp_routing_recipes() as $recipe ) {
+			$after[ $recipe['name'] ] = ! empty( $recipe['enabled'] ) && 'false' !== $recipe['enabled'];
+		}
+		$check( '09-L5 Disable reaches the rule that was listed (B), not what moved to its place', null !== $bid && false === ( $after['minn-rc B'] ?? null ), wp_json_encode( array( $r->get_status(), $after ) ) );
+		$check( '09-L5 the rule now at that position (A) keeps its switch', true === ( $after['minn-rc A'] ?? null ) && true === ( $after['minn-rc C'] ?? null ) );
+	} finally {
+		minn_admin_gsmtp_routing_save( $was );
+		$check( '09-L5 cleanup: the stored rules are back as they were', minn_admin_gsmtp_routing_recipes() == $was ); // phpcs:ignore Universal.Operators.StrictComparisons.LooseEqual
+	}
+} )();
+
+/*
+ * 09-L1: Gravity SMTP's General tab asked only the general-settings cap. Their
+ * screen also asks its own cap for test mode (which stops every email) and
+ * for the email and debug log settings.
+ */
+( function () use ( $check, $drop_user, $admin ) {
+	if ( ! function_exists( 'minn_admin_gravity_smtp_active' ) || ! minn_admin_gravity_smtp_active() || ! class_exists( 'Gravity_Forms\Gravity_SMTP\Users\Roles' ) ) {
+		echo "SKIP  09-L1 Gravity SMTP inactive\n";
+		return;
+	}
+	$roles = 'Gravity_Forms\Gravity_SMTP\Users\Roles';
+	add_role( 'minn_v048rc_gsmtp', 'GSMTP general', array( 'read' => true, constant( "$roles::VIEW_GENERAL_SETTINGS" ) => true, constant( "$roles::EDIT_GENERAL_SETTINGS" ) => true ) );
+	$u      = wp_insert_user( array( 'user_login' => 'minn-v048rc-gs-' . wp_rand(), 'user_pass' => wp_generate_password(), 'role' => 'minn_v048rc_gsmtp', 'user_email' => 'minn-v048rc-gs-' . wp_rand() . '@example.com' ) );
+	$before = minn_admin_gsmtp_settings_shape( 'general' )['values'];
+	$post   = function ( $values ) {
+		$q = new WP_REST_Request( 'POST', '/minn-admin/v1/gravity-smtp/settings/general' );
+		$q->set_header( 'Content-Type', 'application/json' );
+		$q->set_body( wp_json_encode( array( 'values' => $values ) ) );
+		return rest_do_request( $q );
+	};
+	try {
+		wp_set_current_user( $u );
+		foreach ( array( 'test_mode' => ! $before['test_mode'], 'event_log_enabled' => ! $before['event_log_enabled'], 'debug_log_enabled' => ! $before['debug_log_enabled'] ) as $key => $v ) {
+			$r = $post( array( $key => $v ) );
+			$check( "09-L1 the general-settings cap alone does not change {$key}", 403 === $r->get_status() && minn_admin_gsmtp_settings_shape( 'general' )['values'][ $key ] === $before[ $key ], (string) $r->get_status() );
+		}
+		wp_set_current_user( $admin[0]->ID );
+		$r = $post( array( 'debug_log_retention' => $before['debug_log_retention'] + 1 ) );
+		$check( '09-L1 control: an administrator changes the debug log', 200 === $r->get_status() && minn_admin_gsmtp_settings_shape( 'general' )['values']['debug_log_retention'] === $before['debug_log_retention'] + 1, (string) $r->get_status() );
+	} finally {
+		wp_set_current_user( $admin[0]->ID );
+		$post( array( 'debug_log_retention' => $before['debug_log_retention'], 'test_mode' => $before['test_mode'], 'event_log_enabled' => $before['event_log_enabled'], 'debug_log_enabled' => $before['debug_log_enabled'] ) );
+		$drop_user( $u );
+		remove_role( 'minn_v048rc_gsmtp' );
+	}
+} )();
+
+/*
+ * 09-L4: the database browser showed Gravity SMTP's raw message bodies and
+ * debug lines to anyone past the preview cap, a reset link's key whole, to
+ * an administrator the mail logs hide keys from.
+ */
+( function () use ( $check, $drop_user, $admin ) {
+	if ( is_multisite() || ! function_exists( 'minn_admin_gravity_smtp_active' ) || ! minn_admin_gravity_smtp_active() ) {
+		echo "SKIP  09-L4 needs a single site with Gravity SMTP\n";
+		return;
+	}
+	global $wpdb;
+	// A new administrator a cap map keeps from editing the first one (new,
+	// as minn_admin_mail_bodies_open() remembers its answer per account).
+	$ad   = wp_insert_user( array( 'user_login' => 'minn-v048rc-ad-' . wp_rand(), 'user_pass' => wp_generate_password(), 'role' => 'administrator', 'user_email' => 'minn-v048rc-ad-' . wp_rand() . '@example.com' ) );
+	$deny = function ( $caps, $cap, $uid, $args ) use ( $admin, $ad ) {
+		return ( 'edit_user' === $cap && (int) $uid === (int) $ad && isset( $args[0] ) && (int) $args[0] === (int) $admin[0]->ID ) ? array( 'do_not_allow' ) : $caps;
+	};
+	add_filter( 'map_meta_cap', $deny, 10, 4 );
+	wp_set_current_user( $ad );
+	try {
+		$check( '09-L4 control: this administrator reads mail with keys hidden', ! minn_admin_mail_bodies_open() );
+		$check( '09-L4 the events table is refused to the database browser', Minn_Admin_Kernel::table_refused( $wpdb->prefix . 'gravitysmtp_events' ) );
+		$check( '09-L4 the debug log table is refused to the database browser', Minn_Admin_Kernel::table_refused( $wpdb->prefix . 'gravitysmtp_debug_log' ) );
+	} finally {
+		remove_filter( 'map_meta_cap', $deny, 10 );
+		wp_set_current_user( $admin[0]->ID );
+		$drop_user( $ad );
+	}
+	$check( '09-L4 control: an administrator who reads mail whole opens both', ! Minn_Admin_Kernel::table_refused( $wpdb->prefix . 'gravitysmtp_events' ) && ! Minn_Admin_Kernel::table_refused( $wpdb->prefix . 'gravitysmtp_debug_log' ) );
+} )();
+
 $summary();
