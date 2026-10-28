@@ -45452,8 +45452,12 @@
 			}
 			const cls = [ en.danger && 'danger', en.active && 'is-on' ].filter( Boolean ).join( ' ' );
 			const clsAttr = cls ? ` class="${ cls }"` : '';
+			// navHref keeps web addresses and paths only, which blanked a
+			// customer's "Email" entry: a mail or phone link passes as itself
+			// (control characters still refused) and opens in place.
+			const contact = en.href && /^(?:mailto|tel):[^\u0000-\u001f\u007f]+$/i.test( String( en.href ).trim() ) ? String( en.href ).trim() : '';
 			return en.href
-				? `<a href="${ esc( navHref( en.href ) ) }" target="_blank" rel="noopener"${ clsAttr }>${ esc( hrefLabel( en.label, en.href ) ) }</a>`
+				? `<a href="${ esc( contact || navHref( en.href ) ) }"${ contact ? '' : ' target="_blank" rel="noopener"' }${ clsAttr }>${ esc( hrefLabel( en.label, en.href ) ) }</a>`
 				: `<button type="button" data-mi="${ i }"${ clsAttr }>${ esc( en.label ) }</button>`;
 		} ).join( '' );
 		document.body.appendChild( minnMenuEl );
