@@ -29127,7 +29127,7 @@
 		const W = B.wpMigrate;
 		const view = $( '#minn-view' );
 		if ( ! W ) {
-			view.innerHTML = emptyHtml( __( 'WP Migrate is not available' ), __( 'Install and activate WP Migrate, then reload.' ) );
+			view.innerHTML = `<div class="minn-card minn-empty">${ esc( __( 'WP Migrate is not available' ) ) }. ${ esc( __( 'Install and activate WP Migrate, then reload.' ) ) }</div>`;
 			return;
 		}
 		const m = migState();
