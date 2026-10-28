@@ -300,9 +300,9 @@ function minn_admin_tm_row( $row, $timeout, $now ) {
 	$is_site = minn_admin_tm_is_site( $row->option_name );
 	$type    = minn_admin_tm_type( $row->option_value );
 	$preview = (string) $row->option_value;
-	if ( strlen( $preview ) > 120 ) {
-		$preview = substr( $preview, 0, 120 ) . '…';
-	}
+	// Masked whole before the cut, so a key straddling it cannot leave its
+	// first characters behind.
+	$preview = Minn_Admin_Egress::clip( $preview, 120 );
 	// Never show full serialized blobs in the list — type is enough for scan.
 	if ( in_array( $type, array( 'array', 'object', 'serialized' ), true ) ) {
 		$preview = '(' . $type . ', ' . size_format( strlen( (string) $row->option_value ), 1 ) . ')';
