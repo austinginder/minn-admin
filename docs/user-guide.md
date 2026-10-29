@@ -4,7 +4,7 @@
 checking on things, keeping plugins current. No code in here. If you build
 plugins, you want [for-plugin-authors.md](for-plugin-authors.md) instead.*
 
-*Current as of v0.47.0. This file ships inside the plugin, so the copy you
+*Current as of v0.48.0. This file ships inside the plugin, so the copy you
 are reading always matches the version you have installed.*
 
 ## What Minn is (and is not)
@@ -221,11 +221,22 @@ away:
   including your plugins' blocks and entire designs and patterns you can
   drop in.
 - **Paste from anywhere.** Word, Google Docs and web pages paste in clean.
-  A pasted image or a lone URL to a tweet or video becomes the real thing,
-  and raw block markup (from an AI tool or a tutorial) pastes in as real,
-  editable blocks. When you want none of that, paste without formatting
+  A pasted image or screenshot uploads to your library, a lone URL to a
+  tweet or video becomes the real thing, and raw block markup (from an AI
+  tool or a tutorial) pastes in as real, editable blocks. Markdown, such
+  as an AI chat's Copy button gives you, gets a choice: format its
+  headings, lists and links, or keep it as it is. When you want none of that, paste without formatting
   (Ctrl+Shift+V, or Cmd+Shift+V on a Mac): the clipboard lands as plain
   text and a video link stays a link instead of becoming a player.
+- **Move blocks where you want them.** Drag an image by its picture and
+  a line shows where it will land. Clicking an image (or the ⚙ chip on a
+  code block or table) offers ↑ and ↓ beside Duplicate and Delete, and a
+  protected card's ⚙ chip has the same arrows; press them again to keep
+  walking the block along. From the keyboard, ⌘⇧⌥T and ⌘⇧⌥Y move the
+  block your cursor is in (Ctrl+Shift+Alt+T and Y on Windows).
+- **Links from a selection.** Select words and press ⌘K to link them; a
+  selected web address fills the link field in itself, so Enter is all
+  it takes.
 - **Your patterns come along.** Patterns you save in WordPress (synced or
   not) appear in the slash menu and the block library, and a Patterns
   entry in the Content list manages them. A synced pattern inserts as a
@@ -295,7 +306,12 @@ away:
   holding edits you never published wears a small amber dot on its status
   in the content list, and the Modified filter there shows only those
   (the filter spans every author, so it is offered to people who may edit
-  others' posts).
+  others' posts). Beside it, Drafts narrows the list to drafts, for one
+  post type or all of them.
+- **Categories, tags and your own taxonomies** sit in the editor's
+  Settings: a post type with taxonomies of its own (a wiki's topics, a
+  portfolio's skills) gets one picker for each, where a chip adds or
+  removes a term and a new name typed in is created as you go.
 - **History** shows revisions with side-by-side comparisons, and a
   revision also reports what changed in the custom fields, so a page
   whose edits all live in ACF fields no longer claims to be identical.
