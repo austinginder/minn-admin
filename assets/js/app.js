@@ -34939,9 +34939,36 @@
 		if ( ! moved ) return false;
 		stampSlotDirtyFor( from );
 		stampSlotDirtyFor( islandEl );
+		queueTableChips();
 		updateEditorStats();
 		scheduleAutosave();
 		return true;
+	}
+
+	// The ↑ ↓ pair the image, code and table popovers carry (the island
+	// inspector draws its own), titled with the keyboard's way to do it.
+	function blockMoveButtons() {
+		const keys = IS_MAC ? [ ' (⌘⇧⌥T)', ' (⌘⇧⌥Y)' ] : [ ' (Ctrl+Shift+Alt+T)', ' (Ctrl+Shift+Alt+Y)' ];
+		return `<span class="minn-insp-move" role="group" aria-label="${ esc( __( 'Move block' ) ) }">
+					<button class="minn-btn-soft" data-blockmove="up" type="button" title="${ esc( __( 'Move up' ) + keys[ 0 ] ) }" aria-label="${ esc( __( 'Move block up' ) ) }">${ icon( 'chevron-up' ) }</button>
+					<button class="minn-btn-soft" data-blockmove="down" type="button" title="${ esc( __( 'Move down' ) + keys[ 1 ] ) }" aria-label="${ esc( __( 'Move block down' ) ) }">${ icon( 'chevron-down' ) }</button>
+				</span>`;
+	}
+
+	// Wire a popover's ↑ ↓ to the block it edits: the block one level up
+	// from the target in its own root (body or slot). The popover stays open
+	// and follows, so repeated presses walk the block into place.
+	function bindBlockMove( pop, target, follow ) {
+		$$( '[data-blockmove]', pop ).forEach( ( b ) => {
+			b.addEventListener( 'mousedown', ( e ) => e.preventDefault() );
+			b.addEventListener( 'click', () => {
+				const body = $( '#minn-editor-body' );
+				const block = body && target && body.contains( target ) ? topBlockIn( target, body ) : null;
+				if ( ! block || ! moveIsland( block, b.dataset.blockmove ) ) return;
+				block.scrollIntoView( { block: 'nearest' } );
+				follow();
+			} );
+		} );
 	}
 
 	// Same undo toast for non-island atomic blocks (empty code <pre>, HR,
@@ -41348,6 +41375,84 @@
 			bindMarkdown( body );
 			bindSlashMenu( body, insertImage );
 
+			// Dragging a block's picture moves the block: an image, or a block
+			// Minn keeps whole (an island, by its preview's picture). Chrome's
+			// own in-editor drag drops a COPY of the image and leaves the
+			// original. The block lands above or below the block under the
+			// pointer, in that block's root, as the ↑ ↓ buttons and ⌘⇧⌥T/Y
+			// move it. The drop line is page chrome outside the body, so no
+			// marker can reach a save.
+			let blockDrag = null;
+			let dropLine = null;
+			const clearDrop = () => {
+				if ( dropLine ) dropLine.remove();
+				dropLine = null;
+			};
+			const dropSpot = ( e ) => {
+				const el = e.target && ( e.target.nodeType === Node.ELEMENT_NODE ? e.target : e.target.parentElement );
+				const over = el && body.contains( el ) ? topBlockIn( el, body ) : null;
+				if ( ! over || ! blockDrag || over === blockDrag || blockDrag.contains( over ) ) return null;
+				const r = over.getBoundingClientRect();
+				return { over, after: e.clientY > r.top + r.height / 2, rect: r };
+			};
+			body.addEventListener( 'dragstart', ( e ) => {
+				blockDrag = null;
+				const t = e.target;
+				if ( ! t || t.nodeType !== Node.ELEMENT_NODE || 'IMG' !== t.tagName || ! e.dataTransfer ) return;
+				// An island's own picture drags the island; a picture typed
+				// into a container's slot is that slot's block.
+				const isl = islandOf( t );
+				const slot = t.closest( '.minn-slot' );
+				const block = isl && ! ( slot && isl.contains( slot ) ) ? isl : topBlockIn( t, body );
+				if ( ! block || ( 'FIGURE' !== block.tagName && ! isRealIsland( block ) ) ) return;
+				blockDrag = block;
+				e.dataTransfer.effectAllowed = 'move';
+				e.dataTransfer.setData( 'text/x-minn-block-move', '1' );
+			} );
+			body.addEventListener( 'dragover', ( e ) => {
+				if ( ! blockDrag ) return;
+				e.preventDefault();
+				e.dataTransfer.dropEffect = 'move';
+				const spot = dropSpot( e );
+				if ( ! spot ) {
+					clearDrop();
+					return;
+				}
+				if ( ! dropLine ) {
+					dropLine = document.createElement( 'div' );
+					dropLine.className = 'minn-block-drop-line';
+					document.body.appendChild( dropLine );
+				}
+				dropLine.style.left = spot.rect.left + 'px';
+				dropLine.style.width = spot.rect.width + 'px';
+				dropLine.style.top = ( ( spot.after ? spot.rect.bottom : spot.rect.top ) - 2 ) + 'px';
+			} );
+			body.addEventListener( 'drop', ( e ) => {
+				if ( ! blockDrag ) return;
+				e.preventDefault();
+				e.stopPropagation();
+				const block = blockDrag;
+				const spot = dropSpot( e );
+				blockDrag = null;
+				clearDrop();
+				if ( ! spot ) return;
+				const from = block.parentElement;
+				if ( spot.after ) spot.over.after( block );
+				else spot.over.before( block );
+				// Direct-DOM: both roots re-splice on save; a slot left empty
+				// keeps a line to type on.
+				stampSlotDirtyFor( from );
+				stampSlotDirtyFor( block );
+				if ( from && from !== body && ! from.firstElementChild ) ensureTrailingParagraph( from );
+				queueTableChips();
+				updateEditorStats();
+				scheduleAutosave();
+			} );
+			body.addEventListener( 'dragend', () => {
+				blockDrag = null;
+				clearDrop();
+			} );
+
 			// Dropped image files land where the pointer released. Dragging
 			// content WITHIN the editor carries no files and keeps Chrome's
 			// native behavior. stopPropagation matters: the app-wide
@@ -45556,9 +45661,13 @@
 					<button class="minn-btn-soft" data-op="header" type="button">${ table.tHead ? esc( __( 'Remove header row' ) ) : esc( __( 'Make first row a header' ) ) }</button>
 					<button class="minn-btn-soft danger" data-op="table-del" type="button">${ esc( __( 'Delete table' ) ) }</button>
 				</div>
+			</div>
+			<div class="minn-insp-actions">
+				${ blockMoveButtons() }
 			</div>`;
 		document.body.appendChild( tablePop );
 		positionBlockPop( tablePop, table.closest( 'figure' ) || table );
+		bindBlockMove( tablePop, table.closest( 'figure' ) || table, () => positionBlockPop( tablePop, table.closest( 'figure' ) || table ) );
 		tablePop.querySelector( '[data-close]' ).addEventListener( 'click', hideTablePop );
 		$$( '[data-op]', tablePop ).forEach( ( b ) => {
 			b.addEventListener( 'mousedown', ( e ) => e.preventDefault() ); // the caret cell must survive the click
@@ -45789,10 +45898,12 @@
 				</select>
 			</div>
 			<div class="minn-insp-actions">
+				${ blockMoveButtons() }
 				<button class="minn-btn-soft danger" data-code-remove type="button" title="${ esc( __( 'Remove this code block' ) ) }">${ icon( 'trash' ) } ${ esc( __( 'Remove' ) ) }</button>
 			</div>`;
 		document.body.appendChild( codePop );
 		positionBlockPop( codePop, pre );
+		bindBlockMove( codePop, pre, () => positionBlockPop( codePop, pre ) );
 		codePop.querySelector( '[data-close]' ).addEventListener( 'click', hideCodePop );
 		armBlockPopA11y( codePop, { label: __( 'Code block settings' ), onClose: hideCodePop, focus: '[data-lang]' } );
 		codePop.querySelector( '[data-lang]' ).addEventListener( 'change', ( e ) => {
@@ -46129,6 +46240,7 @@
 			<div class="minn-insp-actions">
 				<button class="minn-btn-primary" data-img-apply type="button">${ esc( __( 'Apply' ) ) }</button>
 				<button class="minn-btn-soft" data-img-replace type="button">${ icon( 'img' ) } Replace</button>
+				${ blockMoveButtons() }
 				<button class="minn-btn-soft" data-img-dup type="button" title="${ esc( __( 'Duplicate image' ) ) }">${ icon( 'copy' ) }</button>
 				<button class="minn-btn-soft danger" data-img-remove type="button" title="${ esc( __( 'Remove image' ) ) }">${ icon( 'trash' ) }</button>
 			</div>`;
@@ -46268,6 +46380,7 @@
 		// right after it, so caption, classes and the attachment id all
 		// travel — serialization re-reads the DOM, so nothing else to do
 		// beyond stamping the slot dirty.
+		bindBlockMove( imgPop, img.closest( 'figure' ) || img, () => positionBlockPop( imgPop, img.closest( 'figure' ) || img ) );
 		imgPop.querySelector( '[data-img-dup]' ).addEventListener( 'click', () => {
 			if ( duplicateEditableNode( img.closest( 'figure' ) || img ) ) toast( __( 'Image duplicated' ) );
 			hideImgPop();
@@ -46613,6 +46726,10 @@
 			sel.addRange( nr );
 		} catch ( err ) {}
 		block.scrollIntoView( { block: 'nearest' } );
+		// Direct-DOM: a move inside a container slot fires no input, so its
+		// island must be stamped to re-splice on save; chips follow.
+		stampSlotDirtyFor( block );
+		queueTableChips();
 		scheduleAutosave();
 	}
 

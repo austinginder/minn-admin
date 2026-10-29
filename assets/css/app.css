@@ -5186,6 +5186,8 @@ button.minn-ac-item:hover { background: var(--hover); }
 .minn-insp-dfimg-id { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .minn-insp-actions { padding: 12px 14px; border-top: 1px solid var(--border); display: flex; gap: 8px; flex-wrap: wrap; }
 /* Compact move cluster: tight icon buttons reading as one control. */
+/* Where a dragged block will land (page chrome, outside the editor body). */
+.minn-block-drop-line { position: fixed; height: 4px; border-radius: 2px; background: var(--accent); pointer-events: none; z-index: 60; }
 .minn-insp-move { display: inline-flex; gap: 3px; }
 .minn-insp-move .minn-btn-soft { padding-inline-start: 8px; padding-inline-end: 8px; }
 .minn-insp-move .minn-btn-soft svg { width: 14px; height: 14px; }
