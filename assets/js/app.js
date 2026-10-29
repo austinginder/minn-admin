@@ -37204,6 +37204,10 @@
 		// Parked executable attributes go back on the clone — see serializeToBlocks.
 		rtUnpark( clone );
 		$$( '[data-minn-bkt]', clone ).filter( isPasteBracket ).forEach( ( el ) => el.removeAttribute( 'data-minn-bkt' ) );
+		// A block's attributes ride this marker into a block comment; classic
+		// content has none to carry them, and the marker (with this page's
+		// token) is never stored.
+		$$( '[data-minn-attrs]', clone ).forEach( ( el ) => el.removeAttribute( 'data-minn-attrs' ) );
 		// In-flight uploads hold only a blob: URL; empty captions are chrome.
 		$$( '[data-minn-upload]', clone ).filter( isUploadPlaceholder ).forEach( ( el ) => el.remove() );
 		$$( 'figcaption', clone ).forEach( ( fc ) => {
@@ -41509,13 +41513,13 @@
 					}
 				}
 				// Clipboard image FILES (a screenshot ⌘V) upload straight to the
-				// library. When html rides along, prefer it unless it's just
-				// the image's own tag — a Docs/Word copy of text-with-images
-				// must keep its text, but a copied lone image should become a
-				// self-hosted upload, not a hotlink.
+				// library. When html rides along, prefer it unless it's only
+				// the image (pastedImageOnly) — a Docs/Word copy of
+				// text-with-images must keep its text, but a copied lone image
+				// should become a self-hosted upload, not a hotlink.
 				const imgFiles = B.caps.upload ? Array.from( cd.files || [] ).filter( ( f ) => /^image\//.test( f.type ) ) : [];
 				const htmlFlavor = cd.getData( 'text/html' ) || '';
-				if ( imgFiles.length && ( ! htmlFlavor.trim() || /^(?:<meta[^>]*>)?\s*<img[^>]*\/?>\s*$/i.test( htmlFlavor.trim() ) ) ) {
+				if ( imgFiles.length && pastedImageOnly( htmlFlavor ) ) {
 					e.preventDefault();
 					insertImageFiles( body, imgFiles );
 					return;
@@ -47331,6 +47335,21 @@
 		};
 	}
 
+	// Whether a paste's html flavor is only the image its files carry: none,
+	// a lone <img> (Windows wraps it in <html><body><!--StartFragment-->), or
+	// images held inline as data: (which the sanitizer drops, so the html
+	// path would paste nothing). Any text, or a remote image beside others,
+	// keeps the html path: a Docs/Word copy of text-with-images keeps its text.
+	function pastedImageOnly( html ) {
+		if ( ! String( html || '' ).trim() ) return true;
+		let doc;
+		try { doc = new DOMParser().parseFromString( html, 'text/html' ); } catch ( e ) { return false; }
+		if ( ! doc || ! doc.body || doc.body.textContent.trim() ) return false;
+		const imgs = Array.from( doc.body.querySelectorAll( 'img' ) );
+		if ( ! imgs.length || doc.body.querySelector( 'video, audio, iframe, table, picture source' ) ) return false;
+		return 1 === imgs.length || imgs.every( ( img ) => /^data:/i.test( img.getAttribute( 'src' ) || '' ) );
+	}
+
 	// A Markdown choice should feel helpful, not like a question on every
 	// multi-line paste. Require recognizable document syntax, then refuse the
 	// prompt when the clipboard already contains real rich content. Code-view
@@ -47359,9 +47378,15 @@
 		if ( ! String( html || '' ).trim() ) return true;
 		let doc;
 		try { doc = new DOMParser().parseFromString( html, 'text/html' ); } catch ( e ) { return false; }
-		if ( ! doc || ! doc.body || ! doc.body.querySelector( 'pre, code' ) ) return false;
+		if ( ! doc || ! doc.body ) return false;
 		const allowed = new Set( [ 'META', 'PRE', 'CODE', 'DIV', 'SPAN', 'BR' ] );
-		return Array.from( doc.body.querySelectorAll( '*' ) ).every( ( el ) => allowed.has( el.tagName ) );
+		if ( ! Array.from( doc.body.querySelectorAll( '*' ) ).every( ( el ) => allowed.has( el.tagName ) ) ) return false;
+		if ( doc.body.querySelector( 'pre, code' ) ) return true;
+		// A styled <div> or <span> around the very text (a raw view's copy, an
+		// Electron app's copy button) carries the Markdown literally too, not
+		// formatting: the same characters, line breaks aside.
+		const flat = ( v ) => String( v ).replace( /\s+/g, '' );
+		return flat( doc.body.innerText || doc.body.textContent ) === flat( src );
 	}
 
 	function markdownInline( value ) {
