@@ -33264,7 +33264,23 @@
 	// say so at the call site with a "body-root by design" comment.
 	function blockRootOf( node, body ) {
 		const el = node && ( node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement );
-		return ( el && el.closest && el.closest( '.minn-slot' ) ) || body;
+		return minnSlotOf( el ) || body;
+	}
+
+	// A container slot Minn rendered: editable (post kses strips
+	// contenteditable, so content can wear the class but not this) inside a
+	// real island. A look-alike in the text is prose, never a root: a block
+	// moved or dropped into one would land where the save does not read.
+	function isMinnSlot( s ) {
+		return !! s && 1 === s.nodeType && s.classList.contains( 'minn-slot' )
+			&& 'true' === s.getAttribute( 'contenteditable' )
+			&& isRealIsland( s.parentElement && s.parentElement.closest( '.minn-block-island' ) );
+	}
+	// The nearest real slot around el, skipping look-alikes in between.
+	function minnSlotOf( el ) {
+		let s = el && el.closest ? el.closest( '.minn-slot' ) : null;
+		while ( s && ! isMinnSlot( s ) ) s = s.parentElement ? s.parentElement.closest( '.minn-slot' ) : null;
+		return s;
 	}
 
 	// The node's top-level block WITHIN its root (body or slot): the element
@@ -33327,12 +33343,12 @@
 	// slot island: an outer container gated on its own stamp would otherwise
 	// emit stale raw and silently drop a nested edit. No-op outside slots.
 	function stampSlotDirtyFor( el ) {
-		let slot = el && el.closest && el.closest( '.minn-slot' );
+		let slot = minnSlotOf( el );
 		while ( slot ) {
-			const isl = slot.closest( '.minn-block-island' );
-			if ( ! isl ) return;
+			const isl = slot.parentElement.closest( '.minn-block-island' );
+			if ( ! isRealIsland( isl ) ) return;
 			isl.dataset.minnSlotDirty = '1';
-			slot = isl.parentElement && isl.parentElement.closest( '.minn-slot' );
+			slot = minnSlotOf( isl.parentElement );
 		}
 	}
 
@@ -34964,7 +34980,23 @@
 			b.addEventListener( 'click', () => {
 				const body = $( '#minn-editor-body' );
 				const block = body && target && body.contains( target ) ? topBlockIn( target, body ) : null;
-				if ( ! block || ! moveIsland( block, b.dataset.blockmove ) ) return;
+				if ( ! block ) return;
+				// The caret rides along (a table's row and column actions
+				// work "at the caret"): kept as node + offset, which survive
+				// the reparent where a live Range would not.
+				const sel = window.getSelection();
+				const r0 = sel.rangeCount ? sel.getRangeAt( 0 ) : null;
+				const at = r0 && block.contains( r0.startContainer ) ? [ r0.startContainer, r0.startOffset ] : null;
+				if ( ! moveIsland( block, b.dataset.blockmove ) ) return;
+				if ( at ) {
+					try {
+						const nr = document.createRange();
+						nr.setStart( at[ 0 ], at[ 1 ] );
+						nr.collapse( true );
+						sel.removeAllRanges();
+						sel.addRange( nr );
+					} catch ( err ) {}
+				}
 				block.scrollIntoView( { block: 'nearest' } );
 				follow();
 			} );
@@ -35953,6 +35985,11 @@
 			// marker element's inline style is SAVED content (Gutenberg style
 			// attrs paint through it) and must survive.
 			if ( ! readMinnAttrs( el ) ) el.removeAttribute( 'style' );
+			else if ( 'var(--accent)' === el.style.borderColor ) {
+				// The chip hover's border (setTableHot), never a block's own.
+				el.style.borderColor = '';
+				if ( ! el.getAttribute( 'style' ) ) el.removeAttribute( 'style' );
+			}
 			// A redo can resurrect an empty paste-bracket paragraph (see
 			// pasteBlocksInsert) — typed-into, it must not leak its marker.
 			if ( isPasteBracket( el ) ) el.removeAttribute( 'data-minn-bkt' );
@@ -40806,7 +40843,7 @@
 				// (probed for runs; same nested-editable behavior) — clamp the
 				// first press to the slot's own content, like Gutenberg's
 				// select-block-first convention.
-				const slotKd = e.target.closest && e.target.closest( '.minn-slot' );
+				const slotKd = minnSlotOf( e.target );
 				if ( slotKd && appShortcut && e.key.toLowerCase() === 'a' && ! e.shiftKey && ! e.altKey ) {
 					e.preventDefault();
 					e.stopPropagation();
@@ -40990,7 +41027,7 @@
 		body.addEventListener( 'contextmenu', ( e ) => {
 			if ( e.defaultPrevented ) return;
 			if ( e.target.closest && e.target.closest( 'td, th' ) ) return; // the table menu owns cells
-			const slot = e.target.closest ? e.target.closest( '.minn-slot' ) : null;
+			const slot = minnSlotOf( e.target );
 			const col = slot && slot.parentElement;
 			const island = col && col.parentElement ? islandOf( col.parentElement, '.minn-cols-island' ) : null;
 			if ( ! island || ! body.contains( island ) ) return;
@@ -41402,15 +41439,27 @@
 				// An island's own picture drags the island; a picture typed
 				// into a container's slot is that slot's block.
 				const isl = islandOf( t );
-				const slot = t.closest( '.minn-slot' );
+				const slot = minnSlotOf( t );
 				const block = isl && ! ( slot && isl.contains( slot ) ) ? isl : topBlockIn( t, body );
 				if ( ! block || ( 'FIGURE' !== block.tagName && ! isRealIsland( block ) ) ) return;
 				blockDrag = block;
-				e.dataTransfer.effectAllowed = 'move';
+				// Copy stays allowed for a drop outside the editor (another
+				// tab's uploader); inside it, the drop below moves.
+				e.dataTransfer.effectAllowed = 'copyMove';
 				e.dataTransfer.setData( 'text/x-minn-block-move', '1' );
 			} );
+			// Only this drag: a dragend that never reached the body leaves
+			// blockDrag set, and a later text or file drop must not move it.
+			const ourDrag = ( e ) => {
+				if ( ! blockDrag ) return false;
+				if ( blockDrag.isConnected && body.contains( blockDrag ) && e.dataTransfer
+					&& Array.from( e.dataTransfer.types || [] ).includes( 'text/x-minn-block-move' ) ) return true;
+				blockDrag = null;
+				clearDrop();
+				return false;
+			};
 			body.addEventListener( 'dragover', ( e ) => {
-				if ( ! blockDrag ) return;
+				if ( ! ourDrag( e ) ) return;
 				e.preventDefault();
 				e.dataTransfer.dropEffect = 'move';
 				const spot = dropSpot( e );
@@ -41428,7 +41477,7 @@
 				dropLine.style.top = ( ( spot.after ? spot.rect.bottom : spot.rect.top ) - 2 ) + 'px';
 			} );
 			body.addEventListener( 'drop', ( e ) => {
-				if ( ! blockDrag ) return;
+				if ( ! ourDrag( e ) ) return;
 				e.preventDefault();
 				e.stopPropagation();
 				const block = blockDrag;
@@ -41469,6 +41518,7 @@
 			body.addEventListener( 'dragleave', () => document.body.classList.remove( 'minn-drag-editor' ) );
 			body.addEventListener( 'drop', ( e ) => {
 				document.body.classList.remove( 'minn-drag-editor' );
+				if ( e.defaultPrevented ) return; // a block move took it
 				const all = Array.from( ( e.dataTransfer && e.dataTransfer.files ) || [] );
 				if ( ! all.length ) return; // in-editor content drags keep native behavior
 				// Claim EVERY file drop — the unhandled default navigates the
@@ -41580,7 +41630,7 @@
 					const s = window.getSelection();
 					const n = s && s.rangeCount ? s.anchorNode : null;
 					const el2 = n && ( n.nodeType === Node.ELEMENT_NODE ? n : n.parentElement );
-					return el2 && el2.closest ? el2.closest( '.minn-slot' ) : null;
+					return minnSlotOf( el2 );
 				} )();
 				// Paste a URL over selected text → wrap as <a>, don't replace.
 				// Runs before the HTML flavor path so browser-copied links
@@ -48334,7 +48384,7 @@
 			const cols = islandOf( target, '.minn-cols-island' );
 			if ( ! cols ) return;
 			target.innerHTML = '<br>';
-			const here = target.closest( '.minn-slot' );
+			const here = minnSlotOf( target );
 			if ( ! columnOp( cols, 'after', here ? here.parentElement : null ) ) {
 				toast( __( 'This block’s columns can’t be edited here.' ), true );
 			}

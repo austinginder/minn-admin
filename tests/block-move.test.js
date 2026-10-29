@@ -148,6 +148,76 @@ const IMG = '<!-- wp:image -->\n<figure class="wp-block-image"><img src="https:/
 		// A typed character makes the save carry a change either way.
 		raw = await save( colsId );
 		t.check( '⌘⇧⌥T in a column is saved', 'ColTwo,ColOne,ColThree' === orderOf( raw, [ 'ColOne', 'ColTwo', 'ColThree' ] ), orderOf( raw, [ 'ColOne', 'ColTwo', 'ColThree' ] ) );
+		/* Review 13 M-1: a list wearing .minn-slot is prose, not a root. */
+		const lookId = await fresh( 'Move: look-alike slot', [ P( 'Alpha' ), IMG, '<!-- wp:list -->\n<ul class="wp-block-list minn-slot"><!-- wp:list-item -->\n<li>Listed</li>\n<!-- /wp:list-item --></ul>\n<!-- /wp:list -->' ].join( '\n\n' ) );
+		d = await page.evaluate( () => {
+			const body = document.querySelector( '#minn-editor-body' );
+			const src = body.querySelector( 'figure img' );
+			const li = body.querySelector( 'li' );
+			const r = li.getBoundingClientRect();
+			const dt = new DataTransfer();
+			const fire = ( el, type, y ) => el.dispatchEvent( new DragEvent( type, { bubbles: true, cancelable: true, dataTransfer: dt, clientX: r.left + 10, clientY: y } ) );
+			fire( src, 'dragstart', r.top );
+			fire( li, 'dragover', r.bottom - 2 );
+			fire( li, 'drop', r.bottom - 2 );
+			fire( src, 'dragend', r.bottom - 2 );
+			return { inList: !! body.querySelector( 'ul figure, li figure' ) };
+		} );
+		raw = await save( lookId );
+		t.check( 'a drop on a list wearing .minn-slot lands beside the list, not in it', ! d.inList && /<!-- \/wp:list -->\s*<!-- wp:image/.test( raw ), JSON.stringify( d ) + ' ' + raw.slice( -260 ) );
+
+		/* Review 13 L-4: a drag whose dragend never came does not take a later drop. */
+		const staleId = await fresh( 'Move: stale drag', [ P( 'Alpha' ), IMG, P( 'Beta' ) ].join( '\n\n' ) );
+		d = await page.evaluate( () => {
+			const body = document.querySelector( '#minn-editor-body' );
+			const src = body.querySelector( 'figure img' );
+			const beta = [ ...body.querySelectorAll( 'p' ) ].find( ( p ) => p.textContent.trim() === 'Beta' );
+			const r = beta.getBoundingClientRect();
+			src.dispatchEvent( new DragEvent( 'dragstart', { bubbles: true, cancelable: true, dataTransfer: new DataTransfer(), clientX: r.left, clientY: r.top } ) );
+			// No dragend. Later, a plain text drag drops on Beta.
+			const dt2 = new DataTransfer();
+			dt2.setData( 'text/plain', 'dragged words' );
+			beta.dispatchEvent( new DragEvent( 'dragover', { bubbles: true, cancelable: true, dataTransfer: dt2, clientX: r.left + 5, clientY: r.bottom - 2 } ) );
+			const ev = new DragEvent( 'drop', { bubbles: true, cancelable: true, dataTransfer: dt2, clientX: r.left + 5, clientY: r.bottom - 2 } );
+			beta.dispatchEvent( ev );
+			const order = [ ...body.children ].map( ( n ) => n.tagName === 'FIGURE' ? 'IMG' : n.textContent.trim() ).filter( Boolean ).join( ',' );
+			return { order, line: !! document.querySelector( '.minn-block-drop-line' ) };
+		} );
+		t.check( 'a stale drag does not move the image on a later text drop', 'Alpha,IMG,Beta' === d.order && ! d.line, JSON.stringify( d ) );
+
+		/* Review 13 L-3: the table's ↑ ↓ keep the caret in its cell. */
+		const tcId = await fresh( 'Move: table caret', [ P( 'Alpha' ), '<!-- wp:table -->\n<figure class="wp-block-table"><table><tbody><tr><td>RowOne</td></tr><tr><td>RowTwo</td></tr></tbody></table></figure>\n<!-- /wp:table -->' ].join( '\n\n' ) );
+		await page.evaluate( () => {
+			const td = [ ...document.querySelectorAll( '#minn-editor-body td' ) ].find( ( x ) => x.textContent === 'RowTwo' );
+			const r = document.createRange();
+			r.setStart( td.firstChild, 3 );
+			r.collapse( true );
+			getSelection().removeAllRanges();
+			getSelection().addRange( r );
+			document.querySelector( '#minn-editor-body' ).focus();
+		} );
+		await page.waitForFunction( () => [ ...document.querySelectorAll( '.minn-code-chip' ) ].some( ( x ) => x._kind === 'table' ), null, { timeout: 15000 } ).catch( () => null );
+		if ( await openChip( 'table' ) && await page.waitForSelector( '.minn-table-pop [data-blockmove="up"]', { timeout: 10000 } ).catch( () => null ) ) {
+			await popClick( '.minn-table-pop', 'up' );
+		}
+		const caretCell = await page.evaluate( () => {
+			const s = getSelection();
+			const n = s.rangeCount ? s.anchorNode : null;
+			const el = n && ( n.nodeType === 1 ? n : n.parentElement );
+			return el && el.closest ? ( el.closest( 'td' ) || {} ).textContent || null : null;
+		} );
+		t.check( 'the caret stays in its table cell through a move', 'RowTwo' === caretCell, String( caretCell ) );
+
+		/* Review 13 L-6: the chip hover's border never reaches a save. */
+		const hoverId = await fresh( 'Move: hover border', [ P( 'Alpha' ), '<!-- wp:image {"id":42468} -->\n<figure class="wp-block-image"><img src="https://example.com/hover.jpg" alt="" class="wp-image-42468"/></figure>\n<!-- /wp:image -->', P( 'Beta' ) ].join( '\n\n' ) );
+		await page.evaluate( () => {
+			const fig = document.querySelector( '#minn-editor-body figure' );
+			fig.style.borderColor = 'var(--accent)';
+			const b = [ ...document.querySelectorAll( '#minn-editor-body p' ) ].find( ( p ) => p.textContent.trim() === 'Beta' );
+			b.textContent = 'Beta edited';
+		} );
+		raw = await save( hoverId );
+		t.check( 'a hovered image saves without the hover border', /hover\.jpg/.test( raw ) && ! /border-color/.test( raw ), raw.slice( 0, 300 ) );
 	} finally {
 		for ( const id of made ) await deletePost( page, id ).catch( () => {} );
 	}
