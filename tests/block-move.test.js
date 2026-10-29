@@ -218,6 +218,16 @@ const IMG = '<!-- wp:image -->\n<figure class="wp-block-image"><img src="https:/
 		} );
 		raw = await save( hoverId );
 		t.check( 'a hovered image saves without the hover border', /hover\.jpg/.test( raw ) && ! /border-color/.test( raw ), raw.slice( 0, 300 ) );
+		/* Review 14 N-2: a block wearing .minn-slot gets no typing line seeded into it. */
+		const PQ = '<!-- wp:pullquote -->\n<figure class="wp-block-pullquote minn-slot"><blockquote><p>Quoted</p></blockquote></figure>\n<!-- /wp:pullquote -->';
+		const pqId = await fresh( 'Move: look-alike pullquote', [ PQ, P( 'After' ) ].join( '\n\n' ) );
+		await page.evaluate( () => {
+			const p = [ ...document.querySelectorAll( '#minn-editor-body p' ) ].find( ( x ) => x.textContent.trim() === 'After' );
+			p.textContent = 'After edited';
+		} );
+		raw = await save( pqId );
+		const pq = ( raw.match( /<!-- wp:pullquote -->[\s\S]*?<!-- \/wp:pullquote -->/ ) || [ '' ] )[ 0 ];
+		t.check( 'a pullquote wearing .minn-slot saves as it was', pq.replace( /\s+/g, '' ) === PQ.replace( /\s+/g, '' ), pq );
 	} finally {
 		for ( const id of made ) await deletePost( page, id ).catch( () => {} );
 	}

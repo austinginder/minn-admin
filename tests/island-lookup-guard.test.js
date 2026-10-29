@@ -67,7 +67,8 @@ const REVIEWED = {
 	"if ( island.parentElement && island.parentElement.closest( '.minn-island-preview' ) ) return null;": 'previewIsland(): exclusion',
 
 	// Compared with, or asked of, an island already known to be real.
-	"const isl = slot.closest( '.minn-block-island' );": 'stampSlotDirtyFor: a dirty stamp on a look-alike is ignored, flushSlotIsland takes real islands only',
+	"const isl = slot.parentElement.closest( '.minn-block-island' );": 'stampSlotDirtyFor: slot came from minnSlotOf(), isl is tested with isRealIsland() on the next line',
+	"$$( '[data-minn-attrs]', clone ).forEach( ( el ) => el.removeAttribute( 'data-minn-attrs' ) );": 'classicHtml / copy: strips every marker from a clone (removal only)',
 	"isl.dataset.minnSlotDirty = '1';": 'stampSlotDirtyFor: read only by flushSlotIsland, which takes real islands only',
 	"const slots = $$( '.minn-slot', el ).filter( ( s ) => 'true' === s.getAttribute( 'contenteditable' ) && s.closest( '.minn-slot-island' ) === el );": 'flushSlotIsland: el is real; Minn-rendered slots of that island',
 	"if ( el.classList.contains( 'minn-cols-island' ) ) {": 'flushSlotIsland: el is real',
@@ -163,6 +164,43 @@ src.forEach( ( line, i ) => {
 check( 'every island-class or Minn-marker lookup goes through the helpers or is reviewed', 0 === unlisted.length, unlisted.length ? '\n      ' + unlisted.join( '\n      ' ) : '' );
 const stale = Object.keys( REVIEWED ).filter( ( t ) => ! seen.has( t ) );
 check( 'every reviewed line still exists (remove the ones that do not)', 0 === stale.length, stale.join( ' | ' ).slice( 0, 400 ) );
+
+// A container slot is found through minnSlotOf() / isMinnSlot(): content can
+// wear the class, and a block moved, pasted or seeded into a look-alike lands
+// where the save does not read. A bare lookup is listed here with its reason.
+const SLOT_LOOKUP = /(closest|querySelector(All)?|\$\$?)\(\s*'[^']*\.minn-slot(?![a-z-])/;
+const SLOT_REVIEWED = {
+	"let s = el && el.closest ? el.closest( '.minn-slot' ) : null;": 'minnSlotOf() itself',
+	"while ( s && ! isMinnSlot( s ) ) s = s.parentElement ? s.parentElement.closest( '.minn-slot' ) : null;": 'minnSlotOf() itself',
+	"const domCols = $$( '.minn-slot', island )": 'slot island rendering: the island was just built by Minn',
+	"stampSlotDirtyFor( holder.querySelector( '.minn-slot' ) );": 'slot island rendering: the holder was just built by Minn; the stamp re-checks',
+	"const slot = el.querySelector( '.minn-slot' );": 'slot island rendering: the element was just built by Minn',
+	"? nodeEl( range.startContainer ).closest( '.minn-slot, .minn-island-run' ) : null;": 'selection clamp: read only, narrows a selection',
+	"? nodeEl( range.endContainer ).closest( '.minn-slot, .minn-island-run' ) : null;": 'selection clamp: read only, narrows a selection',
+	"const slot = islandEl.parentElement && islandEl.parentElement.closest( '.minn-slot' );": 'islandSiblingSlots: tested editable and inside a real Columns island on the next lines',
+	"if ( e.target.closest && e.target.closest( '.minn-slot' ) ) {": 'input gate: stampSlotDirtyFor() re-checks with minnSlotOf()',
+	"const wrap = img.closest( '.minn-block-island, .minn-slot' );": 'image chip context: read only (chip placement)',
+	"const wrap = a.closest( '.minn-block-island, .minn-slot' );": 'link chip context: read only',
+	"const wrap = table.closest( '.minn-block-island, .minn-slot' );": 'table chip context: read only',
+	"const slots = $$( '.minn-slot', el ).filter( ( s ) => 'true' === s.getAttribute( 'contenteditable' ) && s.closest( '.minn-slot-island' ) === el );": "flushSlotIsland: el is real; editable slots of that island only",
+	"return { slot, slots: $$( '.minn-slot', colsIsland ).filter( ( s ) => realSlot( s ) && s.closest( '.minn-slot-island' ) === colsIsland ) };": "islandSiblingSlots: editable slots of a real Columns island",
+	"const box = e.target.closest ? e.target.closest( '#minn-editor-body > figure.wp-block-table, #minn-editor-body > table, #minn-editor-body > figure.wp-block-image, #minn-editor-body > img, #minn-editor-body > pre:not(.wp-block-verse):not(.wp-block-preformatted), .minn-slot > figure.wp-block-table, .minn-slot > table, .minn-slot > figure.wp-block-image, .minn-slot > img, .minn-slot > pre:not(.wp-block-verse):not(.wp-block-preformatted)' ) : null;": "chip hover target: read only (which block a chip highlights)",
+};
+const slotSeen = new Set();
+const slotUnlisted = [];
+src.forEach( ( line, i ) => {
+	if ( ! SLOT_LOOKUP.test( line ) ) return;
+	const t = line.trim();
+	if ( /filter\( isMinnSlot \)/.test( t ) ) return;
+	if ( Object.prototype.hasOwnProperty.call( SLOT_REVIEWED, t ) ) {
+		slotSeen.add( t );
+		return;
+	}
+	slotUnlisted.push( `app.js:${ i + 1 }  ${ t.slice( 0, 140 ) }` );
+} );
+check( 'every container-slot lookup goes through minnSlotOf() / isMinnSlot() or is reviewed', 0 === slotUnlisted.length, slotUnlisted.length ? '\n      ' + slotUnlisted.join( '\n      ' ) : '' );
+const slotStale = Object.keys( SLOT_REVIEWED ).filter( ( t ) => ! slotSeen.has( t ) );
+check( 'every reviewed slot line still exists', 0 === slotStale.length, slotStale.join( ' | ' ).slice( 0, 400 ) );
 
 // The island write paths each prove the island is real themselves, so a
 // caller that found it by class cannot hand them a look-alike.

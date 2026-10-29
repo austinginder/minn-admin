@@ -35827,7 +35827,7 @@
 	function liftNestedLists( body ) {
 		// Container slots are mini-bodies — lift within each slot too, or a
 		// markdown "- " inside a group would serialize as <p><ul>.
-		[ body, ...$$( '.minn-slot', body ) ].forEach( ( root ) => {
+		[ body, ...$$( '.minn-slot', body ).filter( isMinnSlot ) ].forEach( ( root ) => {
 			$$( ':scope > p > ul, :scope > p > ol', root ).forEach( ( l ) => {
 				const p = l.parentNode;
 				if ( p.textContent === l.textContent ) p.replaceWith( l );
@@ -37529,7 +37529,7 @@
 		ensureTrailingParagraph( body );
 		// Container slots need the same terminal affordance as the body — a
 		// slot ending in a table/figure/quote is otherwise untypeable-below.
-		$$( '.minn-slot', body ).forEach( ensureTrailingParagraph );
+		$$( '.minn-slot', body ).filter( isMinnSlot ).forEach( ensureTrailingParagraph );
 		const words = countEditorWords( body );
 		const ed = state.editor;
 		// While clean, keep re-basing so late island previews don't count as
@@ -45459,7 +45459,7 @@
 		// Per block root (body + every container slot), the liftNestedLists
 		// shape — a table/image/code block inside a group or column is a
 		// direct child of its slot, not the body, and earns the same chip.
-		[ body, ...$$( '.minn-slot', body ) ].forEach( ( root ) => {
+		[ body, ...$$( '.minn-slot', body ).filter( isMinnSlot ) ].forEach( ( root ) => {
 			$$( ':scope > table, :scope > figure.wp-block-table table', root ).forEach( ( t ) => targets.push( { el: t, kind: 'table' } ) );
 			$$( ':scope > figure.wp-block-image img, :scope > img', root ).forEach( ( i ) => targets.push( { el: i, kind: 'image' } ) );
 			// Code blocks ride the same persistent chips as tables/images — the
