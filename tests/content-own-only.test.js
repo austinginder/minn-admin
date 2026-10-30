@@ -34,6 +34,7 @@ async function contentCounts( page ) {
 			badge: badge && ! badge.hidden ? num( badge ) : 0,
 			meta: num( meta ),
 			rows: document.querySelectorAll( '.minn-table-row[data-id]' ).length,
+			paged: document.querySelectorAll( '.minn-pager-btn[data-pg]' ).length > 1,
 		};
 	} );
 }
@@ -80,7 +81,11 @@ async function contentCounts( page ) {
 		/* ===== The editor: unchanged, sees every author's work ===== */
 		const e = await loginAs( browser, EDITOR.user, EDITOR.pass );
 		const ec = await contentCounts( e.page );
-		t.check( 'editor count still matches its rows', ec.meta === ec.rows, `meta ${ ec.meta } vs rows ${ ec.rows }` );
+		// The editor's list can outgrow one page on a busy lab; then the
+		// count describes every page and the badge must agree with it.
+		t.check( 'editor count still matches its rows',
+			ec.paged ? ec.meta === ec.badge && ec.rows > 0 && ec.rows < ec.meta : ec.meta === ec.rows,
+			`meta ${ ec.meta } vs rows ${ ec.rows }, badge ${ ec.badge }, paged ${ ec.paged }` );
 		t.check( 'editor sees more than the author does', ec.rows > ac.rows, `${ ec.rows } vs ${ ac.rows }` );
 		const eTitles = await e.page.evaluate( () =>
 			[ ...document.querySelectorAll( '.minn-table-row[data-id] .minn-row-title' ) ].map( ( el ) => el.textContent.trim() )
