@@ -47513,7 +47513,7 @@
 		try { doc = new DOMParser().parseFromString( html, 'text/html' ); } catch ( e ) { return false; }
 		if ( ! doc || ! doc.body || doc.body.textContent.trim() ) return false;
 		const imgs = Array.from( doc.body.querySelectorAll( 'img' ) );
-		if ( ! imgs.length || doc.body.querySelector( 'video, audio, iframe, table, picture source' ) ) return false;
+		if ( ! imgs.length || doc.body.querySelector( 'video, audio, iframe, table, picture > source' ) ) return false;
 		return 1 === imgs.length || imgs.every( ( img ) => /^data:/i.test( img.getAttribute( 'src' ) || '' ) );
 	}
 
