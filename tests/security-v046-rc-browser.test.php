@@ -250,7 +250,9 @@ try {
 		$u = new WP_User( $uid );
 		$u->add_cap( 'gravitysmtp_view_email_log_preview' );
 		$become( $uid );
-		$check( '01-1 Gravity SMTP control: grant the preview cap and the same role browses them', $shown( $gs ) );
+		// The raw tables hold bodies whole, so they also wait on reading mail
+		// whole (minn_admin_mail_bodies_open), which this role cannot.
+		$check( '01-1 Gravity SMTP: the preview cap alone leaves the raw tables shut to a role that cannot read mail whole', $hidden( $gs ) && ( ! $logs || $hidden( $logs ) ) );
 		$u->remove_cap( 'gravitysmtp_view_email_log_preview' );
 		$become( $admin );
 		$check( '01-1 Gravity SMTP control: an administrator still browses them', $shown( $gs ) );

@@ -268,9 +268,17 @@ if ( ! $admin || ! current_user_can( 'manage_options' ) || ( is_multisite() && !
 			$skip( '#7 WP Mail Logging inactive' );
 		} else {
 			minn_admin_wpml_can(); // loads their settings into $wpml_settings
-			$check( '#7 WP Mail Logging control: its default capability (manage_options) lets the probe role browse its mails', minn_admin_wpml_can() && $shown( $ml ) );
+			list( $open ) = $call( 'GET', '/minn-admin/v1/wpml/emails' );
+			$check( "#7 WP Mail Logging control: its default capability (manage_options) lets the probe role list its mails (Minn's: {$open})", minn_admin_wpml_can() && 200 === $open );
+			// The raw table holds bodies whole, so it also waits on reading
+			// mail whole (minn_admin_mail_bodies_open), which this role cannot.
+			$check( '#7 WP Mail Logging: the raw table stays shut to a role that cannot read mail whole', $hidden( $ml ) );
 			$GLOBALS['wpml_settings'] = array_merge( (array) ( $GLOBALS['wpml_settings'] ?? array() ), array( 'can-see-submission-data' => 'manage_woocommerce' ) );
-			$check( '#7 WP Mail Logging: raise its capability and its mails are left out', ! minn_admin_wpml_can() && $hidden( $ml ) );
+			list( $shut ) = $call( 'GET', '/minn-admin/v1/wpml/emails' );
+			$check( "#7 WP Mail Logging: raise its capability and its mails are left out (Minn's: {$shut})", ! minn_admin_wpml_can() && 403 === $shut && $hidden( $ml ) );
+			$become( $admin );
+			$check( '#7 WP Mail Logging control: an administrator who reads mail whole browses them', $shown( $ml ) );
+			$become( $uid );
 		}
 
 		// Activity Log (Aryo): its role scoping, whole or not at all.
