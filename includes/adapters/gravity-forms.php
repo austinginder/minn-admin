@@ -1604,14 +1604,16 @@ function minn_admin_gf_form_settings_save( WP_REST_Request $request ) {
 	}
 	$body = $request->get_json_params();
 	$vals = isset( $body['values'] ) && is_array( $body['values'] ) ? $body['values'] : array();
-	// Nothing to change: answer with the form as stored. A write would still
-	// restamp it with the running Gravity Forms version.
-	if ( ! $vals ) {
-		return rest_ensure_response( minn_admin_gf_form_settings_shape( $form ) );
-	}
 
 	$mapped = minn_admin_gf_map_form_settings( $form );
 	$spec   = $mapped['spec'];
+	// Never write a key the live schema doesn't declare. With none left there
+	// is nothing to change: answer with the form as stored, since a write
+	// would still restamp it with the running Gravity Forms version.
+	$vals = array_intersect_key( $vals, $spec );
+	if ( ! $vals ) {
+		return rest_ensure_response( minn_admin_gf_form_settings_shape( $form ) );
+	}
 
 	// Title mirrors GF's own validation: required, unique across forms
 	// (their screen refuses; GFAPI would silently rename to "title(2)").
@@ -1631,9 +1633,6 @@ function minn_admin_gf_form_settings_save( WP_REST_Request $request ) {
 	$save_enabled_before = ! empty( $form['save']['enabled'] );
 
 	foreach ( $vals as $key => $value ) {
-		if ( ! isset( $spec[ $key ] ) ) {
-			continue; // never write a key the live schema doesn't declare
-		}
 		$s = $spec[ $key ];
 		switch ( $s['type'] ) {
 			case 'toggle':
