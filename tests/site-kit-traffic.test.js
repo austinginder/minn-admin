@@ -4,13 +4,14 @@
  * Google API response (rest_pre_dispatch at 1000); the adapter's gate,
  * rest_do_request, flattening, mapping and caching all run for real.
  */
-const { BASE, launch, login, reporter } = require( './helpers' );
+const { BASE, launch, login, reporter, preferChart } = require( './helpers' );
 
 ( async () => {
 	const { browser, page, errors } = await launch();
 	const t = reporter( 'site-kit-traffic' );
 
 	await login( page );
+	await preferChart( page, 'traffic' );
 
 	// Write-then-verify with retries: on this stack a REST settings write
 	// can be lost when it races the app's parallel boot requests (observed

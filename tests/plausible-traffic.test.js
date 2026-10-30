@@ -4,12 +4,13 @@
  * shared-link validation, request construction, mapping and caching run for
  * real. Plausible rests installed-inactive and Koko remains the resident.
  */
-const { BASE, launch, login, reporter } = require( './helpers' );
+const { BASE, launch, login, reporter, preferChart } = require( './helpers' );
 
 ( async () => {
 	const { browser, page, errors } = await launch();
 	const t = reporter( 'plausible-traffic' );
 	await login( page );
+	await preferChart( page, 'traffic' );
 
 	const setOpt = async ( value ) => {
 		for ( let attempt = 1; attempt <= 5; attempt++ ) {

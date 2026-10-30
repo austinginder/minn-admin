@@ -13,7 +13,7 @@
  */
 const http = require( 'http' );
 const querystring = require( 'querystring' );
-const { BASE, launch, login, reporter } = require( './helpers' );
+const { BASE, launch, login, reporter, preferChart } = require( './helpers' );
 
 const TOKEN = 'minnfixturetoken';
 
@@ -86,6 +86,7 @@ const fakeMatomo = () => new Promise( ( resolve ) => {
 	const fake = await fakeMatomo();
 
 	await login( page );
+	await preferChart( page, 'traffic' );
 
 	const setOpt = async ( v ) => {
 		for ( let attempt = 1; attempt <= 5; attempt++ ) {

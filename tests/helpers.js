@@ -469,6 +469,14 @@ async function leaveEntry( page ) {
 	await page.waitForSelector( '.minn-table, .minn-empty', { timeout: 60000 } );
 }
 
+// The Overview chart opens on Sales on a store and remembers the last pick,
+// so a suite about the traffic chart asks for it before Overview loads.
+async function preferChart( page, source ) {
+	await page.context().addInitScript( ( s ) => {
+		try { localStorage.setItem( 'minn-chart-source', s ); } catch ( e ) { /* ignore */ }
+	}, source );
+}
+
 // A list view switch (Entries → Forms) repaints the old rows dimmed and
 // inert (.minn-busy) until the new collection lands; an evaluate-click
 // ignores pointer-events, so wait for the fresh rows before clicking one.
@@ -479,4 +487,4 @@ async function listSettled( page, timeout = 60000 ) {
 	}, null, { timeout } );
 }
 
-module.exports = { BASE, WP, onExit, launch, login, loginAs, createPost, deletePost, openEditor, freshParagraph, autoConfirm, reporter, closeBrowser, activateClassicTheme, pickCombo, comboValue, setSwitch, switchOn, loadAuthState, saveAuthState, authPath, openEntry, entryActions, entryAction, entryText, leaveEntry, listSettled };
+module.exports = { BASE, WP, onExit, launch, login, loginAs, createPost, deletePost, openEditor, freshParagraph, autoConfirm, reporter, closeBrowser, activateClassicTheme, pickCombo, comboValue, setSwitch, switchOn, loadAuthState, saveAuthState, authPath, openEntry, entryActions, entryAction, entryText, leaveEntry, listSettled, preferChart };

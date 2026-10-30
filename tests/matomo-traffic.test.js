@@ -6,7 +6,7 @@
  * mocked. Matomo rests installed-inactive (Koko is the resident provider);
  * the suite activates it, deactivates Koko for the run, and restores both.
  */
-const { BASE, launch, login, reporter } = require( './helpers' );
+const { BASE, launch, login, reporter, preferChart } = require( './helpers' );
 const { execFileSync } = require( 'child_process' );
 const path = require( 'path' );
 
@@ -30,6 +30,7 @@ const prewarmMatomo = () => {
 	const t = reporter( 'matomo-traffic' );
 
 	await login( page );
+	await preferChart( page, 'traffic' );
 
 	const setOpt = async ( key, v ) => {
 		for ( let attempt = 1; attempt <= 5; attempt++ ) {

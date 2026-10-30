@@ -7,13 +7,14 @@
  * Koko stays active (the fixture's priority-16 reset lets the 20-priority
  * Jetpack adapter answer, the Site Kit fixture convention).
  */
-const { BASE, launch, login, reporter } = require( './helpers' );
+const { BASE, launch, login, reporter, preferChart } = require( './helpers' );
 
 ( async () => {
 	const { browser, page, errors } = await launch();
 	const t = reporter( 'jetpack-stats-traffic' );
 
 	await login( page );
+	await preferChart( page, 'traffic' );
 
 	const setOpt = async ( v ) => {
 		for ( let attempt = 1; attempt <= 5; attempt++ ) {

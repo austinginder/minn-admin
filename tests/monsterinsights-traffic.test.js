@@ -8,7 +8,7 @@
  * stays active (the fixture's priority-13 reset lets the 14-priority adapter
  * answer, the Jetpack fixture convention).
  */
-const { BASE, launch, login, reporter } = require( './helpers' );
+const { BASE, launch, login, reporter, preferChart } = require( './helpers' );
 
 // `name` is the source label the adapter emits; `label` names the leg. The
 // Pro build shares Lite's prefix and label, and cannot run alongside Lite.
@@ -23,6 +23,7 @@ const FAMILY = [
 	const t = reporter( 'monsterinsights-traffic' );
 
 	await login( page );
+	await preferChart( page, 'traffic' );
 
 	const setOpt = async ( v ) => {
 		for ( let attempt = 1; attempt <= 5; attempt++ ) {
@@ -149,8 +150,11 @@ const FAMILY = [
 			t.check( `${ f.label }: Open ${ f.name } escape hatch offered`, day.text.includes( `Open ${ f.name }` ) );
 			await page.keyboard.press( 'Escape' );
 
-			const to = new Date().toISOString().slice( 0, 10 );
-			const fromD = new Date( Date.now() - 6 * 86400000 ).toISOString().slice( 0, 10 );
+			// MonsterInsights refuses an end date past today in the site's
+			// timezone, and today in UTC is already tomorrow there each
+			// evening west of UTC; a window ending yesterday is past everywhere.
+			const to = new Date( Date.now() - 86400000 ).toISOString().slice( 0, 10 );
+			const fromD = new Date( Date.now() - 7 * 86400000 ).toISOString().slice( 0, 10 );
 			const rep = await restGet( `minn-admin/v1/stats/report?from=${ fromD }&to=${ to }` );
 			const secs = ( rep.body && rep.body.sections ) || [];
 			const ids = secs.map( ( s ) => s.id );
