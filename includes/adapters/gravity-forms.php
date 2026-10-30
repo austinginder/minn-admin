@@ -1604,6 +1604,11 @@ function minn_admin_gf_form_settings_save( WP_REST_Request $request ) {
 	}
 	$body = $request->get_json_params();
 	$vals = isset( $body['values'] ) && is_array( $body['values'] ) ? $body['values'] : array();
+	// Nothing to change: answer with the form as stored. A write would still
+	// restamp it with the running Gravity Forms version.
+	if ( ! $vals ) {
+		return rest_ensure_response( minn_admin_gf_form_settings_shape( $form ) );
+	}
 
 	$mapped = minn_admin_gf_map_form_settings( $form );
 	$spec   = $mapped['spec'];
