@@ -30,8 +30,12 @@ const { BASE, launch, login, reporter } = require( './helpers' );
 	// the dying instance's fallback burst would pollute the request count.
 	await page.waitForTimeout( 4500 );
 	reqs.length = 0;
+	// boot-status can take several seconds on a lab whose updaters fetch
+	// their manifests on every transient read; the badges wait for it.
+	const booted = page.waitForResponse( ( r ) => r.url().includes( 'minn-admin/v1/boot-status' ), { timeout: 60000 } ).catch( () => null );
 	await page.goto( BASE + '/minn-admin/overview', { waitUntil: 'domcontentloaded' } );
 	await page.waitForSelector( '.minn-nav-btn', { timeout: 15000 } );
+	await booted;
 	// Let the boot settle (boot-status + content warm + overview loads).
 	await page.waitForTimeout( 3500 );
 
