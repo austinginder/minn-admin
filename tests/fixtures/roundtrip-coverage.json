@@ -314,7 +314,8 @@
         },
         "POST /minn-admin/v1/cf7/forms/(?P<id>\\d+)/mail/preview": {
             "kind": "action",
-            "why": "A one-shot action: it carries no loaded values back."
+            "why": "A one-shot action: it carries no loaded values back. The mail page asks for it on a short timer after loading, so the pages pass records it only when that lands inside the capture.",
+            "pass": "pages (cf7-form)"
         },
         "POST /minn-admin/v1/cf7/messages/(?P<id>\\d+)/restore": {
             "kind": "action",
