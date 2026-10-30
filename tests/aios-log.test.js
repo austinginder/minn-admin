@@ -32,8 +32,8 @@ const wp = ( args ) => execSync(
 
 		// Seed one warning + one info event through AIOS's own recorder so the
 		// row shape is exactly what the plugin writes (details JSON included).
-		wp( `eval "do_action( 'aiowps_record_event', 'user_login', array( 'user_login' => array( 'user' => 'minn-suite' ) ), 'warning' );"` );
-		wp( `eval "do_action( 'aiowps_record_event', 'setting_changed', array( 'setting_changed' => array( 'name' => 'minn_probe' ) ), 'info' );"` );
+		wp( `eval "do_action( 'aios_record_event', 'user_login', array( 'user_login' => array( 'user' => 'minn-suite' ) ), 'warning' );"` );
+		wp( `eval "do_action( 'aios_record_event', 'setting_changed', array( 'setting_changed' => array( 'name' => 'minn_probe' ) ), 'info' );"` );
 
 		const api = ( p ) => page.evaluate( async ( pathArg ) => {
 			const r = await fetch( window.MINN.restUrl + pathArg + ( pathArg.includes( '?' ) ? '&' : '?' ) + '_cb=' + Math.random(), {
@@ -95,7 +95,7 @@ $wpdb->insert( $perm, array(
 	'country_origin' => '', 'blocked_date' => current_time( 'mysql' ),
 	'created' => time(), 'unblock' => 0,
 ) );
-do_action( 'aiowps_record_event', 'failed_login', array( 'failed_login' => array( 'username' => 'minn-suite-fail', 'known' => false ) ), 'warning', 'minn-suite-fail' );
+do_action( 'aios_record_event', 'failed_login', array( 'failed_login' => array( 'username' => 'minn-suite-fail', 'known' => false ) ), 'warning', 'minn-suite-fail' );
 ` );
 		try {
 			wp( `eval-file ${ JSON.stringify( seedPhp ) }` );
