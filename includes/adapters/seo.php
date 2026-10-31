@@ -2008,6 +2008,12 @@ function minn_admin_seo_shows_for_type( $plugin, $post_type ) {
 		// the box switched off for it. A type it never boxes (a non-public
 		// type with REST) is as closed as one switched off.
 		if ( 'Yoast SEO' === $name && class_exists( 'WPSEO_Options' ) ) {
+			// Yoast's own metabox test: an accessible type, attachments not
+			// switched off, the switch, and wpseo_enable_editor_features_{type}
+			// over all of it.
+			if ( class_exists( 'WPSEO_Utils' ) && method_exists( 'WPSEO_Utils', 'is_metabox_active' ) ) {
+				return (bool) WPSEO_Utils::is_metabox_active( $post_type, 'post_type' );
+			}
 			if ( class_exists( 'WPSEO_Post_Type' ) && method_exists( 'WPSEO_Post_Type', 'get_accessible_post_types' )
 				&& ! in_array( $post_type, (array) WPSEO_Post_Type::get_accessible_post_types(), true ) ) {
 				return false;
@@ -2035,6 +2041,16 @@ function minn_admin_seo_shows_for_type( $plugin, $post_type ) {
 			return (bool) aioseo()->dynamicOptions->noConflict()->searchAppearance->postTypes->{$post_type}->advanced->showMetaBox;
 		}
 		if ( 'SEOPress' === $name || 'SEOPress PRO' === $name ) {
+			// SEOPress boxes only its own type list (public, viewable, minus
+			// its exclusions) as seopress_metaboxe_seo leaves it, the same
+			// list its REST role restriction reads; then the per-type switch.
+			// Its redirections type (seopress_404) is boxed apart from the list.
+			if ( 'seopress_404' !== $post_type && function_exists( 'seopress_get_service' ) ) {
+				$boxed = apply_filters( 'seopress_metaboxe_seo', seopress_get_service( 'WordPressData' )->getPostTypes() );
+				if ( ! is_array( $boxed ) || ! array_key_exists( $post_type, $boxed ) ) {
+					return false;
+				}
+			}
 			// 'enable' is "Disable SEO metabox": '1' means off.
 			$titles = get_option( 'seopress_titles_option_name' );
 			$key    = 'seopress_titles_single_titles';
@@ -2049,10 +2065,16 @@ function minn_admin_seo_shows_for_type( $plugin, $post_type ) {
 			$titles = get_option( 'siteseo_titles_option_name' );
 			return empty( $titles['titles_single_titles'][ $post_type ]['disabled'] );
 		}
-		// SureRank and Squirrly ship no per-post-type metabox switch, so there
-		// is nothing to mirror: their controls appear on every type that
-		// supports the editor. Recorded here so the next sweep does not read
-		// their absence as an oversight.
+		// SureRank has no switch in its settings, but its own box test drops
+		// the types it excludes (surerank_excluded_post_types_from_seo_checks).
+		if ( 'SureRank' === $name && class_exists( '\SureRank\Inc\Admin\Seo_Bar' )
+			&& method_exists( '\SureRank\Inc\Admin\Seo_Bar', 'display_metabox' ) ) {
+			return (bool) \SureRank\Inc\Admin\Seo_Bar::display_metabox( $post_type, 'wp_posts' );
+		}
+		// Squirrly ships no per-post-type switch for its SEO fields (its
+		// sq_sla_exclude_post_types list hides the Live Assistant, a writing
+		// aid, not the fields), so there is nothing to mirror. Recorded here
+		// so the next sweep does not read its absence as an oversight.
 	} catch ( \Throwable $e ) {
 		return true; // their internals moved; behave as before
 	}
