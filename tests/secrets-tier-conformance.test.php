@@ -1162,25 +1162,22 @@ $named_not_secret = array(
 	'wp_full_pay_reference_key'               => 'Themeisle SDK: an affiliate reference from a promotion link',
 	'easy_mcp_reference_key'                  => 'Themeisle SDK: an affiliate reference from a promotion link',
 	'feedzy_reference_key'                    => 'Themeisle SDK: an affiliate reference from a promotion link',
+	'cff_license_data'                        => 'Custom Facebook Feed: the licence server\'s answer (status, expiry, customer), which does not hold the key',
+	'cff_license_status_album'                => 'Custom Facebook Feed: an extension licence\'s status word',
+	'cff_license_status_extensions'           => 'Custom Facebook Feed: an extension licence\'s status word',
+	'cff_license_status_multifeed'            => 'Custom Facebook Feed: an extension licence\'s status word',
+	'cff_license_status_ext_reviews'          => 'Custom Facebook Feed: an extension licence\'s status word',
+	'cff_license_status_ext_carousel'         => 'Custom Facebook Feed: an extension licence\'s status word',
+	'cff_license_status_featured_post'        => 'Custom Facebook Feed: an extension licence\'s status word',
+	'cff_check_license_api_post_grace_period' => 'Custom Facebook Feed: a flag',
+	'cff_islicence_upgraded'                  => 'Custom Facebook Feed: a flag',
+	'cff_license_last_check_timestamp'        => 'Custom Facebook Feed: a time',
+	'cff_show_access_token'                   => 'Custom Facebook Feed: a switch (use your own token), not the token',
 );
 // Rows that hold a key and belong to an integration file outside the change
 // that added this part. Each is owed a declaration in its adapter; one that
 // becomes covered fails until it leaves this list, so the list only shrinks.
-$named_owed = array(
-	'fluentform_stripe_webhook_secret'         => 'fluent-forms.php: Stripe webhook signing secret',
-	'ninja_forms_oauth_client_secret'          => 'ninja-forms.php: OAuth client secret for its add-on service',
-	'everest_forms_ai_api_key'                 => 'everest-forms.php: AI provider API key',
-	'everest_forms_restapi_keys'               => 'everest-forms.php: the key its entry submission REST route checks',
-	'everest_forms_admin_entry_approval_token' => 'everest-forms.php: entry approval link tokens',
-	'ss_podcasting_protection_password'        => 'seriously-simple-podcasting.php: the private feed\'s password',
-	'wp_statistics_daily_salt'                 => 'wp-statistics.php: the salt it hashes visitor IPs with (the peer of iawp_salt)',
-	'jetpack_forms_secret_key'                 => 'jetpack-stats.php: the key Jetpack Forms signs with',
-	'jetpack_protect_key'                      => 'jetpack-stats.php: the Protect API key',
-	'bruteprotect_api_key'                     => 'jetpack-stats.php: the older Protect API key',
-	'updraftplus_migration_temp_password'      => 'updraftplus.php: a migration\'s temporary password',
-	'updraftplus_product_key'                  => 'updraftplus.php: the product (licence) key',
-	'cff_oembed_token'                         => 'seo.php (All in One SEO reads it): Smash Balloon\'s Facebook oEmbed access token',
-);
+$named_owed = array();
 $credential_name = static function ( $name ) use ( $credential_leaf ) {
 	return $credential_leaf( '', 'Vx9' . str_repeat( 'a', 9 ), $name );
 };

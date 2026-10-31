@@ -44,6 +44,18 @@
 
 defined( 'ABSPATH' ) || exit;
 
+/*
+ * Smash Balloon's feeds keep a Facebook access token for oEmbeds in rows
+ * shared across its products (Instagram Feed writes the Facebook one, Custom
+ * Facebook Feed both, and All in One SEO reads the Facebook one), and Custom
+ * Facebook Feed its older account and page access tokens, and the licence
+ * key of each of its older extensions (cff_license_key_{extension}; the main
+ * key is in minn_admin_license_secret_options()). No adapter of their own
+ * sits beside them; this file is the one that reads Smash Balloon. Declared
+ * whether or not a feed is active (its rows outlive it).
+ */
+minn_admin_secrets( 'custom-facebook-feed-pro', array( 'options' => array( 'cff_oembed_token', 'sbi_oembed_token', 'cff_access_token', 'cff_page_access_token', 'cff_license_key_*' ) ) );
+
 /**
  * Read a property from a value that may be an object (including
  * __PHP_Incomplete_Class when the vendor's classes are not loaded) or an

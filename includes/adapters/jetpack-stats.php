@@ -44,10 +44,12 @@ function minn_admin_jetpack_stats_ready() {
 /*
  * Jetpack's connection: the blog token and each user's token (a user token
  * signs REST requests as that user and outlives a password change), and the
- * secrets of a connection being made. Declared whether or not Jetpack is
- * active or connected (its rows outlive it).
+ * secrets of a connection being made; the key Jetpack Forms signs with when
+ * the connection gives it none, and Protect's API key (a network option)
+ * with the older BruteProtect one it still sends. Declared whether or not
+ * Jetpack is active or connected (its rows outlive it).
  */
-minn_admin_secrets( 'jetpack', array( 'options' => array( 'jetpack_private_options', 'jetpack_secrets' ) ) );
+minn_admin_secrets( 'jetpack', array( 'options' => array( 'jetpack_private_options', 'jetpack_secrets', 'jetpack_forms_secret_key', 'jetpack_protect_key', 'bruteprotect_api_key' ) ) );
 
 add_filter( 'minn_admin_traffic', function ( $traffic, $days ) {
 	if ( null !== $traffic || ! minn_admin_jetpack_stats_ready() ) {

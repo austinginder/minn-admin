@@ -26,8 +26,11 @@
 defined( 'ABSPATH' ) || exit;
 
 // Everest Forms' captcha secrets (reCAPTCHA v2, invisible and v3, hCaptcha,
-// Turnstile) and its CleanTalk access key.
-minn_admin_secrets( 'everest-forms', array( 'options' => array( 'everest_forms_recaptcha_v2_secret_key', 'everest_forms_recaptcha_v2_invisible_secret_key', 'everest_forms_recaptcha_v3_secret_key', 'everest_forms_recaptcha_hcaptcha_secret_key', 'everest_forms_recaptcha_turnstile_secret_key', 'everest_forms_recaptcha_site_secret', 'everest_forms_recaptcha_cleantalk_access_key' ) ) );
+// Turnstile), its CleanTalk access key, its AI provider's API key, the key
+// its entry submission REST route admits a caller with (its own Advanced
+// settings tab shows it to who manages Everest; nothing in Minn serves it),
+// and the tokens of its entry approval links (each approves an entry).
+minn_admin_secrets( 'everest-forms', array( 'options' => array( 'everest_forms_recaptcha_v2_secret_key', 'everest_forms_recaptcha_v2_invisible_secret_key', 'everest_forms_recaptcha_v3_secret_key', 'everest_forms_recaptcha_hcaptcha_secret_key', 'everest_forms_recaptcha_turnstile_secret_key', 'everest_forms_recaptcha_site_secret', 'everest_forms_recaptcha_cleantalk_access_key', 'everest_forms_ai_api_key', 'everest_forms_restapi_keys', 'everest_forms_admin_entry_approval_token' ) ) );
 
 function minn_admin_everest_active() {
 	if ( ! function_exists( 'evf' ) && ! defined( 'EVF_VERSION' ) ) {

@@ -56,6 +56,9 @@ minn_admin_secrets(
 			'updraft_s3_pass', 'updraft_s3generic_pass', 'updraft_dreamobjects_pass', 'updraft_cloudfiles_apikey', 'updraft_ftp_pass',
 			'updraft_sftp_settings', 'updraft_webdav_settings',
 			'updraft_jobdata_*',
+			// The product (licence) key, and the hash of a migration's
+			// temporary password (a network option each).
+			'updraftplus_product_key', 'updraftplus_migration_temp_password',
 		),
 		'usermeta' => array( 'updraftcentral_login_key' ),
 	)

@@ -21,8 +21,9 @@
 
 defined( 'ABSPATH' ) || exit;
 
-// The Castos hosting API token (publishes and deletes episodes).
-minn_admin_secrets( 'seriously-simple-podcasting', array( 'options' => array( 'ss_podcasting_podmotor_account_api_token' ) ) );
+// The Castos hosting API token (publishes and deletes episodes), and the
+// private feed's password (an unsalted MD5 of it, which a lookup reverses).
+minn_admin_secrets( 'seriously-simple-podcasting', array( 'options' => array( 'ss_podcasting_podmotor_account_api_token', 'ss_podcasting_protection_password' ) ) );
 
 function minn_admin_ssp_active() {
 	return defined( 'SSP_VERSION' )

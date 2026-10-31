@@ -24,8 +24,9 @@
 
 defined( 'ABSPATH' ) || exit;
 
-// Ninja Forms keeps its reCAPTCHA secret inside its settings row.
-minn_admin_secrets( 'ninja-forms', array( 'options' => array( 'ninja_forms_settings' ) ) );
+// Ninja Forms keeps its reCAPTCHA secret inside its settings row, and the
+// client secret of its add-on service's OAuth connection in a row of its own.
+minn_admin_secrets( 'ninja-forms', array( 'options' => array( 'ninja_forms_settings', 'ninja_forms_oauth_client_secret' ) ) );
 
 function minn_admin_ninja_forms_active() {
 	return class_exists( 'Ninja_Forms' ) && Minn_Admin_Kernel_SQL::exists( 'nf3_forms' );
