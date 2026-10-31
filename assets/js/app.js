@@ -2422,8 +2422,12 @@
 	const RT_HTML_NS = 'http://www.w3.org/1999/xhtml';
 	// Never useful in stored content and each one is a way back to execution.
 	// A writer's own iframe sandbox is not among them: parking it loosened the
-	// frame. rtParkFrame keeps it, and tightens it, instead.
-	const RT_KILL_ATTRS = [ 'srcdoc', 'attributename', 'values', 'from', 'to', 'by', 'begin', 'http-equiv' ];
+	// frame. rtParkFrame keeps it, and tightens it, instead. The top-layer
+	// ones go whatever they point at: an open popover or a modal dialog is
+	// painted above the whole admin, past the containment every content host
+	// carries, and post kses lets every role write them.
+	const RT_KILL_ATTRS = [ 'srcdoc', 'attributename', 'values', 'from', 'to', 'by', 'begin', 'http-equiv',
+		'popover', 'popovertarget', 'popovertargetaction', 'command', 'commandfor', 'interestfor', 'interesttarget' ];
 
 	// Stored content (a post's, or a wysiwyg field's in the rich-text modal)
 	// reaches the editor body, the locked preview, island previews and the
