@@ -20,6 +20,13 @@
  * add-on types, which need their own controls. A value that changed since the
  * page loaded refuses the save (409) rather than overwrite it.
  *
+ * Every response masks a known credential's copies, so an answer holding one
+ * (a key pasted into a form) reaches the page as "[redacted:…]". The page's
+ * copy is compared with the stored answer as a read serves it
+ * (Minn_Admin_Egress::served_as()), so a masked answer is neither a conflict
+ * nor a change; entry meta has no restore, so an edited answer still holding
+ * a mask is refused before anything is written (refuse_masks()).
+ *
  * @package minn-admin
  */
 
@@ -182,6 +189,18 @@ function minn_admin_gf_entry_edit_block( $form, $entry ) {
 }
 
 /**
+ * Whether a value the page sent is the stored one as the page was served it:
+ * the same, or the same with each credential copy masked.
+ *
+ * @param mixed $sent   What the page sent.
+ * @param mixed $stored The stored value.
+ * @return bool
+ */
+function minn_admin_gfe_same( $sent, $stored ) {
+	return wp_json_encode( $sent ) === wp_json_encode( $stored ) || Minn_Admin_Egress::served_as( $sent, $stored );
+}
+
+/**
  * The stored value an edit turns into, through the field's own save
  * formatting. WP_Error names the input it refuses.
  *
@@ -301,18 +320,38 @@ add_action( 'rest_api_init', function () {
 				}
 				$e     = $editable[ $input_id ];
 				$field = GFAPI::get_field( $form, $e['row']['id'] );
-				// Refuse to overwrite a value someone changed since the page loaded.
-				if ( array_key_exists( $input_id, $original ) && wp_json_encode( $original[ $input_id ] ) !== wp_json_encode( $e['input']['value'] ) ) {
+				// Refuse to overwrite a value someone changed since the page
+				// loaded. The page holds it as served, a credential masked.
+				if ( array_key_exists( $input_id, $original ) && ! minn_admin_gfe_same( $original[ $input_id ], $e['input']['value'] ) ) {
 					return new WP_Error( 'minn_gfe_conflict', __( 'This entry changed since you opened it. Reload it to see the latest answers, then edit again.', 'minn-admin' ), array( 'status' => 409 ) );
 				}
 				// An answer sent back as the page read it stays as stored:
 				// preparing it first turned a ticked box holding a choice
-				// since renamed into the new name, and trimmed text.
+				// since renamed into the new name, trimmed text, and a masked
+				// credential into its placeholder.
 				$as_read = 'checks' === $e['row']['kind']
 					? (bool) $value === ( '' !== (string) $e['input']['value'] )
-					: wp_json_encode( is_scalar( $value ) ? (string) $value : $value ) === wp_json_encode( $e['input']['value'] );
+					: minn_admin_gfe_same( is_scalar( $value ) ? (string) $value : $value, $e['input']['value'] );
 				if ( $as_read ) {
 					continue;
+				}
+				// A stored pick sent back masked is that pick, so ticking
+				// another box keeps it.
+				if ( 'multi' === $e['row']['kind'] && is_array( $value ) ) {
+					foreach ( $value as $i => $v ) {
+						foreach ( (array) $e['input']['value'] as $was ) {
+							if ( is_scalar( $v ) && minn_admin_gfe_same( (string) $v, (string) $was ) ) {
+								$value[ $i ] = (string) $was;
+								break;
+							}
+						}
+					}
+				}
+				// What is left of a mask was typed around or moved: saved, it
+				// would put the placeholder where the key was.
+				$masked = Minn_Admin_Egress::refuse_masks( array( $input_id => $value ), array( $input_id => $e['input']['value'] ) );
+				if ( $masked ) {
+					return $masked;
 				}
 				$stored = minn_admin_gfe_prepare( $form, $field, $e['row']['kind'], $e['input'], $value, $entry );
 				if ( is_wp_error( $stored ) ) {
