@@ -113,9 +113,22 @@ try {
 	}
 
 	// A type with REST that the provider never boxes (synced patterns are
-	// not public). SEOPress boxes by its switch alone.
-	if ( 'SEOPress' !== $name ) {
-		$check( "{$name}: a type it never boxes is closed", false === minn_admin_seo_shows_for_type( $plugin, 'wp_block' ) );
+	// not public).
+	$check( "{$name}: a type it never boxes is closed", false === minn_admin_seo_shows_for_type( $plugin, 'wp_block' ) );
+	// SEOPress boxes only the types its seopress_metaboxe_seo filter leaves,
+	// whatever the switch says.
+	if ( 'SEOPress' === $name ) {
+		$drop = function ( $types ) {
+			unset( $types['page'] );
+			return $types;
+		};
+		add_filter( 'seopress_metaboxe_seo', $drop );
+		try {
+			$check( "{$name}: a type its filter drops is closed with the switch on", false === minn_admin_seo_shows_for_type( $plugin, 'page' ) );
+		} finally {
+			remove_filter( 'seopress_metaboxe_seo', $drop );
+		}
+		$check( "{$name}: the filter gone, the type opens again (control)", true === minn_admin_seo_shows_for_type( $plugin, 'page' ) );
 	}
 } finally {
 	wp_delete_post( $page, true );
