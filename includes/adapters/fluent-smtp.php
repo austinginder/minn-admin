@@ -576,7 +576,7 @@ minn_admin_resource( 'fluent-smtp/emails', function () {
 			'search' => array( 'columns' => array( 'subject', 'from', 'to' ) ),
 			'range'  => array( 'column' => 'created_at', 'clock' => 'local' ),
 			'order'  => array( 'column' => 'id' ),
-			'row'    => function ( array $r ) {
+			'row'    => minn_admin_mail_masked( function ( array $r ) {
 				return array(
 					'id'         => (int) $r['id'],
 					'subject'    => $r['subject'],
@@ -585,7 +585,7 @@ minn_admin_resource( 'fluent-smtp/emails', function () {
 					'source'     => $r['source'],
 					'created_at' => $r['created_at'],
 				);
-			},
+			} ),
 			'fields' => array(
 				'id'         => 'int',
 				'subject'    => 'text',
@@ -599,8 +599,8 @@ minn_admin_resource( 'fluent-smtp/emails', function () {
 		// Every text in it is masked as the sections are: a provider's reply
 		// can quote the message, reset link included.
 		'item'    => array(
-			'view'   => function ( array $r ) {
-				return minn_admin_mail_mask_value( array(
+			'view'   => minn_admin_mail_masked( function ( array $r ) {
+				return array(
 					'id'         => (int) $r['id'],
 					'subject'    => $r['subject'],
 					'to'         => minn_admin_fluent_smtp_recipients( $r['to'] ),
@@ -611,8 +611,8 @@ minn_admin_resource( 'fluent-smtp/emails', function () {
 					'retries'    => (int) $r['retries'],
 					'created_at' => $r['created_at'],
 					'message'    => (string) $r['body'],
-				) );
-			},
+				);
+			} ),
 			'fields' => array(
 				'id'         => 'int',
 				'subject'    => 'text',

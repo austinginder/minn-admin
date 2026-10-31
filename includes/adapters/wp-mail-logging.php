@@ -213,7 +213,7 @@ minn_admin_resource( 'wpml/emails', function () {
 			// Both the bounds and the column are site-local.
 			'range'  => array( 'column' => 'timestamp', 'clock' => 'local' ),
 			'order'  => array( 'column' => 'mail_id' ),
-			'row'    => function ( array $r ) {
+			'row'    => minn_admin_mail_masked( function ( array $r ) {
 				return array(
 					'id'        => (int) $r['mail_id'],
 					'subject'   => $r['subject'] ? minn_admin_wpml_subject( $r['subject'] ) : __( '(no subject)', 'minn-admin' ),
@@ -221,7 +221,7 @@ minn_admin_resource( 'wpml/emails', function () {
 					'status'    => minn_admin_wpml_failed( $r ) ? 'failed' : 'sent',
 					'timestamp' => $r['timestamp'],
 				);
-			},
+			} ),
 			'fields' => array(
 				'id'        => 'int',
 				'subject'   => 'text',
@@ -234,8 +234,8 @@ minn_admin_resource( 'wpml/emails', function () {
 		// Every text in it is masked as the sections are: the raw headers
 		// and the mailer's error can quote the message, reset link included.
 		'item'    => array(
-			'view'   => function ( array $r ) {
-				return minn_admin_mail_mask_value( array(
+			'view'   => minn_admin_mail_masked( function ( array $r ) {
+				return array(
 					'id'          => (int) $r['mail_id'],
 					'subject'     => minn_admin_wpml_subject( $r['subject'] ),
 					'to'          => minn_admin_wpml_receivers( $r['receiver'] ),
@@ -246,8 +246,8 @@ minn_admin_resource( 'wpml/emails', function () {
 					'host'        => minn_admin_wpml_displays( 'display-host' ) && '0' !== (string) $r['host'] ? (string) $r['host'] : '',
 					'timestamp'   => $r['timestamp'],
 					'message'     => (string) $r['message'],
-				) );
-			},
+				);
+			} ),
 			'fields' => array(
 				'id'          => 'int',
 				'subject'     => 'text',

@@ -207,7 +207,7 @@ minn_admin_resource( 'post-smtp/emails', function () {
 			'search' => array( 'columns' => array( 'original_subject', 'original_to', 'to_header', 'from_header' ) ),
 			'range'  => array( 'column' => 'time', 'clock' => 'local-epoch' ),
 			'order'  => array( 'column' => 'id' ),
-			'row'    => function ( array $r ) {
+			'row'    => minn_admin_mail_masked( function ( array $r ) {
 				return array(
 					'id'      => (int) $r['id'],
 					'subject' => $r['original_subject'] ? $r['original_subject'] : __( '(no subject)', 'minn-admin' ),
@@ -215,7 +215,7 @@ minn_admin_resource( 'post-smtp/emails', function () {
 					'status'  => minn_admin_post_smtp_status( $r['success'] ),
 					'date'    => $r['time'],
 				);
-			},
+			} ),
 			'fields' => array(
 				'id'      => 'int',
 				'subject' => 'text',
@@ -225,8 +225,11 @@ minn_admin_resource( 'post-smtp/emails', function () {
 			),
 		),
 		// The flat item stays for API consumers; the app reads the sections.
+		// Every text in it is masked as the sections are: the error, the
+		// suggested solution and the transport can quote the message, reset
+		// link included.
 		'item'    => array(
-			'view'   => function ( array $r ) {
+			'view'   => minn_admin_mail_masked( function ( array $r ) {
 				$status = minn_admin_post_smtp_status( $r['success'] );
 				return array(
 					'id'        => (int) $r['id'],
@@ -238,9 +241,9 @@ minn_admin_resource( 'post-smtp/emails', function () {
 					'solution'  => (string) $r['solution'],
 					'transport' => (string) $r['transport_uri'],
 					'date'      => $r['time'],
-					'message'   => minn_admin_mail_mask_reset_keys( (string) $r['original_message'] ),
+					'message'   => (string) $r['original_message'],
 				);
-			},
+			} ),
 			'fields' => array(
 				'id'        => 'int',
 				'subject'   => 'text',

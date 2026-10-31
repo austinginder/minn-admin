@@ -129,7 +129,7 @@ minn_admin_resource( 'suremails/emails', function () {
 			'search' => array( 'columns' => array( 'subject', 'email_from', 'email_to' ) ),
 			'range'  => array( 'column' => 'created_at', 'clock' => 'local' ),
 			'order'  => array( 'column' => 'created_at' ),
-			'row'    => function ( array $r ) {
+			'row'    => minn_admin_mail_masked( function ( array $r ) {
 				return array(
 					'id'         => (int) $r['id'],
 					'subject'    => (string) $r['subject'],
@@ -137,7 +137,7 @@ minn_admin_resource( 'suremails/emails', function () {
 					'status'     => (string) $r['status'],
 					'created_at' => $r['created_at'],
 				);
-			},
+			} ),
 			'fields' => array(
 				'id'         => 'int',
 				'subject'    => 'text',

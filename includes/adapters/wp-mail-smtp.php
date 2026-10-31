@@ -133,7 +133,7 @@ minn_admin_resource( 'wp-mail-smtp/events', function () {
 			'search' => array( 'columns' => minn_admin_mail_bodies_open() ? array( 'content', 'initiator' ) : array( 'initiator' ) ),
 			'range'  => array( 'column' => 'created_at', 'clock' => 'utc' ),
 			'order'  => array( 'column' => 'id' ),
-			'row'    => function ( array $r ) {
+			'row'    => minn_admin_mail_masked( function ( array $r ) {
 				// Cut after the fence has seen it whole (Minn_Admin_Egress::clip()).
 				$content = Minn_Admin_Egress::clip( trim( preg_replace( '/\s+/', ' ', minn_admin_mail_mask_reset_keys( (string) $r['content'] ) ) ), 119 );
 				return array(
@@ -143,7 +143,7 @@ minn_admin_resource( 'wp-mail-smtp/events', function () {
 					'type'       => minn_admin_wp_mail_smtp_type( $r['event_type'] ),
 					'created_at' => $r['created_at'],
 				);
-			},
+			} ),
 			'fields' => array(
 				'id'         => 'int',
 				'content'    => 'text',
@@ -153,7 +153,7 @@ minn_admin_resource( 'wp-mail-smtp/events', function () {
 			),
 		),
 		'item'   => array(
-			'view'   => function ( array $r ) {
+			'view'   => minn_admin_mail_masked( function ( array $r ) {
 				return array(
 					'id'         => (int) $r['id'],
 					'initiator'  => minn_admin_wp_mail_smtp_initiator( $r['initiator'] ),
@@ -161,7 +161,7 @@ minn_admin_resource( 'wp-mail-smtp/events', function () {
 					'created_at' => $r['created_at'],
 					'message'    => minn_admin_mail_mask_reset_keys( (string) $r['content'] ),
 				);
-			},
+			} ),
 			'fields' => array(
 				'id'         => 'int',
 				'initiator'  => 'text',

@@ -118,6 +118,23 @@ function minn_admin_mail_sections( array $delivery, $subject, $body = null, arra
 }
 
 /**
+ * A mail log resource's list row or flat item builder, with every text it
+ * returns masked as the sections are (minn_admin_mail_mask_value()): a
+ * subject, a stored header, a mailer's error or a provider's reply can quote
+ * a reset link. Every mail log adapter wraps its 'row' and its item 'view'
+ * in this, so the next one cannot serve them raw;
+ * tests/security-v049-registry-followups.test.php fails on one that does not.
+ *
+ * @param callable $build The builder, called with the kernel's arguments.
+ * @return Closure
+ */
+function minn_admin_mail_masked( callable $build ) {
+	return function ( ...$args ) use ( $build ) {
+		return minn_admin_mail_mask_value( call_user_func_array( $build, $args ) );
+	};
+}
+
+/**
  * minn_admin_mail_mask_reset_keys() over a detail row's value: a string, or
  * every string inside an array (a kv-table).
  *

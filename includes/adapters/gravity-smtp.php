@@ -872,7 +872,7 @@ minn_admin_resource( 'gravity-smtp/events', function () {
 				}
 				return $map;
 			},
-			'row'    => function ( array $r, array $q ) {
+			'row'    => minn_admin_mail_masked( function ( array $r, array $q ) {
 				static $titles = array();
 				$slug = (string) $r['service'];
 				if ( ! isset( $titles[ $slug ] ) ) {
@@ -888,7 +888,7 @@ minn_admin_resource( 'gravity-smtp/events', function () {
 					'to'           => minn_admin_gravity_smtp_recipients( $r['extra'] ),
 					'can_resend'   => $q['batch'][ (int) $r['id'] ] ?? true,
 				);
-			},
+			} ),
 			'fields' => array(
 				'id'           => 'int',
 				'date_created' => array( 'type' => 'datetime', 'stored' => 'utc', 'wire' => 'sql' ),
@@ -903,7 +903,7 @@ minn_admin_resource( 'gravity-smtp/events', function () {
 		// The flat item stays for API consumers; the app reads the sections.
 		'item'    => array(
 			'gate'   => 'detail',
-			'view'   => function ( array $r ) {
+			'view'   => minn_admin_mail_masked( function ( array $r ) {
 				$out = array(
 					'id'           => (int) $r['id'],
 					'subject'      => $r['subject'],
@@ -914,10 +914,10 @@ minn_admin_resource( 'gravity-smtp/events', function () {
 					'can_resend'   => minn_admin_gsmtp_can_resend( minn_admin_gsmtp_events_model(), $r['id'] ),
 				);
 				if ( minn_admin_gsmtp_can_preview() ) {
-					$out['message'] = minn_admin_mail_mask_reset_keys( (string) $r['message'] );
+					$out['message'] = (string) $r['message'];
 				}
 				return array_merge( $out, minn_admin_gsmtp_full_details( $r['id'] ) );
-			},
+			} ),
 			'fields' => array(
 				'id'           => 'int',
 				'subject'      => 'text',
@@ -992,10 +992,10 @@ minn_admin_resource( 'gravity-smtp/debug', function () {
 			// through the mail mask, and searched only by who reads it whole.
 			'search' => array( 'columns' => minn_admin_mail_bodies_open() ? array( 'line' ) : array( 'priority' ) ),
 			'order'  => array( 'column' => 'id' ),
-			'row'    => function ( array $r ) {
+			'row'    => minn_admin_mail_masked( function ( array $r ) {
 				$r['line'] = minn_admin_mail_mask_reset_keys( (string) $r['line'] );
 				return $r;
-			},
+			} ),
 			'fields' => array(
 				'id'           => 'int',
 				'line'         => 'text',
@@ -1027,11 +1027,11 @@ minn_admin_resource( 'gravity-smtp/suppressed', function () {
 			'order'  => array( 'column' => 'date_created' ),
 			// The reason in their own words where they have them; any other
 			// goes out as the slug, which the client's pill tidies.
-			'row'    => function ( array $r ) {
+			'row'    => minn_admin_mail_masked( function ( array $r ) {
 				$labels = '\Gravity_Forms\Gravity_SMTP\Enums\Suppression_Reason_Enum';
 				$r['reason'] = class_exists( $labels ) ? (string) $labels::label( (string) $r['reason'] ) : (string) $r['reason'];
 				return $r;
-			},
+			} ),
 			'fields' => array(
 				'id'           => 'int',
 				'email'        => 'text',

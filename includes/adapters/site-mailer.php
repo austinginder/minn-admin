@@ -153,7 +153,7 @@ minn_admin_resource( 'site-mailer/emails', function () {
 			),
 			'range'  => array( 'column' => 'created_at', 'clock' => 'local' ),
 			'order'  => array( 'column' => 'created_at' ),
-			'row'    => function ( array $r ) {
+			'row'    => minn_admin_mail_masked( function ( array $r ) {
 				return array(
 					'id'         => (int) $r['id'],
 					'subject'    => (string) $r['subject'],
@@ -161,7 +161,7 @@ minn_admin_resource( 'site-mailer/emails', function () {
 					'status'     => minn_admin_site_mailer_status( $r['status'] ),
 					'created_at' => $r['created_at'],
 				);
-			},
+			} ),
 			'fields' => array(
 				'id'         => 'int',
 				'subject'    => 'text',
