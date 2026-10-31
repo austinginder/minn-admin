@@ -92,22 +92,48 @@ function minn_admin_mail_surface( $res, array $o ) {
  * @return array
  */
 function minn_admin_mail_sections( array $delivery, $subject, $body = null, array $more = array(), array $html = array() ) {
-	$message = array( array( 'label' => __( 'Subject', 'minn-admin' ), 'value' => (string) $subject ) );
+	$message = array( array( 'label' => __( 'Subject', 'minn-admin' ), 'value' => minn_admin_mail_mask_reset_keys( (string) $subject ) ) );
 	if ( null !== $body ) {
 		$body      = minn_admin_mail_mask_reset_keys( (string) $body );
 		$message[] = preg_match( '/<\/?[a-z][^>]*>/i', $body )
 			? array_merge( array( 'label' => __( 'Body', 'minn-admin' ), 'value' => $body, 'type' => 'html-preview' ), $html )
 			: array( 'label' => __( 'Body', 'minn-admin' ), 'value' => $body, 'type' => 'code' );
 	}
-	return array(
-		'sections' => array_merge(
-			array(
-				array( 'title' => __( 'Delivery', 'minn-admin' ), 'rows' => $delivery ),
-				array( 'title' => __( 'Message', 'minn-admin' ), 'rows' => $message ),
-			),
-			$more
-		),
-	);
+	// Every other row is masked too: a vendor's stored headers or request
+	// params, a provider's reply or an error can hold the message whole.
+	$sections = array( array( 'title' => __( 'Delivery', 'minn-admin' ), 'rows' => $delivery ) );
+	foreach ( $more as $section ) {
+		$sections[] = $section;
+	}
+	foreach ( $sections as &$section ) {
+		foreach ( ( isset( $section['rows'] ) && is_array( $section['rows'] ) ) ? array_keys( $section['rows'] ) : array() as $i ) {
+			if ( is_array( $section['rows'][ $i ] ) && isset( $section['rows'][ $i ]['value'] ) ) {
+				$section['rows'][ $i ]['value'] = minn_admin_mail_mask_value( $section['rows'][ $i ]['value'] );
+			}
+		}
+	}
+	unset( $section );
+	array_splice( $sections, 1, 0, array( array( 'title' => __( 'Message', 'minn-admin' ), 'rows' => $message ) ) );
+	return array( 'sections' => $sections );
+}
+
+/**
+ * minn_admin_mail_mask_reset_keys() over a detail row's value: a string, or
+ * every string inside an array (a kv-table).
+ *
+ * @param mixed $value Row value.
+ * @return mixed
+ */
+function minn_admin_mail_mask_value( $value ) {
+	if ( is_string( $value ) ) {
+		return minn_admin_mail_mask_reset_keys( $value );
+	}
+	if ( is_array( $value ) ) {
+		foreach ( $value as $k => $v ) {
+			$value[ $k ] = minn_admin_mail_mask_value( $v );
+		}
+	}
+	return $value;
 }
 
 /**
@@ -148,39 +174,107 @@ function minn_admin_mail_mask_reset_keys( $body ) {
 }
 
 /**
- * minn_admin_mail_mask_reset_keys() for one run of text: each link that
- * reads as a reset link, judged with its entities and percent-encoding
- * undone (a click-tracking wrapper encodes the whole link, an HTML body may
- * write "&" as &amp;, &#038; or &#x26;), has every key-like parameter's
- * value hidden, however its separator and its "=" are written.
+ * minn_admin_mail_mask_reset_keys() for one run of text. Each stretch between
+ * spaces, quotes and angle brackets that reads as a reset link, judged with
+ * its JSON escapes, entities and percent-encoding undone (a click-tracking
+ * wrapper encodes the whole link, an HTML body writes "&" as &amp;, &#038; or
+ * &#x26;, a debug log writes JSON), has its key hidden on that same decoded
+ * view. Judging one view and replacing on another is how a key survived: a
+ * separator spelled a way the replacement did not know.
  *
  * @param string $body Text.
  * @return string
  */
 function minn_admin_mail_mask_reset_links( $body ) {
 	return (string) preg_replace_callback(
-		'#https?(?::|%3A)(?://|%2F%2F)[^\s"\'<>]+#i',
+		'#[^\s"\'<>]{16,}#',
 		function ( $m ) {
 			$plain = $m[0];
 			for ( $i = 0; $i < 3; $i++ ) {
+				$plain = str_replace( '\/', '/', $plain );
+				$plain = (string) preg_replace_callback( '#\\\\u00([0-7][0-9a-f])#i', function ( $u ) {
+					return chr( hexdec( $u[1] ) );
+				}, $plain );
 				$plain = rawurldecode( html_entity_decode( $plain, ENT_QUOTES | ENT_HTML5, 'UTF-8' ) );
 			}
+			$plain = str_ireplace( '=3D', '=', $plain );
 			// Core's action=rp and resetpass, a /resetpass/, lost-password or
 			// password-reset page (Theme My Login, WooCommerce, Ultimate
 			// Member), a reset_password action (Ultimate Member, MemberPress),
-			// or any link carrying a key beside the account it is for (a
-			// renamed endpoint).
-			if ( ! preg_match( '#\bact(?:ion)?=(?:rp|resetpass|reset_?password)\b|lost-?password|reset-?pass|password-?reset|[?&;](?:login|id|u|user)=#i', $plain ) ) {
-				return $m[0];
-			}
-			return (string) preg_replace(
-				'#((?:[?&;/]|%26|%3F|%2526|%253F)(?:key|hash|mkey|rp_key|token)(?:=|%3D|%253D|&(?:amp;)?(?:\#0*61|\#x0*3d|equals);))[^&\#;\s"\'<>%]+#i',
-				'$1' . rawurlencode( __( '[hidden]', 'minn-admin' ) ),
-				$m[0]
-			);
+			// or a key beside the account it is for (a renamed endpoint).
+			$reset = preg_match( '#\bact(?:ion)?=(?:rp|resetpass|reset_?password)\b|lost-?password|reset-?pass|password-?reset#i', $plain );
+			$keyed = preg_match( '#(?<![a-z0-9_])(?:key|hash|mkey|rp_key|token)=#i', $plain ) && preg_match( '#[?&;\#](?:login|id|u|user)=#i', $plain );
+			return $reset || $keyed ? minn_admin_mail_hide_keys( $m[0] ) : $m[0];
 		},
 		$body
 	);
+}
+
+/**
+ * A reset link with its key hidden, however it is written. The link is read
+ * one written character at a time (a percent escape at any depth, an entity,
+ * a JSON escape, or a plain character), each standing for the one character
+ * it decodes to, so the hiding sees "&", "=" and "/" as the judging did. It
+ * hides the value of every key-like parameter, and every run of sixteen or
+ * more letters and digits after the host: core's key is twenty of them, and a
+ * fragment or a path segment carries one as well as a query does.
+ *
+ * @param string $run The link as written.
+ * @return string
+ */
+function minn_admin_mail_hide_keys( $run ) {
+	preg_match_all( '#%(?:25)*[0-9a-f]{2}|&(?:\#[0-9]+|\#x[0-9a-f]+|[a-z][a-z0-9]*);|\\\\u[0-9a-f]{4}|\\\\.|.#si', $run, $m );
+	$units = $m[0];
+	$plain = '';
+	foreach ( $units as $u ) {
+		if ( 1 === strlen( $u ) ) {
+			$c = $u;
+		} elseif ( '%' === $u[0] ) {
+			$c = chr( hexdec( substr( $u, -2 ) ) );
+		} elseif ( '&' === $u[0] ) {
+			$c = html_entity_decode( $u, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+		} elseif ( 6 === strlen( $u ) ) {
+			$c = hexdec( substr( $u, 2 ) ) < 0x80 ? chr( hexdec( substr( $u, 2 ) ) ) : ' ';
+		} else {
+			$c = false !== strpos( 'nrt', $u[1] ) ? ' ' : $u[1];
+		}
+		// One byte per unit keeps offsets in step; a character outside ASCII
+		// is never part of a key and ends a value like a space does.
+		$plain .= 1 === strlen( $c ) ? $c : ' ';
+	}
+	$hide = array();
+	preg_match_all( '#(?<![a-z0-9_])(?:key|hash|mkey|rp_key|token)(?:=|&(?:amp;)*(?:\#0*61|\#x0*3d|equals);)#i', $plain, $params, PREG_OFFSET_CAPTURE );
+	foreach ( $params[0] as $p ) {
+		$from = $p[1] + strlen( $p[0] );
+		$to   = $from + strcspn( $plain, "&#;? \t\r\n\"'<>", $from );
+		if ( $to > $from ) {
+			$hide[ $from ] = max( $to, $hide[ $from ] ?? 0 );
+		}
+	}
+	$host = strpos( $plain, '//' );
+	$host = false === $host ? 0 : $host + 2 + strcspn( $plain, '/?#', $host + 2 );
+	preg_match_all( '#[a-z0-9]{16,}#i', $plain, $runs, PREG_OFFSET_CAPTURE, $host );
+	foreach ( $runs[0] as $r ) {
+		$hide[ $r[1] ] = max( $r[1] + strlen( $r[0] ), $hide[ $r[1] ] ?? 0 );
+	}
+	if ( ! $hide ) {
+		return $run;
+	}
+	ksort( $hide );
+	$out = '';
+	$end = 0;
+	foreach ( $units as $i => $u ) {
+		if ( isset( $hide[ $i ] ) && $i >= $end ) {
+			$out .= rawurlencode( __( '[hidden]', 'minn-admin' ) );
+		}
+		if ( isset( $hide[ $i ] ) ) {
+			$end = max( $end, $hide[ $i ] );
+		}
+		if ( $i >= $end ) {
+			$out .= $u;
+		}
+	}
+	return $out;
 }
 
 /**
