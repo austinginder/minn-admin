@@ -25,6 +25,14 @@
 
 defined( 'ABSPATH' ) || exit;
 
+// The PayPal Commerce connection (the merchant secret WPForms sends PayPal
+// as Basic auth and its access token, stored as plain text, unlike the
+// sealed Square tokens), the marketing integrations' accounts (each
+// provider's API key or OAuth tokens), and the licence key the Lite-to-Pro
+// upgrade keeps until Pro installs. Its settings, Stripe and Square rows
+// are on Minn_Admin_DB's central list.
+minn_admin_secrets( 'wpforms', array( 'options' => array( 'wpforms_paypal_commerce_connections', 'wpforms_providers', 'wpforms_connect' ) ) );
+
 /** Pro with entry storage loaded (Lite has no entry handler). */
 function minn_admin_wpforms_active() {
 	return function_exists( 'wpforms' ) && is_object( wpforms()->obj( 'entry' ) );

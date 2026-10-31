@@ -17,6 +17,10 @@
 
 defined( 'ABSPATH' ) || exit;
 
+// The critical CSS service's API key. Autoptimize's own screen shows it to
+// an administrator, so this keeps copies of it out of other responses.
+minn_admin_secrets( 'autoptimize', array( 'options' => array( 'autoptimize_ccss_key' ) ) );
+
 /**
  * @return bool
  */

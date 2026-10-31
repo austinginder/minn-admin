@@ -12,6 +12,11 @@
 
 defined( 'ABSPATH' ) || exit;
 
+// The library connection (its auth key and the secret that signs the
+// library's requests to this site), and the licence key and one-time token
+// the Lite-to-Pro upgrade keeps while it runs. WPCode shows none of them.
+minn_admin_secrets( 'insert-headers-and-footers', array( 'options' => array( 'wpcode_library_api_auth', 'wpcode_connect', 'wpcode_connect_token' ) ) );
+
 /**
  * WPCode's own per-code-type capability for a submitted type.
  *

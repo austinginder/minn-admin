@@ -20,8 +20,48 @@
 
 defined( 'ABSPATH' ) || exit;
 
-// Bookly Cloud's account token.
-minn_admin_secrets( 'bookly-responsive-appointment-booking-tool', array( 'options' => array( 'bookly_cloud_token' ) ) );
+/**
+ * The option rows that hold Bookly's credentials: the ones Bookly itself
+ * names as third-party credentials (Tool::getSensitiveOptions(), which it
+ * never shows without manage_options: Google Calendar, Outlook and Zoom
+ * client secrets, the SMTP login and the Bookly Cloud token), the inbound
+ * keys its Zapier and cron endpoints check a request against, and each
+ * add-on's purchase code (its licence, older copies under an _envato_
+ * name). Bookly's own list is read when it is loaded, so a credential it
+ * adds is hidden on that release; the fixed list covers a site that loads
+ * Minn first.
+ *
+ * @param bool $vendor Merge Bookly's own list when it is loaded.
+ * @return string[]
+ */
+function minn_admin_bookly_secret_options( $vendor = true ) {
+	$names = array(
+		'bookly_gc_client_id', 'bookly_gc_client_secret', 'bookly_oc_app_id', 'bookly_oc_app_secret',
+		'bookly_zoom_oauth_client_id', 'bookly_zoom_oauth_client_secret',
+		'bookly_smtp_host', 'bookly_smtp_port', 'bookly_smtp_user', 'bookly_smtp_password',
+		'bookly_cloud_token', 'bookly_cloud_zapier_api_key', 'bookly_cloud_cron_api_key',
+		'bookly_*_purchase_code',
+	);
+	$tool = '\\Bookly\\Backend\\Modules\\Diagnostics\\Tools\\Tool';
+	if ( $vendor && class_exists( $tool ) && method_exists( $tool, 'getSensitiveOptions' ) ) {
+		try {
+			$names = array_merge( $names, array_filter( (array) $tool::getSensitiveOptions(), 'is_string' ) );
+		} catch ( \Throwable $e ) {
+			unset( $e ); // The fixed list stands.
+		}
+	}
+	return array_values( array_unique( $names ) );
+}
+
+// Each add-on's purchase code is also copied into its row of Bookly's shop
+// table, where the shop screen reads it.
+minn_admin_secrets(
+	'bookly-responsive-appointment-booking-tool',
+	array(
+		'options' => minn_admin_bookly_secret_options(),
+		'columns' => array( 'bookly_shop' => array( 'license' ) ),
+	)
+);
 
 function minn_admin_bookly_active() {
 	return class_exists( '\Bookly\Lib\Entities\CustomerAppointment' )

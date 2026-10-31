@@ -33,6 +33,12 @@
 
 defined( 'ABSPATH' ) || exit;
 
+// Bricks keeps its API keys and secrets (reCAPTCHA, hCaptcha and Turnstile
+// secrets, Mailchimp, SendGrid and Unsplash keys, the Instagram token) and
+// the remote-template passwords in its one settings row; its own screen
+// shows each key only in part.
+minn_admin_secrets( 'bricks', array( 'options' => array( 'bricks_global_settings' ) ) );
+
 function minn_admin_bricks_active() {
 	return defined( 'BRICKS_VERSION' ) && class_exists( '\Bricks\Templates' );
 }

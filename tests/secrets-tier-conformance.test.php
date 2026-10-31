@@ -51,6 +51,17 @@
  *      token, or a fixed word a plugin stores (yes, no, on, off);
  *    - rows listed in $not_secret below, each with what it holds and why it
  *      stays readable.
+ *    Rows whose names say nothing of the keys inside them (Bricks' settings,
+ *    WPForms' PayPal Commerce connection) are seeded in their vendors'
+ *    layouts, so a declaration removed fails even where nothing was saved.
+ * 3. The vendors' own lists. Where a plugin names the rows that hold its
+ *    secrets (Bookly's sensitive options, the rows Burst keeps out of its
+ *    Site Health export), every row it names is covered. Read live, or from
+ *    the plugin's source when it is inactive.
+ * 4. Rows a vendor names as a key. Every option a declared plugin's own
+ *    source reads or writes by a literal name that says credential is
+ *    covered, listed with what it holds, or owed by an integration file
+ *    (printed as OWED; one that becomes covered must leave that list).
  *
  * Prints names, never values.
  *
@@ -202,6 +213,22 @@ $manifest = array(
 	'jetpack'                => array( 'options' => array_fill_keys( array( 'jetpack_private_options', 'jetpack_secrets' ), array() ) ),
 	'wp-migrate-db-pro'      => array( 'usermeta' => array( 'wpmdb_licence_key' ) ),
 	'disembark'              => array( 'options' => array( 'disembark_token' => array() ) ),
+	'bookly-responsive-appointment-booking-tool' => array(
+		'options' => array_fill_keys(
+			array(
+				'bookly_cloud_token', 'bookly_gc_client_secret', 'bookly_oc_app_secret', 'bookly_zoom_oauth_client_secret', 'bookly_smtp_password',
+				'bookly_cloud_zapier_api_key', 'bookly_cloud_cron_api_key', 'bookly_*_purchase_code',
+			),
+			array()
+		),
+		'columns' => array( 'bookly_shop' => array( 'license' ) ),
+	),
+	'gravityforms'           => array( 'options' => array_fill_keys( array( 'rg_gforms_captcha_private_key', 'rg_gforms_captcha_secret_key', 'gf_site_secret', 'gravityformsaddon_*_settings' ), array() ) ),
+	'insert-headers-and-footers' => array( 'options' => array_fill_keys( array( 'wpcode_library_api_auth', 'wpcode_connect', 'wpcode_connect_token' ), array() ) ),
+	'burst-statistics'       => array( 'options' => array_fill_keys( array( 'burst_share_tokens', 'burst_gsc_tokens', 'burst_options_settings', 'burst_admin_options_notifications', 'burst_auto_installed_license' ), array() ) ),
+	'wpforms'                => array( 'options' => array_fill_keys( array( 'wpforms_paypal_commerce_connections', 'wpforms_providers', 'wpforms_connect' ), array() ) ),
+	'bricks'                 => array( 'options' => array( 'bricks_global_settings' => array() ) ),
+	'autoptimize'            => array( 'options' => array( 'autoptimize_ccss_key' => array() ) ),
 );
 $undeclared = array();
 $entries    = 0;
@@ -637,13 +664,24 @@ try {
 				$cols_meta = $wpdb->get_results( "SHOW COLUMNS FROM `{$t}`", ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- as above.
 				foreach ( $cols_meta as $c ) {
 					if ( 'NO' === $c['Null'] && null === $c['Default'] && false === strpos( (string) $c['Extra'], 'auto_increment' ) ) {
-						$row[ $c['Field'] ] = preg_match( '/int|decimal|float|double/i', $c['Type'] ) ? 0 : '';
+						$row[ $c['Field'] ] = preg_match( '/int|decimal|float|double/i', $c['Type'] ) ? 0 : ( preg_match( '/date|time/i', $c['Type'] ) ? current_time( 'mysql' ) : '' );
+					}
+				}
+				$widths = array();
+				foreach ( $cols_meta as $c ) {
+					if ( preg_match( '/char\((\d+)\)/i', $c['Type'], $wm ) ) {
+						$widths[ $c['Field'] ] = (int) $wm[1];
 					}
 				}
 				$fakes = array();
 				foreach ( $cols as $col ) {
-					$k             = $fake( $table . $col );
-					$row[ $col ]   = wp_json_encode( array( 'access_token' => $k, 'token_type' => 'Bearer' ) );
+					$k           = $fake( $table . $col );
+					$row[ $col ] = wp_json_encode( array( 'access_token' => $k, 'token_type' => 'Bearer' ) );
+					// A narrow column (Bookly's 32-character licence) holds the
+					// key bare, as its plugin stores it.
+					if ( isset( $widths[ $col ] ) && strlen( $row[ $col ] ) > $widths[ $col ] ) {
+						$row[ $col ] = $k;
+					}
 					$fakes[ $col ] = $k;
 				}
 				$first                = array_key_first( $fakes );
@@ -789,6 +827,21 @@ $seeds = array(
 	),
 	'jetpack-stats.php'  => array(
 		'jetpack_private_options' => array( 'blog_token' => 'Jp0Blog9Tok8' . $tag . '.Jp0Secret9Part8' . $tag ),
+	),
+	// Rows whose names say nothing of the keys inside them.
+	'bricks.php'         => array(
+		'bricks_global_settings' => array( 'postTypes' => array( 'page' ), 'apiKeySendgrid' => 'SG.Br1ck5Send' . $tag . '.Gr1dKey9' . $tag, 'apiSecretKeyTurnstile' => '0x4Br1ckSecret9' . $tag, 'myTemplatesPassword' => 'Tpl0Pass9Word7' . $tag ),
+	),
+	'wpforms.php'        => array(
+		'wpforms_paypal_commerce_connections' => array( 'live' => array( 'client_id' => 'AZcid' . $tag, 'secret' => 'EPp0Secret9Key8' . $tag, 'access_token' => 'A21Acc3ssTok9' . $tag, 'type' => 'third_party' ) ),
+		'wpforms_providers'                   => array( 'constant-contact-v3' => array( 'acct' . $tag => array( 'access_token' => 'Cc0Access9Tok8' . $tag, 'refresh_token' => 'Cc0Refresh9Tok8' . $tag, 'label' => 'News' ) ) ),
+	),
+	'wpcode.php'         => array(
+		'wpcode_library_api_auth' => array( 'key' => 'Wpc0LibKey9' . $tag, 'username' => 'site-owner', 'webhook_secret' => 'Wpc0Hook9Secret8' . $tag, 'client_id' => 'cl' . $tag ),
+	),
+	'burst-statistics.php' => array(
+		'burst_share_tokens'     => array( array( 'token' => md5( 'share' . $tag ), 'expires' => 0 ) ),
+		'burst_options_settings' => array( 'license' => 'Bur5tLic9Key8' . $tag, 'enable_turbo_mode' => false ),
 	),
 );
 // Rows an adapter touches that hold a credential-named leaf and stay
@@ -981,6 +1034,212 @@ foreach ( $gaps as $key => $hits ) {
 	$check( "option {$key} holds a key and is declared or listed", false, 'leaves ' . implode( ', ', $hits ) . ': declare it with minn_admin_secrets() in its adapter, or list it in $not_secret with what it holds' );
 }
 $check( "every option adapters touch that holds a key is covered ({$scanned} values of " . count( $touched ) . " names, {$keyed} holding a key)", ! $gaps && $keyed > 0, count( $gaps ) . ' uncovered' );
+
+/*
+ * 3. The vendors' own lists of their secrets. A plugin that names the rows
+ *    holding its credentials (to keep them from a lower role, out of its
+ *    Site Health export) has said which rows are keys: each must be covered.
+ *    Read live when the plugin is loaded, else from its source, so the
+ *    check runs on a lab where the plugin is inactive. A row the vendor
+ *    adds to its list on a new release fails here until it is declared.
+ */
+$vendor_source = static function ( $dir, $file ) {
+	$path = WP_PLUGIN_DIR . '/' . $dir . '/' . $file;
+	return is_readable( $path ) ? (string) file_get_contents( $path ) : null; // phpcs:ignore WordPress.WP.AlternativeFunctions
+};
+$quoted = static function ( $text ) {
+	preg_match_all( '/[\'"]([A-Za-z0-9_.\-]+)[\'"]/', (string) $text, $m );
+	return $m[1];
+};
+$vendor_lists = array(
+	// Bookly: "Options that hold third party credentials. They are never
+	// exposed to users without 'manage_options'."
+	'Bookly Tool::getSensitiveOptions()'  => static function () use ( $vendor_source, $quoted ) {
+		$tool = '\\Bookly\\Backend\\Modules\\Diagnostics\\Tools\\Tool';
+		if ( class_exists( $tool ) && method_exists( $tool, 'getSensitiveOptions' ) ) {
+			return array( 'live', (array) $tool::getSensitiveOptions() );
+		}
+		$src = $vendor_source( 'bookly-responsive-appointment-booking-tool', 'backend/modules/diagnostics/tools/Tool.php' );
+		if ( null === $src || ! preg_match( '/function\s+getSensitiveOptions\s*\(\s*\)\s*\{.*?return\s+array\s*\((.*?)\)\s*;/s', $src, $m ) ) {
+			return null;
+		}
+		return array( 'source', $quoted( $m[1] ) );
+	},
+	// Burst: the rows its Site Health export drops whole, the rows it drops
+	// a leaf from, and its settings row, whose licence it drops.
+	'Burst Debug (Site Health export)' => static function () use ( $vendor_source, $quoted ) {
+		$src = $vendor_source( 'burst-statistics', 'includes/Admin/Debug/class-debug.php' );
+		if ( null === $src ) {
+			return null;
+		}
+		$rows = array();
+		if ( preg_match( '/REDACTED_OPTIONS\s*=\s*\[(.*?)\]\s*;/s', $src, $m ) ) {
+			$rows = $quoted( $m[1] );
+		}
+		$cats   = (string) $vendor_source( 'burst-statistics', 'includes/Admin/DomainTypes/class-admin-option-category.php' );
+		$opts   = (string) $vendor_source( 'burst-statistics', 'includes/Admin/class-admin-options.php' );
+		$prefix = preg_match( '/OPTION_PREFIX\s*=\s*[\'"]([a-z_]+)[\'"]/', $opts, $pm ) ? $pm[1] : '';
+		if ( '' !== $prefix && preg_match( '/function\s+redacted_option_keys\s*\(.*?\{(.*?)\n\t\}/s', $src, $m ) && preg_match_all( '/Admin_Option_Category::([A-Z_]+)/', $m[1], $cm ) ) {
+			foreach ( $cm[1] as $const ) {
+				if ( preg_match( '/const\s+' . $const . '\s*=\s*[\'"]([a-z_\-]+)[\'"]/', $cats, $vm ) ) {
+					$rows[] = $prefix . sanitize_key( $vm[1] );
+				}
+			}
+		}
+		if ( preg_match( '/\$settings\s*=\s*get_option\(\s*[\'"]([a-z_]+)[\'"]/', $src, $m ) && preg_match( '/unset\(\s*\$settings\[\s*[\'"]licen[cs]e[\'"]\s*\]\s*\)/', $src ) ) {
+			$rows[] = $m[1];
+		}
+		return $rows ? array( 'source', $rows ) : null;
+	},
+);
+foreach ( $vendor_lists as $what => $read ) {
+	$got = $read();
+	if ( null === $got ) {
+		$skip( "{$what}: the plugin is not installed here" );
+		continue;
+	}
+	list( $from, $rows ) = $got;
+	$open = array_values(
+		array_filter(
+			array_unique( array_map( 'strval', $rows ) ),
+			static function ( $name ) {
+				return ! Minn_Admin_DB::is_credential_option( $name );
+			}
+		)
+	);
+	$check( "{$what}: every row the vendor names as a secret is a credential row here (" . count( $rows ) . " rows, read from its {$from})", $rows && ! $open, implode( ', ', $open ) );
+}
+// Bookly's own list is merged in only when Bookly is loaded before Minn's
+// adapter; the fixed list must hold it too.
+if ( function_exists( 'minn_admin_bookly_secret_options' ) ) {
+	$got = $vendor_lists['Bookly Tool::getSensitiveOptions()']();
+	if ( $got ) {
+		$fixed = minn_admin_bookly_secret_options( false );
+		$miss  = array_diff( $got[1], $fixed );
+		$check( 'Bookly: the fixed list holds every row Bookly names, for a site that loads Minn first', ! $miss, implode( ', ', $miss ) );
+	}
+}
+
+/*
+ * 4. Rows a vendor names as a key. Every option the source of a plugin an
+ *    adapter declares for reads or writes by a literal name (its own calls,
+ *    not a method of the same name) whose name says it holds a credential
+ *    (as in part 2: secret, token, password, key and the like, less the
+ *    names that describe one) must be covered, or listed below with what it
+ *    holds. This finds the next row a vendor adds beside the ones already
+ *    declared, on a lab where nothing was ever saved in it.
+ */
+$named_not_secret = array(
+	'rg_gforms_captcha_public_key'            => 'Gravity Forms: the reCAPTCHA site key, sent to every visitor',
+	'forminator_captcha_key'                  => 'Forminator: a captcha site key, sent to every visitor',
+	'forminator_v2_invisible_captcha_key'     => 'Forminator: a captcha site key, sent to every visitor',
+	'forminator_v3_captcha_key'               => 'Forminator: a captcha site key, sent to every visitor',
+	'forminator_hcaptcha_key'                 => 'Forminator: a captcha site key, sent to every visitor',
+	'forminator_turnstile_key'                => 'Forminator: a captcha site key, sent to every visitor',
+	'job_manager_google_maps_api_key'         => 'WP Job Manager: a browser Maps key, sent to every visitor',
+	'themeisle_google_map_block_api_key'      => 'Otter: a browser Maps key, sent to every visitor',
+	'surerank_gsc_verification_token'         => 'Search Console site verification, printed in every page head',
+	'disallowed_keys'                         => 'core: the comment blocklist (words, not keys)',
+	'moderation_keys'                         => 'core: the comment moderation list (words, not keys)',
+	'ftp_credentials'                         => 'core: the FTP host, user name and connection type; core never stores the password',
+	'srfm_db_owner_token'                     => 'SureForms: a site marker written into its tables\' comments, readable in any table structure',
+	'srfm_abilities_api'                      => 'SureForms: a switch',
+	'srfm_abilities_api_edit'                 => 'SureForms: a switch',
+	'srfm_abilities_api_delete'               => 'SureForms: a switch',
+	'fluentform_stripe_key_decrypt_failed'    => 'Fluent Forms: a flag',
+	'evf_saved_license_plan'                  => 'Everest Forms: the licence plan\'s name',
+	'plausible_analytics_api_token_caps'      => 'Plausible: what the token may do, not the token',
+	'jetpack_plugin_api_action_links'         => 'Jetpack: plugin action links',
+	'seed_csp4_settings_content'              => 'Jetpack: another plugin\'s coming-soon settings, named "seed"',
+	'itsec_strong_passwords'                  => 'Solid Security: a switch',
+	'seopress_pro_license_last_check'         => 'SEOPress: a time',
+	'burst_db_upgrade_seed_uid_dictionary'    => 'Burst: an upgrade\'s progress',
+	'otter_reference_key'                     => 'Themeisle SDK: an affiliate reference from a promotion link',
+	'optimole_reference_key'                  => 'Themeisle SDK: an affiliate reference from a promotion link',
+	'rop_reference_key'                       => 'Themeisle SDK: an affiliate reference from a promotion link',
+	'neve_reference_key'                      => 'Themeisle SDK: an affiliate reference from a promotion link',
+	'hyve_reference_key'                      => 'Themeisle SDK: an affiliate reference from a promotion link',
+	'wp_full_pay_reference_key'               => 'Themeisle SDK: an affiliate reference from a promotion link',
+	'easy_mcp_reference_key'                  => 'Themeisle SDK: an affiliate reference from a promotion link',
+	'feedzy_reference_key'                    => 'Themeisle SDK: an affiliate reference from a promotion link',
+);
+// Rows that hold a key and belong to an integration file outside the change
+// that added this part. Each is owed a declaration in its adapter; one that
+// becomes covered fails until it leaves this list, so the list only shrinks.
+$named_owed = array(
+	'fluentform_stripe_webhook_secret'         => 'fluent-forms.php: Stripe webhook signing secret',
+	'ninja_forms_oauth_client_secret'          => 'ninja-forms.php: OAuth client secret for its add-on service',
+	'everest_forms_ai_api_key'                 => 'everest-forms.php: AI provider API key',
+	'everest_forms_restapi_keys'               => 'everest-forms.php: the key its entry submission REST route checks',
+	'everest_forms_admin_entry_approval_token' => 'everest-forms.php: entry approval link tokens',
+	'ss_podcasting_protection_password'        => 'seriously-simple-podcasting.php: the private feed\'s password',
+	'wp_statistics_daily_salt'                 => 'wp-statistics.php: the salt it hashes visitor IPs with (the peer of iawp_salt)',
+	'jetpack_forms_secret_key'                 => 'jetpack-stats.php: the key Jetpack Forms signs with',
+	'jetpack_protect_key'                      => 'jetpack-stats.php: the Protect API key',
+	'bruteprotect_api_key'                     => 'jetpack-stats.php: the older Protect API key',
+	'updraftplus_migration_temp_password'      => 'updraftplus.php: a migration\'s temporary password',
+	'updraftplus_product_key'                  => 'updraftplus.php: the product (licence) key',
+	'cff_oembed_token'                         => 'seo.php (All in One SEO reads it): Smash Balloon\'s Facebook oEmbed access token',
+);
+$credential_name = static function ( $name ) use ( $credential_leaf ) {
+	return $credential_leaf( '', 'Vx9' . str_repeat( 'a', 9 ), $name );
+};
+$option_call = '/(?<![>:\w$])(?:get|update|add)_(?:site_|network_)?option\(\s*[\'"]([A-Za-z0-9_.\-]+)[\'"]\s*[,)]/';
+$named       = array();
+$dirs        = 0;
+foreach ( array_keys( $declared ) as $slug ) {
+	$dir = '';
+	foreach ( array( WP_PLUGIN_DIR . '/' . $slug, get_theme_root() . '/' . $slug ) as $d ) {
+		if ( '' === $dir && is_dir( $d ) ) {
+			$dir = $d;
+		}
+	}
+	if ( '' === $dir ) {
+		continue;
+	}
+	++$dirs;
+	$files = new RecursiveIteratorIterator(
+		new RecursiveCallbackFilterIterator(
+			new RecursiveDirectoryIterator( $dir, FilesystemIterator::SKIP_DOTS ),
+			static function ( $f ) {
+				return ! ( $f->isDir() && in_array( $f->getFilename(), array( 'node_modules', '.git', 'tests' ), true ) );
+			}
+		)
+	);
+	foreach ( $files as $f ) {
+		if ( 'php' !== $f->getExtension() ) {
+			continue;
+		}
+		$src = (string) file_get_contents( $f->getPathname() ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+		if ( false === stripos( $src, '_option(' ) || ! preg_match_all( $option_call, $src, $m ) ) {
+			continue;
+		}
+		foreach ( $m[1] as $name ) {
+			if ( $credential_name( $name ) ) {
+				$named[ $name ][ $slug ] = true;
+			}
+		}
+	}
+}
+$open = array();
+$paid = array();
+foreach ( $named as $name => $by ) {
+	$covered = Minn_Admin_DB::is_credential_option( $name );
+	if ( isset( $named_owed[ $name ] ) ) {
+		if ( $covered ) {
+			$paid[] = $name;
+		} else {
+			printf( "OWED  option %s (%s): %s\n", $name, implode( ' ', array_keys( $by ) ), $named_owed[ $name ] );
+		}
+	} elseif ( ! $covered && ! isset( $named_not_secret[ $name ] ) ) {
+		$open[] = $name . ' (' . implode( ' ', array_keys( $by ) ) . ')';
+	}
+}
+foreach ( $open as $o ) {
+	$check( "option {$o}, named by its vendor as a key, is declared or listed", false, 'declare it with minn_admin_secrets() in its adapter, or list it in $named_not_secret with what it holds' );
+}
+$check( 'every option a declared vendor names as a key is covered (' . count( $named ) . " names in {$dirs} plugins, " . count( array_diff_key( $named_owed, array_flip( $paid ) ) ) . ' owed)', $named && ! $open, count( $open ) . ' uncovered' );
+$check( 'an owed row that is now covered has left the owed list', ! $paid, implode( ', ', $paid ) );
 
 $pass = count( array_filter( $results ) );
 printf( "\nsecrets-tier-conformance: %d/%d passed\n", $pass, count( $results ) );

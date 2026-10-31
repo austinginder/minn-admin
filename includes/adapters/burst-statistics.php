@@ -11,6 +11,13 @@
 
 defined( 'ABSPATH' ) || exit;
 
+// What Burst keeps out of its own Site Health export: the share-link tokens
+// that open its statistics to anyone holding one, the Search Console
+// tokens, and from its settings rows the Pro licence key and the Slack
+// webhook its alerts post to. Also the copy of the licence key its WP-CLI
+// install keeps as a network option.
+minn_admin_secrets( 'burst-statistics', array( 'options' => array( 'burst_share_tokens', 'burst_gsc_tokens', 'burst_options_settings', 'burst_admin_options_notifications', 'burst_auto_installed_license' ) ) );
+
 /**
  * Burst Statistics is loaded AND this user may read its reports.
  *
