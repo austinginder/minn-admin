@@ -1613,6 +1613,21 @@ function minn_admin_gf_form_settings_save( WP_REST_Request $request ) {
 	// is nothing to change: answer with the form as stored, since a write
 	// would still restamp it with the running Gravity Forms version.
 	$vals = array_intersect_key( $vals, $spec );
+	// A setting sent back as the read served it (a credential copy in it
+	// masked) stays as stored. Form meta has no restore, so an edited one
+	// still holding a mask is refused before anything is written: saved, it
+	// would put the placeholder where the key was on the public form. A save
+	// that changes nothing answers as stored, as above.
+	foreach ( $vals as $key => $value ) {
+		$kind = array( 'toggle' => 'bool', 'number' => 'number' )[ $spec[ $key ]['type'] ] ?? 'text';
+		if ( array_key_exists( $key, $mapped['values'] ) && Minn_Admin::unchanged( $value, $mapped['values'][ $key ], $kind ) ) {
+			unset( $vals[ $key ] );
+		}
+	}
+	$masked = Minn_Admin_Egress::refuse_masks( $vals, array_intersect_key( $mapped['values'], $vals ) );
+	if ( $masked ) {
+		return $masked;
+	}
 	if ( ! $vals ) {
 		return rest_ensure_response( minn_admin_gf_form_settings_shape( $form ) );
 	}

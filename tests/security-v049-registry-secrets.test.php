@@ -12,6 +12,8 @@
  *   is seeded in its vendor's own layout and read back through the browser,
  *   its value search, the fence's list and a minn-admin/v1 response that
  *   hands a copy back.
+ * GF-Mask-1: the Gravity Forms per-form settings save wrote an edited value
+ *   still holding an egress mask into the form, where the credential was.
  *
  * Seeded rows are written with SQL (no option hooks: the vendor sees
  * nothing) and put back with SQL however the run ends. Prints names, never
@@ -251,5 +253,55 @@ try {
 	}
 	$put_back();
 }
+
+/*
+ * GF-Mask-1: the per-form settings save refuses an edit that still holds a
+ * mask, keeps a value sent back as served, and writes a clean edit.
+ */
+( function () use ( $check, $send, $seed, $put_back, $forget, $fake ) {
+	if ( ! class_exists( 'GFAPI' ) || ! function_exists( 'minn_admin_gf_form_settings_save' ) ) {
+		echo "SKIP  GF-Mask-1 Gravity Forms inactive\n";
+		return;
+	}
+	// A key in a row declared since before this round, so the check stands
+	// on its own.
+	$key  = $fake( 'gf-mask' );
+	$desc = '<p>Find us: <iframe src="https://maps.example.test/embed?key=' . $key . '"></iframe></p>';
+	$form = GFAPI::add_form(
+		array(
+			'title'       => 'minn v049 mask ' . wp_rand(),
+			'description' => $desc,
+			'fields'      => array( array( 'id' => 1, 'type' => 'text', 'label' => 'Answer' ) ),
+		)
+	);
+	if ( is_wp_error( $form ) ) {
+		echo "SKIP  GF-Mask-1 form not created\n";
+		return;
+	}
+	try {
+		$seed( 'rg_gforms_captcha_private_key', $key );
+		$forget();
+		$route                  = "/minn-admin/v1/gf/forms/{$form}/settings/form";
+		list( $st, $body, $d )  = $send( 'GET', $route );
+		$served                 = (string) ( $d['values']['description'] ?? '' );
+		$check( "GF-Mask-1 the settings read shows the description with the key masked (premise, {$st})", 200 === $st && false !== strpos( $served, '[redacted:' ) && false === strpos( $body, $key ), substr( $served, 0, 120 ) );
+
+		list( $st, $body ) = $send( 'POST', $route, array(), array( 'values' => array( 'description' => $served . '<p>Open daily.</p>' ) ) );
+		$stored            = (string) GFAPI::get_form( $form )['description'];
+		$check( "GF-Mask-1 an edit around the mask is refused with nothing written ({$st})", 400 === $st && $desc === $stored && false !== strpos( $body, 'minn_egress_mask' ), $desc === $stored ? '' : 'the placeholder was stored' );
+
+		list( $st ) = $send( 'POST', $route, array(), array( 'values' => array( 'description' => $served ) ) );
+		$stored     = (string) GFAPI::get_form( $form )['description'];
+		$check( "GF-Mask-1 the description sent back as served is unchanged: the key stays ({$st})", 200 === $st && $desc === $stored );
+
+		$clean        = '<p>Open daily.</p>';
+		list( $st )   = $send( 'POST', $route, array(), array( 'values' => array( 'description' => $clean, 'title' => GFAPI::get_form( $form )['title'] ) ) );
+		$after        = GFAPI::get_form( $form );
+		$check( "GF-Mask-1 an edit holding no mask is written ({$st})", 200 === $st && false !== strpos( (string) $after['description'], 'Open daily.' ) && false === strpos( (string) $after['description'], '[redacted:' ) );
+	} finally {
+		GFAPI::delete_form( $form );
+		$put_back();
+	}
+} )();
 
 $summary();
