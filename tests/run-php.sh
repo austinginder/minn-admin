@@ -169,6 +169,8 @@ MINN_SEO_SWAP=seopress run security-v049-registry-gates single --user=admin --re
 MINN_SEO_SWAP=surerank run security-v049-registry-gates single --user=admin --require=tests/lib/seo-swap.php
 MINN_SWAP_ADD=insert-headers-and-footers/ihaf.php run security-v049-registry-secrets single --user=admin --require=tests/lib/plugin-swap.php
 run security-v049-registry-followups single --user=admin
+# Post SMTP, SureMails and Site Mailer stay inactive on the lab; the swap loads them for this process only.
+MINN_SWAP_ADD=post-smtp/postman-smtp.php,suremails/suremails.php,site-mailer/site-mailer.php run security-v049-registry-followups single --user=admin --require=tests/lib/plugin-swap.php
 # Header Footer Code Manager stays inactive on the lab; the swap loads it for this process only.
 MINN_SWAP_ADD=header-footer-code-manager/99robots-header-footer-code-manager.php run hfcm-storage single --user=admin --require=tests/lib/plugin-swap.php
 # The SEO panel's per-type switch, once per provider: Yoast resident, the rest swapped in for this process only.
