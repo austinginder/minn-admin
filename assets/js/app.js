@@ -25416,8 +25416,9 @@
 			}
 		}
 		// Notification-panel per-row Update buttons (same queue state).
+		// Inside the panel only: post content behind it can wear data-nupd.
 		if ( state.notifOpen ) {
-			$$( '[data-nupd]' ).forEach( ( b ) => {
+			$$( '[data-nupd]', $( '#minn-overlays' ) ).forEach( ( b ) => {
 				const item = ( state.cache.notifications || [] ).find( ( n ) => n.id === b.dataset.nupd );
 				if ( ! item || ! item.update || item.update.type !== 'plugin' ) return;
 				const busy = notifUpdateBusy( item );
@@ -31488,7 +31489,10 @@
 	}
 
 	function bindStoreSecretModal( m ) {
-		$$( '[data-copysecret]' ).forEach( ( btn ) =>
+		// Inside the overlays root only, as bindModal: content behind the
+		// modal can wear these data attributes.
+		const ovr = $( '#minn-overlays' );
+		$$( '[data-copysecret]', ovr ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', async () => {
 				const v = btn.dataset.copysecret === 'ck' ? m.ck : m.cs;
 				try { await navigator.clipboard.writeText( v ); toast( __( 'Copied' ) ); } catch ( e ) { toast( __( 'Copy failed; select the text and copy it yourself.' ), true ); }
@@ -51167,6 +51171,11 @@
 	function bindModal() {
 		const m = state.modal;
 		if ( ! m ) return;
+		// Every lookup stays inside the overlays root: stored content in the
+		// view behind the modal can wear any class or data attribute (post
+		// kses keeps both), and a document-wide $$() bound the modal's actions
+		// to it too.
+		const ovr = $( '#minn-overlays' );
 		// mousedown, never click: a combobox inside the modal picks on
 		// mousedown and hides its panel, so when the option list overhangs the
 		// modal the mouseup lands on the backdrop and the composed click's
@@ -51211,12 +51220,12 @@
 
 		if ( m.type === 'editor-side' ) {
 			const meta = editorSideDoorMeta( m.id );
-			const body = $( '.minn-editor-door-body' );
+			const body = $( '.minn-editor-door-body', ovr );
 			if ( meta && meta.bind && body && state.editor ) meta.bind( body );
 		}
 
 		if ( m.type === 'changelog' && ENGINE && ! m.plugin ) {
-			$$( '[data-clproduct]' ).forEach( ( btn ) =>
+			$$( '[data-clproduct]', ovr ).forEach( ( btn ) =>
 				btn.addEventListener( 'click', () => {
 					if ( ( btn.dataset.clproduct === 'engine' ) !== !! m.engine ) openChangelog( btn.dataset.clproduct );
 				} )
@@ -51224,7 +51233,7 @@
 		}
 
 		if ( m.type === 'changelog' && m.sections ) {
-			$$( '[data-clver]' ).forEach( ( btn ) =>
+			$$( '[data-clver]', ovr ).forEach( ( btn ) =>
 				btn.addEventListener( 'click', () => {
 					const i = parseInt( btn.dataset.clver, 10 );
 					if ( i === m.sec ) return;
@@ -51249,7 +51258,7 @@
 		}
 
 		if ( m.type === 'db-row' ) {
-			$$( '[data-dbcopy]' ).forEach( ( btn ) =>
+			$$( '[data-dbcopy]', ovr ).forEach( ( btn ) =>
 				btn.addEventListener( 'click', async () => {
 					const cell = m.cells[ parseInt( btn.dataset.dbcopy, 10 ) ];
 					const value = typeof cell === 'string' ? cell : ( cell && cell.v ) || '';
@@ -51282,7 +51291,7 @@
 				// leading newline, so text saved with CRLF (wp-admin's own
 				// forms) read as edited and overwrote a newer copy.
 				const asShown = ( v ) => String( v ?? '' ).replace( /\r\n?/g, '\n' ).replace( /^\n/, '' );
-				$$( '[data-wfield]' ).forEach( ( input ) => {
+				$$( '[data-wfield]', ovr ).forEach( ( input ) => {
 					const k = input.dataset.wfield;
 					if ( asShown( input.value ) !== asShown( loaded[ k ] ) ) raw[ k ] = input.value;
 				} );
@@ -51299,7 +51308,7 @@
 		}
 
 		if ( m.type === 'chart-activity' ) {
-			$$( '[data-ca]' ).forEach( ( row ) =>
+			$$( '[data-ca]', ovr ).forEach( ( row ) =>
 				row.addEventListener( 'click', () => {
 					const it = ( m.items || [] )[ parseInt( row.dataset.ca, 10 ) ];
 					if ( ! it ) return;
@@ -51314,7 +51323,7 @@
 			// Analytics drill-down: open the front-end URL (the page that
 			// got the traffic). Editor deep-links would need a type resolve
 			// and aren't the job of a traffic modal.
-			$$( '[data-tp]' ).forEach( ( row ) =>
+			$$( '[data-tp]', ovr ).forEach( ( row ) =>
 				row.addEventListener( 'click', () => {
 					const it = ( m.data && m.data.pages || [] )[ parseInt( row.dataset.tp, 10 ) ];
 					// The path comes from the analytics provider's own response
@@ -51594,14 +51603,14 @@
 		}
 
 		if ( m.type === 'cpt' ) {
-			bindStructureToggles( $( '.minn-modal' ) );
+			bindStructureToggles( $( '.minn-modal', ovr ) );
 			if ( ! m.item && m.backends && m.backends.length > 1 ) {
-				bindFormComboboxes( $( '.minn-modal' ), 'data-cptbackend', [ { key: 'backend', type: 'combobox', options: m.backends.map( ( b ) => [ b, CPT_SOURCE_LABEL[ b ] || b ] ) } ] );
+				bindFormComboboxes( $( '.minn-modal', ovr ), 'data-cptbackend', [ { key: 'backend', type: 'combobox', options: m.backends.map( ( b ) => [ b, CPT_SOURCE_LABEL[ b ] || b ] ) } ] );
 			}
 			const saveBtn = $( '#minn-cpt-save' );
 			if ( saveBtn ) saveBtn.addEventListener( 'click', async () => {
 				// Scope to the modal — the list rows behind it carry data-cpt slugs.
-				const modal = $( '.minn-modal' );
+				const modal = $( '.minn-modal', ovr );
 				const payload = { supports: [], taxonomies: [] };
 				$$( '[data-cptfield]', modal ).forEach( ( i ) => { payload[ i.dataset.cptfield ] = i.value.trim(); } );
 				$$( '[data-cptflag]', modal ).forEach( ( i ) => { payload[ i.dataset.cptflag ] = i.classList.contains( 'on' ) ? 1 : 0; } );
@@ -51638,20 +51647,20 @@
 		}
 
 		if ( m.type === 'surface-action' ) {
-			bindActionFields( $( '.minn-modal' ), m.action, closeModal, ( body ) =>
+			bindActionFields( $( '.minn-modal', ovr ), m.action, closeModal, ( body ) =>
 				runSurfaceFieldsAction( m.surface, m.item, m.action, body )
 			);
 		}
 
 		if ( m.type === 'surface-form' ) {
-			bindFormComboboxes( $( '.minn-modal' ), 'data-createfield', ( ( m.coll || m.surface.collection ).create || {} ).fields );
+			bindFormComboboxes( $( '.minn-modal', ovr ), 'data-createfield', ( ( m.coll || m.surface.collection ).create || {} ).fields );
 			const createBtn = $( '#minn-surface-create' );
 			if ( createBtn ) createBtn.addEventListener( 'click', async () => {
 				const cr = ( m.coll || m.surface.collection ).create;
 				// Defaults first, then the typed fields (dot paths supported).
 				const body = JSON.parse( JSON.stringify( cr.defaults || {} ) );
 				let missing = false;
-				$$( '[data-createfield]', $( '.minn-modal' ) ).forEach( ( input ) => {
+				$$( '[data-createfield]', $( '.minn-modal', ovr ) ).forEach( ( input ) => {
 					const v = surfaceFieldValue( input );
 					const empty = v == null || v === '' || ( Array.isArray( v ) && ! v.length );
 					// Number 0 is a real value; optional fields can set required:false.
@@ -51734,13 +51743,13 @@
 		}
 
 		if ( m.type === 'tax' ) {
-			bindStructureToggles( $( '.minn-modal' ) );
+			bindStructureToggles( $( '.minn-modal', ovr ) );
 			if ( ! m.item && m.backends && m.backends.length > 1 ) {
-				bindFormComboboxes( $( '.minn-modal' ), 'data-taxbackend', [ { key: 'backend', type: 'combobox', options: m.backends.map( ( b ) => [ b, CPT_SOURCE_LABEL[ b ] || b ] ) } ] );
+				bindFormComboboxes( $( '.minn-modal', ovr ), 'data-taxbackend', [ { key: 'backend', type: 'combobox', options: m.backends.map( ( b ) => [ b, CPT_SOURCE_LABEL[ b ] || b ] ) } ] );
 			}
 			const saveBtn = $( '#minn-tax-save' );
 			if ( saveBtn ) saveBtn.addEventListener( 'click', async () => {
-				const modal = $( '.minn-modal' );
+				const modal = $( '.minn-modal', ovr );
 				const payload = { object_types: [] };
 				$$( '[data-taxfield]', modal ).forEach( ( i ) => { payload[ i.dataset.taxfield ] = i.value.trim(); } );
 				$$( '[data-taxflag]', modal ).forEach( ( i ) => { payload[ i.dataset.taxflag ] = i.classList.contains( 'on' ) ? 1 : 0; } );
@@ -51783,7 +51792,7 @@
 				}
 				if ( count ) count.textContent = m.picked.length ? `${ m.picked.length } selected — in click order` : __( 'Pick images in order' );
 			};
-			$$( '[data-pick]' ).forEach( ( el ) =>
+			$$( '[data-pick]', ovr ).forEach( ( el ) =>
 				el.addEventListener( 'click', () => {
 					const it = m.items[ parseInt( el.dataset.pick, 10 ) ];
 					if ( ! it ) return;
@@ -51916,8 +51925,8 @@
 		}
 
 		if ( m.type === 'surface' ) {
-			bindFormComboboxes( $( '.minn-modal' ), 'data-editfield', ( ( ( m.coll || m.surface.collection ).detail || {} ).edit || {} ).fields );
-			$$( '[data-scopy]', $( '.minn-modal' ) ).forEach( ( btn ) =>
+			bindFormComboboxes( $( '.minn-modal', ovr ), 'data-editfield', ( ( ( m.coll || m.surface.collection ).detail || {} ).edit || {} ).fields );
+			$$( '[data-scopy]', $( '.minn-modal', ovr ) ).forEach( ( btn ) =>
 				btn.addEventListener( 'click', async () => {
 					const wrap = btn.closest( '.minn-detail-code-wrap' );
 					const pre = wrap && wrap.querySelector( 'pre' );
@@ -51951,7 +51960,7 @@
 			if ( ! m.loading && m.editShown !== m.item ) {
 				m.editShown = m.item;
 				m.editInitial = {};
-				$$( '[data-editfield]' ).forEach( ( input ) => {
+				$$( '[data-editfield]', ovr ).forEach( ( input ) => {
 					m.editInitial[ input.dataset.editfield ] = JSON.stringify( surfaceFieldValue( input ) );
 				} );
 			}
@@ -51977,7 +51986,7 @@
 					const v = surfaceValue( from, k );
 					if ( v !== undefined ) body[ k ] = ( v && typeof v === 'object' ) ? JSON.parse( JSON.stringify( v ) ) : v;
 				} );
-				$$( '[data-editfield]' ).forEach( ( input ) => {
+				$$( '[data-editfield]', ovr ).forEach( ( input ) => {
 					const key = input.dataset.editfield;
 					const v = surfaceFieldValue( input );
 					const untouched = now && m.editInitial && m.editInitial[ key ] === JSON.stringify( v );
@@ -51996,7 +52005,7 @@
 					saveBtn.textContent = 'Save';
 				}
 			} );
-			$$( '[data-saction]' ).forEach( ( btn ) =>
+			$$( '[data-saction]', ovr ).forEach( ( btn ) =>
 				btn.addEventListener( 'click', async () => {
 					const action = ( m.coll || m.surface.collection ).actions[ parseInt( btn.dataset.saction, 10 ) ];
 					if ( ! action ) return;
@@ -52072,7 +52081,7 @@
 				} );
 			}
 			filterSitePickerRows();
-			$$( '[data-spgo]' ).forEach( ( btn ) => btn.addEventListener( 'click', () => {
+			$$( '[data-spgo]', ovr ).forEach( ( btn ) => btn.addEventListener( 'click', () => {
 				openSite( ( m.items || [] )[ parseInt( btn.dataset.spgo, 10 ) ] );
 			} ) );
 		}
@@ -52174,7 +52183,7 @@
 			} );
 		}
 		if ( m.type === 'styles-history' ) {
-			$$( '[data-gsrestore]' ).forEach( ( btn ) =>
+			$$( '[data-gsrestore]', ovr ).forEach( ( btn ) =>
 				btn.addEventListener( 'click', () => restoreStylesRevision( m, parseInt( btn.dataset.gsrestore, 10 ) ) )
 			);
 		}
@@ -52194,7 +52203,7 @@
 		}
 
 		if ( m.type === 'revisions-list' ) {
-			$$( '[data-revlist]' ).forEach( ( btn ) =>
+			$$( '[data-revlist]', ovr ).forEach( ( btn ) =>
 				btn.addEventListener( 'click', () => {
 					const revId = parseInt( btn.dataset.revlist, 10 );
 					const ed = state.editor;
@@ -52222,7 +52231,7 @@
 				} );
 				heat.addEventListener( 'focusout', () => hideRevHeatTip() );
 			}
-			$$( '[data-revday]' ).forEach( ( cell ) =>
+			$$( '[data-revday]', ovr ).forEach( ( cell ) =>
 				cell.addEventListener( 'click', () => {
 					if ( ! state.modal || state.modal.type !== 'revisions-list' ) return;
 					hideRevHeatTip();
@@ -52240,7 +52249,7 @@
 			} );
 			// Highlight the active day cell after paint.
 			if ( m.dayFilter ) {
-				const active = $( `.minn-rev-heat-cell[data-revday="${ CSS.escape( m.dayFilter ) }"]` );
+				const active = $( `.minn-rev-heat-cell[data-revday="${ CSS.escape( m.dayFilter ) }"]`, ovr );
 				if ( active ) active.classList.add( 'sel' );
 			}
 		}
@@ -52299,6 +52308,9 @@
 	}
 
 	function bindThemeInstallModal( m ) {
+		// Inside the overlays root only, as bindModal: content behind the
+		// modal can wear these data attributes.
+		const ovr = $( '#minn-overlays' );
 		const input = $( '#minn-ti-search' );
 		input.focus();
 		input.setSelectionRange( input.value.length, input.value.length );
@@ -52346,7 +52358,7 @@
 				}
 			}
 		};
-		$$( '[data-ti]' ).forEach( ( btn ) =>
+		$$( '[data-ti]', ovr ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', async () => {
 				const t = m.results[ parseInt( btn.dataset.ti, 10 ) ];
 				if ( ! t ) return;
@@ -52963,6 +52975,9 @@
 	}
 
 	function bindPluginInstallModalRest( m ) {
+		// Inside the overlays root only, as bindModal: content behind the
+		// modal can wear these data attributes.
+		const ovr = $( '#minn-overlays' );
 		const input = $( '#minn-pi-search' );
 		// Focus the search only when the catalog is showing (empty open).
 		if ( ! m.q ) {
@@ -52986,7 +53001,7 @@
 		} );
 
 		// Catalog chip → install / activate + hover tip.
-		$$( '[data-pi-chip]' ).forEach( ( btn ) => {
+		$$( '[data-pi-chip]', ovr ).forEach( ( btn ) => {
 			const cat = PLUGIN_CATALOG.find( ( c ) => c.id === btn.dataset.cat );
 			const entry = cat && cat.plugins[ parseInt( btn.dataset.piChip, 10 ) ];
 			btn.addEventListener( 'click', async () => {
@@ -53010,11 +53025,11 @@
 			}
 		} );
 		// Scroll inside the catalog hides a tip that would float wrong.
-		const results = $( '.minn-pi-results' );
+		const results = $( '.minn-pi-results', ovr );
 		if ( results ) results.addEventListener( 'scroll', hidePluginTip, { passive: true } );
 
 		// "Browse more on WordPress.org" under a card → directory search.
-		$$( '[data-pi-more]' ).forEach( ( btn ) =>
+		$$( '[data-pi-more]', ovr ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', () => {
 				const cat = PLUGIN_CATALOG.find( ( c ) => c.id === btn.dataset.piMore );
 				if ( ! cat || ! cat.q ) return;
@@ -53035,10 +53050,10 @@
 		// renderOverlays rebuilds the modal, which resets the results scroll —
 		// put the reader back where they were.
 		const renderKeepingScroll = () => {
-			const list = $( '.minn-pi-results' );
+			const list = $( '.minn-pi-results', ovr );
 			const top = list ? list.scrollTop : 0;
 			renderOverlays();
-			const again = $( '.minn-pi-results' );
+			const again = $( '.minn-pi-results', ovr );
 			if ( again ) again.scrollTop = top;
 		};
 		const more = $( '#minn-pi-more' );
@@ -53058,7 +53073,7 @@
 			}
 		} );
 
-		$$( '[data-pi]' ).forEach( ( btn ) =>
+		$$( '[data-pi]', ovr ).forEach( ( btn ) =>
 			btn.addEventListener( 'click', async () => {
 				const p = m.results[ parseInt( btn.dataset.pi, 10 ) ];
 				if ( ! p ) return;
@@ -55403,19 +55418,19 @@
 					toast( e.message, true );
 				}
 			} );
-			$$( '.minn-notif-tab' ).forEach( ( btn ) =>
+			$$( '.minn-notif-tab', root ).forEach( ( btn ) =>
 				btn.addEventListener( 'click', () => { state.notifTab = btn.dataset.tab; renderOverlays(); } )
 			);
 			const updAll = $( '#minn-update-all' );
 			if ( updAll ) updAll.addEventListener( 'click', runUpdateEverything );
-			$$( '[data-nupd]' ).forEach( ( b ) =>
+			$$( '[data-nupd]', root ).forEach( ( b ) =>
 				b.addEventListener( 'click', ( e ) => {
 					e.stopPropagation();
 					const item = ( state.cache.notifications || [] ).find( ( n ) => n.id === b.dataset.nupd );
 					if ( item ) runNotifUpdate( item, b );
 				} )
 			);
-			$$( '.minn-notif-link[data-li]' ).forEach( ( b ) =>
+			$$( '.minn-notif-link[data-li]', root ).forEach( ( b ) =>
 				b.addEventListener( 'click', ( e ) => {
 					e.stopPropagation();
 					const item = ( state.cache.notifications || [] ).find( ( n ) => n.id === b.dataset.nid );
@@ -55451,7 +55466,7 @@
 			// Hide clears the notice from Minn's OWN digest — for nags whose
 			// real dismissal is plugin-specific admin-ajax JS Minn can't
 			// replay. Ids are content-stable so it survives re-captures.
-			$$( '.minn-notif-hide' ).forEach( ( b ) =>
+			$$( '.minn-notif-hide', root ).forEach( ( b ) =>
 				b.addEventListener( 'click', async ( e ) => {
 					e.stopPropagation();
 					const nid = b.dataset.nid;
@@ -55472,7 +55487,7 @@
 					}
 				} )
 			);
-			$$( '.minn-notif-row' ).forEach( ( row ) =>
+			$$( '.minn-notif-row', root ).forEach( ( row ) =>
 				row.addEventListener( 'click', () => {
 					const item = ( state.cache.notifications || [] ).find( ( n ) => n.id === row.dataset.nid );
 					if ( ! item ) return;
