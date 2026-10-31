@@ -65,6 +65,159 @@ wp_set_current_user( $admin[0]->ID );
 $tag = substr( md5( (string) microtime( true ) ), 0, 8 );
 
 /*
+ * 08-1: render-blocks ran WP_Embed::autoembed() over a block's whole HTML
+ * whenever it held "wp-block-embed__wrapper", so one Contributor request
+ * embedded every bare URL it carried, and with no post each lookup left a
+ * published oembed_cache post behind. Only an embed block's own URL is
+ * resolved now, lookups per request are capped, and answers are cached in
+ * the editable post's meta or in an expiring transient.
+ */
+( function () use ( $check, $drop_user, $admin, $call, $tag ) {
+	global $wpdb, $wp_embed;
+	if ( empty( $wp_embed ) ) {
+		echo "SKIP  08-1 no WP_Embed\n";
+		return;
+	}
+	$lookups = 0;
+	$http    = 0;
+	$cap     = defined( 'Minn_Admin_REST::PREVIEW_EMBED_LOOKUPS' ) ? Minn_Admin_REST::PREVIEW_EMBED_LOOKUPS : 10;
+	// After core's own local-URL answer (priority 10), so it sees null.
+	$answer = function ( $result, $url ) use ( &$lookups ) {
+		if ( false === strpos( (string) $url, 'minn-v049.example' ) ) {
+			return $result;
+		}
+		++$lookups;
+		return false !== strpos( $url, '/ok/' ) ? '<iframe title="minn-v049-embed" src="' . esc_url( $url ) . '"></iframe>' : false;
+	};
+	$no_http = function () use ( &$http ) {
+		++$http;
+		return new WP_Error( 'minn_v049_no_http', 'This suite makes no HTTP requests.' );
+	};
+	add_filter( 'pre_oembed_result', $answer, 99, 2 );
+	add_filter( 'pre_http_request', $no_http, 1 );
+
+	$cache_ids = function () use ( $wpdb ) {
+		return array_map( 'intval', $wpdb->get_col( "SELECT ID FROM {$wpdb->posts} WHERE post_type = 'oembed_cache'" ) );
+	};
+	$transients = function () use ( $wpdb ) {
+		return $wpdb->get_col( "SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE '\\_transient\\_minn\\_embed\\_%'" );
+	};
+	$ids_before = $cache_ids();
+	$tr_before  = $transients();
+
+	$embed = function ( $url, $name = 'core/embed' ) {
+		$comment = 'core/embed' === $name ? 'embed' : $name;
+		return '<!-- wp:' . $comment . ' {"url":"' . $url . '","type":"rich","providerNameSlug":"minn"} -->' . "\n"
+			. '<figure class="wp-block-embed is-type-rich is-provider-minn wp-block-embed-minn"><div class="wp-block-embed__wrapper">' . "\n"
+			. $url . "\n" . '</div></figure>' . "\n" . '<!-- /wp:' . $comment . ' -->';
+	};
+	$render = function ( array $blocks, $post ) use ( $call ) {
+		list( $st, $d ) = $call( 'POST', '/minn-admin/v1/render-blocks', array( 'blocks' => $blocks, 'post' => $post ) );
+		return array( $st, (array) ( $d['rendered'] ?? array() ) );
+	};
+	$iframes = function ( array $rendered ) {
+		return count( array_filter( $rendered, function ( $h ) {
+			return false !== strpos( (string) $h, 'title="minn-v049-embed"' );
+		} ) );
+	};
+
+	$cid   = wp_insert_user( array( 'user_login' => 'minn-v049-co-' . $tag, 'user_pass' => wp_generate_password(), 'role' => 'contributor', 'user_email' => 'minn-v049-co-' . $tag . '@example.com' ) );
+	$own   = wp_insert_post( array( 'post_title' => 'minn v049 embed own ' . $tag, 'post_status' => 'draft', 'post_author' => $cid ) );
+	$other = wp_insert_post( array( 'post_title' => 'minn v049 embed other ' . $tag, 'post_status' => 'draft', 'post_author' => $admin[0]->ID ) );
+	try {
+		wp_set_current_user( $cid );
+
+		// A core/html block wearing the wrapper class over forty bare URLs.
+		$flood = '<!-- wp:html --><div class="wp-block-embed__wrapper"></div>';
+		for ( $i = 0; $i < 40; $i++ ) {
+			$flood .= "\n<p>https://minn-v049.example/no/{$tag}-flood-{$i}</p>";
+		}
+		$flood  .= "\n<!-- /wp:html -->";
+		$lookups = 0;
+		list( $st ) = $render( array( $flood ), 0 );
+		$new = array_diff( $cache_ids(), $ids_before );
+		$check( '08-1 a Contributor\'s bare URLs in an html block start no embed lookup', 200 === $st && 0 === $lookups, "status {$st}, lookups {$lookups}" );
+		$check( '08-1 and leave no oembed_cache post', ! $new, count( $new ) . ' new rows' );
+
+		// Twenty-five embed blocks, every lookup failing.
+		$blocks = array();
+		for ( $i = 0; $i < 25; $i++ ) {
+			$blocks[] = $embed( "https://minn-v049.example/no/{$tag}-many-{$i}" );
+		}
+		$lookups = 0;
+		list( $st ) = $render( $blocks, 0 );
+		$new = array_diff( $cache_ids(), $ids_before );
+		$check( '08-1 embed lookups per request are capped', 200 === $st && $lookups <= $cap, "status {$st}, lookups {$lookups}" );
+		$check( '08-1 failed lookups with no post leave no oembed_cache post', ! $new, count( $new ) . ' new rows' );
+		$check( '08-1 no HTTP request was made', 0 === $http, "{$http} attempts" );
+
+		// Controls: a real embed block still previews as the provider's player.
+		$lookups = 0;
+		list( $st, $out ) = $render( array( $embed( "https://minn-v049.example/ok/{$tag}-own" ) ), $own );
+		$meta = array_filter( array_keys( (array) get_post_meta( $own ) ), function ( $k ) {
+			return 0 === strpos( $k, '_oembed_' ) && 0 !== strpos( $k, '_oembed_time_' );
+		} );
+		$check( '08-1 control: an embed block on the Contributor\'s own draft previews', 200 === $st && 1 === $iframes( $out ) && false !== strpos( (string) $out[0], 'wp-block-embed__wrapper' ), substr( (string) ( $out[0] ?? '' ), 0, 200 ) );
+		$check( '08-1 its answer is cached in that draft\'s meta, as the front end caches it', 1 === count( $meta ) && ! array_diff( $cache_ids(), $ids_before ), wp_json_encode( array_values( $meta ) ) );
+		$lookups = 0;
+		$render( array( $embed( "https://minn-v049.example/ok/{$tag}-own" ) ), $own );
+		$check( '08-1 a second preview reads that cache', 0 === $lookups, "lookups {$lookups}" );
+
+		$held = $wp_embed->post_ID;
+		list( $st, $out ) = $render( array( $embed( "https://minn-v049.example/ok/{$tag}-nopost" ) ), 0 );
+		$check( '08-1 control: with no post an embed block previews too', 200 === $st && 1 === $iframes( $out ), substr( (string) ( $out[0] ?? '' ), 0, 200 ) );
+		$check( '08-1 with no post the answer is an expiring transient, not a post', count( array_diff( $transients(), $tr_before ) ) >= 1 && ! array_diff( $cache_ids(), $ids_before ) );
+		$check( '08-1 WP_Embed\'s post id is put back after the render', $held === $wp_embed->post_ID, wp_json_encode( $wp_embed->post_ID ) );
+
+		$render( array( $embed( "https://minn-v049.example/ok/{$tag}-other" ) ), $other );
+		$check( '08-1 a post the Contributor cannot edit gets no cache rows', '' === implode( '', array_filter( array_keys( (array) get_post_meta( $other ) ), function ( $k ) {
+			return 0 === strpos( $k, '_oembed_' );
+		} ) ) );
+
+		// Legacy block name and an embed nested in a group.
+		$legacy = $embed( "https://minn-v049.example/ok/{$tag}-legacy", 'core-embed/youtube' );
+		$nested = '<!-- wp:group --><div class="wp-block-group">' . $embed( "https://minn-v049.example/ok/{$tag}-nested" ) . '</div><!-- /wp:group -->';
+		list( $st, $out ) = $render( array( $legacy, $nested ), $own );
+		$check( '08-1 control: a pre-5.6 embed block name and a nested embed both preview', 200 === $st && 2 === $iframes( $out ), wp_json_encode( array_map( function ( $h ) {
+			return substr( (string) $h, 0, 120 );
+		}, $out ) ) );
+
+		// A post with more embeds than one request may look up: cached
+		// answers are free, so the next load fills in the rest.
+		$blocks = array();
+		for ( $i = 0; $i < 14; $i++ ) {
+			$blocks[] = $embed( "https://minn-v049.example/ok/{$tag}-fill-{$i}" );
+		}
+		$lookups = 0;
+		list( , $first ) = $render( $blocks, $own );
+		$first_lookups   = $lookups;
+		$lookups         = 0;
+		list( , $second ) = $render( $blocks, $own );
+		$check( '08-1 control: a post with 14 embeds previews them all by its second load', $cap === $first_lookups && $cap === $iframes( $first ) && 14 === $iframes( $second ) && 4 === $lookups, "first {$first_lookups}/" . $iframes( $first ) . ", second {$lookups}/" . $iframes( $second ) );
+
+		// The class is closed for every caller, not only untrusted ones.
+		wp_set_current_user( $admin[0]->ID );
+		$lookups = 0;
+		$render( array( str_replace( '-flood-', '-admin-flood-', $flood ) ), 0 );
+		$check( '08-1 an administrator\'s bare URLs in an html block start no lookup either', 0 === $lookups, "lookups {$lookups}" );
+		$check( '08-1 still no HTTP request was made', 0 === $http, "{$http} attempts" );
+	} finally {
+		wp_set_current_user( $admin[0]->ID );
+		remove_filter( 'pre_oembed_result', $answer, 99 );
+		remove_filter( 'pre_http_request', $no_http, 1 );
+		foreach ( array_diff( $cache_ids(), $ids_before ) as $id ) {
+			wp_delete_post( $id, true );
+		}
+		foreach ( array_diff( $transients(), $tr_before ) as $name ) {
+			delete_transient( substr( $name, strlen( '_transient_' ) ) );
+		}
+		wp_delete_post( $own, true );
+		wp_delete_post( $other, true );
+		$drop_user( $cid );
+	}
+} )();
+
+/*
  * 00-2: the SEO panel's per-type gate read SEOPress's switch only, while
  * SEOPress boxes only its own type list as seopress_metaboxe_seo leaves it.
  * The sweep found the same gap for Yoast (wpseo_enable_editor_features_{type})
@@ -124,6 +277,61 @@ $tag = substr( md5( (string) microtime( true ) ), 0, 8 );
 	} finally {
 		wp_delete_post( $page, true );
 	}
+} )();
+
+/*
+ * Class guards (static). An embed lookup over markup a caller sent runs
+ * only where it is capped and cached in an editable post or a transient,
+ * never through WP_Embed's no-post cache (autoembed or the_content with no
+ * post leave an oembed_cache post per URL). Each FluentSnippets write that
+ * can put code on the site or start it asks the authoring switch.
+ */
+( function () use ( $check ) {
+	$root = dirname( __DIR__ );
+	$src  = array();
+	$it   = new RecursiveIteratorIterator( new RecursiveDirectoryIterator( $root . '/includes', FilesystemIterator::SKIP_DOTS ) );
+	foreach ( $it as $f ) {
+		if ( '.php' === substr( (string) $f, -4 ) ) {
+			$src[ substr( (string) $f, strlen( $root ) + 1 ) ] = (string) file_get_contents( (string) $f );
+		}
+	}
+	// Pattern => file => how many times it may appear, each one reviewed.
+	$reviewed = array(
+		'/->\s*autoembed\s*\(/'                                             => array(),
+		'/apply_filters\(\s*[\'"]the_content[\'"]/'                         => array(),
+		'/_wp_oembed_get_object\(\)\s*->\s*(get_html|get_data|fetch)\s*\(/' => array(),
+		// preview_embed(): capped, transient-cached.
+		'/\bwp_oembed_get\s*\(/'                                            => array( 'includes/class-minn-admin-rest.php' => 1 ),
+		// preview_embed(): capped, with post_ID set to an editable post.
+		'/\$wp_embed->shortcode\s*\(/'                                      => array( 'includes/class-minn-admin-rest.php' => 1 ),
+		// refresh_oembed_cache(): a post's own embeds after a save of it.
+		'/->\s*cache_oembed\s*\(/'                                          => array( 'includes/class-minn-admin.php' => 1 ),
+	);
+	foreach ( $reviewed as $re => $want ) {
+		$found = array();
+		foreach ( $src as $file => $text ) {
+			$n = preg_match_all( $re, $text );
+			if ( $n ) {
+				$found[ $file ] = $n;
+			}
+		}
+		ksort( $found );
+		ksort( $want );
+		$check( "guard: embed lookups {$re} only where reviewed", $found === $want, wp_json_encode( $found ) );
+	}
+	$fluent = (string) ( $src['includes/adapters/fluent-snippets.php'] ?? '' );
+	if ( '' === $fluent ) {
+		return;
+	}
+	$writes = 0;
+	$asked  = 0;
+	foreach ( array_slice( explode( 'minn_admin_endpoint(', $fluent ), 1 ) as $route ) {
+		if ( preg_match( "/'methods'\s*=>\s*'(POST|PUT|PATCH)'/", $route ) ) {
+			++$writes;
+			$asked += false !== strpos( $route, 'minn_admin_fluent_authoring_refused(' ) ? 1 : 0;
+		}
+	}
+	$check( 'guard: every FluentSnippets write route that can add, change or start code asks the authoring switch', $writes > 0 && $writes === $asked, "{$asked} of {$writes}" );
 } )();
 
 /*

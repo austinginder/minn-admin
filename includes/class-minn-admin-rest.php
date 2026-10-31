@@ -3027,6 +3027,126 @@ class Minn_Admin_REST {
 		return false;
 	}
 
+	/**
+	 * Embed lookups one render may start. A lookup is an outbound fetch (and
+	 * a discovery fetch when no provider matches); an answer already cached
+	 * costs nothing and is not counted, so a post's embeds fill in over its
+	 * next loads however many it holds.
+	 */
+	const PREVIEW_EMBED_LOOKUPS = 10;
+
+	/**
+	 * Island previews show an embed block as the front end will: its own
+	 * URL, alone in the block's wrapper, turned into the provider's player.
+	 *
+	 * Only a core embed block's wrapper is resolved, never other URLs in the
+	 * markup: WP_Embed::autoembed() over a whole block embedded every URL
+	 * standing alone on a line, as many as the caller wrote. And never
+	 * through WP_Embed's no-post cache, which keeps every answer, a failure
+	 * included, as a published oembed_cache post that nothing removes. With
+	 * a post the caller may edit, the answer is cached in that post's meta,
+	 * where the front end caches the same embed; without one, in an expiring
+	 * transient, as core's oEmbed proxy does for the block editor.
+	 *
+	 * @param string $raw     The block markup the caller sent.
+	 * @param string $html    Its render.
+	 * @param int    $post_id A post the caller may edit, or 0.
+	 * @param int    $budget  Lookups left for this request (counted down).
+	 * @param array  $seen    URL => answer, for this request.
+	 * @return string
+	 */
+	private static function preview_embeds( $raw, $html, $post_id, &$budget, array &$seen ) {
+		$wrappers = array();
+		$walk     = static function ( $blocks ) use ( &$walk, &$wrappers ) {
+			foreach ( (array) $blocks as $block ) {
+				$name = (string) ( $block['blockName'] ?? '' );
+				// core-embed/* is the block's name before WordPress 5.6, still
+				// in older posts and still embedded by the front end.
+				if ( ( 'core/embed' === $name || 0 === strpos( $name, 'core-embed/' ) )
+					&& preg_match( '#<div class="wp-block-embed__wrapper">\s*(https?://[^\s<>"]+)\s*</div>#i', (string) ( $block['innerHTML'] ?? '' ), $m ) ) {
+					$wrappers[ $m[0] ] = $m[1];
+				}
+				if ( ! empty( $block['innerBlocks'] ) ) {
+					$walk( $block['innerBlocks'] );
+				}
+			}
+		};
+		$walk( parse_blocks( $raw ) );
+		foreach ( $wrappers as $wrapper => $url ) {
+			if ( false === strpos( $html, $wrapper ) ) {
+				continue;
+			}
+			$embed = self::preview_embed( $url, $post_id, $budget, $seen );
+			if ( is_string( $embed ) && '' !== $embed ) {
+				$html = str_replace( $wrapper, str_replace( $url, $embed, $wrapper ), $html );
+			}
+		}
+		return $html;
+	}
+
+	/**
+	 * One embed URL as WP_Embed::shortcode() answers it, cached where
+	 * preview_embeds() says. False when the lookup budget is spent.
+	 *
+	 * @param string $url     The URL as the block holds it.
+	 * @param int    $post_id A post the caller may edit, or 0.
+	 * @param int    $budget  Lookups left for this request.
+	 * @param array  $seen    URL => answer, for this request.
+	 * @return string|false
+	 */
+	private static function preview_embed( $url, $post_id, &$budget, array &$seen ) {
+		if ( array_key_exists( $url, $seen ) ) {
+			return $seen[ $url ];
+		}
+		$wp_embed = $GLOBALS['wp_embed'];
+		// The same keys WP_Embed::shortcode() reads (kses writes & as &amp;).
+		$clean = str_replace( '&amp;', '&', $url );
+		$attr  = wp_parse_args( array(), wp_embed_defaults( $url ) );
+		// A registered handler (core's audio and video, a plugin's own)
+		// answers from the URL alone, as it does first in shortcode().
+		$handled = $wp_embed->get_embed_handler_html( array(), $clean );
+		if ( false !== $handled ) {
+			$seen[ $url ] = $handled;
+			return $handled;
+		}
+		$suffix = md5( $clean . serialize( $attr ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- WP_Embed's own cache key.
+		if ( $post_id ) {
+			if ( '' === get_post_meta( $post_id, '_oembed_' . $suffix, true ) ) {
+				if ( $budget < 1 ) {
+					return false;
+				}
+				--$budget;
+			}
+			$held              = $wp_embed->post_ID;
+			$wp_embed->post_ID = $post_id;
+			try {
+				$seen[ $url ] = $wp_embed->shortcode( array(), $url );
+			} finally {
+				$wp_embed->post_ID = $held;
+			}
+			return $seen[ $url ];
+		}
+		$key    = 'minn_embed_' . $suffix;
+		$cached = get_transient( $key );
+		if ( false === $cached ) {
+			if ( $budget < 1 ) {
+				return false;
+			}
+			--$budget;
+			/** This filter is documented in wp-includes/class-wp-embed.php */
+			$fetched = wp_oembed_get( $clean, array_merge( $attr, array( 'discover' => apply_filters( 'embed_oembed_discover', true ) ) ) );
+			$cached  = $fetched ? $fetched : '{{unknown}}';
+			// A failure is remembered for an hour, so a retry loop costs
+			// nothing and a provider that was down comes back soon.
+			/** This filter is documented in wp-includes/class-wp-embed.php */
+			$ttl = $fetched ? apply_filters( 'oembed_ttl', DAY_IN_SECONDS, $clean, $attr, 0 ) : HOUR_IN_SECONDS;
+			set_transient( $key, $cached, $ttl );
+		}
+		/** This filter is documented in wp-includes/class-wp-embed.php */
+		$seen[ $url ] = ( '{{unknown}}' === $cached ) ? $wp_embed->maybe_make_link( $clean ) : apply_filters( 'embed_oembed_html', $cached, $clean, $attr, 0 );
+		return $seen[ $url ];
+	}
+
 	public static function render_blocks( WP_REST_Request $request ) {
 		$blocks = $request['blocks'];
 		if ( ! is_array( $blocks ) ) {
@@ -3214,6 +3334,8 @@ class Minn_Admin_REST {
 
 		$queue_before = wp_styles()->queue;
 		$rendered     = array();
+		$embed_budget = self::PREVIEW_EMBED_LOOKUPS;
+		$embed_seen   = array();
 		// The resolvers and the preview clamps come back off however the
 		// render ends, a block that throws included.
 		try {
@@ -3272,10 +3394,10 @@ class Minn_Admin_REST {
 					}
 				}
 				// Embed blocks keep a bare URL in their saved HTML; the front end
-				// converts it via WP_Embed::autoembed on the_content — run the same
-				// pass here so island previews show the real embed.
+				// converts it via WP_Embed on the_content, so island previews
+				// resolve each embed block's own URL (preview_embeds says how).
 				if ( isset( $GLOBALS['wp_embed'] ) && false !== strpos( $html, 'wp-block-embed__wrapper' ) ) {
-					$html = $GLOBALS['wp_embed']->autoembed( $html );
+					$html = self::preview_embeds( $raw, $html, $post_id, $embed_budget, $embed_seen );
 				}
 				/**
 				 * Per-block HTML post-process for island previews. Used by the
