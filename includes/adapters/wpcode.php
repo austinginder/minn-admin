@@ -18,6 +18,32 @@ defined( 'ABSPATH' ) || exit;
 minn_admin_secrets( 'insert-headers-and-footers', array( 'options' => array( 'wpcode_library_api_auth', 'wpcode_connect', 'wpcode_connect_token' ) ) );
 
 /**
+ * WPCode's "AI & Automation Access" switch (off by default) for its
+ * snippets and site-wide code: while it is off WPCode registers no write
+ * ability, so nothing but its own nonce-checked screens can create, change,
+ * turn on or off a snippet. Minn's routes are REST, so a write that is not
+ * a browser session (an Application Password, or a request with no valid
+ * wp_rest nonce) is refused the same way while the switch is off. Builds
+ * without the switch wrote for their screen's capability alone.
+ *
+ * @param WP_REST_Request $request The write.
+ * @return WP_Error|null
+ */
+function minn_admin_wpcode_authoring_refused( WP_REST_Request $request ) {
+	if ( ! class_exists( 'WPCode_Abilities_API' ) || ! method_exists( 'WPCode_Abilities_API', 'write_enabled' ) || WPCode_Abilities_API::write_enabled() ) {
+		return null;
+	}
+	if ( Minn_Admin_REST::browser_session( $request ) ) {
+		return null;
+	}
+	return new WP_Error(
+		'minn_wpcode_automation_off',
+		__( 'Adding, editing, turning on or off and deleting snippets with an Application Password or another sign-in that is not a browser session is turned off on this site. An administrator can allow it in WPCode settings (AI & Automation Access).', 'minn-admin' ),
+		array( 'status' => 403 )
+	);
+}
+
+/**
  * WPCode's own per-code-type capability for a submitted type.
  *
  * WPCode Pro grades snippet authoring by what the code can DO —
@@ -732,6 +758,10 @@ minn_admin_resource( 'wpcode/snippets', function () {
 		'create'  => array(
 			'gate'   => 'view',
 			'run'    => function ( WP_REST_Request $request ) {
+				$refused = minn_admin_wpcode_authoring_refused( $request );
+				if ( $refused ) {
+					return $refused;
+				}
 				$create_type     = sanitize_key( (string) ( $request['code_type'] ?? 'php' ) );
 				$create_location = minn_admin_wpcode_location_in( $request, $create_type );
 				if ( is_wp_error( $create_location ) ) {
@@ -789,6 +819,10 @@ minn_admin_resource( 'wpcode/snippets', function () {
 				'method' => 'PUT',
 				'gate'   => 'view',
 				'run'    => function ( $id, array $row, WP_REST_Request $request ) {
+					$refused = minn_admin_wpcode_authoring_refused( $request );
+					if ( $refused ) {
+						return $refused;
+					}
 					$snippet = minn_admin_wpcode_snippet( $id );
 					// The STORED type gates the edit, and when the payload
 					// carries a new code_type that type must be allowed too —
@@ -998,7 +1032,11 @@ minn_admin_resource( 'wpcode/snippets', function () {
 			'delete' => array(
 				'method' => 'DELETE',
 				'gate'   => 'view',
-				'run'    => function ( $id ) {
+				'run'    => function ( $id, array $row, WP_REST_Request $request ) {
+					$refused = minn_admin_wpcode_authoring_refused( $request );
+					if ( $refused ) {
+						return $refused;
+					}
 					$snippet = minn_admin_wpcode_snippet( $id );
 					// Destroying a snippet needs the same bar as editing it: the
 					// stored code type's tier AND edit_post on this snippet.
@@ -1025,6 +1063,10 @@ minn_admin_resource( 'wpcode/snippets', function () {
 					'active' => array( 'type' => 'boolean', 'required' => true ),
 				),
 				'run'    => function ( $id, array $row, WP_REST_Request $request ) {
+					$refused = minn_admin_wpcode_authoring_refused( $request );
+					if ( $refused ) {
+						return $refused;
+					}
 					$snippet = minn_admin_wpcode_snippet( $id );
 					// Publishing a snippet runs its code, so the stored type's tier
 					// gates this too — a text-tier user must not be able to activate

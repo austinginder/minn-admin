@@ -14,6 +14,10 @@
  *   hands a copy back.
  * GF-Mask-1: the Gravity Forms per-form settings save wrote an edited value
  *   still holding an egress mask into the form, where the credential was.
+ * WPC-Auto-1: WPCode keeps snippet writes away from automation until its
+ *   "AI & Automation Access" switch is on; Minn's WPCode routes wrote for an
+ *   Application Password. A static guard holds every WPCode write route to
+ *   the switch. Defines REST_REQUEST for its last checks, so it runs last.
  *
  * Seeded rows are written with SQL (no option hooks: the vendor sees
  * nothing) and put back with SQL however the run ends. Prints names, never
@@ -301,6 +305,209 @@ try {
 	} finally {
 		GFAPI::delete_form( $form );
 		$put_back();
+	}
+} )();
+
+/*
+ * WPC-Auto-1: with WPCode's "AI & Automation Access" off, a write that is not
+ * a browser session (an Application Password, a REST request without a
+ * valid wp_rest nonce) cannot create, edit, turn on or off or delete a
+ * snippet; Minn's own screens (a valid nonce) still can.
+ */
+( function () use ( $check, $send, $tag ) {
+	// Static guard: every run closure in the WPCode adapter that writes
+	// (a resource create or action, or an endpoint whose methods are not
+	// GET) asks the switch before anything else.
+	$file = dirname( __DIR__ ) . '/includes/adapters/wpcode.php';
+	if ( ! is_readable( $file ) ) {
+		$file = WP_PLUGIN_DIR . '/minn-admin/includes/adapters/wpcode.php';
+	}
+	$toks = array_values(
+		array_filter(
+			token_get_all( (string) file_get_contents( $file ) ), // phpcs:ignore WordPress.WP.AlternativeFunctions
+			static function ( $t ) {
+				return ! is_array( $t ) || ! in_array( $t[0], array( T_WHITESPACE, T_COMMENT, T_DOC_COMMENT ), true );
+			}
+		)
+	);
+	$text = static function ( $from, $to ) use ( $toks ) {
+		$out = '';
+		for ( $k = $from; $k <= $to; $k++ ) {
+			$out .= is_array( $toks[ $k ] ) ? $toks[ $k ][1] : $toks[ $k ];
+			$out .= ' ';
+		}
+		return $out;
+	};
+	$n      = count( $toks );
+	$writes = array();
+	$gated  = 0;
+	for ( $i = 0; $i < $n; $i++ ) {
+		$t = $toks[ $i ];
+		if ( ! is_array( $t ) || T_CONSTANT_ENCAPSED_STRING !== $t[0] || "'run'" !== $t[1] || T_DOUBLE_ARROW !== ( $toks[ $i + 1 ][0] ?? null ) ) {
+			continue;
+		}
+		// The array literal holding this 'run', and the call it is an
+		// argument of (minn_admin_endpoint, or a resource's create/action).
+		$depth = 0;
+		$open  = null;
+		for ( $j = $i - 1; $j >= 0; $j-- ) {
+			$c = $toks[ $j ];
+			if ( ')' === $c || ']' === $c ) {
+				++$depth;
+			} elseif ( '(' === $c || '[' === $c ) {
+				if ( 0 === $depth ) {
+					$open = $j;
+					break;
+				}
+				--$depth;
+			}
+		}
+		$depth = 0;
+		$close = $n - 1;
+		for ( $j = $open + 1; $j < $n; $j++ ) {
+			$c = $toks[ $j ];
+			if ( '(' === $c || '[' === $c ) {
+				++$depth;
+			} elseif ( ')' === $c || ']' === $c ) {
+				if ( 0 === $depth ) {
+					$close = $j;
+					break;
+				}
+				--$depth;
+			}
+		}
+		$block    = $text( $open, $close );
+		$endpoint = $open >= 3 && is_array( $toks[ $open - 1 ] ) && 'array' === strtolower( $toks[ $open - 1 ][1] ) && preg_match( "/minn_admin_endpoint\s*\(\s*'[^']*'\s*,\s*$/", $text( max( 0, $open - 5 ), $open - 2 ) );
+		if ( $endpoint ) {
+			$write = (bool) preg_match( "/'methods'\s*=>\s*(?!'GET')/", $block );
+		} else {
+			$write = ! preg_match( "/'method'\s*=>\s*'GET'/", $block );
+		}
+		if ( ! $write ) {
+			continue;
+		}
+		// The closure's body, from its first brace to the matching one.
+		$from = $i + 2;
+		while ( $from < $n && '{' !== $toks[ $from ] ) {
+			++$from;
+		}
+		$depth = 0;
+		$to    = $from;
+		for ( $j = $from; $j < $n; $j++ ) {
+			if ( '{' === $toks[ $j ] || ( is_array( $toks[ $j ] ) && in_array( $toks[ $j ][0], array( T_CURLY_OPEN, T_DOLLAR_OPEN_CURLY_BRACES ), true ) ) ) {
+				++$depth;
+			} elseif ( '}' === $toks[ $j ] ) {
+				--$depth;
+				if ( 0 === $depth ) {
+					$to = $j;
+					break;
+				}
+			}
+		}
+		$writes[] = $t[2];
+		// The gate is the body's first statement: nothing is read or written
+		// before it.
+		$gated += preg_match( '/^\{\s*\$(\w+)\s*=\s*minn_admin_wpcode_authoring_refused\s*\(\s*\$request\s*\)\s*;\s*if\s*\(\s*\$\1\s*\)\s*\{\s*return\s+\$\1\s*;/', $text( $from, $to ) ) ? 1 : 0;
+	}
+	$check( 'WPC-Auto-1 guard: every WPCode write route asks the automation switch first (' . count( $writes ) . ' routes, lines ' . implode( ', ', $writes ) . ')', count( $writes ) >= 4 && count( $writes ) === $gated, "{$gated} of " . count( $writes ) );
+
+	if ( ! function_exists( 'minn_admin_wpcode_active' ) || ! minn_admin_wpcode_active() || ! class_exists( 'WPCode_Abilities_API' ) || ! method_exists( 'WPCode_Abilities_API', 'write_enabled' ) ) {
+		echo "SKIP  WPC-Auto-1 WPCode 2.4+ inactive\n";
+		return;
+	}
+	// The switch is set in memory through WPCode's own filter: nothing
+	// stored changes.
+	$off = static function () {
+		return false;
+	};
+	$on  = static function () {
+		return true;
+	};
+	$as_app_password = static function ( $fn ) {
+		global $wp_rest_application_password_uuid;
+		$held                              = $wp_rest_application_password_uuid;
+		$wp_rest_application_password_uuid = wp_generate_uuid4();
+		try {
+			return $fn();
+		} finally {
+			$wp_rest_application_password_uuid = $held;
+		}
+	};
+	$route = '/minn-admin/v1/wpcode/snippets';
+	$body  = array( 'name' => 'Minn v049 automation ' . $tag, 'code' => '// minn v049', 'code_type' => 'php', 'location' => 'on_demand', 'auto_insert' => true, 'priority' => 10, 'active' => false, 'tags' => array(), 'desc' => '' );
+	$made  = array();
+	$start = get_posts( array( 'post_type' => 'wpcode', 'post_status' => 'any', 'numberposts' => -1, 'fields' => 'ids' ) );
+	$count = static function () {
+		return count( get_posts( array( 'post_type' => 'wpcode', 'post_status' => 'any', 'numberposts' => -1, 'fields' => 'ids' ) ) );
+	};
+	try {
+		add_filter( 'wpcode_abilities_write_enabled', $off, PHP_INT_MAX );
+		list( $st, , $d ) = $send( 'POST', $route, array(), $body );
+		$id               = (int) ( is_array( $d ) ? ( $d['id'] ?? 0 ) : 0 );
+		if ( $id ) {
+			$made[] = $id;
+		}
+		$check( "WPC-Auto-1 control: a signed-in session (no Application Password) creates a snippet with the switch off ({$st})", 200 === $st && $id > 0, wp_json_encode( is_array( $d ) ? ( $d['code'] ?? '' ) : '' ) );
+		if ( ! $id ) {
+			return;
+		}
+		$before = $count();
+		list( $st, , $d ) = $as_app_password( static function () use ( $send, $route, $body ) {
+			return $send( 'POST', $route, array(), array( 'name' => 'Minn v049 app pw' ) + $body );
+		} );
+		$check( "WPC-Auto-1 with the switch off, an Application Password cannot create a snippet ({$st})", 403 === $st && 'minn_wpcode_automation_off' === ( $d['code'] ?? '' ) && $before === $count(), wp_json_encode( $d['code'] ?? '' ) );
+		$code_was = (string) get_post_field( 'post_content', $id );
+		list( $st ) = $as_app_password( static function () use ( $send, $route, $id ) {
+			return $send( 'PUT', $route . '/' . $id, array(), array( 'code' => '// minn v049 rewritten' ) );
+		} );
+		clean_post_cache( $id );
+		$check( "WPC-Auto-1 nor edit one ({$st})", 403 === $st && $code_was === (string) get_post_field( 'post_content', $id ) );
+		list( $st ) = $as_app_password( static function () use ( $send, $route, $id ) {
+			return $send( 'POST', $route . '/' . $id . '/active', array(), array( 'active' => true ) );
+		} );
+		clean_post_cache( $id );
+		$check( "WPC-Auto-1 nor turn one on ({$st})", 403 === $st && 'publish' !== get_post_status( $id ) );
+		list( $st ) = $as_app_password( static function () use ( $send, $route, $id ) {
+			return $send( 'DELETE', $route . '/' . $id );
+		} );
+		clean_post_cache( $id );
+		$check( "WPC-Auto-1 nor delete one ({$st})", 403 === $st && false !== get_post_status( $id ) );
+
+		remove_filter( 'wpcode_abilities_write_enabled', $off, PHP_INT_MAX );
+		add_filter( 'wpcode_abilities_write_enabled', $on, PHP_INT_MAX );
+		list( $st ) = $as_app_password( static function () use ( $send, $route, $id ) {
+			return $send( 'PUT', $route . '/' . $id, array(), array( 'priority' => 11 ) );
+		} );
+		$check( "WPC-Auto-1 control: with the switch on, an Application Password may edit ({$st})", 200 === $st );
+		remove_filter( 'wpcode_abilities_write_enabled', $on, PHP_INT_MAX );
+
+		// Over HTTP a sign-in that is not a cookie session arrives without a
+		// nonce. Last in the suite: REST_REQUEST stays defined.
+		if ( ! defined( 'REST_REQUEST' ) ) {
+			define( 'REST_REQUEST', true );
+		}
+		add_filter( 'wpcode_abilities_write_enabled', $off, PHP_INT_MAX );
+		list( $st, , $d ) = $send( 'POST', $route, array(), array( 'name' => 'Minn v049 no nonce' ) + $body );
+		$check( "WPC-Auto-1 with the switch off, a REST request with no wp_rest nonce cannot create a snippet ({$st})", 403 === $st && 'minn_wpcode_automation_off' === ( $d['code'] ?? '' ) );
+		list( $st ) = $send( 'POST', $route, array( '_wpnonce' => 'abcdef1234' ), array( 'name' => 'Minn v049 bad nonce' ) + $body );
+		$check( "WPC-Auto-1 nor one with a forged nonce ({$st})", 403 === $st );
+		$req = new WP_REST_Request( 'PUT', $route . '/' . $id );
+		$req->set_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
+		$check( 'WPC-Auto-1 a valid nonce does not admit an Application Password', function_exists( 'minn_admin_wpcode_authoring_refused' ) && null !== $as_app_password( static function () use ( $req ) {
+			return minn_admin_wpcode_authoring_refused( $req );
+		} ) );
+		list( $st ) = $send( 'POST', $route . '/' . $id . '/active', array( '_wpnonce' => wp_create_nonce( 'wp_rest' ) ), array( 'active' => false ) );
+		$check( "WPC-Auto-1 control: Minn's own screens (a valid wp_rest nonce) still write with the switch off ({$st})", 200 === $st );
+	} finally {
+		remove_filter( 'wpcode_abilities_write_enabled', $off, PHP_INT_MAX );
+		remove_filter( 'wpcode_abilities_write_enabled', $on, PHP_INT_MAX );
+		// What this section made, and any snippet a refusal under test let
+		// through.
+		foreach ( get_posts( array( 'post_type' => 'wpcode', 'post_status' => 'any', 'numberposts' => -1 ) ) as $p ) {
+			if ( in_array( $p->ID, $made, true ) || ( ! in_array( $p->ID, $start, true ) && 0 === strpos( $p->post_title, 'Minn v049 ' ) ) ) {
+				wp_delete_post( $p->ID, true );
+			}
+		}
 	}
 } )();
 
