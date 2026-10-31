@@ -33411,11 +33411,18 @@
 	// contenteditable, so content can wear the class but not this) inside a
 	// real island. A look-alike in the text is prose, never a root: a block
 	// moved or dropped into one would land where the save does not read.
+	// A slot Minn rendered: editable, the nearest island around it a real
+	// slot island, and not inside any island's preview. Content can wear the
+	// class and contenteditable="true" too, and inside a preview a look-alike
+	// sits under a real island, so that alone took preview DOM for writing
+	// surface.
 	function isMinnSlot( s ) {
 		return !! s && 1 === s.nodeType && s.classList.contains( 'minn-slot' )
 			&& 'true' === s.getAttribute( 'contenteditable' )
-			&& isRealIsland( s.parentElement && s.parentElement.closest( '.minn-block-island' ) );
+			&& isMinnSlotIsland( s.parentElement && s.parentElement.closest( '.minn-block-island' ) )
+			&& ! minnPreviewOf( s );
 	}
+	const isMinnSlotIsland = ( isl ) => isRealIsland( isl ) && isl.classList.contains( 'minn-slot-island' );
 	// The nearest island or real slot around el, which decides whether el is
 	// writing surface (a slot, or neither) or preview chrome (an island).
 	// Content can wear the slot class (post kses keeps class), so a

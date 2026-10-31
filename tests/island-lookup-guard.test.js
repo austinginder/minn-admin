@@ -100,6 +100,7 @@ const REVIEWED = {
 	"} else if ( n.classList && n.classList.contains( 'minn-block-island' ) ) {": 'paste: a clipboard island pastes as its visible preview, never as an island',
 	"const slotIdx = new Set( $$( '.minn-slot-island', body ).filter( isRealIsland ).map( ( el ) => parseInt( el.dataset.island, 10 ) ) );": 'guarded on the line',
 	"if ( a.closest( '#minn-editor-body, .minn-island-preview, .minn-email-frame' ) ) return;": 'exclusion: leaves links in content and previews alone',
+	"&& isMinnSlotIsland( s.parentElement && s.parentElement.closest( '.minn-block-island' ) )": 'isMinnSlot(): isMinnSlotIsland() tests it with isRealIsland()',
 	"let w = el && el.closest ? el.closest( '.minn-block-island, .minn-slot' ) : null;": 'editWrapOf(): an island found here only makes Minn do less (preview chrome); a slot is taken only through isMinnSlot()',
 	"while ( w && ! w.classList.contains( 'minn-block-island' ) && ! isMinnSlot( w ) ) {": 'editWrapOf() itself',
 	"w = w.parentElement ? w.parentElement.closest( '.minn-block-island, .minn-slot' ) : null;": 'editWrapOf() itself',
@@ -232,6 +233,9 @@ check( 'paste never rebuilds an island from clipboard HTML', ! /islandHtml\( idx
 // The edit controls opened by a click on content decide through
 // editWrapOf() and isMinnSlot(), and a shortcode token's popover opens only
 // on a token Minn made, in a run of the island's own arm.
+check( 'a real slot sits in a real slot island and in no island\'s preview',
+	/function isMinnSlot\( s \) \{[\s\S]*?isMinnSlotIsland\([\s\S]*?! minnPreviewOf\( s \);/.test( body )
+	&& /const isMinnSlotIsland = \( isl \) => isRealIsland\( isl \) && isl\.classList\.contains\( 'minn-slot-island' \);/.test( body ) );
 check( 'the image, link and table controls skip look-alike slots',
 	( body.match( /const wrap = editWrapOf\( (img|a|table) \);\n\t+if \( wrap && ! isMinnSlot\( wrap \) \) return;/g ) || [] ).length === 3 );
 check( 'the shortcode token popover takes Minn\'s own tokens in an armed run only',
