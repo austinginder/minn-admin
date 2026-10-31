@@ -19915,22 +19915,39 @@
 	const PREVIEW_REMOTE_RE = /<(?:img|source|video|audio|input)\b[^>]*\b(?:src|srcset|poster)\s*=\s*["']?\s*(?:https?:)?\/\/|\bbackground\s*=\s*["']?\s*(?:https?:)?\/\/|url\(\s*["']?\s*(?:https?:)?\/\/|<link\b[^>]*\bhref\s*=\s*["']?\s*(?:https?:)?\/\/|@import\s+(?:url\()?\s*["']?\s*(?:https?:)?\/\//i;
 	// What the policy cannot stop: the document navigating itself (a meta
 	// refresh, which a sandbox without scripts still follows) and the
-	// browser's own lookups (dns-prefetch, preconnect, prefetch, prerender),
-	// each of which reaches the sender's host when the preview opens, and a
-	// <base> pointing every relative link there. Taken out of the parsed
-	// message (an inert parse: nothing in it runs or loads); a message
+	// browser's own lookups (dns-prefetch, preconnect, prefetch, prerender,
+	// and the link prefetching a message can switch on), each of which
+	// reaches the sender's host when the preview opens, and a <base> pointing
+	// every relative link there. Taken out of the parsed message (an inert
+	// parse: nothing in it runs or loads), and out of every srcdoc document
+	// nested in it, which inherits the policy but not this pass. The parse
+	// always runs: attribute values decode character references, so a
+	// rel="dns-pre&#102;etch" reads as nothing on the raw text. A message
 	// without any of them is left exactly as written.
-	const PREVIEW_SELF_NAV_RE = /http-equiv|<base\b|prefetch|preconnect|prerender|preload/i;
-	function previewStripSelfNav( str ) {
-		if ( ! PREVIEW_SELF_NAV_RE.test( str ) ) return str;
+	const PREVIEW_SELF_NAV_RELS = /(?:^|\s)(?:dns-prefetch|preconnect|prefetch|prerender|preload|modulepreload)(?:\s|$)/i;
+	const PREVIEW_NEST_DEPTH = 3;
+	function previewStripSelfNav( str, depth = 0 ) {
 		const doc = new DOMParser().parseFromString( str, 'text/html' );
 		let removed = 0;
 		$$( 'meta[http-equiv], base, link[rel]', doc ).forEach( ( el ) => {
 			const drop = 'BASE' === el.tagName
-				|| ( 'META' === el.tagName && /refresh/i.test( el.getAttribute( 'http-equiv' ) || '' ) )
-				|| ( 'LINK' === el.tagName && /(?:^|\s)(?:dns-prefetch|preconnect|prefetch|prerender|preload|modulepreload)(?:\s|$)/i.test( el.getAttribute( 'rel' ) || '' ) );
+				|| ( 'META' === el.tagName && /^\s*(?:refresh|x-dns-prefetch-control)\s*$/i.test( el.getAttribute( 'http-equiv' ) || '' ) )
+				|| ( 'LINK' === el.tagName && PREVIEW_SELF_NAV_RELS.test( el.getAttribute( 'rel' ) || '' ) );
 			if ( drop ) {
 				el.remove();
+				removed++;
+			}
+		} );
+		$$( 'iframe[srcdoc], frame[srcdoc]', doc ).forEach( ( el ) => {
+			if ( depth >= PREVIEW_NEST_DEPTH ) {
+				el.remove();
+				removed++;
+				return;
+			}
+			const inner = el.getAttribute( 'srcdoc' );
+			const next = previewStripSelfNav( inner, depth + 1 );
+			if ( next !== inner ) {
+				el.setAttribute( 'srcdoc', next );
 				removed++;
 			}
 		} );
@@ -19938,8 +19955,29 @@
 		const dt = str.match( /^\s*<!doctype[^>]*>/i );
 		return ( dt ? dt[ 0 ] : '' ) + doc.documentElement.outerHTML;
 	}
+	// The raw-text test misses a URL written with character references
+	// (src="&#47;&#47;host"), which the parse decodes, so the parsed
+	// attributes and style text are read too. The policy blocks the load
+	// either way; this decides whether the bar offering it shows.
+	const PREVIEW_REMOTE_URL = /^\s*(?:https?:)?\/\//i;
+	const PREVIEW_REMOTE_CSS = /url\(\s*["']?\s*(?:https?:)?\/\/|@import\s+(?:url\()?\s*["']?\s*(?:https?:)?\/\//i;
+	function previewHasRemote( str, depth = 0 ) {
+		if ( PREVIEW_REMOTE_RE.test( str ) ) return true;
+		const doc = new DOMParser().parseFromString( str, 'text/html' );
+		return $$( '*', doc ).some( ( el ) => {
+			for ( const a of [ 'src', 'poster', 'background', 'data' ] ) {
+				if ( PREVIEW_REMOTE_URL.test( el.getAttribute( a ) || '' ) ) return true;
+			}
+			if ( ( el.getAttribute( 'srcset' ) || '' ).split( ',' ).some( ( c ) => PREVIEW_REMOTE_URL.test( c ) ) ) return true;
+			if ( ( 'link' === el.localName || 'image' === el.localName ) && PREVIEW_REMOTE_URL.test( el.getAttribute( 'href' ) || el.getAttribute( 'xlink:href' ) || '' ) ) return true;
+			if ( PREVIEW_REMOTE_CSS.test( el.getAttribute( 'style' ) || '' ) ) return true;
+			if ( 'style' === el.localName && PREVIEW_REMOTE_CSS.test( el.textContent || '' ) ) return true;
+			return depth < PREVIEW_NEST_DEPTH && el.hasAttribute( 'srcdoc' ) && previewHasRemote( el.getAttribute( 'srcdoc' ), depth + 1 );
+		} );
+	}
 	function previewSrcdoc( html, allowRemote ) {
-		const meta = `<meta http-equiv="Content-Security-Policy" content="${ allowRemote ? PREVIEW_CSP_ALLOW : PREVIEW_CSP_BLOCK }">`;
+		// Prefetch control switched off first: a later "on" is ignored.
+		const meta = `<meta http-equiv="Content-Security-Policy" content="${ allowRemote ? PREVIEW_CSP_ALLOW : PREVIEW_CSP_BLOCK }"><meta http-equiv="x-dns-prefetch-control" content="off">`;
 		const str = previewStripSelfNav( String( html == null ? '' : html ) );
 		const dt = str.match( /^\s*<!doctype[^>]*>/i );
 		return dt ? dt[ 0 ] + meta + str.slice( dt[ 0 ].length ) : meta + str;
@@ -19947,7 +19985,7 @@
 	// The iframe plus, when the HTML references remote content and the caller
 	// did not already allow it, a bar offering to load it.
 	function previewFrameHtml( html, { cls, id, title, allowRemote } ) {
-		const blocked = ! allowRemote && PREVIEW_REMOTE_RE.test( String( html == null ? '' : html ) );
+		const blocked = ! allowRemote && previewHasRemote( String( html == null ? '' : html ) );
 		const bar = blocked ? `<div class="minn-email-remote" data-remote-bar>
 			<span>${ esc( __( 'Remote images are blocked so opening this does not tell the sender it was read.' ) ) }</span>
 			<button type="button" class="minn-btn-soft" data-load-remote>${ esc( __( 'Load images' ) ) }</button>
