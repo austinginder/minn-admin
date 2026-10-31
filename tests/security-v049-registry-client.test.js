@@ -307,7 +307,6 @@ const wp = ( args ) => {
 				refConnect: links( doc( '<link rel="pre&#x63;onnect" href="//t.example"><p>x</p>' ) ),
 				nestedLinks: inner ? links( new DOMParser().parseFromString( inner.getAttribute( 'srcdoc' ) || '', 'text/html' ) ) : [ 'no iframe' ],
 				prefetchOn: !! doc( '<meta http-equiv="x-dns-prefetch-control" content="on"><p>x</p>' ).querySelector( 'meta[content="on"]' ),
-				ownOff: /<meta http-equiv="x-dns-prefetch-control" content="off">/.test( previewSrcdoc( plain, false ) ),
 				plainKept: previewSrcdoc( plain, false ).endsWith( plain ),
 				barRef: /data-remote-bar/.test( previewFrameHtml( '<img src="&#47;&#47;t.example/p.gif">', { cls: 'x', title: 't' } ) ),
 				barPlain: /data-remote-bar/.test( previewFrameHtml( plain, { cls: 'x', title: 't' } ) ),
@@ -316,7 +315,7 @@ const wp = ( args ) => {
 		t.check( 'a character-referenced dns-prefetch link is stripped', 0 === res.refPrefetch.length, JSON.stringify( res.refPrefetch ) );
 		t.check( 'a character-referenced preconnect link is stripped', 0 === res.refConnect.length, JSON.stringify( res.refConnect ) );
 		t.check( 'prefetch links inside a nested srcdoc are stripped', 0 === res.nestedLinks.length, JSON.stringify( res.nestedLinks ) );
-		t.check( 'a message cannot switch link prefetching on, and the preview switches it off', ! res.prefetchOn && res.ownOff, JSON.stringify( res ) );
+		t.check( 'a message cannot switch link prefetching on', ! res.prefetchOn, JSON.stringify( res ) );
 		t.check( 'a message with nothing to strip is left as written', res.plainKept, '' );
 		t.check( 'a remote URL written with character references shows the remote bar', res.barRef && ! res.barPlain, JSON.stringify( res ) );
 	} finally {

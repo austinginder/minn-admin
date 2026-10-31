@@ -19976,8 +19976,7 @@
 		} );
 	}
 	function previewSrcdoc( html, allowRemote ) {
-		// Prefetch control switched off first: a later "on" is ignored.
-		const meta = `<meta http-equiv="Content-Security-Policy" content="${ allowRemote ? PREVIEW_CSP_ALLOW : PREVIEW_CSP_BLOCK }"><meta http-equiv="x-dns-prefetch-control" content="off">`;
+		const meta = `<meta http-equiv="Content-Security-Policy" content="${ allowRemote ? PREVIEW_CSP_ALLOW : PREVIEW_CSP_BLOCK }">`;
 		const str = previewStripSelfNav( String( html == null ? '' : html ) );
 		const dt = str.match( /^\s*<!doctype[^>]*>/i );
 		return dt ? dt[ 0 ] + meta + str.slice( dt[ 0 ].length ) : meta + str;
