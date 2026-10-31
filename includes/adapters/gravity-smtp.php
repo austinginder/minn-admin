@@ -24,7 +24,10 @@
  * Event_Model::get_search_clause default does (subject, message, extra)
  * plus the service column, so an address, a subject, a sending plugin
  * (inside extra), a body phrase or a connector slug all hit. extra stays
- * serialized; LIKE matches the text inside the blob. A Source filter
+ * serialized; LIKE matches the text inside the blob. extra carries a
+ * connector's request params (Zoho's hold the message), so it is searched
+ * like the message, only by who may read mail whole; anyone else matches
+ * the subject, the service and a whole address. A Source filter
  * loads origins on demand from their get_all_sending_sources (not at
  * boot) and narrows with the same extra RLIKE their SQL_Filter_Parser
  * uses for non-column keys.
@@ -637,18 +640,149 @@ function minn_admin_gsmtp_event_view( array $r ) {
 	$delivery[] = array( 'label' => __( 'Service', 'minn-admin' ), 'value' => (string) $r['service'] );
 	$delivery[] = array( 'label' => __( 'Date', 'minn-admin' ), 'value' => $r['date_created'] . ' UTC' );
 
-	// Stored headers ride the serialized `extra` blob. Regex-decode only
-	// (never unserialize third-party blobs): plain string headers alone.
-	$headers = array();
-	if ( is_string( $r['extra'] ) && preg_match( '/"headers";a:\d+:\{(.*)$/s', $r['extra'], $m ) ) {
-		if ( preg_match_all( '/s:\d+:"([^"]{1,64})";s:\d+:"([^"]{0,512})";/', $m[1], $pairs, PREG_SET_ORDER ) ) {
-			foreach ( array_slice( $pairs, 0, 30 ) as $p ) {
-				$headers[ $p[1] ] = $p[2];
+	$headers = minn_admin_gsmtp_stored_headers( $r['extra'] );
+	$more    = $headers ? array( array( 'title' => __( 'Headers', 'minn-admin' ), 'rows' => array( array( 'label' => __( 'Stored headers', 'minn-admin' ), 'value' => $headers, 'type' => 'kv-table' ) ) ) ) : array();
+	return minn_admin_mail_sections( $delivery, $r['subject'], minn_admin_gsmtp_can_preview() ? (string) $r['message'] : null, $more );
+}
+
+/**
+ * The string headers stored with an event: the top-level headers array of
+ * the serialized `extra` blob, and nothing past it. The blob holds their
+ * Recipient_Collection objects (which Minn_Admin::decode_serialized()
+ * refuses whole) and, beside the headers, the connector's request params,
+ * where a Zoho send keeps the message whole. So the blob is walked, never
+ * unserialized: each value is stepped over by its declared length, and only
+ * the headers array's own string entries are read.
+ *
+ * @param string $extra Serialized `extra` column.
+ * @return array Header name => value, at most 30.
+ */
+function minn_admin_gsmtp_stored_headers( $extra ) {
+	$s = (string) $extra;
+	$p = 0;
+	if ( ! preg_match( '/a:(\d+):\{/A', $s, $m, 0, $p ) ) {
+		return array();
+	}
+	$p += strlen( $m[0] );
+	for ( $i = (int) $m[1]; $i > 0; $i-- ) {
+		$key = minn_admin_gsmtp_serialized_string( $s, $p );
+		if ( null === $key && ! minn_admin_gsmtp_serialized_skip( $s, $p ) ) {
+			return array();
+		}
+		if ( 'headers' !== $key ) {
+			if ( ! minn_admin_gsmtp_serialized_skip( $s, $p ) ) {
+				return array();
+			}
+			continue;
+		}
+		if ( ! preg_match( '/a:(\d+):\{/A', $s, $m, 0, $p ) ) {
+			return array();
+		}
+		$p      += strlen( $m[0] );
+		$headers = array();
+		for ( $j = (int) $m[1]; $j > 0; $j-- ) {
+			$name = minn_admin_gsmtp_serialized_string( $s, $p );
+			if ( null === $name && ! minn_admin_gsmtp_serialized_skip( $s, $p ) ) {
+				return $headers;
+			}
+			$value = minn_admin_gsmtp_serialized_string( $s, $p );
+			if ( null === $value && ! minn_admin_gsmtp_serialized_skip( $s, $p ) ) {
+				return $headers;
+			}
+			if ( null !== $name && null !== $value && count( $headers ) < 30 ) {
+				$headers[ $name ] = $value;
 			}
 		}
+		return $headers;
 	}
-	$more = $headers ? array( array( 'title' => __( 'Headers', 'minn-admin' ), 'rows' => array( array( 'label' => __( 'Stored headers', 'minn-admin' ), 'value' => $headers, 'type' => 'kv-table' ) ) ) ) : array();
-	return minn_admin_mail_sections( $delivery, $r['subject'], minn_admin_gsmtp_can_preview() ? (string) $r['message'] : null, $more );
+	return array();
+}
+
+/**
+ * A serialized string at $p, stepping past it; null (and $p unmoved) when
+ * something else is there.
+ *
+ * @param string $s Serialized text.
+ * @param int    $p Offset, advanced past the string.
+ * @return string|null
+ */
+function minn_admin_gsmtp_serialized_string( $s, &$p ) {
+	if ( ! preg_match( '/s:(\d+):"/A', $s, $m, 0, $p ) ) {
+		return null;
+	}
+	$at  = $p + strlen( $m[0] );
+	$len = (int) $m[1];
+	if ( '";' !== substr( $s, $at + $len, 2 ) ) {
+		return null;
+	}
+	$p = $at + $len + 2;
+	return substr( $s, $at, $len );
+}
+
+/**
+ * Step over one serialized value at $p without building it: scalars,
+ * strings by their length, arrays and objects member by member, an object's
+ * custom serialization by its length. False on anything malformed or nested
+ * deeper than 32.
+ *
+ * @param string $s     Serialized text.
+ * @param int    $p     Offset, advanced past the value.
+ * @param int    $depth Nesting so far.
+ * @return bool
+ */
+function minn_admin_gsmtp_serialized_skip( $s, &$p, $depth = 0 ) {
+	if ( $depth > 32 ) {
+		return false;
+	}
+	if ( null !== minn_admin_gsmtp_serialized_string( $s, $p ) ) {
+		return true;
+	}
+	if ( preg_match( '/(?:N|b:[01]|i:-?\d+|d:[^;]{1,64}|[rR]:\d+);/A', $s, $m, 0, $p ) ) {
+		$p += strlen( $m[0] );
+		return true;
+	}
+	if ( preg_match( '/E:(\d+):"/A', $s, $m, 0, $p ) ) {
+		$end = $p + strlen( $m[0] ) + (int) $m[1];
+		if ( '";' !== substr( $s, $end, 2 ) ) {
+			return false;
+		}
+		$p = $end + 2;
+		return true;
+	}
+	if ( preg_match( '/C:(\d+):"/A', $s, $m, 0, $p ) ) {
+		$at = $p + strlen( $m[0] ) + (int) $m[1];
+		if ( ! preg_match( '/":(\d+):\{/A', $s, $c, 0, $at ) ) {
+			return false;
+		}
+		$end = $at + strlen( $c[0] ) + (int) $c[1];
+		if ( '}' !== substr( $s, $end, 1 ) ) {
+			return false;
+		}
+		$p = $end + 1;
+		return true;
+	}
+	if ( preg_match( '/a:(\d+):\{/A', $s, $m, 0, $p ) ) {
+		$at = $p + strlen( $m[0] );
+	} elseif ( preg_match( '/O:(\d+):"/A', $s, $m, 0, $p ) ) {
+		$at = $p + strlen( $m[0] ) + (int) $m[1];
+		if ( ! preg_match( '/":(\d+):\{/A', $s, $m, 0, $at ) ) {
+			return false;
+		}
+		$at += strlen( $m[0] );
+	} else {
+		return false;
+	}
+	$p = $at;
+	for ( $i = 2 * (int) $m[1]; $i > 0; $i-- ) {
+		if ( ! minn_admin_gsmtp_serialized_skip( $s, $p, $depth + 1 ) ) {
+			return false;
+		}
+	}
+	if ( '}' !== substr( $s, $p, 1 ) ) {
+		return false;
+	}
+	++$p;
+	return true;
 }
 
 // date_created is UTC (current_time( 'mysql', true )), and a chart bar hands
@@ -700,13 +834,29 @@ minn_admin_resource( 'gravity-smtp/events', function () {
 			// Their Event_Model::get_search_clause default (subject, message,
 			// extra) plus the service. Matching bodies would let a caller who
 			// may not open a message probe it a substring at a time (a reset
-			// link, a code), so only a preview-capable caller searches them.
+			// link, a code), so only a preview-capable caller searches them,
+			// and on a network only its owner (a body search finds a reset
+			// key the page hides). extra counts as a body: a connector's
+			// request params ride it, Zoho's with the message whole. Anyone
+			// else finds an event by an address in it, matched whole.
 			'search' => array(
-				'columns' => array( 'subject', 'extra', 'service' ),
+				'columns' => array( 'subject', 'service' ),
 				'also'    => function ( $term ) {
-					// Nor on a network for anyone but its owner: a body search finds a
-					// reset key the page hides.
-					return minn_admin_gsmtp_can_preview() && minn_admin_mail_bodies_open() ? array( 'message' => array( 'contains' => $term ) ) : null;
+					if ( minn_admin_gsmtp_can_preview() && minn_admin_mail_bodies_open() ) {
+						return array( '#any' => array(
+							array( 'message' => array( 'contains' => $term ) ),
+							array( 'extra' => array( 'contains' => $term ) ),
+						) );
+					}
+					if ( ! is_email( $term ) ) {
+						return null;
+					}
+					$value = 's:' . strlen( $term ) . ':"' . $term . '";';
+					return array( 'extra' => array( 'any' => array(
+						array( 'contains' => '"email";' . $value ),
+						array( 'contains' => '"to";' . $value ),
+						array( 'contains' => '"from";' . $value ),
+					) ) );
 				},
 			),
 			'range'  => array( 'column' => 'date_created', 'clock' => 'local' ),

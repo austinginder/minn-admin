@@ -214,6 +214,137 @@ try {
 		wp_set_current_user( $admin );
 		$check( 'Sections-1 no section of a detail serves a reset key to a reader the log hides keys from', ! $leaks( $out, $k ), substr( (string) $out, 0, 400 ) );
 	} )();
+
+	/*
+	 * GSMTP-1: Gravity SMTP's event detail read "stored headers" from the
+	 * headers key to the end of the extra blob, through params, where a Zoho
+	 * send logs the message whole, and the list searched extra for every log
+	 * reader while it searched the message only for who may read it whole.
+	 */
+	( function () use ( $check, $leaks, $reader, $admin ) {
+		global $wpdb;
+		if ( ! function_exists( 'minn_admin_gsmtp_event_view' ) || ! function_exists( 'minn_admin_gravity_smtp_active' ) || ! minn_admin_gravity_smtp_active() ) {
+			echo "SKIP  GSMTP-1 Gravity SMTP inactive\n";
+			return;
+		}
+		$table = $wpdb->prefix . 'gravitysmtp_events';
+		if ( $table !== $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) ) {
+			echo "SKIP  GSMTP-1 no events table\n";
+			return;
+		}
+		$tag  = 'v049mail' . wp_rand( 100000, 999999 );
+		$k    = 'GsQ7Lw9PaZx3Vb8Nc2aT';
+		$to   = "{$tag}@example.com";
+		$body = "Someone has requested a password reset for the following account:\r\n\r\nUsername: root\r\n\r\nPhrase {$tag}zz\r\n\r\nTo reset your password, visit the following address:\r\n\r\n" . wp_login_url() . "?action=rp&key={$k}&login=root&wp_lang=en_US\r\n";
+		$s    = function ( $v ) {
+			return 's:' . strlen( $v ) . ':"' . $v . '";';
+		};
+		// Their Connector_Base::set_email_log_data() order and shapes: the
+		// recipients are their Recipient_Collection objects, Zoho's request
+		// body rides params with the message as content.
+		$recipient = 'O:53:"Gravity_Forms\Gravity_SMTP\Utils\Recipient_Collection":1:{' . $s( 'recipients' ) . 'a:1:{i:0;O:42:"Gravity_Forms\Gravity_SMTP\Utils\Recipient":2:{' . $s( 'email' ) . $s( $to ) . $s( 'name' ) . $s( 'Root' ) . '}}}';
+		$extra     = 'a:6:{' . $s( 'to' ) . $recipient . $s( 'from' ) . $s( 'sender@example.com' )
+			. $s( 'headers' ) . 'a:1:{' . $s( 'content-type' ) . $s( 'text/plain' ) . '}'
+			. $s( 'attachments' ) . 'a:0:{}' . $s( 'source' ) . $s( 'WordPress' )
+			. $s( 'params' ) . 'a:5:{' . $s( 'fromAddress' ) . $s( 'sender@example.com' ) . $s( 'toAddress' ) . $s( $to ) . $s( 'subject' ) . $s( 'Password Reset' ) . $s( 'content' ) . $s( $body ) . $s( 'mailFormat' ) . $s( 'plaintext' ) . '}}';
+		$now = gmdate( 'Y-m-d H:i:s' );
+		$ok  = $wpdb->insert( $table, array(
+			'date_created' => $now,
+			'date_updated' => $now,
+			'status'       => 'sent',
+			'service'      => 'zoho',
+			'subject'      => "Password Reset {$tag}",
+			'message'      => $body,
+			'extra'        => $extra,
+		) );
+		$id  = (int) $wpdb->insert_id;
+		if ( ! $ok || $id < 1 ) {
+			$check( 'GSMTP-1 a Zoho-shaped event is seeded', false, $wpdb->last_error );
+			return;
+		}
+		$caps = array( minn_admin_gsmtp_cap( 'VIEW_EMAIL_LOG' ), minn_admin_gsmtp_cap( 'VIEW_EMAIL_LOG_DETAILS' ) );
+		$user = new WP_User( $reader );
+		try {
+			$view = minn_admin_gsmtp_event_view( $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $id ), ARRAY_A ) );
+			$kv   = array();
+			foreach ( $view['sections'] as $sec ) {
+				foreach ( $sec['rows'] as $row ) {
+					if ( 'kv-table' === ( $row['type'] ?? '' ) ) {
+						$kv = (array) $row['value'];
+					}
+				}
+			}
+			$check( 'GSMTP-1 stored headers are the headers array alone', array( 'content-type' ) === array_keys( $kv ), wp_json_encode( array_keys( $kv ) ) );
+			$check( 'GSMTP-1 control: a stored header still shows', 'text/plain' === ( $kv['content-type'] ?? '' ) );
+
+			$find = function ( $term ) use ( $id ) {
+				$req = new WP_REST_Request( 'GET', '/minn-admin/v1/gravity-smtp/events' );
+				$req->set_param( 'search', $term );
+				$res = rest_do_request( $req );
+				return array( 200 === $res->get_status() && (bool) preg_match( '/"id":' . $id . '[,}]/', (string) wp_json_encode( $res->get_data() ) ), $res->get_status() );
+			};
+			list( $hit ) = $find( "{$tag}zz" );
+			$check( 'GSMTP-1 control: who reads mail whole finds an event by a phrase of its message', $hit );
+
+			foreach ( $caps as $cap ) {
+				$user->add_cap( $cap );
+			}
+			wp_set_current_user( 0 );
+			wp_set_current_user( $reader );
+			$check( 'GSMTP-1 the reader holds the log and its details but not the preview (the premise)', current_user_can( $caps[1] ) && ! minn_admin_gsmtp_can_preview() && ! minn_admin_mail_bodies_open() );
+			$res = rest_do_request( new WP_REST_Request( 'GET', "/minn-admin/v1/gravity-smtp/events/{$id}/view" ) );
+			$out = (string) wp_json_encode( $res->get_data() );
+			$check( 'GSMTP-1 the event detail serves the reader no reset key', 200 === $res->get_status() && ! $leaks( $out, $k ), $res->get_status() . ' ' . substr( $out, 0, 300 ) );
+			$res = rest_do_request( new WP_REST_Request( 'GET', "/minn-admin/v1/gravity-smtp/events/{$id}" ) );
+			$check( 'GSMTP-1 the event item serves the reader no reset key', 200 === $res->get_status() && ! $leaks( (string) wp_json_encode( $res->get_data() ), $k ), (string) $res->get_status() );
+			list( $hit, $status ) = $find( 'key=' . substr( $k, 0, 6 ) );
+			$check( 'GSMTP-1 a search does not find the event by its reset key', 200 === $status && ! $hit, "status {$status}" . ( $hit ? ', found' : '' ) );
+			list( $hit ) = $find( "{$tag}zz" );
+			$check( 'GSMTP-1 a search does not find the event by a phrase of its message', ! $hit );
+			list( $hit ) = $find( "Password Reset {$tag}" );
+			$check( 'GSMTP-1 control: the reader finds the event by its subject', $hit );
+			list( $hit ) = $find( $to );
+			$check( 'GSMTP-1 control: the reader finds the event by its recipient\'s address', $hit );
+		} finally {
+			wp_set_current_user( $admin );
+			foreach ( $caps as $cap ) {
+				$user->remove_cap( $cap );
+			}
+			$wpdb->delete( $table, array( 'id' => $id ) );
+		}
+	} )();
+
+	/*
+	 * Search-1, the class: a mail log's list search may name a column that
+	 * holds a message (or a blob beside it) only for who reads mail whole.
+	 */
+	( function () use ( $check ) {
+		$body = array( 'message', 'body', 'content', 'extra', 'line', 'original_message', 'session_transcript', 'params', 'raw' );
+		$open = array();
+		foreach ( glob( MINN_ADMIN_DIR . 'includes/adapters/*.php' ) as $file ) {
+			$src = (string) file_get_contents( $file );
+			if ( false === strpos( $src, 'minn_admin_mail_surface' ) && false === strpos( $src, 'minn_admin_mail_sections' ) ) {
+				continue;
+			}
+			$lines = preg_split( '/\r?\n/', $src );
+			foreach ( $lines as $i => $line ) {
+				if ( ! preg_match( "/'search'\s*=>/", $line ) ) {
+					continue;
+				}
+				for ( $j = $i; $j <= $i + 2 && isset( $lines[ $j ] ); $j++ ) {
+					if ( ! preg_match( "/'columns'\s*=>/", $lines[ $j ] ) ) {
+						continue;
+					}
+					preg_match_all( "/'([a-z_]+)'/", substr( $lines[ $j ], strpos( $lines[ $j ], "'columns'" ) + 9 ), $m );
+					if ( array_intersect( $m[1], $body ) && false === strpos( $lines[ $j ], 'minn_admin_mail_bodies_open' ) ) {
+						$open[] = basename( $file ) . ':' . ( $j + 1 ) . ' ' . trim( $lines[ $j ] );
+					}
+					break;
+				}
+			}
+		}
+		$check( 'Search-1 no mail log searches a message column for a reader it hides keys from', ! $open, implode( ' | ', $open ) );
+	} )();
 } finally {
 	wp_set_current_user( $admin );
 	$drop_user( $reader );
