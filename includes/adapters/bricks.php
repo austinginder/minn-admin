@@ -356,6 +356,42 @@ function minn_admin_bricks_conditions_summary( $post_id ) {
 	return implode( ' · ', $parts );
 }
 
+/**
+ * The tag names a template save writes, from the names the page sent. A read
+ * serves each name with any credential copy in it masked, and tags are saved
+ * by name, so a name sent back as served is the stored tag, not a new one
+ * named "[redacted:…]"; a mask anywhere else is refused before anything is
+ * written (Minn_Admin_Egress::refuse_masks()).
+ *
+ * @param array    $sent    Names the page sent.
+ * @param string[] $current The template's tag names as stored.
+ * @return string[]|WP_Error
+ */
+function minn_admin_bricks_template_tags( array $sent, array $current ) {
+	$names = array();
+	$typed = array();
+	foreach ( $sent as $tag ) {
+		if ( ! is_scalar( $tag ) ) {
+			continue;
+		}
+		foreach ( $current as $had ) {
+			if ( Minn_Admin::unchanged( (string) $tag, (string) $had ) ) {
+				$names[] = (string) $had;
+				continue 2;
+			}
+		}
+		$tag = sanitize_text_field( (string) $tag );
+		if ( '' !== $tag ) {
+			$typed[] = $tag;
+		}
+	}
+	$masked = Minn_Admin_Egress::refuse_masks( array( 'tags' => $typed ), array( 'tags' => $current ) );
+	if ( $masked ) {
+		return $masked;
+	}
+	return array_values( array_unique( array_merge( $names, $typed ) ) );
+}
+
 /** Normalize a template post into a surface item. */
 function minn_admin_bricks_template_item( $post ) {
 	$types = minn_admin_bricks_template_types();
@@ -993,6 +1029,10 @@ add_action( 'rest_api_init', function () {
 			if ( ! isset( minn_admin_bricks_template_types()[ $type ] ) ) {
 				return new WP_Error( 'invalid', __( 'Pick a template type.', 'minn-admin' ), array( 'status' => 400 ) );
 			}
+			$masked = Minn_Admin_Egress::refuse_masks( array( 'post_title' => $title ), array() );
+			if ( $masked ) {
+				return $masked;
+			}
 			// Mirrors Bricks' own create_template: publish for publishers,
 			// pending otherwise, type stored as postmeta after insert.
 			$id = wp_insert_post( wp_slash( array(
@@ -1046,6 +1086,16 @@ add_action( 'rest_api_init', function () {
 			if ( $masked ) {
 				return $masked;
 			}
+			// Tags are read before anything is written, so a refused tag
+			// leaves the title and type as they were too.
+			$tags = null;
+			if ( is_array( $request['tags'] ) ) {
+				$had  = get_the_terms( $post, BRICKS_DB_TEMPLATE_TAX_TAG );
+				$tags = minn_admin_bricks_template_tags( $request['tags'], ( $had && ! is_wp_error( $had ) ) ? wp_list_pluck( $had, 'name' ) : array() );
+				if ( is_wp_error( $tags ) ) {
+					return $tags;
+				}
+			}
 			if ( '' !== $title && $title !== $post->post_title ) {
 				$result = wp_update_post( wp_slash( array( 'ID' => $post->ID, 'post_title' => esc_html( $title ) ) ), true );
 				if ( is_wp_error( $result ) ) {
@@ -1080,13 +1130,10 @@ add_action( 'rest_api_init', function () {
 			}
 			// Tags ride as an array (an empty one clears); by NAME so new
 			// tags create on the fly, like their tax_input create path.
-			if ( is_array( $request['tags'] ) ) {
-				$tags = array_values( array_filter( array_map( function ( $tag ) {
-					return sanitize_text_field( (string) $tag );
-				}, $request['tags'] ) ) );
+			if ( null !== $tags ) {
 				// Slashed: a new tag is created through wp_insert_term(), which
 				// unslashes the name (term_exists() unslashes to match).
-				$set  = wp_set_object_terms( $post->ID, wp_slash( $tags ), BRICKS_DB_TEMPLATE_TAX_TAG );
+				$set = wp_set_object_terms( $post->ID, wp_slash( $tags ), BRICKS_DB_TEMPLATE_TAX_TAG );
 				if ( is_wp_error( $set ) ) {
 					return $set;
 				}
