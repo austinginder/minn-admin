@@ -2610,26 +2610,44 @@
 		el.removeAttribute( RT_PARK_CSS );
 	}
 
-	// A <noscript>'s inside is parsed two ways: as markup by the inert parse
-	// (scripting off) and as raw text ending at the first "</noscript" by the
-	// live page. An attribute value carrying that string is harmless here and
-	// breaks out into live markup wherever the editor re-parses its own HTML
-	// (every table op, a "/" insert). The live page never shows a noscript's
-	// inside, so it is parked whole in a page-token attribute (a start tag's
-	// attributes parse the same both ways) and goes back on the serializer's
-	// inert copy.
-	const RT_PARK_NOSCRIPT = RT_PARK_PREFIX + 'noscript';
-	const rtIsNoscript = ( el ) => 'noscript' === el.localName && 'http://www.w3.org/1999/xhtml' === el.namespaceURI;
-	function rtParkNoscript( el ) {
-		if ( ! rtIsNoscript( el ) || el.hasAttribute( RT_PARK_NOSCRIPT ) ) return;
-		el.setAttribute( RT_PARK_NOSCRIPT, el.innerHTML );
+	// A raw-text element's inside comes back out of the serializer unescaped,
+	// so a second parse can read it as markup. A <noscript> is parsed two
+	// ways on its own: as markup by the inert parse (scripting off) and as raw
+	// text ending at the first "</noscript" by the live page. <xmp>, <iframe>,
+	// <noembed>, <noframes> and <plaintext> are raw text in both, but a nested
+	// form plus a MathML namespace flip moves one of them into MathML on the
+	// next parse, where "</math><img onerror>" in its text is markup again.
+	// The inert walk sees only text there and parks nothing, and the editor
+	// re-parses its own HTML (every table op, a "/" insert, a block paste).
+	// The live page never shows these insides (an xmp's text, a frame's
+	// fallback), so each is parked whole in a page-token attribute (a start
+	// tag's attributes parse the same every time) and goes back on the
+	// serializer's inert copy.
+	const RT_PARK_RAW = RT_PARK_PREFIX + 'raw';
+	const RT_RAW_CARRIERS = [ 'noscript', 'xmp', 'iframe', 'noembed', 'noframes', 'plaintext' ];
+	const RT_HTML_NS = 'http://www.w3.org/1999/xhtml';
+	const rtIsRawCarrier = ( el ) => RT_HTML_NS === el.namespaceURI && RT_RAW_CARRIERS.includes( el.localName );
+	function rtParkRaw( el ) {
+		if ( ! rtIsRawCarrier( el ) ) return;
+		// Already parked: anything inside now came from a re-parse, never
+		// from the writer, and shows nothing the parked copy does not hold.
+		if ( el.hasAttribute( RT_PARK_RAW ) ) {
+			if ( el.firstChild ) el.textContent = '';
+			return;
+		}
+		el.setAttribute( RT_PARK_RAW, el.innerHTML );
 		el.textContent = '';
 	}
-	function rtUnparkNoscript( el ) {
-		if ( ! rtIsNoscript( el ) || ! el.hasAttribute( RT_PARK_NOSCRIPT ) ) return;
-		const inner = el.getAttribute( RT_PARK_NOSCRIPT );
-		el.removeAttribute( RT_PARK_NOSCRIPT );
-		el.innerHTML = inner;
+	function rtUnparkRaw( el ) {
+		if ( ! el.hasAttribute || ! el.hasAttribute( RT_PARK_RAW ) ) return;
+		const inner = el.getAttribute( RT_PARK_RAW );
+		el.removeAttribute( RT_PARK_RAW );
+		// A noscript's inside is markup in the inert copy and goes back as
+		// markup. Every other carrier's is text. An element that a re-parse
+		// moved out of the HTML namespace gets its text back as text, which
+		// its serializer escapes, so a save never writes the markup out live.
+		if ( 'noscript' === el.localName && RT_HTML_NS === el.namespaceURI ) el.innerHTML = inner;
+		else el.textContent = inner;
 	}
 
 	// Keeps every TAG. Dropping tags would delete core/embed output, raw-HTML
@@ -2640,7 +2658,7 @@
 		$$( '*', root ).forEach( ( el ) => {
 			// Its inside was captured raw: the descendants still listed here
 			// are detached and parked for nothing.
-			rtParkNoscript( el );
+			rtParkRaw( el );
 			rtParkStyle( el );
 			rtRenameAttrs( el, rtParkName );
 			if ( el.content && el.content.nodeType === 11 ) rtNeutralize( el.content );
@@ -2663,8 +2681,8 @@
 		if ( root && 1 === root.nodeType ) all.unshift( root );
 		all.forEach( ( el ) => {
 			// Before the rename below, which would turn the parked inside
-			// into an attribute named "noscript".
-			rtUnparkNoscript( el );
+			// into an attribute named "raw".
+			rtUnparkRaw( el );
 			rtUnparkStyle( el );
 			rtRenameAttrs( el, ( name ) => (
 				0 === name.toLowerCase().indexOf( RT_PARK_PREFIX )
@@ -2691,15 +2709,52 @@
 		return holder.innerHTML;
 	}
 
-	// The string form of rtNeutralizeInto, for the one sink that cannot take
-	// nodes: execCommand('insertHTML') wants markup. Parse inertly and park
-	// what runs, then hand back the parked markup. The parked attributes ride
-	// into the document exactly as they do on load, and the serializer's
-	// rtUnpark puts the writer's bytes back on the way to the database.
+	// The string form of rtNeutralizeInto, for the sinks that cannot take
+	// nodes: execCommand('insertHTML') and insertAdjacentHTML want markup.
+	// Parse inertly and park what runs, then hand back the parked markup. The
+	// parked attributes ride into the document exactly as they do on load,
+	// and the serializer's rtUnpark puts the writer's bytes back on the way to
+	// the database.
+	//
+	// The markup handed back is parsed AGAIN by the live page, and parse,
+	// serialize, parse is not always the same tree (a nested form plus a
+	// MathML namespace flip turns raw text into elements). What the inert
+	// walk checked is only what the live page builds when the string is a
+	// fixed point: one more inert parse and walk gives back the same string.
+	// So the walk repeats until it does. Markup that never settles is refused
+	// (null), and every caller inserts nothing rather than an unchecked tree.
+	const RT_SETTLE_PASSES = 4;
 	function rtNeutralizedHtml( html ) {
-		const s = String( html == null ? '' : html );
+		let s = String( html == null ? '' : html );
 		if ( ! s ) return '';
-		return rtNeutralize( inertParse( s ) ).innerHTML;
+		for ( let i = 0; i < RT_SETTLE_PASSES; i++ ) {
+			const next = rtNeutralize( inertParse( s ) ).innerHTML;
+			if ( next === s ) return s;
+			s = next;
+		}
+		return null;
+	}
+	const rtRefusedToast = () => toast( __( 'This markup could not be made safe to insert, so nothing was inserted.' ), true );
+
+	// The string sinks for editor content. Each one settles the markup first
+	// and inserts nothing when it cannot; tests/content-sink-guard.test.js
+	// fails on a raw insertHTML or a content insertAdjacentHTML elsewhere.
+	function rtInsertHtml( html ) {
+		const safe = rtNeutralizedHtml( html );
+		if ( null === safe ) {
+			rtRefusedToast();
+			return null;
+		}
+		return document.execCommand( 'insertHTML', false, safe );
+	}
+	function rtInsertAdjacentHtml( el, where, html ) {
+		const safe = rtNeutralizedHtml( html );
+		if ( null === safe ) {
+			rtRefusedToast();
+			return false;
+		}
+		el.insertAdjacentHTML( where, safe );
+		return true;
 	}
 
 	// The one way stored post content should ever reach a live element. Parse
@@ -2857,7 +2912,7 @@
 			e.preventDefault();
 			const rich = cd.getData( 'text/html' );
 			const payload = ( rich && sanitizePastedHtml( rich ) ) || pasteTextPayload( cd.getData( 'text/plain' ) || '' );
-			if ( payload ) document.execCommand( 'insertHTML', false, payload.html );
+			if ( payload ) rtInsertHtml( payload.html );
 		} );
 		const escKey = ( e ) => {
 			if ( e.key === 'Escape' ) { e.stopPropagation(); closeRichText(); done(); }
@@ -33817,8 +33872,10 @@
 				const slice = rangeSliceBlock( range, el );
 				if ( ! slice.html || ! slice.html.trim() ) return;
 				// Keep the block's own element (a partial <h2> stays a heading).
-				const shell = el.cloneNode( false );
-				shell.innerHTML = slice.html;
+				// Imported from an inert parse, never parsed live: the slice is
+				// serialized editor DOM, and parsing it again in this page is
+				// the string round trip rtNeutralizeInto exists to avoid.
+				const shell = rtNeutralizeInto( el.cloneNode( false ), slice.html );
 				holder.appendChild( shell );
 			} );
 			if ( ! holder.childNodes.length ) return '';
@@ -34836,9 +34893,8 @@
 		// insertAdjacentHTML on a live element parses for real, so the block's
 		// stored markup arrives parked like every other stored value and the
 		// serializer's rtUnpark hands the bytes back on save.
-		const html = rtNeutralizedHtml( islandHtml( idx, blockName, template, ed ) );
-		if ( anchor ) anchor.insertAdjacentHTML( 'beforebegin', html );
-		else body.insertAdjacentHTML( 'beforeend', html );
+		const html = islandHtml( idx, blockName, template, ed );
+		if ( ! ( anchor ? rtInsertAdjacentHtml( anchor, 'beforebegin', html ) : rtInsertAdjacentHtml( body, 'beforeend', html ) ) ) return null;
 		const islandEl = islandByIdx( body, idx );
 		// insertAdjacentHTML fires no input — a slot ancestor must re-splice.
 		stampSlotDirtyFor( islandEl || anchor );
@@ -41140,7 +41196,7 @@
 						s.removeAllRanges();
 						s.addRange( saved );
 					}
-					document.execCommand( 'insertHTML', false, imageFigureHtml( it ) + '<p><br></p>' );
+					rtInsertHtml( imageFigureHtml( it ) + '<p><br></p>' );
 					scheduleAutosave();
 				} );
 			};
@@ -41714,7 +41770,7 @@
 					const literal = anchorEl.closest( 'pre' )
 						? text.replace( /\r\n?/g, '\n' )
 						: text.replace( /\s*\n\s*/g, ' ' );
-					document.execCommand( 'insertHTML', false, esc( literal ) );
+					rtInsertHtml( esc( literal ) );
 					scheduleAutosave();
 					return;
 				}
@@ -45770,7 +45826,9 @@
 				const tr = document.createElement( 'tr' );
 				Array.from( hr.cells ).forEach( ( c ) => {
 					const td = document.createElement( 'td' );
-					td.innerHTML = c.innerHTML;
+					// Moved, not copied through innerHTML: a string copy parses
+					// the cell's markup again in this page.
+					while ( c.firstChild ) td.appendChild( c.firstChild );
 					tr.appendChild( td );
 				} );
 				const tbody = table.tBodies[ 0 ];
@@ -45784,7 +45842,7 @@
 					const tr = document.createElement( 'tr' );
 					Array.from( first.cells ).forEach( ( c ) => {
 						const th = document.createElement( 'th' );
-						th.innerHTML = c.innerHTML;
+						while ( c.firstChild ) th.appendChild( c.firstChild );
 						tr.appendChild( th );
 					} );
 					thead.appendChild( tr );
@@ -45814,7 +45872,7 @@
 		sel.removeAllRanges();
 		sel.addRange( r );
 		if ( del ) return document.execCommand( 'delete', false, null );
-		return document.execCommand( 'insertHTML', false, html );
+		return rtInsertHtml( html );
 	}
 
 	function tableOp( table, op, refCell ) {
@@ -46843,7 +46901,7 @@
 			sel.removeAllRanges();
 			sel.addRange( r );
 			// Escape text; nested markup inside code is rare and becomes text.
-			document.execCommand( 'insertHTML', false, esc( existing.textContent ) );
+			rtInsertHtml( esc( existing.textContent ) );
 			return;
 		}
 		if ( range.collapsed ) return;
@@ -46860,7 +46918,7 @@
 			while ( c.firstChild ) c.parentNode.insertBefore( c.firstChild, c );
 			c.remove();
 		} );
-		document.execCommand( 'insertHTML', false, `<code>${ holder.innerHTML }</code>\u200B` );
+		rtInsertHtml( `<code>${ holder.innerHTML }</code>\u200B` );
 		// Heal + drop ZWSP (see wrapInline code path).
 		const anchor = sel.anchorNode;
 		let code = closestInlineCode( anchor );
@@ -47011,7 +47069,7 @@
 				const html = tag === 'code'
 					? `<code${ attrs }>${ esc( inner ) }</code>\u200B`
 					: `<${ tag }${ attrs }>${ esc( inner ) }</${ tag }>`;
-				document.execCommand( 'insertHTML', false, html );
+				rtInsertHtml( html );
 				let el = justInserted( tag.toUpperCase() );
 				// After code+ZWSP the caret often sits *in* the ZWSP text node
 				// (offset 1), so justInserted misses the CODE (it only checks
@@ -47745,14 +47803,15 @@
 	// islandHtml and editableSegmentHtml both hand back a block's stored
 	// markup verbatim, because the serializers read it back out of the DOM at
 	// save and neutralising it there would rewrite bytes the writer never
-	// touched. Parking is therefore the caller's job, and this is the sink
-	// rtNeutralizedHtml exists for. Doing it HERE rather than at each caller
-	// covers the two clipboard branches and pasteInsert's block path at once;
-	// rtParkName leaves an already-parked attribute alone, so a payload that
-	// was parked upstream is not double-prefixed.
+	// touched. Parking is therefore the caller's job, and rtInsertHtml does
+	// it (to a fixed point) for the whole bracketed payload. Doing it HERE
+	// rather than at each caller covers the two clipboard branches and
+	// pasteInsert's block path at once; rtParkName leaves an already-parked
+	// attribute alone, so a payload that was parked upstream is not
+	// double-prefixed.
 	function pasteBlocksInsert( root, blocksHtml ) {
 		const BKT = `<p data-minn-bkt="${ PAGE_TOKEN }"><br></p>`;
-		document.execCommand( 'insertHTML', false, BKT + rtNeutralizedHtml( blocksHtml ) + BKT );
+		if ( null === rtInsertHtml( BKT + blocksHtml + BKT ) ) return;
 		const sel = window.getSelection();
 		$$( 'p[data-minn-bkt]', root ).filter( isPasteBracket ).forEach( ( p ) => {
 			p.removeAttribute( 'data-minn-bkt' );
@@ -47781,24 +47840,24 @@
 		// Slots are mini-bodies: block splices land within the caret's root.
 		const root = blockRootOf( anchorEl, body );
 		if ( payload.kind === 'inline' ) {
-			document.execCommand( 'insertHTML', false, payload.html );
+			rtInsertHtml( payload.html );
 			return;
 		}
 		if ( anchorEl.closest( 'li' ) ) {
 			if ( payload.list ) {
-				document.execCommand( 'insertHTML', false, payload.list );
+				rtInsertHtml( payload.list );
 				liftNestedLists( root );
 			} else {
-				document.execCommand( 'insertHTML', false, pasteFlatHtml( payload ) );
+				rtInsertHtml( pasteFlatHtml( payload ) );
 			}
 			return;
 		}
 		if ( anchorEl.closest( 'h1,h2,h3,h4,h5,h6,td,th,figcaption' ) ) {
-			document.execCommand( 'insertHTML', false, pasteFlatHtml( payload ) );
+			rtInsertHtml( pasteFlatHtml( payload ) );
 			return;
 		}
 		if ( anchorEl.closest( 'blockquote' ) ) {
-			document.execCommand( 'insertHTML', false, payload.allParagraphs ? payload.html : pasteFlatHtml( payload ) );
+			rtInsertHtml( payload.allParagraphs ? payload.html : pasteFlatHtml( payload ) );
 			return;
 		}
 		pasteBlocksInsert( root, payload.html );
@@ -47856,7 +47915,7 @@
 			if ( ! /^image\//.test( file.type ) ) return;
 			const key = UPLOAD_KEY + ( ++uploadSeq );
 			const blobUrl = URL.createObjectURL( file );
-			document.execCommand( 'insertHTML', false,
+			rtInsertHtml(
 				`<figure class="wp-block-image" data-minn-upload="${ esc( key ) }"><img src="${ blobUrl }" alt=""><figcaption class="wp-element-caption"></figcaption></figure><p><br></p>` );
 			scheduleAutosave();
 			uploadImageFile( file ).then( ( it ) => {
@@ -48422,7 +48481,7 @@
 						// the serializer's rtUnpark hands the bytes back on
 						// save. Registry and user patterns already take this
 						// route; these two were the exceptions.
-						p.insertAdjacentHTML( 'beforebegin', rtNeutralizedHtml( r.html ) );
+						if ( ! rtInsertAdjacentHtml( p, 'beforebegin', r.html ) ) return;
 						stampSlotDirtyFor( p );
 						// Leave the empty p as the caret landing (already focused).
 						scheduleAutosave();
@@ -48527,7 +48586,7 @@
 			if ( ! ed ) return;
 			if ( ! ed.islands ) ed.islands = [];
 			const idx = ed.islands.push( action.template ) - 1;
-			target.insertAdjacentHTML( 'beforebegin', rtNeutralizedHtml( islandHtml( idx, action.block, action.template, ed ) ) );
+			if ( ! rtInsertAdjacentHtml( target, 'beforebegin', islandHtml( idx, action.block, action.template, ed ) ) ) return;
 			const p = document.createElement( 'p' );
 			p.appendChild( document.createElement( 'br' ) );
 			target.replaceWith( p );
@@ -48574,7 +48633,7 @@
 			// Replace the "/" block outright so the inserted markup lands
 			// beside it in its root (never wrapped inside the block's div).
 			// Parked on the way in, unparked by the serializer on the way out.
-			target.insertAdjacentHTML( 'beforebegin', rtNeutralizedHtml( action.html ) );
+			if ( ! rtInsertAdjacentHtml( target, 'beforebegin', action.html ) ) return;
 			const p = document.createElement( 'p' );
 			p.appendChild( document.createElement( 'br' ) );
 			target.replaceWith( p );
