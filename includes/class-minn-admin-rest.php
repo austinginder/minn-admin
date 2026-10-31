@@ -2617,6 +2617,34 @@ class Minn_Admin_REST {
 	 * (edit_posts) matches the editor itself.
 	 */
 	/**
+	 * Whether a request comes from a signed-in browser session: not an
+	 * Application Password, and over HTTP a valid wp_rest nonce (core checks
+	 * the nonce only for cookie sign-ins, so any other authentication arrives
+	 * without one). For writes a vendor keeps off its REST API until the site
+	 * owner allows it, because a leaked credential could make them.
+	 *
+	 * A dispatch inside PHP that is not serving a REST request (WP-CLI, a
+	 * cron job) is already code running on the server and has no nonce to
+	 * show, so it passes; one made while serving a REST request does not.
+	 *
+	 * @param WP_REST_Request $request The request.
+	 * @return bool
+	 */
+	public static function browser_session( WP_REST_Request $request ) {
+		if ( function_exists( 'rest_get_authenticated_app_password' ) && rest_get_authenticated_app_password() ) {
+			return false;
+		}
+		if ( ! ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ) {
+			return true;
+		}
+		$nonce = (string) $request->get_header( 'X-WP-Nonce' );
+		if ( '' === $nonce && is_string( $request->get_param( '_wpnonce' ) ) ) {
+			$nonce = $request->get_param( '_wpnonce' );
+		}
+		return '' !== $nonce && false !== wp_verify_nonce( $nonce, 'wp_rest' );
+	}
+
+	/**
 	 * Hand a block's owner the images a writer picked, take back its markup.
 	 *
 	 * Attachments are resolved HERE rather than trusted from the browser: the

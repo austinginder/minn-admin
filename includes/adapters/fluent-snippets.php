@@ -235,6 +235,37 @@ function minn_admin_fluent_can_write() {
 }
 
 /**
+ * FluentSnippets' REST authoring switch (RestAuthoring, off by default):
+ * while it is off, their own REST refuses to create or edit a snippet, so an
+ * Application Password cannot put PHP on the site, and their editor saves
+ * over nonce-checked admin-ajax instead. Minn's write routes answer the same
+ * way: a signed-in browser session (Minn's own screens) may write, any other
+ * authentication is refused until the site owner turns the switch on. Their
+ * switch leaves status changes out because an activation puts no new code
+ * on the site; Minn holds turning a snippet ON to it as well, since a
+ * snippet written in their editor and left inactive should not be started by
+ * a credential that may not write one. Turning one off and deleting stay open.
+ *
+ * @param WP_REST_Request $request The write.
+ * @return WP_Error|null The refusal, or null when the write may go ahead.
+ */
+function minn_admin_fluent_authoring_refused( WP_REST_Request $request ) {
+	$switch = '\FluentSnippets\App\Services\RestAuthoring';
+	// Before 10.57 there is no switch: their REST wrote for install_plugins.
+	if ( ! class_exists( $switch ) || ! method_exists( $switch, 'isEnabled' ) || $switch::isEnabled() ) {
+		return null;
+	}
+	if ( Minn_Admin_REST::browser_session( $request ) ) {
+		return null;
+	}
+	return new WP_Error(
+		'minn_fluent_rest_authoring_off',
+		__( 'Adding, editing and turning on snippets with an Application Password or another sign-in that is not a browser session is turned off on this site. An administrator can allow it in FluentSnippets settings (REST API authoring).', 'minn-admin' ),
+		array( 'status' => 403 )
+	);
+}
+
+/**
  * Every snippet in their index, rebuilt first as their own list does. Their
  * paginated read counts its total AFTER the slice, so it is read whole.
  *
@@ -360,6 +391,10 @@ minn_admin_endpoint( 'fluent-snippets', array(
 	'active'  => 'minn_admin_fluent_ready',
 	'gate'    => 'minn_admin_fluent_can_write',
 	'run'     => function ( WP_REST_Request $request ) {
+		$refused = minn_admin_fluent_authoring_refused( $request );
+		if ( $refused ) {
+			return $refused;
+		}
 		$tags = $request['tags'];
 		if ( is_array( $tags ) ) {
 			$tags = implode( ', ', array_map( 'sanitize_text_field', $tags ) );
@@ -413,6 +448,10 @@ minn_admin_endpoint( 'fluent-snippets/(?P<file>[^/]+)', array(
 	'active'  => 'minn_admin_fluent_ready',
 	'gate'    => 'minn_admin_fluent_can_write',
 	'run'     => function ( WP_REST_Request $request ) {
+		$refused = minn_admin_fluent_authoring_refused( $request );
+		if ( $refused ) {
+			return $refused;
+		}
 		$file = minn_admin_fluent_file( $request );
 		$now  = minn_admin_fluent_load( $file );
 		if ( is_wp_error( $now ) ) {
@@ -503,6 +542,12 @@ minn_admin_endpoint( 'fluent-snippets/(?P<file>[^/]+)/active', array(
 		$now  = minn_admin_fluent_load( $file );
 		if ( is_wp_error( $now ) ) {
 			return $now;
+		}
+		if ( ! empty( $request['active'] ) ) {
+			$refused = minn_admin_fluent_authoring_refused( $request );
+			if ( $refused ) {
+				return $refused;
+			}
 		}
 		list( , $meta, $code ) = $now;
 		$meta['status']        = ! empty( $request['active'] ) ? 'published' : 'draft';
