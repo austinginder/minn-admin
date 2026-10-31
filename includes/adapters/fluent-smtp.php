@@ -596,9 +596,11 @@ minn_admin_resource( 'fluent-smtp/emails', function () {
 			),
 		),
 		// The flat item stays for API consumers; the app reads the sections.
+		// Every text in it is masked as the sections are: a provider's reply
+		// can quote the message, reset link included.
 		'item'    => array(
 			'view'   => function ( array $r ) {
-				return array(
+				return minn_admin_mail_mask_value( array(
 					'id'         => (int) $r['id'],
 					'subject'    => $r['subject'],
 					'to'         => minn_admin_fluent_smtp_recipients( $r['to'] ),
@@ -608,8 +610,8 @@ minn_admin_resource( 'fluent-smtp/emails', function () {
 					'source'     => $r['source'],
 					'retries'    => (int) $r['retries'],
 					'created_at' => $r['created_at'],
-					'message'    => minn_admin_mail_mask_reset_keys( $r['body'] ),
-				);
+					'message'    => (string) $r['body'],
+				) );
 			},
 			'fields' => array(
 				'id'         => 'int',

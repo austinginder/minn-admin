@@ -231,9 +231,11 @@ minn_admin_resource( 'wpml/emails', function () {
 			),
 		),
 		// The flat item stays for API consumers; the app reads the sections.
+		// Every text in it is masked as the sections are: the raw headers
+		// and the mailer's error can quote the message, reset link included.
 		'item'    => array(
 			'view'   => function ( array $r ) {
-				return array(
+				return minn_admin_mail_mask_value( array(
 					'id'          => (int) $r['mail_id'],
 					'subject'     => minn_admin_wpml_subject( $r['subject'] ),
 					'to'          => minn_admin_wpml_receivers( $r['receiver'] ),
@@ -243,8 +245,8 @@ minn_admin_resource( 'wpml/emails', function () {
 					'attachments' => trim( (string) $r['attachments'], "0 \n" ),
 					'host'        => minn_admin_wpml_displays( 'display-host' ) && '0' !== (string) $r['host'] ? (string) $r['host'] : '',
 					'timestamp'   => $r['timestamp'],
-					'message'     => minn_admin_mail_mask_reset_keys( (string) $r['message'] ),
-				);
+					'message'     => (string) $r['message'],
+				) );
 			},
 			'fields' => array(
 				'id'          => 'int',
