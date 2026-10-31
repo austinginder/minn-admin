@@ -17,6 +17,11 @@
  * edit as text, email or paragraph by their content. Uploads, signatures,
  * passwords, acceptance boxes and payment fields stay in Elementor.
  *
+ * A credential copy in an answer reaches the page masked: the page's copy is
+ * compared with the stored answer as a read serves it, and an edit still
+ * holding a mask is refused before anything is written (as in
+ * gravity-forms-entry-edit.php).
+ *
  * @package minn-admin
  */
 
@@ -194,13 +199,33 @@ add_action( 'rest_api_init', function () {
 				}
 				$row    = $rows[ $key ];
 				$stored = $row['inputs'][0]['value'];
-				if ( array_key_exists( $key, $original ) && wp_json_encode( $original[ $key ] ) !== wp_json_encode( $stored ) ) {
+				// The page holds the answer as served, a credential masked.
+				if ( array_key_exists( $key, $original ) && ! Minn_Admin::unchanged( $original[ $key ], $stored ) ) {
 					return new WP_Error( 'minn_ele_conflict', __( 'This submission changed since you opened it. Reload it to see the latest answers, then edit again.', 'minn-admin' ), array( 'status' => 409 ) );
 				}
 				// An answer sent back as the page read it stays as stored:
-				// cleaning it first rewrote a stored "50%DEAL" or inline markup.
-				if ( wp_json_encode( $value ) === wp_json_encode( $stored ) ) {
+				// cleaning it first rewrote a stored "50%DEAL" or inline markup,
+				// and a masked credential into its placeholder.
+				if ( Minn_Admin::unchanged( $value, $stored ) ) {
 					continue;
+				}
+				// A stored pick sent back masked is that pick, so ticking
+				// another box keeps it.
+				if ( 'multi' === $row['kind'] && is_array( $value ) ) {
+					foreach ( $value as $i => $v ) {
+						foreach ( (array) $stored as $was ) {
+							if ( is_scalar( $v ) && Minn_Admin::unchanged( (string) $v, (string) $was ) ) {
+								$value[ $i ] = (string) $was;
+								break;
+							}
+						}
+					}
+				}
+				// What is left of a mask was typed around or moved: saved, it
+				// would put the placeholder where the key was.
+				$masked = Minn_Admin_Egress::refuse_masks( array( $key => $value ), array( $key => $stored ) );
+				if ( $masked ) {
+					return $masked;
 				}
 				$allowed = isset( $row['choices'] ) ? wp_list_pluck( $row['choices'], 0 ) : array();
 				if ( 'multi' === $row['kind'] ) {

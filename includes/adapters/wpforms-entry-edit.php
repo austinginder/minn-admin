@@ -22,6 +22,11 @@
  * addresses. Dates, ratings, sliders, rich text, uploads, payments and
  * dynamic choices stay in WPForms. Gated on their edit_entry_single.
  *
+ * A credential copy in an answer reaches the page masked: the page's copy is
+ * compared with the stored answer as a read serves it, and an edit still
+ * holding a mask is refused before anything is written (as in
+ * gravity-forms-entry-edit.php).
+ *
  * @package minn-admin
  */
 
@@ -344,10 +349,34 @@ add_action( 'rest_api_init', function () {
 				if ( ! isset( $inputs[ $input ] ) ) {
 					return new WP_Error( 'minn_wpe_locked', __( 'That answer can only be edited in WPForms.', 'minn-admin' ), array( 'status' => 400, 'field' => $input ) );
 				}
-				if ( array_key_exists( $input, $original ) && wp_json_encode( $original[ $input ] ) !== wp_json_encode( $inputs[ $input ]['value'] ) ) {
+				$stored = $inputs[ $input ]['value'];
+				// The page holds the answer as served, a credential masked.
+				if ( array_key_exists( $input, $original ) && ! Minn_Admin::unchanged( $original[ $input ], $stored ) ) {
 					return new WP_Error( 'minn_wpe_conflict', __( 'This entry changed since you opened it. Reload it to see the latest answers, then edit again.', 'minn-admin' ), array( 'status' => 409 ) );
 				}
+				// Sent back as served, it stays as stored.
+				if ( Minn_Admin::unchanged( $value, $stored ) ) {
+					continue;
+				}
 				$field_row = $inputs[ $input ]['row'];
+				// A stored pick sent back masked is that pick, so ticking
+				// another box keeps it.
+				if ( 'multi' === $field_row['kind'] && is_array( $value ) ) {
+					foreach ( $value as $i => $v ) {
+						foreach ( (array) $stored as $was ) {
+							if ( is_scalar( $v ) && Minn_Admin::unchanged( (string) $v, (string) $was ) ) {
+								$value[ $i ] = (string) $was;
+								break;
+							}
+						}
+					}
+				}
+				// What is left of a mask was typed around or moved: saved, it
+				// would put the placeholder where the key was.
+				$masked = Minn_Admin_Egress::refuse_masks( array( $input => $value ), array( $input => $stored ) );
+				if ( $masked ) {
+					return $masked;
+				}
 				$allowed   = isset( $field_row['choices'] ) ? wp_list_pluck( $field_row['choices'], 0 ) : array();
 				if ( 'multi' === $field_row['kind'] ) {
 					$value = array_values( array_filter( (array) $value, function ( $v ) use ( $allowed ) {
