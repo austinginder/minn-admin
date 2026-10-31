@@ -33374,6 +33374,19 @@
 			&& 'true' === s.getAttribute( 'contenteditable' )
 			&& isRealIsland( s.parentElement && s.parentElement.closest( '.minn-block-island' ) );
 	}
+	// The nearest island or real slot around el, which decides whether el is
+	// writing surface (a slot, or neither) or preview chrome (an island).
+	// Content can wear the slot class (post kses keeps class), so a
+	// look-alike is skipped, never taken for a slot: inside an island's
+	// preview it opened the image, link and table controls on DOM the save
+	// never reads.
+	function editWrapOf( el ) {
+		let w = el && el.closest ? el.closest( '.minn-block-island, .minn-slot' ) : null;
+		while ( w && ! w.classList.contains( 'minn-block-island' ) && ! isMinnSlot( w ) ) {
+			w = w.parentElement ? w.parentElement.closest( '.minn-block-island, .minn-slot' ) : null;
+		}
+		return w;
+	}
 	// The nearest real slot around el, skipping look-alikes in between.
 	function minnSlotOf( el ) {
 		let s = el && el.closest ? el.closest( '.minn-slot' ) : null;
@@ -41037,8 +41050,8 @@
 		body.addEventListener( 'click', ( e ) => {
 			const img = e.target.closest( 'img' );
 			if ( ! img || ! body.contains( img ) ) return;
-			const wrap = img.closest( '.minn-block-island, .minn-slot' );
-			if ( wrap && ! wrap.classList.contains( 'minn-slot' ) ) return;
+			const wrap = editWrapOf( img );
+			if ( wrap && ! isMinnSlot( wrap ) ) return;
 			openImgPop( img );
 		} );
 		// Clicking a link opens its edit popover (links never navigate
@@ -41052,8 +41065,8 @@
 			// same link editable in two places. Text inside a link (even
 			// one that also wraps an image) still opens the link popover.
 			if ( e.target.closest( 'img' ) ) return;
-			const wrap = a.closest( '.minn-block-island, .minn-slot' );
-			if ( wrap && ! wrap.classList.contains( 'minn-slot' ) ) return;
+			const wrap = editWrapOf( a );
+			if ( wrap && ! isMinnSlot( wrap ) ) return;
 			e.preventDefault();
 			openLinkPop( a );
 		} );
@@ -41153,8 +41166,8 @@
 			// slot; tables inside island PREVIEWS stay read-only. Nearest
 			// wrapper decides: a slot means editable surface, an island
 			// means preview chrome (a preview inside a slot still bails).
-			const wrap = table.closest( '.minn-block-island, .minn-slot' );
-			if ( wrap && ! wrap.classList.contains( 'minn-slot' ) ) return;
+			const wrap = editWrapOf( table );
+			if ( wrap && ! isMinnSlot( wrap ) ) return;
 			e.preventDefault();
 			openTableMenu( e.clientX, e.clientY, table, cell );
 		} );
@@ -42260,8 +42273,12 @@
 	 * theme or plugin describes the shortcode through
 	 * minn_admin_shortcode_hints), and typing [ offers the described ones.
 	 * runSourceText() reads a run back as text plus each token's source. */
+	// The tokens Minn made. Content can wear the class, and a look-alike
+	// opened the popover on preview text the run never reads back.
+	const SC_TOKENS = new WeakSet();
 	function makeScToken( src ) {
 		const el = document.createElement( 'span' );
+		SC_TOKENS.add( el );
 		el.className = 'minn-sc-token';
 		el.setAttribute( 'contenteditable', 'false' );
 		el.dataset.sc = src;
@@ -42336,9 +42353,10 @@
 
 	function openScTokenPop( tok ) {
 		hideScPop();
+		if ( ! SC_TOKENS.has( tok ) ) return;
 		const run = tok.closest( '.minn-island-run' );
 		const island = run && islandOf( run );
-		if ( ! island || ! island._minnRuns ) return;
+		if ( ! island || ! island._minnRuns || ! island._minnRuns.spans.includes( run ) ) return;
 		const src = tok.dataset.sc || '';
 		const hint = scHintFor( tok.dataset.tag || '' );
 		const fields = hint ? hint.fields.filter( ( f ) => f.options && f.options.length ) : [];
@@ -46585,8 +46603,7 @@
 		// direct child of the body or of a .minn-slot. The keydown handler
 		// resolves the caret's root via blockRootOf and every walk below uses
 		// it; only .minn-island-run interiors still bail (runs are text-only).
-		const isRootChild = ( el ) => !! ( el && el.parentNode && ( el.parentNode === body
-			|| ( el.parentNode.classList && el.parentNode.classList.contains( 'minn-slot' ) ) ) );
+		const isRootChild = ( el ) => !! ( el && el.parentNode && ( el.parentNode === body || isMinnSlot( el.parentNode ) ) );
 		// Root-child blocks that arm/delete like islands when empty (or always
 		// for HR). Not list/heading — those stay normal prose.
 		const isAtomicEl = ( el ) => {
@@ -48432,8 +48449,7 @@
 			if ( ! b || ! state.editor ) return;
 			b.focus( { preventScroll: true } );
 			// A root child = direct child of the body or of a container slot.
-			const rootChild = ( el ) => !! ( el && el.isConnected && el.parentNode && ( el.parentNode === b
-				|| ( el.parentNode.classList && el.parentNode.classList.contains( 'minn-slot' ) ) ) );
+			const rootChild = ( el ) => !! ( el && el.isConnected && el.parentNode && ( el.parentNode === b || isMinnSlot( el.parentNode ) ) );
 			let target;
 			if ( targetBlock && rootChild( targetBlock ) ) {
 				// The slash menu's "/" block — replaceable by design.

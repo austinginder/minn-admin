@@ -93,9 +93,6 @@ const REVIEWED = {
 	"&& ! aEl.closest( '.minn-block-island' ) ) {": 'exclusion',
 	"if ( ! code || code.closest( 'pre' ) || code.closest( '.minn-block-island' ) ) return null;": 'exclusion',
 	"if ( a && ebody.contains( a ) && ! a.closest( '.minn-block-island' ) ) return openLinkPop( a );": 'exclusion: no link popover inside islands',
-	"const wrap = img.closest( '.minn-block-island, .minn-slot' );": 'exclusion: an image in an island is not edited here',
-	"const wrap = a.closest( '.minn-block-island, .minn-slot' );": 'exclusion',
-	"const wrap = table.closest( '.minn-block-island, .minn-slot' );": 'exclusion',
 	"const inIsland = block.closest( '.minn-block-island' );": 'caret walk out of island chrome, no write',
 	"if ( ! next || next.classList.contains( 'minn-block-island' ) ) {": 'landing paragraph check, no write',
 	"if ( ! next || next.classList.contains( 'minn-block-island' ) ) return; // keep as the landing paragraph": 'landing paragraph check, no write',
@@ -103,6 +100,9 @@ const REVIEWED = {
 	"} else if ( n.classList && n.classList.contains( 'minn-block-island' ) ) {": 'paste: a clipboard island pastes as its visible preview, never as an island',
 	"const slotIdx = new Set( $$( '.minn-slot-island', body ).filter( isRealIsland ).map( ( el ) => parseInt( el.dataset.island, 10 ) ) );": 'guarded on the line',
 	"if ( a.closest( '#minn-editor-body, .minn-island-preview, .minn-email-frame' ) ) return;": 'exclusion: leaves links in content and previews alone',
+	"let w = el && el.closest ? el.closest( '.minn-block-island, .minn-slot' ) : null;": 'editWrapOf(): an island found here only makes Minn do less (preview chrome); a slot is taken only through isMinnSlot()',
+	"while ( w && ! w.classList.contains( 'minn-block-island' ) && ! isMinnSlot( w ) ) {": 'editWrapOf() itself',
+	"w = w.parentElement ? w.parentElement.closest( '.minn-block-island, .minn-slot' ) : null;": 'editWrapOf() itself',
 	"if ( carrier && ! carrier.closest( '.minn-island-preview' ) && body.contains( carrier ) ) {": 'exclusion',
 	"const prev = n.querySelector( '.minn-island-preview' );": 'paste: a clipboard island pastes as what its preview shows, never as an island',
 
@@ -172,6 +172,8 @@ const SLOT_LOOKUP = /(closest|querySelector(All)?|\$\$?)\(\s*'[^']*\.minn-slot(?
 const SLOT_REVIEWED = {
 	"let s = el && el.closest ? el.closest( '.minn-slot' ) : null;": 'minnSlotOf() itself',
 	"while ( s && ! isMinnSlot( s ) ) s = s.parentElement ? s.parentElement.closest( '.minn-slot' ) : null;": 'minnSlotOf() itself',
+	"let w = el && el.closest ? el.closest( '.minn-block-island, .minn-slot' ) : null;": 'editWrapOf() itself: a slot it returns passed isMinnSlot()',
+	"w = w.parentElement ? w.parentElement.closest( '.minn-block-island, .minn-slot' ) : null;": 'editWrapOf() itself',
 	"const domCols = $$( '.minn-slot', island )": 'slot island rendering: the island was just built by Minn',
 	"stampSlotDirtyFor( holder.querySelector( '.minn-slot' ) );": 'slot island rendering: the holder was just built by Minn; the stamp re-checks',
 	"const slot = el.querySelector( '.minn-slot' );": 'slot island rendering: the element was just built by Minn',
@@ -179,9 +181,6 @@ const SLOT_REVIEWED = {
 	"? nodeEl( range.endContainer ).closest( '.minn-slot, .minn-island-run' ) : null;": 'selection clamp: read only, narrows a selection',
 	"const slot = islandEl.parentElement && islandEl.parentElement.closest( '.minn-slot' );": 'islandSiblingSlots: tested editable and inside a real Columns island on the next lines',
 	"if ( e.target.closest && e.target.closest( '.minn-slot' ) ) {": 'input gate: stampSlotDirtyFor() re-checks with minnSlotOf()',
-	"const wrap = img.closest( '.minn-block-island, .minn-slot' );": 'image chip context: read only (chip placement)',
-	"const wrap = a.closest( '.minn-block-island, .minn-slot' );": 'link chip context: read only',
-	"const wrap = table.closest( '.minn-block-island, .minn-slot' );": 'table chip context: read only',
 	"const slots = $$( '.minn-slot', el ).filter( ( s ) => 'true' === s.getAttribute( 'contenteditable' ) && s.closest( '.minn-slot-island' ) === el );": "flushSlotIsland: el is real; editable slots of that island only",
 	"return { slot, slots: $$( '.minn-slot', colsIsland ).filter( ( s ) => realSlot( s ) && s.closest( '.minn-slot-island' ) === colsIsland ) };": "islandSiblingSlots: editable slots of a real Columns island",
 	"const box = e.target.closest ? e.target.closest( '#minn-editor-body > figure.wp-block-table, #minn-editor-body > table, #minn-editor-body > figure.wp-block-image, #minn-editor-body > img, #minn-editor-body > pre:not(.wp-block-verse):not(.wp-block-preformatted), .minn-slot > figure.wp-block-table, .minn-slot > table, .minn-slot > figure.wp-block-image, .minn-slot > img, .minn-slot > pre:not(.wp-block-verse):not(.wp-block-preformatted)' ) : null;": "chip hover target: read only (which block a chip highlights)",
@@ -202,6 +201,16 @@ check( 'every container-slot lookup goes through minnSlotOf() / isMinnSlot() or 
 const slotStale = Object.keys( SLOT_REVIEWED ).filter( ( t ) => ! slotSeen.has( t ) );
 check( 'every reviewed slot line still exists', 0 === slotStale.length, slotStale.join( ' | ' ).slice( 0, 400 ) );
 
+// A slot is decided by reference. Testing the class alone took a look-alike
+// inside an island's preview for writing surface, and the image, link and
+// table controls opened on DOM the save never reads; only isMinnSlot() may
+// ask the class.
+const classSlot = [];
+src.forEach( ( line, i ) => {
+	if ( /classList\.contains\(\s*'minn-slot'\s*\)/.test( line ) && ! /^return !! s && 1 === s\.nodeType && s\.classList\.contains\( 'minn-slot' \)/.test( line.trim() ) ) classSlot.push( `app.js:${ i + 1 }  ${ line.trim().slice( 0, 140 ) }` );
+} );
+check( 'no slot is decided by its class alone (isMinnSlot() is the only one that asks)', 0 === classSlot.length, classSlot.join( ' | ' ) );
+
 // The island write paths each prove the island is real themselves, so a
 // caller that found it by class cannot hand them a look-alike.
 const body = src.join( '\n' );
@@ -220,6 +229,13 @@ check( 'the serializer flush commits real Details and Buttons islands only',
 	/'\.minn-details-island', root \)\.filter\( isRealIsland \)/.test( body ) && /'\.minn-buttons-island', root \)\.filter\( isRealIsland \)/.test( body ) );
 check( 'upload placeholders carry the page token', /const key = UPLOAD_KEY \+/.test( body ) && ! /'u' \+ \( \+\+uploadSeq \)/.test( body ) );
 check( 'paste never rebuilds an island from clipboard HTML', ! /islandHtml\( idx, n\.dataset\.block/.test( body ) );
+// The edit controls opened by a click on content decide through
+// editWrapOf() and isMinnSlot(), and a shortcode token's popover opens only
+// on a token Minn made, in a run of the island's own arm.
+check( 'the image, link and table controls skip look-alike slots',
+	( body.match( /const wrap = editWrapOf\( (img|a|table) \);\n\t+if \( wrap && ! isMinnSlot\( wrap \) \) return;/g ) || [] ).length === 3 );
+check( 'the shortcode token popover takes Minn\'s own tokens in an armed run only',
+	/if \( ! SC_TOKENS\.has\( tok \) \) return;/.test( fnBody( 'openScTokenPop' ) ) && /_minnRuns\.spans\.includes\( run \)/.test( fnBody( 'openScTokenPop' ) ) );
 // A server render reaches the island it was asked for, never a look-alike
 // carrying its class or index ahead of it in the post.
 [ 'renderIslandPreviews', 'applyInspector', 'replaceIsland', 'insertIsland' ].forEach( ( fn ) => {
