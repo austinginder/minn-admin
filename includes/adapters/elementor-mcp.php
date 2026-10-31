@@ -25,10 +25,12 @@
  * Creating a connection stays on their setup screen (it hands the secret to
  * one client and shows the per-client instructions), one link away.
  *
- * Gate: manage_options plus a valid wp_rest nonce on the writes, exactly as
- * their settings and credentials routes check (the nonce keeps an
+ * Gate: manage_options plus a valid wp_rest nonce on the writes, as their
+ * settings and credentials routes check, and a browser session
+ * (Minn_Admin_REST::browser_session()): the nonce is there to keep an
  * application-password caller, such as an MCP client itself, from flipping
- * the switch back on or revoking connections).
+ * the switch back on or revoking connections, and a nonce minted for such a
+ * caller verifies for it, so the Application Password is refused outright.
  * Their REST namespace carries the package version, so Minn reads and writes
  * the option through their controller class instead of calling it.
  *
@@ -47,10 +49,10 @@ function minn_admin_elementor_mcp_can() {
 	return minn_admin_elementor_mcp_active() && current_user_can( 'manage_options' );
 }
 
-/** Their write gate: manage_options AND a wp_rest nonce in X-WP-Nonce. */
+/** Their write gate (manage_options AND a wp_rest nonce in X-WP-Nonce), in a browser session. */
 function minn_admin_elementor_mcp_can_write( WP_REST_Request $request ) {
 	$nonce = (string) $request->get_header( 'X-WP-Nonce' );
-	return minn_admin_elementor_mcp_can() && '' !== $nonce && wp_verify_nonce( $nonce, 'wp_rest' );
+	return minn_admin_elementor_mcp_can() && Minn_Admin_REST::browser_session( $request ) && '' !== $nonce && wp_verify_nonce( $nonce, 'wp_rest' );
 }
 
 function minn_admin_elementor_mcp_enabled() {

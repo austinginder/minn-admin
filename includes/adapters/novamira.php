@@ -53,15 +53,18 @@ function minn_admin_novamira_cap() {
 }
 
 /**
- * Writes also need a wp_rest nonce in X-WP-Nonce. Novamira changes its
- * switch, ability rules, connections and memories only from wp-admin forms
- * behind check_admin_referer, which an Application Password cannot reach;
- * without the nonce an agent holding the password its own connect flow
- * issued could re-enable an ability the owner turned off.
+ * Writes also need a browser session: a wp_rest nonce in X-WP-Nonce and no
+ * Application Password (Minn_Admin_REST::browser_session()). Novamira
+ * changes its switch, ability rules, connections and memories only from
+ * wp-admin forms behind check_admin_referer, which an Application Password
+ * cannot reach; an agent holding the password its own connect flow issued
+ * could otherwise re-enable an ability the owner turned off. The nonce alone
+ * is not enough: one minted while the password signs a request verifies
+ * for every later request it signs.
  */
 function minn_admin_novamira_can_write( WP_REST_Request $request ) {
 	$nonce = (string) $request->get_header( 'X-WP-Nonce' );
-	return minn_admin_novamira_can() && '' !== $nonce && (bool) wp_verify_nonce( $nonce, 'wp_rest' );
+	return minn_admin_novamira_can() && Minn_Admin_REST::browser_session( $request ) && '' !== $nonce && (bool) wp_verify_nonce( $nonce, 'wp_rest' );
 }
 
 /**
