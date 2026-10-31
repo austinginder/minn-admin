@@ -2419,8 +2419,11 @@
 	// Attributes that take a URL. One whose scheme can reach execution is
 	// parked (rtParkName), never trusted.
 	const RT_URL_ATTRS = [ 'href', 'src', 'xlink:href', 'action', 'formaction', 'data', 'poster', 'background', 'cite', 'longdesc', 'ping' ];
+	const RT_HTML_NS = 'http://www.w3.org/1999/xhtml';
 	// Never useful in stored content and each one is a way back to execution.
-	const RT_KILL_ATTRS = [ 'srcdoc', 'sandbox', 'attributename', 'values', 'from', 'to', 'by', 'begin', 'http-equiv' ];
+	// A writer's own iframe sandbox is not among them: parking it loosened the
+	// frame. rtParkFrame keeps it, and tightens it, instead.
+	const RT_KILL_ATTRS = [ 'srcdoc', 'attributename', 'values', 'from', 'to', 'by', 'begin', 'http-equiv' ];
 
 	// Stored content (a post's, or a wysiwyg field's in the rich-text modal)
 	// reaches the editor body, the locked preview, island previews and the
@@ -2563,9 +2566,41 @@
 		// A stylesheet <link> applies to the whole document (and fetches the
 		// moment it lands), not to the markup around it.
 		if ( 'href' === lower && el && 'LINK' === el.tagName ) return RT_PARK_PREFIX + name;
+		// An <object> or <embed> loads a document of its own that no sandbox
+		// attribute can reach. A same-origin page there runs its scripts as
+		// whoever opened the editor (parent.MINN.nonce in reach), and a
+		// cross-origin URL can redirect to one, so neither loads in a live
+		// copy, whatever its scheme.
+		if ( el && RT_HTML_NS === el.namespaceURI && ( ( 'data' === lower && 'object' === el.localName ) || ( 'src' === lower && 'embed' === el.localName ) ) ) return RT_PARK_PREFIX + name;
 		if ( RT_URL_ATTRS.includes( lower ) && ! rtSafeUrl( value ) ) return RT_PARK_PREFIX + name;
 		return name;
 	};
+
+	// A content iframe loads in the live copy with a sandbox that leaves out
+	// allow-same-origin. Without it a frame of a same-origin page (or of any
+	// URL that redirects to one) ran the writer's scripts in this origin, with
+	// parent.MINN.nonce in reach, as whoever merely opened the post. The
+	// writer's own sandbox is kept and narrowed, never widened, and its value
+	// (or its absence) is parked for rtUnpark, so the stored bytes come back.
+	const RT_PARK_FRAME = RT_PARK_PREFIX + 'frame';
+	const RT_FRAME_SANDBOX = [ 'allow-scripts', 'allow-popups', 'allow-presentation' ];
+	const rtIsFrame = ( el ) => RT_HTML_NS === el.namespaceURI && ( 'iframe' === el.localName || 'frame' === el.localName );
+	function rtParkFrame( el ) {
+		if ( ! rtIsFrame( el ) || el.hasAttribute( RT_PARK_FRAME ) ) return;
+		const own = el.getAttribute( 'sandbox' );
+		el.setAttribute( RT_PARK_FRAME, null === own ? '0' : '1' + own );
+		const tokens = null === own
+			? RT_FRAME_SANDBOX
+			: own.toLowerCase().split( /\s+/ ).filter( ( tok ) => RT_FRAME_SANDBOX.includes( tok ) );
+		el.setAttribute( 'sandbox', tokens.join( ' ' ) );
+	}
+	function rtUnparkFrame( el ) {
+		if ( ! el.hasAttribute || ! el.hasAttribute( RT_PARK_FRAME ) ) return;
+		const own = el.getAttribute( RT_PARK_FRAME );
+		el.removeAttribute( RT_PARK_FRAME );
+		if ( '1' === own.charAt( 0 ) ) el.setAttribute( 'sandbox', own.slice( 1 ) );
+		else el.removeAttribute( 'sandbox' );
+	}
 
 	// A <style> element is global wherever it lands, so rendered markup could
 	// repaint or hide Minn's own chrome. Its rules are scoped to the editor
@@ -2625,7 +2660,6 @@
 	// serializer's inert copy.
 	const RT_PARK_RAW = RT_PARK_PREFIX + 'raw';
 	const RT_RAW_CARRIERS = [ 'noscript', 'xmp', 'iframe', 'noembed', 'noframes', 'plaintext' ];
-	const RT_HTML_NS = 'http://www.w3.org/1999/xhtml';
 	const rtIsRawCarrier = ( el ) => RT_HTML_NS === el.namespaceURI && RT_RAW_CARRIERS.includes( el.localName );
 	function rtParkRaw( el ) {
 		if ( ! rtIsRawCarrier( el ) ) return;
@@ -2661,6 +2695,7 @@
 			rtParkRaw( el );
 			rtParkStyle( el );
 			rtRenameAttrs( el, rtParkName );
+			rtParkFrame( el );
 			if ( el.content && el.content.nodeType === 11 ) rtNeutralize( el.content );
 		} );
 		return root;
@@ -2684,6 +2719,9 @@
 			// into an attribute named "raw".
 			rtUnparkRaw( el );
 			rtUnparkStyle( el );
+			// Before the rename too: its marker would come back as a
+			// sandbox attribute.
+			rtUnparkFrame( el );
 			rtRenameAttrs( el, ( name ) => (
 				0 === name.toLowerCase().indexOf( RT_PARK_PREFIX )
 					? name.slice( RT_PARK_PREFIX.length )
@@ -2702,6 +2740,7 @@
 		const holder = inertParse( String( html || '' ) );
 		$$( '*', holder ).forEach( ( el ) => {
 			rtUnparkStyle( el );
+			rtUnparkFrame( el );
 			Array.from( el.attributes || [] ).forEach( ( a ) => {
 				if ( 0 === a.name.toLowerCase().indexOf( RT_PARK_PREFIX ) ) el.removeAttribute( a.name );
 			} );
