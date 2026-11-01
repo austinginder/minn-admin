@@ -72,7 +72,9 @@ const KEEP = [
 	{ name: 'relative link', html: `<p><a href="../docs/">docs</a></p>`, want: /<a href="\.\.\/docs\/">/i },
 	{ name: 'protocol-relative image (as an https one)', html: `<img src="//cdn.example/a.png" alt="">`, want: /<img src="\/\/cdn\.example\/a\.png"/i },
 	{ name: 'inline image', html: `<img src="data:image/png;base64,iVBORw0KGgo=" alt="">`, want: /<img src="data:image\/png;base64,/i },
-	{ name: 'https embed iframe', html: `<iframe src="https://www.youtube.com/embed/x"></iframe>`, want: /<iframe src="https:\/\/www\.youtube\.com\/embed\/x">/i },
+	// A frame is sandboxed in the live copy (no same-origin), so only the
+	// value read back is held to the writer's bytes.
+	{ name: 'https embed iframe', html: `<iframe src="https://www.youtube.com/embed/x"></iframe>`, want: /<iframe src="https:\/\/www\.youtube\.com\/embed\/x"><\/iframe>/i, live: /<iframe src="https:\/\/www\.youtube\.com\/embed\/x"[^>]*\ssandbox="(?![^"]*allow-same-origin)[^"]*"/i },
 ];
 
 ( async () => {
@@ -150,7 +152,8 @@ const KEEP = [
 
 	for ( const k of KEEP ) {
 		const r = await seed( k.html );
-		t.check( `preserved: ${ k.name }`, k.want.test( r.html || '' ) && k.want.test( r.back || '' ), ( r.html || '' ).slice( 0, 90 ) );
+		const liveOk = k.live ? k.live.test( r.html || '' ) : k.want.test( r.html || '' );
+		t.check( `preserved: ${ k.name }`, liveOk && k.want.test( r.back || '' ), `${ ( r.html || '' ).slice( 0, 90 ) } => ${ ( r.back || '' ).slice( 0, 90 ) }` );
 	}
 
 	// Plain text still becomes editable blocks.
