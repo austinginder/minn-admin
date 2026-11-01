@@ -208,11 +208,26 @@ A few properties worth knowing before auditing (details in
   secret rows older versions kept), Jetpack's connection tokens, Solid
   Security's Network Brute Force key, OttoKit's signing secret, WP
   Statistics' settings row, add-on licences and cipher key, CleanTalk's
-  self-call tokens and WP Migrate's per-user licence key.
+  self-call tokens, WP Migrate's per-user licence key, Bookly (its own
+  list of sensitive options, read live when Bookly is loaded, its cloud
+  keys, add-on purchase codes and its shop licence column), Gravity Forms'
+  Gravity API secret and older reCAPTCHA secret, WPCode's library
+  connection, Burst's share and Search Console tokens and its settings,
+  WPForms' PayPal Commerce connections and integration accounts, Bricks'
+  settings row, Autoptimize's critical CSS key, Fluent Forms' Stripe
+  webhook secret, Ninja Forms' OAuth secret, Everest Forms' REST, AI and
+  approval keys, Seriously Simple Podcasting's feed password, WP
+  Statistics' daily salt, Jetpack Forms' and Protect's keys, UpdraftPlus'
+  product key and migration password, and Smash Balloon's Facebook tokens
+  and extension licence keys.
   `tests/secrets-tier-conformance.test.php` seeds a key into every declared
   store and reads it back through the browser and a minn-admin/v1 response,
   and fails on any settings row an integration touches that holds a key
-  nothing declares. UpdraftPlus' running-job rows
+  nothing declares, on any row a vendor's own list of sensitive settings
+  names (Bookly's, and the rows Burst keeps out of its Site Health
+  export), and on any option a declared plugin's source reads or writes
+  under a credential-sounding name that is neither declared nor listed
+  with a reason. UpdraftPlus' running-job rows
   (`updraft_jobdata_*`, in options or the network's sitemeta) copy every
   storage destination's settings, typed passwords included, and are
   redacted whole by name, since a copy is recognised only when its value
@@ -289,6 +304,63 @@ A few properties worth knowing before auditing (details in
   anything is written. A preview made from a real entry fills the
   submitter's account fields only as far as the vendor's own entry screen
   shows them, and their profile only for someone who may list users.
+- Mail logs show a password reset link's key only to someone who may
+  read mail whole (who can edit every administrator). For anyone else every
+  field of a logged email, the list's subjects included, goes through one
+  mask (`minn_admin_mail_masked()`, `includes/adapters/mail-kit.php`): it
+  decodes a run of text the way a browser and a mail client would (JSON
+  escapes, entities, percent-encoding, quoted-printable) before deciding it
+  is a reset link, and hides the key on that same decoded view, in its
+  query, fragment or path. Searching a log's message text, or a column that
+  copies it (Gravity SMTP's `extra`), is for the same readers only. A
+  subject that carries a reset link can still be searched by anyone the
+  log is open to.
+- Stored content shown in the editor, a preview, a revision or a rich-text
+  field is first read in an inert document, where event handlers, URLs
+  that can run script, the inside of raw-text elements (`script`,
+  `noscript`, `xmp`, `iframe`, `noembed`, `noframes`, `plaintext`) and
+  attributes that can open the top layer (`popover`, `popovertarget`,
+  `command`, `commandfor`, `interestfor`) are held back under a token for
+  the page; a save puts the writer's bytes back. Markup handed on as text
+  (paste, table edits, inserts) is read again until a reading changes
+  nothing, and refused if it never settles, since parsing HTML twice can
+  give two different trees, and goes in as nodes from that inert reading;
+  `tests/content-sink-guard.test.js` fails on an insert that skips this.
+  The editor's own wrappers (block previews, Details bodies, Custom HTML)
+  are never glued to stored markup in one string: each is filled from its
+  own parsed nodes. Every other piece of stored markup joined into the
+  editor is checked first: a block stays editable, and a container's
+  wrapper hosts a typing slot, only when a parse shows the markup is
+  self-contained and the wrapper closes where it should; otherwise the
+  block stays an island saved byte for byte. Comment-only freeform is
+  decided by the parser. So unbalanced HTML can neither escape a wrapper,
+  swallow the blocks after it, nor save Minn's chrome into the post.
+  Frames in content load sandboxed without same-origin access (a writer's
+  own sandbox is kept and only narrowed), and `object` and `embed` load
+  nothing in the editor. The one frame given its own origin back is the
+  exact player frame the server put in a preview from one of WordPress's
+  built-in oEmbed providers (no discovery, no embed handler, nothing a
+  plugin added, and the site's own oEmbed object must answer the URL with
+  that same provider), matched by its full src, never inside a caption and
+  with no name a link could target. A preview looks up only an embed
+  block's own URL, at most ten new ones per request, and caches the answer
+  in the post being edited when one of its saved embed blocks holds that
+  exact URL, otherwise for a day, never in a stored `oembed_cache` post.
+  Controls of the notification panel and of modals answer only inside
+  `#minn-overlays`, and every document-wide sweep of Minn's chrome classes
+  skips content, so content wearing their markup is inert
+  (`tests/overlay-scope-guard.test.js`). Links and forms in content that
+  name a target, or a `<base target>` that would give them one, never
+  navigate any window or frame from inside Minn.
+- Where a plugin keeps a switch for writing code or settings by
+  automation (FluentSnippets' REST authoring, WPCode's AI & Automation
+  Access), Minn follows it: while it is off, only a signed-in browser
+  session (`Minn_Admin_REST::browser_session()`: no Application Password,
+  and a valid `wp_rest` nonce) may change what the switch covers (for
+  FluentSnippets adding, editing and switching a snippet on; switching off
+  and deleting stay open, as in its own API). Elementor MCP's and Novamira's settings ask the same of every
+  write. A route that checks a `wp_rest` nonce also asks for a browser
+  session, which a static check holds.
 - On a network, Minn's network routes read network capabilities on the
   main site, as core's Network Admin does, so a network capability granted
   through one subsite's role counts for nothing. On an install with several
