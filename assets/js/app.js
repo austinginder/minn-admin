@@ -2822,7 +2822,7 @@
 			return null;
 		}
 		const done = document.execCommand( 'insertHTML', false, safe );
-		adoptRawBlocks( document.getElementById( 'minn-editor-body' ) );
+		adoptEditorMarkup( document.getElementById( 'minn-editor-body' ) );
 		return done;
 	}
 	function rtInsertAdjacentHtml( el, where, html ) {
@@ -2832,7 +2832,7 @@
 			return false;
 		}
 		el.insertAdjacentHTML( where, safe );
-		adoptRawBlocks( document.getElementById( 'minn-editor-body' ) );
+		adoptEditorMarkup( document.getElementById( 'minn-editor-body' ) );
 		return true;
 	}
 
@@ -2841,17 +2841,30 @@
 	// into innerHTML on a live element would parse it for real, the step the
 	// inert parse exists to avoid, and re-open every mutation-XSS shape a
 	// string round trip carries.
-	function rtNeutralizeInto( el, html, vouched ) {
+	function rtNeutralizeInto( el, html, vouched, preview ) {
 		el.textContent = '';
 		const s = String( html == null ? '' : html );
 		if ( ! s ) return el;
 		const holder = rtNeutralize( inertParse( s ) );
 		if ( vouched ) rtVouchFrames( holder, vouched );
+		if ( preview ) rtParkEditable( holder );
 		Array.from( holder.childNodes ).forEach( ( node ) => {
 			el.appendChild( document.importNode( node, true ) );
 		} );
 		return el;
 	}
+
+	// A copy that only shows stored content (an island preview, the locked
+	// view, the revision viewer) takes no typing: content's own
+	// contenteditable="true" made preview text editable there, and every
+	// keystroke was dropped at save, which reads the stored markup. Parked
+	// like the rest, so nothing about the stored bytes changes. Not used on
+	// the editor body, where Minn's own islands and slots ride the same
+	// attribute.
+	function rtParkEditable( root ) {
+		$$( '[contenteditable]', root ).forEach( ( el ) => rtRenameAttrs( el, ( name ) => ( 'contenteditable' === name.toLowerCase() ? RT_PARK_PREFIX + name : name ) ) );
+	}
+	const rtPreviewInto = ( el, html, vouched ) => rtNeutralizeInto( el, html, vouched, true );
 
 	// A wysiwyg field's stored value, opened in the rich-text modal. It is
 	// stored content like a post's, so it takes the post editor's path: parse
@@ -33055,6 +33068,15 @@
 		rtUnpark( out );
 		return out.innerHTML;
 	}
+	// Markup the editor built from stored content has landed under root:
+	// adopt its Custom HTML wrappers, and park content's contenteditable in
+	// every island preview it holds (a preview starts as the block's own
+	// markup until its server render lands).
+	function adoptEditorMarkup( root ) {
+		adoptRawBlocks( root );
+		if ( root ) $$( '.minn-island-preview', root ).filter( isMinnPreview ).forEach( rtParkEditable );
+		return root;
+	}
 	// An editable segment's HTML, a Custom HTML block inside its wrapper.
 	const editableBlockHtml = ( seg ) => ( 'html' === seg.name.replace( /^core\//, '' )
 		? rawBlockHtml( 'html', seg.raw, editableSegmentHtml( seg ) )
@@ -35142,7 +35164,7 @@
 		// insertAdjacentHTML on a live element parses for real, and a stored
 		// block is somebody's markup. Land the copy through the inert path,
 		// the way a pattern insert already does.
-		const dup = adoptRawBlocks( rtNeutralizeInto( document.createElement( 'div' ), islandHtml( ni, islandEl.dataset.block || 'block', raw, ed ) ) );
+		const dup = adoptEditorMarkup( rtNeutralizeInto( document.createElement( 'div' ), islandHtml( ni, islandEl.dataset.block || 'block', raw, ed ) ) );
 		Array.from( dup.childNodes ).reverse().forEach( ( node ) =>
 			islandEl.parentNode.insertBefore( node, islandEl.nextSibling ) );
 		// Direct-DOM insertion fires no input — ancestor slots must re-splice.
@@ -35329,8 +35351,8 @@
 			// live parse runs the resource-loading side of it, so an image
 			// with an error handler fires while the tree is being built.
 			// duplicateIsland takes the same route for the same reason.
-			const k = adoptRawBlocks( rtNeutralizeInto( document.createElement( 'div' ), keepHTML ) ).firstElementChild;
-			const d = adoptRawBlocks( rtNeutralizeInto( document.createElement( 'div' ), dropHTML ) ).firstElementChild;
+			const k = adoptEditorMarkup( rtNeutralizeInto( document.createElement( 'div' ), keepHTML ) ).firstElementChild;
+			const d = adoptEditorMarkup( rtNeutralizeInto( document.createElement( 'div' ), dropHTML ) ).firstElementChild;
 			if ( ! k || ! d ) return;
 			if ( keep.isConnected ) keep.replaceWith( k );
 			else parent.insertBefore( k, keepNext && keepNext.isConnected && keepNext.parentNode === parent ? keepNext : null );
@@ -35611,7 +35633,7 @@
 		delete prev.dataset.sliderWait;
 		delete prev.dataset.harvestWait;
 		delete prev._minnCollapsedSlides;
-		rtNeutralizeInto( prev, html, vouched );
+		rtPreviewInto( prev, html, vouched );
 	}
 	const embedOrigins = ( r, i ) => ( r && r.embed_origins && r.embed_origins[ i ] ) || null;
 
@@ -36916,7 +36938,7 @@
 							state.editor.content = r.content.rendered;
 							const body = $( '#minn-editor-body' );
 							if ( body ) {
-								rtNeutralizeInto( body, r.content.rendered );
+								rtPreviewInto( body, r.content.rendered );
 								highlightCodeBlocks( body );
 								updateEditorStats();
 							}
@@ -40662,7 +40684,7 @@
 		// children puts the first keystrokes in a bare text node, and the
 		// slash menu (and most block ops) need a top-level element.
 		rtNeutralizeInto( body, ed.content || ( locked ? '' : '<p><br></p>' ) );
-		adoptRawBlocks( body );
+		adoptEditorMarkup( body );
 		if ( ! locked ) seedImageCaptions( body );
 		if ( ! locked ) ensureTrailingParagraph( body );
 		highlightCodeBlocks( body );
@@ -45071,7 +45093,7 @@
 		ed.islands[ idx ] = newRaw;
 		// Detached, but an <img src> in a detached tree still loads and still
 		// fires onerror, so this is a live sink like any other.
-		const tmp = adoptRawBlocks( rtNeutralizeInto( document.createElement( 'div' ), islandHtml( idx, String( islandEl.dataset.block || '' ), newRaw, ed ) ) );
+		const tmp = adoptEditorMarkup( rtNeutralizeInto( document.createElement( 'div' ), islandHtml( idx, String( islandEl.dataset.block || '' ), newRaw, ed ) ) );
 		const fresh = tmp.firstElementChild;
 		if ( ! fresh ) return false;
 		islandEl.replaceWith( fresh );
@@ -45567,13 +45589,13 @@
 			const r = await api( 'minn-admin/v1/render-blocks', { method: 'POST', body: JSON.stringify( { blocks: [ newRaw ], post: ( state.editor && state.editor.id ) || 0 } ) } );
 			injectPreviewStyles( r && r.styles );
 			const html = r && r.rendered && r.rendered[ 0 ];
-			if ( previewEl && html && html.trim() ) rtNeutralizeInto( previewEl, html, embedOrigins( r, 0 ) );
+			if ( previewEl && html && html.trim() ) rtPreviewInto( previewEl, html, embedOrigins( r, 0 ) );
 			rearm();
 			updateEditorStats();
 		} catch ( e ) {
 			if ( previewEl ) {
 				const inner2 = stripBlockComments( newRaw ).trim();
-				if ( inner2 ) rtNeutralizeInto( previewEl, inner2 );
+				if ( inner2 ) rtPreviewInto( previewEl, inner2 );
 			}
 			rearm();
 		}
@@ -48264,7 +48286,7 @@
 			const idx = ed.islands.push( seg.raw ) - 1;
 			// insertAdjacentHTML on a live element parses for real; a pattern is
 			// stored markup like any other, so it lands through the inert path.
-			const holder = adoptRawBlocks( rtNeutralizeInto( document.createElement( 'div' ), islandHtml( idx, seg.name.includes( '/' ) ? seg.name : 'core/' + seg.name, seg.raw, ed ) ) );
+			const holder = adoptEditorMarkup( rtNeutralizeInto( document.createElement( 'div' ), islandHtml( idx, seg.name.includes( '/' ) ? seg.name : 'core/' + seg.name, seg.raw, ed ) ) );
 			Array.from( holder.childNodes ).forEach( ( node ) => anchor.parentNode.insertBefore( node, anchor ) );
 			count++;
 		} );
@@ -51291,7 +51313,7 @@
 		// The revision diff carries stored post markup, so renderModal leaves
 		// #minn-diff empty and it is seeded here, inertly.
 		const diffWrap = $( '#minn-diff' );
-		if ( diffWrap && m._diffHtml ) rtNeutralizeInto( diffWrap, m._diffHtml );
+		if ( diffWrap && m._diffHtml ) rtPreviewInto( diffWrap, m._diffHtml );
 		const closeBtn = $( '#minn-modal-close' );
 		if ( closeBtn ) closeBtn.addEventListener( 'click', closeModal );
 		const closeBtn2 = $( '#minn-modal-close2' );
@@ -54057,7 +54079,7 @@
 		const preview = $( '#minn-revision-preview' );
 		if ( preview ) {
 			const raw = ( rev.content && ( rev.content.raw != null ? rev.content.raw : rev.content.rendered ) ) || '';
-			rtNeutralizeInto( preview, stripBlockComments( raw ) || `<span style="color:var(--text3);">${ esc( __( '(empty)' ) ) }</span>` );
+			rtPreviewInto( preview, stripBlockComments( raw ) || `<span style="color:var(--text3);">${ esc( __( '(empty)' ) ) }</span>` );
 			highlightCodeBlocks( preview );
 		}
 		const restore = $( '#minn-restore-rev' );

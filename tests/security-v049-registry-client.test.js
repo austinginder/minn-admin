@@ -22,6 +22,10 @@
  *         and the same links inside a nested srcdoc, and shows the
  *         remote-content bar for a URL written with character references.
  *         Run against the shipped functions in Chrome, no fixture needed.
+ *   Also: a core oEmbed provider's player, in the preview render-blocks
+ *         filled for its block, gets its own origin back (the server vouches
+ *         for it); any other frame in that preview and every stored frame
+ *         stays strict. Content's contenteditable is parked in a preview.
  *   17-2  The notification panel and the modals bind their controls inside
  *         their own root: post content wearing data-nupd, minn-notif-link
  *         or data-revlist gets no click listener when the bell or the
@@ -260,6 +264,42 @@ const wp = ( args ) => {
 		await page.waitForTimeout( 400 );
 		t.check( 'no table menu on a preview table behind a look-alike slot', ! await popOpen( '.minn-table-menu' ), '' );
 		await page.keyboard.press( 'Escape' );
+
+		t.check( 'content\'s contenteditable is parked in an island preview', await page.evaluate( () => {
+			const look = document.querySelector( '#minn-editor-body .minn-island-preview .minn-slot' );
+			return !! look && ! look.hasAttribute( 'contenteditable' ) && look.getAttributeNames().some( ( n ) => /^data-minn-inert-p[0-9a-z]+-contenteditable$/.test( n ) );
+		} ), '' );
+
+		/* ===== Provider embeds vouched by the server, everything else strict ===== */
+		const emb = ( url, slug, caption = '' ) => `<!-- wp:embed {"url":"${ url }","type":"video","providerNameSlug":"${ slug }"} -->\n<figure class="wp-block-embed is-type-video"><div class="wp-block-embed__wrapper">\n${ url }\n</div>${ caption }</figure>\n<!-- /wp:embed -->`;
+		const YT = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+		const answer = await page.evaluate( async ( blocks ) => {
+			const r = await fetch( window.MINN.restUrl + 'minn-admin/v1/render-blocks', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce }, body: JSON.stringify( { blocks, post: 0 } ) } );
+			return r.json();
+		}, [ emb( YT, 'youtube' ), '<!-- wp:html --><iframe src="https://www.youtube.com/embed/x"></iframe><!-- /wp:html -->', emb( 'https://example.invalid/not-a-provider', 'example' ) ] );
+		const vo = answer.embed_origins || {};
+		t.check( 'render-blocks vouches a core provider\'s player origin for its own block only',
+			JSON.stringify( vo[ 0 ] ) === '["https://www.youtube.com"]' && ! vo[ 1 ] && ! vo[ 2 ], JSON.stringify( vo ) );
+		const EPOST = emb( YT, 'youtube', '<figcaption class="wp-element-caption"><iframe class="minn49-cap" src="https://player.vimeo.com/robots.txt" width="20" height="20"></iframe></figcaption>' )
+			+ '\n\n<!-- wp:html -->\n<iframe class="minn49-raw" src="https://www.youtube.com/robots.txt" width="20" height="20"></iframe>\n<!-- /wp:html -->';
+		const eid = await createPost( page, { title: 'Minn v049 embeds', content: EPOST, status: 'draft' } );
+		made.push( eid );
+		await openEditor( page, eid );
+		await page.waitForSelector( '#minn-editor-body .minn-island-preview iframe[src*="youtube.com/embed/dQw4w9WgXcQ"]', { timeout: 90000 } );
+		const sb = await page.evaluate( () => {
+			const q = ( sel ) => {
+				const f = document.querySelector( sel );
+				return f ? f.getAttribute( 'sandbox' ) : 'missing';
+			};
+			return {
+				player: q( '#minn-editor-body .minn-island-preview iframe[src*="youtube.com/embed/dQw4w9WgXcQ"]' ),
+				caption: q( '#minn-editor-body .minn-island-preview iframe.minn49-cap' ),
+				raw: q( '#minn-editor-body iframe.minn49-raw' ),
+			};
+		} );
+		t.check( 'the provider\'s player in its own preview gets its origin back', /allow-same-origin/.test( sb.player ) && /allow-scripts/.test( sb.player ), JSON.stringify( sb ) );
+		t.check( 'a frame of another origin in the same preview stays strict', 'missing' !== sb.caption && ! /allow-same-origin/.test( sb.caption ), JSON.stringify( sb ) );
+		t.check( 'a stored iframe of the provider\'s origin stays strict', 'missing' !== sb.raw && null !== sb.raw && ! /allow-same-origin/.test( sb.raw ), JSON.stringify( sb ) );
 
 		/* ===== 17-2 overlay bindings stay in their root ===== */
 		const PLANT = '<!-- wp:paragraph -->\n<p class="minn49-plant">x <span data-nupd="plugin-hello-1.0" class="minn49-nupd">update</span> <span class="minn-notif-link minn49-nl" data-nid="notice-x" data-li="0">act</span> <span class="minn-notif-row minn49-row" data-nid="notice-x">row</span> <span class="minn-notif-hide minn49-hide" data-nid="notice-x">hide</span> <span data-revlist="1" class="minn49-rev">rev</span></p>\n<!-- /wp:paragraph -->';
