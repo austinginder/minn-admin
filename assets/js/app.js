@@ -44709,7 +44709,10 @@
 		// Nested containers stack their ⚙ chips in the same corner, so two
 		// popovers can read as one changing its mind
 		// — the open popover's island wears a highlight instead.
-		$$( '.minn-insp-target' ).filter( isChrome ).forEach( ( el ) => el.classList.remove( 'minn-insp-target' ) );
+		// Minn puts the highlight on real islands only (inside the editor
+		// body, so isChrome would skip them); content wearing the class is
+		// left as written.
+		$$( '.minn-insp-target' ).filter( isRealIsland ).forEach( ( el ) => el.classList.remove( 'minn-insp-target' ) );
 		if ( inspectorEl && inspectorEl._minnA11yEsc ) {
 			document.removeEventListener( 'keydown', inspectorEl._minnA11yEsc, true );
 		}

@@ -62,7 +62,7 @@ const CHROME_REVIEWED = {
 const chromeSeen = new Set();
 const chromeBad = [];
 src.split( '\n' ).forEach( ( line, i ) => {
-	const m = line.match( /\$\$\(\s*'\.minn-[^']*'\s*\)(\.filter\(\s*(isChrome|isMinnPreview)\s*\))?/ );
+	const m = line.match( /\$\$\(\s*['`]\.minn-[^'`]*['`]\s*\)(\.(?:filter|some)\(\s*(isChrome|isMinnPreview|isRealIsland)\s*\))?/ );
 	if ( ! m || m[ 1 ] ) return;
 	const t = line.trim();
 	if ( Object.prototype.hasOwnProperty.call( CHROME_REVIEWED, t ) ) {
