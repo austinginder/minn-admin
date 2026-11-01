@@ -2598,6 +2598,34 @@
 			: own.toLowerCase().split( /\s+/ ).filter( ( tok ) => RT_FRAME_SANDBOX.includes( tok ) );
 		el.setAttribute( 'sandbox', tokens.join( ' ' ) );
 	}
+	// A server-rendered embed preview names the https origins of the frames
+	// a core oEmbed provider answered with (render-blocks, embed_origins).
+	// Those frames, and only inside the preview that render fills, get their
+	// own origin back, which a provider's player needs to run. The list comes
+	// from the response, never from markup, so content cannot vouch for a
+	// frame; this page's own origin is never accepted.
+	function rtVouchFrames( root, vouched ) {
+		const ok = ( Array.isArray( vouched ) ? vouched : [] ).filter( ( o ) => 'string' === typeof o
+			&& /^https:\/\/[a-z0-9.-]+(?::\d+)?$/i.test( o ) && o.toLowerCase() !== location.origin.toLowerCase() );
+		if ( ! ok.length ) return;
+		const allow = RT_FRAME_SANDBOX.concat( 'allow-same-origin' );
+		$$( 'iframe', root ).forEach( ( f ) => {
+			if ( ! rtIsFrame( f ) || ! f.hasAttribute( RT_PARK_FRAME ) ) return;
+			let origin = '';
+			try {
+				const u = new URL( f.getAttribute( 'src' ) || '', location.href );
+				if ( 'https:' === u.protocol ) origin = u.origin;
+			} catch ( e ) {
+				return;
+			}
+			if ( ! origin || ! ok.some( ( o ) => o.toLowerCase() === origin.toLowerCase() ) ) return;
+			const own = f.getAttribute( RT_PARK_FRAME );
+			const tokens = '1' === own.charAt( 0 )
+				? own.slice( 1 ).toLowerCase().split( /\s+/ ).filter( ( tok ) => allow.includes( tok ) )
+				: allow;
+			f.setAttribute( 'sandbox', tokens.join( ' ' ) );
+		} );
+	}
 	function rtUnparkFrame( el ) {
 		if ( ! el.hasAttribute || ! el.hasAttribute( RT_PARK_FRAME ) ) return;
 		const own = el.getAttribute( RT_PARK_FRAME );
@@ -2805,11 +2833,12 @@
 	// into innerHTML on a live element would parse it for real, the step the
 	// inert parse exists to avoid, and re-open every mutation-XSS shape a
 	// string round trip carries.
-	function rtNeutralizeInto( el, html ) {
+	function rtNeutralizeInto( el, html, vouched ) {
 		el.textContent = '';
 		const s = String( html == null ? '' : html );
 		if ( ! s ) return el;
 		const holder = rtNeutralize( inertParse( s ) );
+		if ( vouched ) rtVouchFrames( holder, vouched );
 		Array.from( holder.childNodes ).forEach( ( node ) => {
 			el.appendChild( document.importNode( node, true ) );
 		} );
@@ -35007,7 +35036,7 @@
 				injectPreviewStyles( r && r.styles );
 				const rendered = r && r.rendered && r.rendered[ 0 ];
 				const prev = islandPreview( islandEl );
-				if ( prev && rendered && rendered.trim() ) setPreviewHtml( prev, rendered );
+				if ( prev && rendered && rendered.trim() ) setPreviewHtml( prev, rendered, embedOrigins( r, 0 ) );
 				updateEditorStats();
 			} )
 			.catch( () => {} );
@@ -35521,14 +35550,16 @@
 	// start from a clean slate or a re-render (Apply, a server render landing)
 	// leaves the slider stack un-collapsed with the flag still saying "done"
 	//.
-	function setPreviewHtml( prev, html ) {
+	// vouched: the embed origins render-blocks answered for this block.
+	function setPreviewHtml( prev, html, vouched ) {
 		if ( ! prev ) return;
 		delete prev.dataset.sliderCollapsed;
 		delete prev.dataset.sliderWait;
 		delete prev.dataset.harvestWait;
 		delete prev._minnCollapsedSlides;
-		rtNeutralizeInto( prev, html );
+		rtNeutralizeInto( prev, html, vouched );
 	}
+	const embedOrigins = ( r, i ) => ( r && r.embed_origins && r.embed_origins[ i ] ) || null;
 
 	let previewRevealRaf = 0;
 	function schedulePreviewReveal() {
@@ -44943,7 +44974,7 @@
 			.then( ( r ) => {
 				injectPreviewStyles( r && r.styles );
 				const html = r && r.rendered && r.rendered[ 0 ];
-				if ( prev && html && html.trim() ) setPreviewHtml( prev, html );
+				if ( prev && html && html.trim() ) setPreviewHtml( prev, html, embedOrigins( r, 0 ) );
 				schedulePreviewReveal();
 				// Re-arm in-place text editing against the new markup.
 				const body = islandEl && islandEl.closest( '.minn-editor-body' );
@@ -45470,7 +45501,7 @@
 			const r = await api( 'minn-admin/v1/render-blocks', { method: 'POST', body: JSON.stringify( { blocks: [ newRaw ], post: ( state.editor && state.editor.id ) || 0 } ) } );
 			injectPreviewStyles( r && r.styles );
 			const html = r && r.rendered && r.rendered[ 0 ];
-			if ( previewEl && html && html.trim() ) rtNeutralizeInto( previewEl, html );
+			if ( previewEl && html && html.trim() ) rtNeutralizeInto( previewEl, html, embedOrigins( r, 0 ) );
 			rearm();
 			updateEditorStats();
 		} catch ( e ) {
@@ -45508,7 +45539,7 @@
 					// Shortcode/details host live fields — never clobber them.
 					if ( isLiveFieldIsland( island ) ) return;
 					const el = islandPreview( island );
-					if ( el && html && html.trim() ) setPreviewHtml( el, html );
+					if ( el && html && html.trim() ) setPreviewHtml( el, html, embedOrigins( r, i ) );
 				} );
 				// Rendered previews are the arming surface for in-place island
 				// text editing — align text nodes against the raw's text runs.
@@ -48710,7 +48741,7 @@
 					injectPreviewStyles( r && r.styles );
 					const html = r && r.rendered && r.rendered[ 0 ];
 					const prev = islandPreview( islandEl );
-					if ( prev && html && html.trim() ) setPreviewHtml( prev, html );
+					if ( prev && html && html.trim() ) setPreviewHtml( prev, html, embedOrigins( r, 0 ) );
 					updateEditorStats();
 				} )
 				.catch( () => {} );

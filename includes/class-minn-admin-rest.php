@@ -3053,9 +3053,11 @@ class Minn_Admin_REST {
 	 * @param int    $post_id A post the caller may edit, or 0.
 	 * @param int    $budget  Lookups left for this request (counted down).
 	 * @param array  $seen    URL => answer, for this request.
+	 * @param array  $origins Filled with the https origins of the frames a
+	 *                        core oEmbed provider answered with.
 	 * @return string
 	 */
-	private static function preview_embeds( $raw, $html, $post_id, &$budget, array &$seen ) {
+	private static function preview_embeds( $raw, $html, $post_id, &$budget, array &$seen, array &$origins = array() ) {
 		$wrappers = array();
 		$walk     = static function ( $blocks ) use ( &$walk, &$wrappers ) {
 			foreach ( (array) $blocks as $block ) {
@@ -3079,9 +3081,52 @@ class Minn_Admin_REST {
 			$embed = self::preview_embed( $url, $post_id, $budget, $seen );
 			if ( is_string( $embed ) && '' !== $embed ) {
 				$html = str_replace( $wrapper, str_replace( $url, $embed, $wrapper ), $html );
+				foreach ( self::vouched_embed_origins( $url, $embed ) as $origin ) {
+					$origins[ $origin ] = true;
+				}
 			}
 		}
 		return $html;
+	}
+
+	/**
+	 * The https origins of the frames in an embed's answer, when the URL
+	 * belongs to one of core's oEmbed providers without discovery. The
+	 * editor keeps every content frame in an opaque-origin sandbox; a
+	 * provider's own player needs its origin to run, and these are the only
+	 * frames it is given back to, inside the preview this render fills.
+	 * A discovered embed, a handler's answer and anything a URL merely
+	 * points at stay sandboxed. The site's own origin is never vouched.
+	 *
+	 * @param string $url   The URL as the block holds it.
+	 * @param string $embed Its embed HTML.
+	 * @return string[]
+	 */
+	private static function vouched_embed_origins( $url, $embed ) {
+		if ( ! function_exists( '_wp_oembed_get_object' ) || false === stripos( $embed, '<iframe' ) ) {
+			return array();
+		}
+		$clean = str_replace( '&amp;', '&', $url );
+		if ( false === _wp_oembed_get_object()->get_provider( $clean, array( 'discover' => false ) ) ) {
+			return array();
+		}
+		$home    = wp_parse_url( home_url() );
+		$own     = strtolower( (string) ( $home['host'] ?? '' ) );
+		$origins = array();
+		if ( preg_match_all( '#<iframe\b[^>]*?\ssrc\s*=\s*(["\'])(.*?)\1#is', $embed, $m ) ) {
+			foreach ( $m[2] as $src ) {
+				$parts = wp_parse_url( html_entity_decode( $src, ENT_QUOTES ) );
+				if ( ! is_array( $parts ) || 'https' !== strtolower( (string) ( $parts['scheme'] ?? '' ) ) || empty( $parts['host'] ) ) {
+					continue;
+				}
+				$host = strtolower( $parts['host'] );
+				if ( $host === $own || ! preg_match( '/^[a-z0-9.-]+$/', $host ) ) {
+					continue;
+				}
+				$origins[] = 'https://' . $host . ( empty( $parts['port'] ) || 443 === (int) $parts['port'] ? '' : ':' . (int) $parts['port'] );
+			}
+		}
+		return array_values( array_unique( $origins ) );
 	}
 
 	/**
@@ -3336,6 +3381,8 @@ class Minn_Admin_REST {
 		$rendered     = array();
 		$embed_budget = self::PREVIEW_EMBED_LOOKUPS;
 		$embed_seen   = array();
+		// Block index => the origins its embed preview vouches for.
+		$embed_origins = array();
 		// The resolvers and the preview clamps come back off however the
 		// render ends, a block that throws included.
 		try {
@@ -3397,7 +3444,11 @@ class Minn_Admin_REST {
 				// converts it via WP_Embed on the_content, so island previews
 				// resolve each embed block's own URL (preview_embeds says how).
 				if ( isset( $GLOBALS['wp_embed'] ) && false !== strpos( $html, 'wp-block-embed__wrapper' ) ) {
-					$html = self::preview_embeds( $raw, $html, $post_id, $embed_budget, $embed_seen );
+					$vouched = array();
+					$html    = self::preview_embeds( $raw, $html, $post_id, $embed_budget, $embed_seen, $vouched );
+					if ( $vouched ) {
+						$embed_origins[ count( $rendered ) ] = array_keys( $vouched );
+					}
 				}
 				/**
 				 * Per-block HTML post-process for island previews. Used by the
@@ -3443,6 +3494,10 @@ class Minn_Admin_REST {
 			}
 		}
 		$out         = array( 'rendered' => $rendered );
+		if ( $embed_origins ) {
+			// An object keyed by block index, beside rendered.
+			$out['embed_origins'] = (object) $embed_origins;
+		}
 		$new_handles = array_values( array_diff( wp_styles()->queue, $queue_before ) );
 		$styles      = $new_handles ? self::collect_style_urls( $new_handles ) : array(
 			'urls'   => array(),
