@@ -304,7 +304,7 @@ const wp = ( args ) => {
 		// origin in the caption, the exact player src in the caption, and the
 		// exact player src outside it under a name a link targets.
 		const CAPTION = `<figcaption class="wp-element-caption"><iframe class="minn49-cap" src="https://www.youtube.com/robots.txt" width="20" height="20"></iframe><iframe class="minn49-capplayer" src="${ PLAYER }" width="20" height="20"></iframe></figcaption>`
-			+ `<iframe class="minn49-named" name="minn49nav" src="${ PLAYER }" width="20" height="20"></iframe><a class="minn49-navlink" target="minn49nav" href="/">go</a><form class="minn49-navform" target="minn49nav" action="/"><button type="submit">go</button></form>`;
+			+ `<iframe class="minn49-named" name="minn49nav" src="${ PLAYER }" width="20" height="20"></iframe><a class="minn49-navlink" target="minn49nav" href="/">go</a><form class="minn49-navform" target="minn49nav" action="/"><button type="submit">go</button></form><base target="minn49nav">`;
 		const EPOST = emb( YT, 'youtube', CAPTION )
 			+ '\n\n<!-- wp:html -->\n<iframe class="minn49-raw" src="https://www.youtube.com/robots.txt" width="20" height="20"></iframe>\n<!-- /wp:html -->';
 		// The caption's copy of the player runs sandboxed without its origin,
@@ -344,6 +344,9 @@ const wp = ( args ) => {
 			return { link: click.defaultPrevented, form: submit.defaultPrevented };
 		} );
 		t.check( 'a content link or form naming a target navigates nothing from a preview', nav.link && nav.form, JSON.stringify( nav ) );
+		// Review 3: <base target> would give every untargeted link a target.
+		const baseTarget = await page.evaluate( () => document.querySelectorAll( 'base[target]' ).length );
+		t.check( 'a content <base target> is parked, so no untargeted link gains a window', 0 === baseTarget, String( baseTarget ) );
 		t.check( 'a stored iframe of the provider\'s origin stays strict', 'missing' !== sb.raw && null !== sb.raw && ! /allow-same-origin/.test( sb.raw ), JSON.stringify( sb ) );
 
 		/* ===== Island text stays editable after a paste and an insert ===== */

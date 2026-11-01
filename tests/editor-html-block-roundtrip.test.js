@@ -157,6 +157,39 @@ const POST = [ PARA, WRAPPED, MULTI, CODE ].join( '\n\n' ) + '\n\n' + FREEFORM +
 		t.check( 'no island chrome or server preview is saved from open markup', ! /minn-block-island|minn-island-preview|minn-island-chip|minn-raw-block|data-minn-/.test( sibSaved ), sibSaved.slice( 0, 400 ) );
 		t.check( 'nothing after the <textarea> cover was lost', sibSaved.includes( '<!-- wp:paragraph -->\n<p>after the textarea</p>\n<!-- /wp:paragraph -->' ) && /<p>tail<\/p>/.test( sibSaved ), sibSaved.slice( -300 ) );
 
+		/* ===== Cut tags, stray end tags and an open comment (review 3) ===== */
+		// Each parses to nothing on its own, yet swallows or closes what
+		// follows it in a joined string; all must stay islands saved as stored.
+		const CUTS = [
+			"<!-- wp:paragraph -->\n<p>see</p><div class=\"x\"\n<!-- /wp:paragraph -->",
+			"<!-- wp:latest-posts {\"postsToShow\":1} /-->",
+			"<!-- wp:paragraph -->\n<p>after the cut div</p>\n<!-- /wp:paragraph -->",
+			"</x",
+			"<!-- wp:paragraph -->\n<p>after the cut end tag</p>\n<!-- /wp:paragraph -->",
+			"<a href=\"/x\"",
+			"<!-- wp:paragraph -->\n<p>after the cut a</p>\n<!-- /wp:paragraph -->",
+			"<!-- wp:latest-posts {\"postsToShow\":1} /-->",
+			"<!-- wp:paragraph -->\n<p>after the second list</p>\n<!-- /wp:paragraph -->",
+			"<!-- wp:group -->\n<div class=\"wp-block-group\"><!-- wp:paragraph -->\n<p>in group</p>\n<!-- /wp:paragraph -->\n\n<!-- note\n\n<!-- wp:paragraph -->\n<p>in group 2</p>\n<!-- /wp:paragraph --></div>\n<!-- /wp:group -->",
+			"<!-- wp:paragraph -->\n<p>after the group</p>\n<!-- /wp:paragraph -->",
+			"<!-- TODO fix this",
+			"<!-- wp:paragraph -->\n<p>after the open comment</p>\n<!-- /wp:paragraph -->",
+			"<!-- wp:latest-posts {\"postsToShow\":1} /-->",
+			"<!-- wp:paragraph -->\n<p>last</p>\n<!-- /wp:paragraph -->",
+		];
+		const CPOST = CUTS.join( '\n\n' );
+		const cutId = await createPost( page, { title: 'Cut markup round trip', content: CPOST, status: 'draft' } );
+		ids.push( cutId );
+		await openEditor( page, cutId );
+		await page.waitForSelector( '#minn-editor-body .minn-block-island', { timeout: 90000 } );
+		await page.waitForTimeout( 2500 );
+		await freshParagraph( page );
+		await page.keyboard.type( 'tail' );
+		const cutSaved = await save( cutId );
+		const cutMissing = [ ...new Set( CUTS ) ].filter( ( b ) => ! cutSaved.includes( b ) );
+		t.check( 'cut tags, stray end tags and an open comment, and their neighbours, come back byte for byte', 0 === cutMissing.length, cutMissing.join( ' | ' ).slice( 0, 400 ) + ' :: ' + cutSaved.slice( 0, 300 ) );
+		t.check( 'no island chrome or server preview is saved from cut markup', ! /minn-block-island|minn-island-preview|minn-island-chip|minn-raw-block|data-minn-/.test( cutSaved ), cutSaved.slice( 0, 400 ) );
+
 		/* ===== A Custom HTML block keeps itself through a copy ===== */
 		const cid = await createPost( page, { title: 'HTML block copy', content: [ PARA, WRAPPED, LP, PARA ].join( '\n\n' ), status: 'draft' } );
 		ids.push( cid );

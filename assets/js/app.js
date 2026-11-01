@@ -2581,7 +2581,9 @@
 		if ( 0 === lower.indexOf( 'on' ) || RT_KILL_ATTRS.includes( lower ) ) return RT_PARK_PREFIX + name;
 		// <base href> rewrites every relative URL on the page, so it is not
 		// safe even when the URL itself is: judge the tag, not the scheme.
-		if ( 'href' === lower && el && 'BASE' === el.tagName ) return RT_PARK_PREFIX + name;
+		// <base target> likewise gives every untargeted link on the page,
+		// Minn's own included, a window to navigate.
+		if ( ( 'href' === lower || 'target' === lower ) && el && 'BASE' === el.tagName ) return RT_PARK_PREFIX + name;
 		// A stylesheet <link> applies to the whole document (and fetches the
 		// moment it lands), not to the markup around it.
 		if ( 'href' === lower && el && 'LINK' === el.tagName ) return RT_PARK_PREFIX + name;
@@ -33129,14 +33131,27 @@
 		const kids = top[ 0 ].childNodes;
 		if ( 2 !== kids.length || 1 !== kids[ 0 ].nodeType || ! kids[ 0 ].hasAttribute( 'data-w' ) || 1 !== kids[ 1 ].nodeType || ! kids[ 1 ].hasAttribute( 'data-p' ) ) return false;
 		const last = kids[ 0 ].lastElementChild;
-		return !! last && last.hasAttribute( 'data-s' ) && last === kids[ 0 ].lastChild;
+		if ( ! last || ! last.hasAttribute( 'data-s' ) || last !== kids[ 0 ].lastChild ) return false;
+		// The probe itself, untouched: a tag cut at the end takes it in as
+		// attributes.
+		if ( 'div' !== last.localName || 1 !== last.attributes.length || last.firstChild ) return false;
+		// Parsed alone it must read the same as inside the box: a tag cut at
+		// the end takes the probe in, and glued to the next block it takes
+		// that block instead.
+		last.remove();
+		return kids[ 0 ].innerHTML === inertParse( String( html || '' ) ).innerHTML;
 	}
 	// True when freeform holds nothing but comments and whitespace as the
 	// parser reads it. A regex over <!--…--> disagrees with the tokenizer
 	// (<!-->, <!--->, --!> end a comment early), and live markup it took
-	// for comment text was glued into the joined string unchecked.
+	// for comment text was glued into the joined string unchecked. Its
+	// bytes must also come back unchanged: an unclosed comment, a cut tag
+	// or stray end tags parse to nothing here, yet swallow or close what
+	// follows them in the joined string.
 	function rtCommentOnly( html ) {
-		return Array.from( inertParse( String( html || '' ) ).childNodes ).every( ( n ) => 8 === n.nodeType || ( 3 === n.nodeType && ! n.data.trim() ) );
+		const s = String( html || '' );
+		const box = inertParse( s );
+		return box.innerHTML === s && Array.from( box.childNodes ).every( ( n ) => 8 === n.nodeType || ( 3 === n.nodeType && ! n.data.trim() ) );
 	}
 	// The closers for stored wrapper bytes that open around a slot, read
 	// from the parse of those bytes, never counted by pattern: the slot div
@@ -40776,16 +40791,18 @@
 		// the next save would persist the reverted body. Adopt the live DOM
 		// first. (Bit the paste suite as a heisenbug: paste → slow-server
 		// late render wiped the body → ⌘S saved pre-paste content.)
-		// The live nodes themselves come along, not only their markup: a
+		// Copies of the live nodes come along, not only their markup: a
 		// Custom HTML block is known to the serializer by reference, and
-		// rebuilt from the string it saved as paragraphs.
+		// rebuilt from the string it saved as paragraphs. Copies, not the
+		// nodes themselves: native undo steps recorded against the old body
+		// must find nothing live to half-replay.
 		ed.liveNodes = null;
 		if ( ed.dirty && ! locked ) {
 			const liveBody = $( '#minn-editor-body' );
 			const liveTitle = $( '#minn-editor-title' );
 			if ( liveBody ) {
 				ed.content = liveBody.innerHTML;
-				ed.liveNodes = Array.from( liveBody.childNodes );
+				ed.liveNodes = Array.from( liveBody.childNodes, ( n ) => ( 1 === n.nodeType ? cloneEditable( n ) : n.cloneNode( true ) ) );
 			}
 			if ( liveTitle ) ed.title = liveTitle.value;
 		}
