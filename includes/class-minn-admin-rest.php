@@ -3044,8 +3044,9 @@ class Minn_Admin_REST {
 	 * standing alone on a line, as many as the caller wrote. And never
 	 * through WP_Embed's no-post cache, which keeps every answer, a failure
 	 * included, as a published oembed_cache post that nothing removes. With
-	 * a post the caller may edit, the answer is cached in that post's meta,
-	 * where the front end caches the same embed; without one, in an expiring
+	 * a post the caller may edit whose saved content holds the URL, the
+	 * answer is cached in that post's meta, where the front end caches the
+	 * same embed; otherwise (an unsaved URL, or no post), in an expiring
 	 * transient, as core's oEmbed proxy does for the block editor.
 	 *
 	 * @param string $raw     The block markup the caller sent.
@@ -3198,6 +3199,13 @@ class Minn_Admin_REST {
 			return $handled;
 		}
 		$suffix = md5( $clean . serialize( $attr ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- WP_Embed's own cache key.
+		// Only a URL the post already holds is cached in its meta, where the
+		// front end reads it; one only typed into the editor goes to an
+		// expiring transient, so previews can't grow the post's meta.
+		$saved = $post_id ? (string) get_post_field( 'post_content', $post_id, 'raw' ) : '';
+		if ( $post_id && false === strpos( $saved, $url ) && false === strpos( $saved, $clean ) ) {
+			$post_id = 0;
+		}
 		if ( $post_id ) {
 			if ( '' === get_post_meta( $post_id, '_oembed_' . $suffix, true ) ) {
 				if ( $budget < 1 ) {

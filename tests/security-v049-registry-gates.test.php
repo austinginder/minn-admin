@@ -122,7 +122,7 @@ $tag = substr( md5( (string) microtime( true ) ), 0, 8 );
 	};
 
 	$cid   = wp_insert_user( array( 'user_login' => 'minn-v049-co-' . $tag, 'user_pass' => wp_generate_password(), 'role' => 'contributor', 'user_email' => 'minn-v049-co-' . $tag . '@example.com' ) );
-	$own   = wp_insert_post( array( 'post_title' => 'minn v049 embed own ' . $tag, 'post_status' => 'draft', 'post_author' => $cid ) );
+	$own   = wp_insert_post( array( 'post_title' => 'minn v049 embed own ' . $tag, 'post_status' => 'draft', 'post_author' => $cid, 'post_content' => $embed( "https://minn-v049.example/ok/{$tag}-own" ) ) );
 	$other = wp_insert_post( array( 'post_title' => 'minn v049 embed other ' . $tag, 'post_status' => 'draft', 'post_author' => $admin[0]->ID ) );
 	try {
 		wp_set_current_user( $cid );
@@ -162,6 +162,18 @@ $tag = substr( md5( (string) microtime( true ) ), 0, 8 );
 		$lookups = 0;
 		$render( array( $embed( "https://minn-v049.example/ok/{$tag}-own" ) ), $own );
 		$check( '08-1 a second preview reads that cache', 0 === $lookups, "lookups {$lookups}" );
+
+		// A URL only typed into the editor, not in the draft's saved content.
+		$own_meta = function () use ( $own ) {
+			return array_filter( array_keys( (array) get_post_meta( $own ) ), function ( $k ) {
+				return 0 === strpos( $k, '_oembed_' );
+			} );
+		};
+		$meta_before = $own_meta();
+		$tr_unsaved  = $transients();
+		list( $st, $out ) = $render( array( $embed( "https://minn-v049.example/ok/{$tag}-unsaved" ), $embed( "https://minn-v049.example/no/{$tag}-unsaved" ) ), $own );
+		$check( 'N-7 an embed not in the draft\'s saved content still previews', 200 === $st && 1 === $iframes( $out ), substr( (string) ( $out[0] ?? '' ), 0, 200 ) );
+		$check( 'N-7 and adds no row to the draft\'s meta, only expiring transients', ! array_diff( $own_meta(), $meta_before ) && 2 === count( array_diff( $transients(), $tr_unsaved ) ), wp_json_encode( array_values( array_diff( $own_meta(), $meta_before ) ) ) );
 
 		$held = $wp_embed->post_ID;
 		list( $st, $out ) = $render( array( $embed( "https://minn-v049.example/ok/{$tag}-nopost" ) ), 0 );
