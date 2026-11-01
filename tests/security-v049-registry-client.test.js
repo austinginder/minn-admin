@@ -304,7 +304,7 @@ const wp = ( args ) => {
 		// origin in the caption, the exact player src in the caption, and the
 		// exact player src outside it under a name a link targets.
 		const CAPTION = `<figcaption class="wp-element-caption"><iframe class="minn49-cap" src="https://www.youtube.com/robots.txt" width="20" height="20"></iframe><iframe class="minn49-capplayer" src="${ PLAYER }" width="20" height="20"></iframe></figcaption>`
-			+ `<iframe class="minn49-named" name="minn49nav" src="${ PLAYER }" width="20" height="20"></iframe><a class="minn49-navlink" target="minn49nav" href="/">go</a>`;
+			+ `<iframe class="minn49-named" name="minn49nav" src="${ PLAYER }" width="20" height="20"></iframe><a class="minn49-navlink" target="minn49nav" href="/">go</a><form class="minn49-navform" target="minn49nav" action="/"><button type="submit">go</button></form>`;
 		const EPOST = emb( YT, 'youtube', CAPTION )
 			+ '\n\n<!-- wp:html -->\n<iframe class="minn49-raw" src="https://www.youtube.com/robots.txt" width="20" height="20"></iframe>\n<!-- /wp:html -->';
 		// The caption's copy of the player runs sandboxed without its origin,
@@ -333,6 +333,17 @@ const wp = ( args ) => {
 		t.check( 'a caption frame of the player\'s origin stays strict', 'missing' !== sb.caption && ! /allow-same-origin/.test( sb.caption ), JSON.stringify( sb ) );
 		t.check( 'a caption frame with the player\'s exact src stays strict', 'missing' !== sb.capPlayer && ! /allow-same-origin/.test( sb.capPlayer ), JSON.stringify( sb ) );
 		t.check( 'a vouched frame keeps no name a link or form could target', ! sb.nameLeft, JSON.stringify( sb ) );
+		const nav = await page.evaluate( () => {
+			const a = document.querySelector( '#minn-editor-body .minn49-navlink' );
+			const f = document.querySelector( '#minn-editor-body .minn49-navform' );
+			if ( ! a || ! f ) return 'missing';
+			const click = new MouseEvent( 'click', { bubbles: true, cancelable: true } );
+			a.dispatchEvent( click );
+			const submit = new Event( 'submit', { bubbles: true, cancelable: true } );
+			f.dispatchEvent( submit );
+			return { link: click.defaultPrevented, form: submit.defaultPrevented };
+		} );
+		t.check( 'a content link or form naming a target navigates nothing from a preview', nav.link && nav.form, JSON.stringify( nav ) );
 		t.check( 'a stored iframe of the provider\'s origin stays strict', 'missing' !== sb.raw && null !== sb.raw && ! /allow-same-origin/.test( sb.raw ), JSON.stringify( sb ) );
 
 		/* ===== Island text stays editable after a paste and an insert ===== */
@@ -366,6 +377,14 @@ const wp = ( args ) => {
 		await pasteFlavors( { 'text/x-minn-blocks': '<!-- wp:acme/duo -->\n<div class="acme-duo"><p>Inserted island.</p></div>\n<!-- /wp:acme/duo -->', 'text/plain': 'x' } );
 		await page.waitForTimeout( 1500 );
 		t.check( 'island text stays editable after a paste and an insert', await runsEditable(), '' );
+		// The block settings highlight goes with the popover.
+		await page.click( '#minn-editor-body .minn-block-island[data-block="acme/panel"] .minn-island-chip' );
+		await page.waitForSelector( '.minn-inspector', { timeout: 60000 } ).catch( () => {} );
+		const lit = await page.evaluate( () => document.querySelectorAll( '#minn-editor-body .minn-insp-target' ).length );
+		await page.keyboard.press( 'Escape' );
+		await page.waitForTimeout( 500 );
+		const left = await page.evaluate( () => document.querySelectorAll( '#minn-editor-body .minn-insp-target' ).length );
+		t.check( 'closing block settings takes the island\'s highlight off', 1 === lit && 0 === left, JSON.stringify( { lit, left } ) );
 
 		/* ===== 17-2 overlay bindings stay in their root ===== */
 		const TABS = '<!-- wp:html -->\n<div class="minn-tabs minn49-tabs"><span class="minn-tab">tab</span></div>\n<!-- /wp:html -->';

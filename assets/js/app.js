@@ -20059,6 +20059,18 @@
 		</div>` : '';
 		return `${ bar }<iframe class="${ cls }"${ id ? ` id="${ id }"` : '' } sandbox="" title="${ esc( title ) }" srcdoc="${ esc( previewSrcdoc( html, !! allowRemote ) ) }"></iframe>`;
 	}
+	// Stored content's links and forms never navigate a window or frame from
+	// inside Minn. A link or form naming a target could steer a preview's
+	// frame (one given its origin back, if a provider's page names itself)
+	// to a page of this site; an island-wrapped link returned before the
+	// editor's own preventDefault. Captured first, for every content host.
+	document.addEventListener( 'click', ( e ) => {
+		const a = e.target && e.target.closest ? e.target.closest( 'a[target], area[target]' ) : null;
+		if ( a && ! isChrome( a ) ) e.preventDefault();
+	}, true );
+	document.addEventListener( 'submit', ( e ) => {
+		if ( e.target && e.target.closest && ! isChrome( e.target ) ) e.preventDefault();
+	}, true );
 	document.addEventListener( 'click', ( e ) => {
 		const btn = e.target.closest && e.target.closest( '[data-load-remote]' );
 		if ( ! btn ) return;
