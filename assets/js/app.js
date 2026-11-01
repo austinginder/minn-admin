@@ -2484,6 +2484,11 @@
 	const UPLOAD_KEY = 'u' + PAGE_TOKEN + '-';
 	// Custom HTML and freeform wrappers (rawBlockHtml), keyed by reference.
 	const RAW_BLOCK_KEY = 'r' + PAGE_TOKEN + '-';
+	// Island previews built as markup start as an empty placeholder, filled
+	// from these as nodes (adoptEditorMarkup).
+	const FILL_KEY = 'f' + PAGE_TOKEN + '-';
+	const fillPending = new Map();
+	let fillSeq = 0;
 	const RAW_BLOCKS = new WeakMap();
 	const rawBlockPending = new Map();
 	let rawBlockSeq = 0;
@@ -33051,10 +33056,39 @@
 	// content can wear: the tokened attribute it is built with is taken off
 	// as the nodes land (adoptRawBlocks). An untouched one saves its stored
 	// bytes; an edited one saves its edited markup, as the same block.
+	// The wrapper goes into the joined markup EMPTY and its content is
+	// parsed on its own and imported as nodes when it lands
+	// (adoptRawBlocks): glued into one string with its neighbours, an
+	// unbalanced block (an open/close pair of Custom HTML blocks around
+	// others, a stray close) escaped the wrapper or swallowed the blocks
+	// after it, and the save wrote Minn's chrome and the server preview into
+	// the post. Markup that is not self-contained is not wrapped at all: it
+	// stays an island, saved byte for byte (null here).
 	function rawBlockHtml( kind, raw, inner ) {
+		if ( ! rtSelfContained( inner ) ) return null;
 		const key = RAW_BLOCK_KEY + ( ++rawBlockSeq );
-		rawBlockPending.set( key, { kind, raw } );
-		return `<div class="minn-raw-block" data-minn-raw="${ esc( key ) }">${ inner }</div>`;
+		rawBlockPending.set( key, { kind, raw, inner } );
+		return `<div class="minn-raw-block" data-minn-raw="${ esc( key ) }"><br></div>`;
+	}
+	// True when markup opens and closes everything it touches: parsed inside
+	// a box, nothing of it lands outside the box and nothing after the box
+	// lands inside it.
+	// Stored markup an island shows (its preview, a Details body), held for
+	// adoptEditorMarkup to import as nodes: glued into the joined string it
+	// could close the island early or swallow what follows it, as a Custom
+	// HTML block did.
+	function markupFill( html, preview ) {
+		const key = FILL_KEY + ( ++fillSeq );
+		fillPending.set( key, { html, preview } );
+		return key;
+	}
+	const previewFill = ( html ) => markupFill( html, true );
+	function rtSelfContained( html ) {
+		const box = inertParse( '<div data-o=""><div data-w="">' + String( html || '' ) + '</div><i data-p=""></i></div><i data-q=""></i>' );
+		const top = box.childNodes;
+		if ( 2 !== top.length || 1 !== top[ 0 ].nodeType || ! top[ 0 ].hasAttribute( 'data-o' ) || 1 !== top[ 1 ].nodeType || ! top[ 1 ].hasAttribute( 'data-q' ) ) return false;
+		const kids = top[ 0 ].childNodes;
+		return 2 === kids.length && 1 === kids[ 0 ].nodeType && kids[ 0 ].hasAttribute( 'data-w' ) && 1 === kids[ 1 ].nodeType && kids[ 1 ].hasAttribute( 'data-p' );
 	}
 	// The wrapper's content as it would be saved: an inert copy, Minn's own
 	// clean-ups, the writer's parked attributes put back.
@@ -33069,29 +33103,49 @@
 		return out.innerHTML;
 	}
 	// Markup the editor built from stored content has landed under root:
-	// adopt its Custom HTML wrappers, and park content's contenteditable in
-	// every island preview it holds (a preview starts as the block's own
-	// markup until its server render lands).
+	// fill each island preview placeholder with the block's own markup (as
+	// nodes; its contenteditable parked, which is content's alone at this
+	// point, before Minn arms any text runs), then the Custom HTML wrappers.
+	// Only placeholders still pending are touched, so a later call never
+	// reaches a preview Minn has since armed.
 	function adoptEditorMarkup( root ) {
+		if ( ! root ) return root;
+		if ( fillPending.size ) {
+			$$( '[data-minn-fill]', root ).forEach( ( el ) => {
+				const key = String( el.getAttribute( 'data-minn-fill' ) || '' );
+				if ( 0 !== key.indexOf( FILL_KEY ) || ! fillPending.has( key ) ) return;
+				const fill = fillPending.get( key );
+				fillPending.delete( key );
+				el.removeAttribute( 'data-minn-fill' );
+				// A preview shows content only; a Details body is typed into.
+				if ( fill.preview ) rtPreviewInto( el, fill.html );
+				else rtNeutralizeInto( el, fill.html );
+			} );
+		}
 		adoptRawBlocks( root );
-		if ( root ) $$( '.minn-island-preview', root ).filter( isMinnPreview ).forEach( rtParkEditable );
 		return root;
 	}
-	// An editable segment's HTML, a Custom HTML block inside its wrapper.
+	// An editable segment's HTML, a Custom HTML block inside its wrapper (null
+	// when its markup is not self-contained: the caller islands it).
 	const editableBlockHtml = ( seg ) => ( 'html' === seg.name.replace( /^core\//, '' )
 		? rawBlockHtml( 'html', seg.raw, editableSegmentHtml( seg ) )
 		: editableSegmentHtml( seg ) );
 	// Run after markup built by appendEditableContent lands under root.
 	function adoptRawBlocks( root ) {
 		if ( ! root || ! rawBlockPending.size ) return root;
+		const filled = [];
 		$$( 'div[data-minn-raw]', root ).forEach( ( el ) => {
 			const key = el.getAttribute( 'data-minn-raw' );
 			const rec = 0 === String( key ).indexOf( RAW_BLOCK_KEY ) ? rawBlockPending.get( key ) : null;
 			if ( ! rec ) return;
 			rawBlockPending.delete( key );
 			el.removeAttribute( 'data-minn-raw' );
-			RAW_BLOCKS.set( el, { kind: rec.kind, raw: rec.raw, snap: rawBlockInner( el ) } );
+			rtNeutralizeInto( el, rec.inner );
+			filled.push( [ el, rec ] );
 		} );
+		// Every wrapper filled first, so no snapshot is taken of a tree still
+		// changing around it.
+		filled.forEach( ( [ el, rec ] ) => RAW_BLOCKS.set( el, { kind: rec.kind, raw: rec.raw, snap: rawBlockInner( el ) } ) );
 		return root;
 	}
 
@@ -33110,9 +33164,16 @@
 		if ( ! ed.islands ) ed.islands = [];
 		return segments.map( ( seg ) => {
 			if ( seg.type === 'html' ) {
-				return /\S/.test( seg.raw.replace( /<!--[\s\S]*?-->/g, '' ) ) ? rawBlockHtml( 'freeform', seg.raw, seg.raw ) : seg.raw;
+				if ( ! /\S/.test( seg.raw.replace( /<!--[\s\S]*?-->/g, '' ) ) ) return seg.raw;
+				const wrapped = rawBlockHtml( 'freeform', seg.raw, seg.raw );
+				if ( null != wrapped ) return wrapped;
+				const fi = ed.islands.push( seg.raw ) - 1;
+				return islandHtml( fi, 'core/freeform', seg.raw, ed );
 			}
-			if ( segmentEditable( seg ) ) return editableBlockHtml( seg );
+			if ( segmentEditable( seg ) ) {
+				const h = editableBlockHtml( seg );
+				if ( null != h ) return h;
+			}
 			const idx = ed.islands.push( seg.raw ) - 1;
 			return islandHtml( idx, seg.name, seg.raw, ed );
 		} ).join( '\n' );
@@ -33432,7 +33493,10 @@
 		// insert-path asymmetry convention).
 		const childHtml = ( seg ) => {
 			if ( seg.type === 'html' ) return seg.raw.trim(); // comment-only freeform → DOM comment nodes
-			if ( segmentEditable( seg ) ) return editableBlockHtml( seg );
+			if ( segmentEditable( seg ) ) {
+				const h = editableBlockHtml( seg );
+				if ( null != h ) return h;
+			}
 			if ( ! ed || ! ed.islands ) return null;
 			const ci = ed.islands.push( seg.raw ) - 1;
 			return islandHtml( ci, seg.name, seg.raw, ed );
@@ -33837,7 +33901,7 @@
 					<summary class="minn-details-sum-row">
 						<input type="text" class="minn-details-summary" data-details-summary="${ idx }" value="${ esc( parts.summary ) }" placeholder="${ esc( __( 'Details' ) ) }" spellcheck="true" autocomplete="off">
 					</summary>
-					<div class="minn-details-body" contenteditable="true" data-details-body="${ idx }" data-placeholder="${ esc( __( 'Write the hidden content…' ) ) }">${ bodyInner }</div>
+					<div class="minn-details-body" contenteditable="true" data-details-body="${ idx }" data-placeholder="${ esc( __( 'Write the hidden content…' ) ) }"${ bodyInner ? ` data-minn-fill="${ esc( markupFill( bodyInner, false ) ) }"><br>` : '>' }</div>
 				</details>
 			</div>`;
 		}
@@ -33905,7 +33969,7 @@
 			${ imgBadge ? `<button class="minn-imgtool-badge" type="button" data-imgbadge="1" tabindex="-1">${ esc( imgBadge ) }</button>` : '' }
 			${ ctedBadge ? `<button class="minn-imgtool-badge" type="button" data-ctedbadge="1" tabindex="-1">${ esc( ctedBadge ) }</button>` : '' }
 			${ patternRef ? `<button class="minn-pattern-cover" data-patternedit="${ esc( patternRef ) }" type="button" aria-label="${ esc( __( 'Edit this pattern' ) ) }"><span class="minn-pattern-badge">${ esc( __( 'Edit pattern' ) ) } ↗</span></button>` : '' }
-			<div class="minn-island-preview" data-preview="${ idx }" data-theme="${ previewThemeMode() }" data-root-theme="${ previewThemeMode() }">${ inner || `<div class="minn-island-empty">${ esc( __( 'Dynamic block — rendered on the site' ) ) }</div>` }</div>
+			<div class="minn-island-preview" data-preview="${ idx }" data-theme="${ previewThemeMode() }" data-root-theme="${ previewThemeMode() }"${ inner ? ` data-minn-fill="${ esc( previewFill( inner ) ) }"><br>` : `><div class="minn-island-empty">${ esc( __( 'Dynamic block — rendered on the site' ) ) }</div>` }</div>
 		</div>`;
 	}
 

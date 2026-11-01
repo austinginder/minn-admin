@@ -104,6 +104,11 @@ check( 'rtNeutralizedHtml repeats the inert walk until the markup is a fixed poi
 	check( `${ fn } settles first and inserts nothing it could not settle`,
 		/const safe = rtNeutralizedHtml\( html \);/.test( b ) && /if \( null === safe \)/.test( b ) );
 } );
+// Island previews and Custom HTML wrappers go into joined markup empty and
+// are filled as nodes, so stored markup is never glued to its neighbours.
+check( 'island previews and Custom HTML wrappers are filled from nodes, never glued into the joined markup',
+	/data-minn-fill="\$\{ esc\( previewFill\( inner \) \) \}"><br>/.test( src ) && /data-minn-raw="\$\{ esc\( key \) \}"><br><\/div>/.test( src )
+	&& /rtNeutralizeInto\( el, rec\.inner \);/.test( fnBody( 'adoptRawBlocks' ) ) && /if \( ! rtSelfContained\( inner \) \) return null;/.test( fnBody( 'rawBlockHtml' ) ) );
 const carriers = ( src.match( /const RT_RAW_CARRIERS = \[([^\]]*)\]/ ) || [] )[ 1 ] || '';
 check( 'every raw-text carrier\'s inside is parked',
 	[ 'noscript', 'xmp', 'iframe', 'noembed', 'noframes', 'plaintext' ].every( ( c ) => carriers.includes( `'${ c }'` ) ), carriers );
