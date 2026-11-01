@@ -33193,6 +33193,20 @@
 		const html = editableSegmentHtml( seg );
 		return rtSelfContained( html ) ? html : null;
 	};
+	// A copy of editor DOM that keeps each Custom HTML wrapper's record: the
+	// serializer knows a wrapper only by reference, and a copy it did not
+	// know saved the block's elements as paragraphs, wrapper lost.
+	// cloneNode parses nothing, so parked attributes stay parked.
+	function cloneEditable( el ) {
+		const copy = el.cloneNode( true );
+		const from = [ el, ...$$( 'div.minn-raw-block', el ) ];
+		const to = [ copy, ...$$( 'div.minn-raw-block', copy ) ];
+		from.forEach( ( src, i ) => {
+			const rec = RAW_BLOCKS.get( src );
+			if ( rec && to[ i ] ) RAW_BLOCKS.set( to[ i ], rec );
+		} );
+		return copy;
+	}
 	// Run after markup built by appendEditableContent lands under root.
 	function adoptRawBlocks( root ) {
 		if ( ! root || ! rawBlockPending.size ) return root;
@@ -34207,7 +34221,7 @@
 			blocks.forEach( ( el ) => {
 				const isIsland = isRealIsland( el );
 				if ( isIsland || rangeFullyCoversNode( range, el ) ) {
-					holder.appendChild( el.cloneNode( true ) );
+					holder.appendChild( cloneEditable( el ) );
 					return;
 				}
 				const slice = rangeSliceBlock( range, el );
@@ -34217,6 +34231,9 @@
 				// serialized editor DOM, and parsing it again in this page is
 				// the string round trip rtNeutralizeInto exists to avoid.
 				const shell = rtNeutralizeInto( el.cloneNode( false ), slice.html );
+				// Part of a Custom HTML block is still that block, as edited.
+				const rawRec = RAW_BLOCKS.get( el );
+				if ( rawRec ) RAW_BLOCKS.set( shell, { kind: rawRec.kind, raw: rawRec.raw, snap: null } );
 				holder.appendChild( shell );
 			} );
 			if ( ! holder.childNodes.length ) return '';
@@ -35434,8 +35451,10 @@
 	function mergeProseBlocksWithUndo( keep, drop ) {
 		if ( ! keep || ! drop || keep === drop || ! keep.parentNode ) return;
 		const parent = keep.parentNode;
-		const keepHTML = keep.outerHTML;
-		const dropHTML = drop.outerHTML;
+		// Copies, not markup: rebuilt from a string, a Custom HTML block
+		// inside either would come back as a stranger to the serializer.
+		const keepCopy = cloneEditable( keep );
+		const dropCopy = cloneEditable( drop );
 		const keepNext = keep.nextSibling;
 		const beforeCount = keep.childNodes.length;
 		if ( keep.tagName === 'BLOCKQUOTE' && drop.tagName === 'P' ) {
@@ -35479,13 +35498,10 @@
 		scheduleAutosave();
 		toastAction( __( 'Blocks merged · ⌘Z' ), 'Undo', () => {
 			if ( ! parent.isConnected ) return;
-			// Parse inert, never into a container from the live document: a
-			// live parse runs the resource-loading side of it, so an image
-			// with an error handler fires while the tree is being built.
-			// duplicateIsland takes the same route for the same reason.
-			const k = adoptEditorMarkup( rtNeutralizeInto( document.createElement( 'div' ), keepHTML ) ).firstElementChild;
-			const d = adoptEditorMarkup( rtNeutralizeInto( document.createElement( 'div' ), dropHTML ) ).firstElementChild;
-			if ( ! k || ! d ) return;
+			// The copies taken before the merge: nothing is parsed again, so
+			// what was parked stays parked and nothing loads or fires.
+			const k = keepCopy;
+			const d = dropCopy;
 			if ( keep.isConnected ) keep.replaceWith( k );
 			else parent.insertBefore( k, keepNext && keepNext.isConnected && keepNext.parentNode === parent ? keepNext : null );
 			k.after( d );
@@ -40737,10 +40753,17 @@
 		// the next save would persist the reverted body. Adopt the live DOM
 		// first. (Bit the paste suite as a heisenbug: paste → slow-server
 		// late render wiped the body → ⌘S saved pre-paste content.)
+		// The live nodes themselves come along, not only their markup: a
+		// Custom HTML block is known to the serializer by reference, and
+		// rebuilt from the string it saved as paragraphs.
+		ed.liveNodes = null;
 		if ( ed.dirty && ! locked ) {
 			const liveBody = $( '#minn-editor-body' );
 			const liveTitle = $( '#minn-editor-title' );
-			if ( liveBody ) ed.content = liveBody.innerHTML;
+			if ( liveBody ) {
+				ed.content = liveBody.innerHTML;
+				ed.liveNodes = Array.from( liveBody.childNodes );
+			}
 			if ( liveTitle ) ed.title = liveTitle.value;
 		}
 		view.innerHTML = `
@@ -40815,7 +40838,13 @@
 		// Blank posts must not stay truly empty: a contenteditable with no
 		// children puts the first keystrokes in a bare text node, and the
 		// slash menu (and most block ops) need a top-level element.
-		rtNeutralizeInto( body, ed.content || ( locked ? '' : '<p><br></p>' ) );
+		if ( ed.liveNodes ) {
+			body.textContent = '';
+			ed.liveNodes.forEach( ( n ) => body.appendChild( n ) );
+		} else {
+			rtNeutralizeInto( body, ed.content || ( locked ? '' : '<p><br></p>' ) );
+		}
+		ed.liveNodes = null;
 		adoptEditorMarkup( body );
 		if ( ! locked ) seedImageCaptions( body );
 		if ( ! locked ) ensureTrailingParagraph( body );
