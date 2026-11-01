@@ -2482,6 +2482,11 @@
 		}
 	};
 	const UPLOAD_KEY = 'u' + PAGE_TOKEN + '-';
+	// Custom HTML and freeform wrappers (rawBlockHtml), keyed by reference.
+	const RAW_BLOCK_KEY = 'r' + PAGE_TOKEN + '-';
+	const RAW_BLOCKS = new WeakMap();
+	const rawBlockPending = new Map();
+	let rawBlockSeq = 0;
 	const isUploadPlaceholder = ( el ) => !! el && 1 === el.nodeType
 		&& 0 === String( el.getAttribute( 'data-minn-upload' ) || '' ).indexOf( UPLOAD_KEY );
 	// The paste brackets (pasteBlocksInsert) carry the token too, so content's
@@ -2816,7 +2821,9 @@
 			rtRefusedToast();
 			return null;
 		}
-		return document.execCommand( 'insertHTML', false, safe );
+		const done = document.execCommand( 'insertHTML', false, safe );
+		adoptRawBlocks( document.getElementById( 'minn-editor-body' ) );
+		return done;
 	}
 	function rtInsertAdjacentHtml( el, where, html ) {
 		const safe = rtNeutralizedHtml( html );
@@ -2825,6 +2832,7 @@
 			return false;
 		}
 		el.insertAdjacentHTML( where, safe );
+		adoptRawBlocks( document.getElementById( 'minn-editor-body' ) );
 		return true;
 	}
 
@@ -33021,6 +33029,50 @@
 		return Object.keys( attrs ).every( ( k ) => allowed.includes( k ) );
 	}
 
+	// A Custom HTML block, or a run of freeform HTML between blocks, keeps
+	// its own markup: the serializer otherwise re-derived blocks from its
+	// elements, so a save turned it into paragraphs and dropped a wrapper
+	// <div> with its class and attributes, though nobody touched it. Its
+	// content is editable inside a wrapper Minn adds (never saved itself).
+	// The wrapper is matched by reference (RAW_BLOCKS), never by what
+	// content can wear: the tokened attribute it is built with is taken off
+	// as the nodes land (adoptRawBlocks). An untouched one saves its stored
+	// bytes; an edited one saves its edited markup, as the same block.
+	function rawBlockHtml( kind, raw, inner ) {
+		const key = RAW_BLOCK_KEY + ( ++rawBlockSeq );
+		rawBlockPending.set( key, { kind, raw } );
+		return `<div class="minn-raw-block" data-minn-raw="${ esc( key ) }">${ inner }</div>`;
+	}
+	// The wrapper's content as it would be saved: an inert copy, Minn's own
+	// clean-ups, the writer's parked attributes put back.
+	function rawBlockInner( el ) {
+		const out = rtInertCopy( el );
+		$$( 'figcaption', out ).forEach( ( fc ) => {
+			if ( ! fc.textContent.trim() ) fc.remove();
+		} );
+		cleanBoundaryNbsp( out );
+		modernizeStrikes( out );
+		rtUnpark( out );
+		return out.innerHTML;
+	}
+	// An editable segment's HTML, a Custom HTML block inside its wrapper.
+	const editableBlockHtml = ( seg ) => ( 'html' === seg.name.replace( /^core\//, '' )
+		? rawBlockHtml( 'html', seg.raw, editableSegmentHtml( seg ) )
+		: editableSegmentHtml( seg ) );
+	// Run after markup built by appendEditableContent lands under root.
+	function adoptRawBlocks( root ) {
+		if ( ! root || ! rawBlockPending.size ) return root;
+		$$( 'div[data-minn-raw]', root ).forEach( ( el ) => {
+			const key = el.getAttribute( 'data-minn-raw' );
+			const rec = 0 === String( key ).indexOf( RAW_BLOCK_KEY ) ? rawBlockPending.get( key ) : null;
+			if ( ! rec ) return;
+			rawBlockPending.delete( key );
+			el.removeAttribute( 'data-minn-raw' );
+			RAW_BLOCKS.set( el, { kind: rec.kind, raw: rec.raw, snap: rawBlockInner( el ) } );
+		} );
+		return root;
+	}
+
 	// Build the contenteditable HTML: simple blocks stripped of comments,
 	// complex blocks as atomic islands whose raw markup is stored verbatim.
 	function buildEditableContent( ed, raw ) {
@@ -33035,8 +33087,10 @@
 		const segments = tokenizeBlocks( raw ) || [];
 		if ( ! ed.islands ) ed.islands = [];
 		return segments.map( ( seg ) => {
-			if ( seg.type === 'html' ) return seg.raw;
-			if ( segmentEditable( seg ) ) return editableSegmentHtml( seg );
+			if ( seg.type === 'html' ) {
+				return /\S/.test( seg.raw.replace( /<!--[\s\S]*?-->/g, '' ) ) ? rawBlockHtml( 'freeform', seg.raw, seg.raw ) : seg.raw;
+			}
+			if ( segmentEditable( seg ) ) return editableBlockHtml( seg );
 			const idx = ed.islands.push( seg.raw ) - 1;
 			return islandHtml( idx, seg.name, seg.raw, ed );
 		} ).join( '\n' );
@@ -33356,7 +33410,7 @@
 		// insert-path asymmetry convention).
 		const childHtml = ( seg ) => {
 			if ( seg.type === 'html' ) return seg.raw.trim(); // comment-only freeform → DOM comment nodes
-			if ( segmentEditable( seg ) ) return editableSegmentHtml( seg );
+			if ( segmentEditable( seg ) ) return editableBlockHtml( seg );
 			if ( ! ed || ! ed.islands ) return null;
 			const ci = ed.islands.push( seg.raw ) - 1;
 			return islandHtml( ci, seg.name, seg.raw, ed );
@@ -35088,7 +35142,7 @@
 		// insertAdjacentHTML on a live element parses for real, and a stored
 		// block is somebody's markup. Land the copy through the inert path,
 		// the way a pattern insert already does.
-		const dup = rtNeutralizeInto( document.createElement( 'div' ), islandHtml( ni, islandEl.dataset.block || 'block', raw, ed ) );
+		const dup = adoptRawBlocks( rtNeutralizeInto( document.createElement( 'div' ), islandHtml( ni, islandEl.dataset.block || 'block', raw, ed ) ) );
 		Array.from( dup.childNodes ).reverse().forEach( ( node ) =>
 			islandEl.parentNode.insertBefore( node, islandEl.nextSibling ) );
 		// Direct-DOM insertion fires no input — ancestor slots must re-splice.
@@ -35275,8 +35329,8 @@
 			// live parse runs the resource-loading side of it, so an image
 			// with an error handler fires while the tree is being built.
 			// duplicateIsland takes the same route for the same reason.
-			const k = rtNeutralizeInto( document.createElement( 'div' ), keepHTML ).firstElementChild;
-			const d = rtNeutralizeInto( document.createElement( 'div' ), dropHTML ).firstElementChild;
+			const k = adoptRawBlocks( rtNeutralizeInto( document.createElement( 'div' ), keepHTML ) ).firstElementChild;
+			const d = adoptRawBlocks( rtNeutralizeInto( document.createElement( 'div' ), dropHTML ) ).firstElementChild;
 			if ( ! k || ! d ) return;
 			if ( keep.isConnected ) keep.replaceWith( k );
 			else parent.insertBefore( k, keepNext && keepNext.isConnected && keepNext.parentNode === parent ? keepNext : null );
@@ -36169,6 +36223,16 @@
 			// meaningless outside this tab. Skip it; the post-upload swap
 			// triggers another save that includes the real attachment.
 			if ( isUploadPlaceholder( n ) ) return;
+			// A Custom HTML block or freeform run: its stored bytes when
+			// untouched, its edited markup as the same block otherwise.
+			const rawRec = RAW_BLOCKS.get( n );
+			if ( rawRec ) {
+				const inner = rawBlockInner( n );
+				if ( inner === rawRec.snap ) out.push( rawRec.raw.trim() );
+				else if ( 'html' === rawRec.kind ) pushBlock( 'html', null, inner.trim() );
+				else if ( inner.trim() ) out.push( inner.trim() );
+				return;
+			}
 			const tag = n.tagName.toLowerCase();
 			// The inert document's copy: rtUnpark runs on it below.
 			const el = rtInertCopy( n );
@@ -36475,6 +36539,7 @@
 		$$( 'pre', container ).forEach( ( pre ) => {
 			if ( ! force && anchorEl && pre.contains( anchorEl ) ) return;
 			if ( pre.closest( '.minn-block-island' ) ) return; // islands stay verbatim
+			if ( pre.closest( '.minn-raw-block' ) ) return; // so does a Custom HTML block's code
 			// Verse and preformatted blocks are prose, not code.
 			if ( pre.classList.contains( 'wp-block-verse' ) || pre.classList.contains( 'wp-block-preformatted' ) ) return;
 			let code = pre.querySelector( 'code' );
@@ -40597,6 +40662,7 @@
 		// children puts the first keystrokes in a bare text node, and the
 		// slash menu (and most block ops) need a top-level element.
 		rtNeutralizeInto( body, ed.content || ( locked ? '' : '<p><br></p>' ) );
+		adoptRawBlocks( body );
 		if ( ! locked ) seedImageCaptions( body );
 		if ( ! locked ) ensureTrailingParagraph( body );
 		highlightCodeBlocks( body );
@@ -45005,7 +45071,7 @@
 		ed.islands[ idx ] = newRaw;
 		// Detached, but an <img src> in a detached tree still loads and still
 		// fires onerror, so this is a live sink like any other.
-		const tmp = rtNeutralizeInto( document.createElement( 'div' ), islandHtml( idx, String( islandEl.dataset.block || '' ), newRaw, ed ) );
+		const tmp = adoptRawBlocks( rtNeutralizeInto( document.createElement( 'div' ), islandHtml( idx, String( islandEl.dataset.block || '' ), newRaw, ed ) ) );
 		const fresh = tmp.firstElementChild;
 		if ( ! fresh ) return false;
 		islandEl.replaceWith( fresh );
@@ -48198,7 +48264,7 @@
 			const idx = ed.islands.push( seg.raw ) - 1;
 			// insertAdjacentHTML on a live element parses for real; a pattern is
 			// stored markup like any other, so it lands through the inert path.
-			const holder = rtNeutralizeInto( document.createElement( 'div' ), islandHtml( idx, seg.name.includes( '/' ) ? seg.name : 'core/' + seg.name, seg.raw, ed ) );
+			const holder = adoptRawBlocks( rtNeutralizeInto( document.createElement( 'div' ), islandHtml( idx, seg.name.includes( '/' ) ? seg.name : 'core/' + seg.name, seg.raw, ed ) ) );
 			Array.from( holder.childNodes ).forEach( ( node ) => anchor.parentNode.insertBefore( node, anchor ) );
 			count++;
 		} );

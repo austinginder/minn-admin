@@ -74,7 +74,7 @@ lines.forEach( ( line, i ) => {
 	if ( isComment( line ) ) return;
 	const t = line.trim();
 	const at = `app.js:${ i + 1 }  ${ t.slice( 0, 140 ) }`;
-	if ( /execCommand\(\s*['"]insertHTML['"]/.test( t ) && t !== "return document.execCommand( 'insertHTML', false, safe );" ) results0.insertHtml.push( at );
+	if ( /execCommand\(\s*['"]insertHTML['"]/.test( t ) && t !== "const done = document.execCommand( 'insertHTML', false, safe );" ) results0.insertHtml.push( at );
 	if ( /\.insertAdjacentHTML\(/.test( t ) && t !== 'el.insertAdjacentHTML( where, safe );' ) {
 		if ( Object.prototype.hasOwnProperty.call( ADJACENT_REVIEWED, t ) ) adjSeen.add( t );
 		else results0.adjacent.push( at );

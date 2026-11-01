@@ -142,6 +142,8 @@ const REVIEWED = {
 	"const read = new Set( readEl ? readEl.getAttribute( 'data-minn-acf-read' ).split( /\\s+/ ) : [] );": 'island runs: the island\'s own fields',
 	"const marked = editorBody.querySelector( `[data-minn-tbl=\"${ marker }\"]` );": 'table rebuild: one-shot marker with this page\'s token',
 	"$$( '[data-minn-bkt]', clone ).filter( isPasteBracket ).forEach( ( el ) => el.removeAttribute( 'data-minn-bkt' ) );": 'guarded on the line',
+	"$$( 'div[data-minn-raw]', root ).forEach( ( el ) => {": 'adoptRawBlocks: only a value carrying this page\'s token and a pending key is taken, then the marker comes off',
+	"const key = el.getAttribute( 'data-minn-raw' );": 'adoptRawBlocks: same',
 };
 
 const results = [];
@@ -229,6 +231,8 @@ check( 'commitShortcodeInput finds its island through islandOf()', /islandOf\(/.
 check( 'the serializer flush commits real Details and Buttons islands only',
 	/'\.minn-details-island', root \)\.filter\( isRealIsland \)/.test( body ) && /'\.minn-buttons-island', root \)\.filter\( isRealIsland \)/.test( body ) );
 check( 'upload placeholders carry the page token', /const key = UPLOAD_KEY \+/.test( body ) && ! /'u' \+ \( \+\+uploadSeq \)/.test( body ) );
+check( 'a Custom HTML or freeform wrapper is known by reference only',
+	/const rawRec = RAW_BLOCKS\.get\( n \);/.test( body ) && /0 === String\( key \)\.indexOf\( RAW_BLOCK_KEY \)/.test( body ) && /el\.removeAttribute\( 'data-minn-raw' \);/.test( body ) );
 check( 'paste never rebuilds an island from clipboard HTML', ! /islandHtml\( idx, n\.dataset\.block/.test( body ) );
 // The edit controls opened by a click on content decide through
 // editWrapOf() and isMinnSlot(), and a shortcode token's popover opens only
