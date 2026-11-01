@@ -823,11 +823,16 @@ minn_admin_resource( 'gravity-smtp/events', function () {
 				array( 'param' => 'status', 'column' => 'status', 'type' => 'key' ),
 				array( 'param' => 'service', 'column' => 'service', 'type' => 'key' ),
 				// The same extra-blob match their SQL_Filter_Parser makes for
-				// keys that are not columns: serialized or JSON.
+				// keys that are not columns: serialized or JSON. Both needles are
+				// locked to the whole value (its length, or its JSON encoding and
+				// the delimiter after it), so a facet can never match part of the
+				// blob that follows the source.
 				array( 'param' => 'source', 'values' => function ( $source ) {
+					$json = '"source":' . wp_json_encode( (string) $source );
 					return array( 'extra' => array( 'any' => array(
 						array( 'contains' => '"source";s:' . strlen( $source ) . ':"' . $source . '"' ),
-						array( 'contains' => '"source":"' . $source . '"' ),
+						array( 'contains' => $json . ',' ),
+						array( 'contains' => $json . '}' ),
 					) ) );
 				} ),
 			),
