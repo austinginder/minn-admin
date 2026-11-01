@@ -2834,11 +2834,21 @@
 		const safe = rtNeutralizedHtml( html );
 		if ( null === safe ) {
 			rtRefusedToast();
+			rtDropPending( html );
 			return null;
 		}
 		const done = document.execCommand( 'insertHTML', false, safe );
 		adoptEditorMarkup( document.getElementById( 'minn-editor-body' ) );
+		// Whatever the insert did not land is never filled.
+		rtDropPending( html );
 		return done;
+	}
+	// Forget the placeholder fills a markup string carries.
+	function rtDropPending( html ) {
+		String( html || '' ).replace( /data-minn-(raw|fill)="([^"]*)"/g, ( m, kind, key ) => {
+			( 'raw' === kind ? rawBlockPending : fillPending ).delete( key );
+			return m;
+		} );
 	}
 	// Nodes, never a string: insertAdjacentHTML parses in the target's
 	// context (a content <form> or foreign element above it), which the
@@ -29181,7 +29191,7 @@
 		const close = () => { overlay.remove(); document.removeEventListener( 'keydown', onKey ); };
 		// Registered before a confirm's own listener, so the DOM guard (not
 		// ordering) keeps Escape from closing the viewer under an open confirm.
-		const onKey = ( e ) => { if ( e.key === 'Escape' && ! $( '.minn-confirm-overlay' ) ) close(); };
+		const onKey = ( e ) => { if ( e.key === 'Escape' && ! $$( '.minn-confirm-overlay' ).some( isChrome ) ) close(); };
 		document.addEventListener( 'keydown', onKey );
 		overlay.addEventListener( 'mousedown', ( e ) => { if ( e.target === overlay ) close(); } );
 		overlay.querySelector( '[data-close]' ).addEventListener( 'click', close );
@@ -34023,7 +34033,8 @@
 		// block looks typeable and is not, so the hint answers "why can't I
 		// type here?". Everything else already has the ⚙ chip in view, and a
 		// label repeating it was pure noise.
-		const hint = SIMPLE_BLOCKS.includes( short ) ? __( 'Styled block: edit text via ⚙' ) : '';
+		// A Custom HTML block islands for its markup, not for its styling.
+		const hint = SIMPLE_BLOCKS.includes( short ) && 'html' !== short ? __( 'Styled block: edit text via ⚙' ) : '';
 		// Images in the preview are click-through doorways: gallery-shaped
 		// blocks open the Images editor, single-image blocks the replace
 		// picker. The stamp drives the pointer cursor and the click branch.
@@ -45297,7 +45308,13 @@
 		const raw = ed.islands && ed.islands[ idx ];
 		if ( raw == null ) return;
 		const model = inspectorModel( raw );
-		if ( ! model ) { toast( __( 'This block’s markup can’t be parsed safely.' ), true ); return; }
+		if ( ! model ) {
+			// Freeform HTML between blocks has no block comment to read; it
+			// is kept exactly as written.
+			if ( 'core/freeform' === islandEl.dataset.block ) toast( __( 'This HTML has no block settings. It is saved exactly as written.' ) );
+			else toast( __( 'This block’s markup can’t be parsed safely.' ), true );
+			return;
+		}
 
 		// Placeholder while schemas load.
 		islandEl.classList.add( 'minn-insp-target' );
@@ -61148,7 +61165,7 @@
 			const redo = ( 'z' === k && e.shiftKey ) || ( 'y' === k && e.ctrlKey && ! e.metaKey && ! e.shiftKey );
 			if ( ! redo && ! ( 'z' === k && ! e.shiftKey ) ) return;
 			const b = builderPage();
-			if ( ! b || $( '.minn-modal-overlay, .minn-confirm-modal' ) ) return;
+			if ( ! b || $$( '.minn-modal-overlay, .minn-confirm-modal' ).some( isChrome ) ) return;
 			const t = e.target;
 			const box = t && t.closest && ( t.closest( 'textarea, [contenteditable="true"], [contenteditable=""]' ) || ( 'INPUT' === t.tagName && ! t.classList.contains( 'minn-ac-input' ) ? t : null ) );
 			if ( box && b.hist.key === box && b.hist.undo[ b.hist.undo.length - 1 ] !== b.hist.cur ) return;
@@ -61312,7 +61329,7 @@
 			// A confirm dialog stacked over a modal owns the keyboard: its own
 			// listeners close it on Escape; the modal underneath must not
 			// also close (or arrow-navigate) from the same keypress.
-			const confirmUp = !! $( '.minn-confirm-overlay' );
+			const confirmUp = $$( '.minn-confirm-overlay' ).some( isChrome );
 			if ( state.modal && ! confirmUp && ( e.key === 'ArrowLeft' || e.key === 'ArrowRight' ) ) {
 				const t = e.target;
 				const typing = t && ( t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable );

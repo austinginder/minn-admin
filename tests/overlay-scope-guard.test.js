@@ -72,6 +72,25 @@ src.split( '\n' ).forEach( ( line, i ) => {
 	chromeBad.push( `app.js:${ i + 1 }  ${ t.slice( 0, 120 ) }` );
 } );
 check( 'every document-wide sweep of Minn chrome by class skips content hosts', 0 === chromeBad.length, chromeBad.length ? '\n      ' + chromeBad.join( '\n      ' ) : '' );
+// An overlay or modal is asked for by existence ("is a dialog up?"), and a
+// bare $() answers yes for content wearing the class: builder undo went off
+// and Escape stopped closing the log and revision modals.
+const OVERLAY_REVIEWED = {
+	"const t = $( '.minn-order-page-head .minn-modal-title' );": 'order page header; no post content on that route',
+};
+const overlaySeen = new Set();
+const overlayBad = [];
+src.split( '\n' ).forEach( ( line, i ) => {
+	if ( ! /(?:^|[^\w$])\$\(\s*['`]\.minn-[^'`]*(?:overlay|modal)[^'`]*['`]\s*\)/.test( line ) ) return;
+	const t = line.trim();
+	if ( Object.prototype.hasOwnProperty.call( OVERLAY_REVIEWED, t ) ) {
+		overlaySeen.add( t );
+		return;
+	}
+	overlayBad.push( `app.js:${ i + 1 }  ${ t.slice( 0, 120 ) }` );
+} );
+check( 'no bare $() existence check of an overlay or modal (content can wear the class)', 0 === overlayBad.length, overlayBad.length ? '\n      ' + overlayBad.join( '\n      ' ) : '' );
+check( 'every reviewed overlay lookup still exists', Object.keys( OVERLAY_REVIEWED ).every( ( k ) => overlaySeen.has( k ) ), '' );
 check( 'every reviewed chrome sweep still exists', Object.keys( CHROME_REVIEWED ).every( ( k ) => chromeSeen.has( k ) ), Object.keys( CHROME_REVIEWED ).filter( ( k ) => ! chromeSeen.has( k ) ).join( ' | ' ) );
 check( 'isChrome excludes every host of stored content',
 	/const CONTENT_HOSTS = '#minn-editor-body, \.minn-rt-body, \.minn-revision-preview, \.minn-diff, \.minn-island-preview, \.minn-email-frame';/.test( src ) );
