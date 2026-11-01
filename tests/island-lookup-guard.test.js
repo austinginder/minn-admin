@@ -142,6 +142,7 @@ const REVIEWED = {
 	"const read = new Set( readEl ? readEl.getAttribute( 'data-minn-acf-read' ).split( /\\s+/ ) : [] );": 'island runs: the island\'s own fields',
 	"const marked = editorBody.querySelector( `[data-minn-tbl=\"${ marker }\"]` );": 'table rebuild: one-shot marker with this page\'s token',
 	"$$( '[data-minn-bkt]', clone ).filter( isPasteBracket ).forEach( ( el ) => el.removeAttribute( 'data-minn-bkt' ) );": 'guarded on the line',
+	"const probe = box.querySelector( '[data-minn-slot-probe]' );": 'rtSlotClosers: the probe in an inert parse it just built from stored wrapper bytes and its own probe',
 	"$$( '[data-minn-fill]', root ).forEach( ( el ) => {": 'adoptEditorMarkup: only a key carrying this page\'s token and still pending is filled, then the marker comes off',
 	"const key = String( el.getAttribute( 'data-minn-fill' ) || '' );": 'adoptEditorMarkup: same',
 	"$$( 'div[data-minn-raw]', root ).forEach( ( el ) => {": 'adoptRawBlocks: only a value carrying this page\'s token and a pending key is taken, then the marker comes off',

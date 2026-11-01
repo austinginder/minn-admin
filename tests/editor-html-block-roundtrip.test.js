@@ -8,8 +8,15 @@
  * Untouched, each comes back byte for byte. Edited, it stays the same block
  * with the edit in it. Unbalanced markup (an open/close pair of blocks
  * around others, a stray close) can neither escape its block nor swallow
- * its neighbours: it is never glued into one string with them. A code block inside one is not syntax-highlighted,
- * so no highlight markup can reach the save.
+ * its neighbours: it is never glued into one string with them. A code
+ * block inside one is not syntax-highlighted, so no highlight markup can
+ * reach the save.
+ *
+ * The same holds for every other block: a paragraph or heading left open,
+ * a slot container whose wrapper bytes leave an element open or start a
+ * <textarea>, saves its stored bytes and leaves its neighbours alone. A
+ * Custom HTML block stays itself when copied, and a block-markup paste of
+ * one (and of an island) fills in, saves as pasted, and undoes and redoes.
  */
 const { launch, login, createPost, deletePost, openEditor: openEditorQuick, freshParagraph, reporter, BASE } = require( './helpers' );
 // The shared opener waits 15 s a try; this lab runs at load 40-100, where an
@@ -114,6 +121,97 @@ const POST = [ PARA, WRAPPED, MULTI, CODE ].join( '\n\n' ) + '\n\n' + FREEFORM +
 		const second = await editAndSave();
 		const count = ( s, needle ) => s.split( needle ).length - 1;
 		t.check( 'a second load and save duplicates nothing', UNBAL.every( ( b ) => 1 === count( second, b ) ) && 1 === count( second, '<p>x</p>' ), second.slice( 0, 600 ) );
+
+		/* ===== Open markup in other blocks and in slot wrapper bytes ===== */
+		const LP = '<!-- wp:latest-posts {"postsToShow":1} /-->';
+		const SIBS = [
+			'<!-- wp:paragraph -->\n<p>see <a href="/x">link</p>\n<!-- /wp:paragraph -->',
+			LP,
+			'<!-- wp:paragraph -->\n<p>after one</p>\n<!-- /wp:paragraph -->',
+			'<!-- wp:heading -->\n<h2 class="wp-block-heading">Title<span>\n<!-- /wp:heading -->',
+			'<!-- wp:query-title {"type":"archive"} /-->',
+			'<!-- wp:paragraph -->\n<p>a</p></div><p>x2</p>\n<!-- /wp:paragraph -->',
+			'<!-- wp:group -->\n<div class="wp-block-group"><!-- wp:paragraph -->\n<p><b>bold</p>\n<!-- /wp:paragraph --><!-- wp:latest-posts /--></div>\n<!-- /wp:group -->',
+			'<!-- wp:paragraph -->\n<p>after the group</p>\n<!-- /wp:paragraph -->',
+			'<!-- wp:cover -->\n<div class="wp-block-cover"><a href="/x"><span class="bg"></span><div class="wp-block-cover__inner-container"><!-- wp:paragraph -->\n<p>in cover a</p>\n<!-- /wp:paragraph --></div></div>\n<!-- /wp:cover -->',
+			LP,
+			'<!-- wp:media-text -->\n<div class="wp-block-media-text"><figure class="wp-block-media-text__media"><b></figure><div class="wp-block-media-text__content"><!-- wp:paragraph -->\n<p>mt</p>\n<!-- /wp:paragraph --></div></div>\n<!-- /wp:media-text -->',
+			'<!-- wp:paragraph -->\n<p>after the media</p>\n<!-- /wp:paragraph -->',
+			'<!-- wp:stackable/columns -->\n<div class="stk-block-columns stk-block"><span title="</div>"></span><div class="stk-row stk-inner-blocks stk-block-content"><!-- wp:stackable/column -->\n<div class="stk-block-column stk-column"><div class="stk-column-wrapper"><div class="stk-block-content stk-inner-blocks"><!-- wp:paragraph -->\n<p>stk</p>\n<!-- /wp:paragraph --></div></div></div>\n<!-- /wp:stackable/column --></div></div>\n<!-- /wp:stackable/columns -->',
+			'<!-- wp:paragraph -->\n<p>after the columns</p>\n<!-- /wp:paragraph -->',
+			'<!-- wp:cover -->\n<div class="wp-block-cover"><textarea><div class="wp-block-cover__inner-container"><!-- wp:paragraph -->\n<p>in cover t</p>\n<!-- /wp:paragraph --></div></div>\n<!-- /wp:cover -->',
+			'<!-- wp:paragraph -->\n<p>after the textarea</p>\n<!-- /wp:paragraph -->',
+			PARA,
+		];
+		const SPOST = SIBS.join( '\n\n' );
+		const sid = await createPost( page, { title: 'Open markup round trip', content: SPOST, status: 'draft' } );
+		ids.push( sid );
+		await openEditor( page, sid );
+		await page.waitForSelector( '#minn-editor-body .minn-block-island', { timeout: 90000 } );
+		await page.waitForTimeout( 2500 );
+		await freshParagraph( page );
+		await page.keyboard.type( 'tail' );
+		const sibSaved = await save( sid );
+		const sibMissing = [ ...new Set( SIBS ) ].filter( ( b ) => ! sibSaved.includes( b ) );
+		t.check( 'blocks with open markup, and their neighbours, come back byte for byte', 0 === sibMissing.length, sibMissing.join( ' | ' ).slice( 0, 400 ) + ' :: ' + sibSaved.slice( 0, 300 ) );
+		t.check( 'no island chrome or server preview is saved from open markup', ! /minn-block-island|minn-island-preview|minn-island-chip|minn-raw-block|data-minn-/.test( sibSaved ), sibSaved.slice( 0, 400 ) );
+		t.check( 'nothing after the <textarea> cover was lost', sibSaved.includes( '<!-- wp:paragraph -->\n<p>after the textarea</p>\n<!-- /wp:paragraph -->' ) && /<p>tail<\/p>/.test( sibSaved ), sibSaved.slice( -300 ) );
+
+		/* ===== A Custom HTML block keeps itself through a copy ===== */
+		const cid = await createPost( page, { title: 'HTML block copy', content: [ PARA, WRAPPED, LP, PARA ].join( '\n\n' ), status: 'draft' } );
+		ids.push( cid );
+		await openEditor( page, cid );
+		await page.waitForSelector( '#minn-editor-body .acme-wrap', { timeout: 90000 } );
+		await page.waitForTimeout( 1500 );
+		const copied = await page.evaluate( () => {
+			const body = document.querySelector( '#minn-editor-body' );
+			body.focus();
+			const r = document.createRange();
+			r.selectNodeContents( body );
+			const sel = window.getSelection();
+			sel.removeAllRanges();
+			sel.addRange( r );
+			const dt = new DataTransfer();
+			body.dispatchEvent( new ClipboardEvent( 'copy', { bubbles: true, cancelable: true, clipboardData: dt } ) );
+			return dt.getData( 'text/x-minn-blocks' );
+		} );
+		t.check( 'a copy that spans an island carries the Custom HTML block as itself', copied.includes( WRAPPED ), copied.slice( 0, 400 ) );
+
+		/* ===== A block-markup paste of a Custom HTML block and an island ===== */
+		const DUO = '<!-- wp:acme/duo -->\n<div class="acme-duo"><p>Pasted island.</p></div>\n<!-- /wp:acme/duo -->';
+		const PASTED = '<!-- wp:html -->\n<div class="paste-wrap" data-y="2"><span>pasted</span></div>\n<!-- /wp:html -->';
+		const pid = await createPost( page, { title: 'HTML block paste', content: PARA, status: 'draft' } );
+		ids.push( pid );
+		await openEditor( page, pid );
+		await page.waitForSelector( '#minn-editor-body p', { timeout: 90000 } );
+		await freshParagraph( page );
+		await page.evaluate( ( markup ) => {
+			const body = document.querySelector( '#minn-editor-body' );
+			const dt = new DataTransfer();
+			dt.setData( 'text/x-minn-blocks', markup );
+			dt.setData( 'text/plain', 'x' );
+			body.dispatchEvent( new ClipboardEvent( 'paste', { bubbles: true, cancelable: true, clipboardData: dt } ) );
+		}, PASTED + '\n\n' + DUO );
+		await page.waitForTimeout( 1500 );
+		const landed = await page.evaluate( () => ( {
+			wrap: document.querySelectorAll( '#minn-editor-body .minn-raw-block .paste-wrap' ).length,
+			island: document.querySelectorAll( '#minn-editor-body .minn-block-island[data-block="acme/duo"]' ).length,
+			pending: document.querySelectorAll( '#minn-editor-body [data-minn-raw], #minn-editor-body [data-minn-fill]' ).length,
+			preview: ( document.querySelector( '#minn-editor-body .minn-block-island[data-block="acme/duo"] .minn-island-preview' ) || {} ).textContent || '',
+		} ) );
+		t.check( 'the pasted Custom HTML block and island land filled, no placeholder left', 1 === landed.wrap && 1 === landed.island && 0 === landed.pending && /Pasted island/.test( landed.preview ), JSON.stringify( landed ) );
+		const pastedSave = await save( pid );
+		t.check( 'the paste saves as pasted', pastedSave.includes( PASTED ) && pastedSave.includes( DUO ), pastedSave.slice( 0, 500 ) );
+		const counts = () => page.evaluate( () => [ document.querySelectorAll( '#minn-editor-body .paste-wrap' ).length, document.querySelectorAll( '#minn-editor-body .minn-block-island[data-block="acme/duo"]' ).length ] );
+		await page.keyboard.press( 'Meta+z' );
+		await page.waitForTimeout( 600 );
+		const undone = await counts();
+		await page.keyboard.press( 'Meta+Shift+z' );
+		await page.waitForTimeout( 600 );
+		const redone = await counts();
+		t.check( 'undo takes the paste out and redo puts it back', 0 === undone[ 0 ] && 0 === undone[ 1 ] && 1 === redone[ 0 ] && 1 === redone[ 1 ], JSON.stringify( { undone, redone } ) );
+		const redoSave = await save( pid );
+		t.check( 'after undo and redo the paste saves once, as pasted', 1 === redoSave.split( PASTED ).length - 1 && 1 === redoSave.split( DUO ).length - 1, redoSave.slice( 0, 500 ) );
 	} finally {
 		for ( const id of ids ) await deletePost( page, id );
 		await t.done( browser, errors );

@@ -121,6 +121,20 @@ check( 'the partial-selection copy imports its slice instead of parsing it live'
 check( 'table header ops move cells\' nodes instead of copying markup',
 	! /\.innerHTML = c\.innerHTML/.test( fnBody( 'applyTableMutation' ) ) );
 
+// Every other block glued into the joined markup is checked as well: an
+// editable block stays prose only when its markup is self-contained, slot
+// wrapper bytes are closed from their own parse (never counted by
+// pattern), and freeform counts as comment-only only by the parser.
+check( 'an editable block is prose only when its markup is self-contained',
+	/return rtSelfContained\( html \) \? html : null;/.test( src ) );
+const slotFn = fnBody( 'slotIslandHtml' );
+check( 'slot islands close their wrapper bytes from the parse, and fall back to a plain island when they cannot',
+	( slotFn.match( /rtSlotClosers\(/g ) || [] ).length >= 3 && ! /domOpenDivs/.test( src ) && ( slotFn.match( /if \( null == (closers|colClose) \) return null;/g ) || [] ).length >= 3 );
+check( 'comment-only freeform is decided by the parser, never by a <!--…--> pattern',
+	/const slotIgnorableHtml = \( raw \) => rtCommentOnly\( raw \);/.test( src )
+	&& /if \( rtCommentOnly\( seg\.raw \) \) return seg\.raw;/.test( fnBody( 'appendEditableContent' ) )
+	&& /rtCommentOnly\( seg\.raw \) \? seg\.raw\.trim\(\) : null/.test( slotFn ) );
+
 const failed = results.filter( ( r ) => ! r ).length;
 console.log( `\ncontent-sink-guard: ${ results.length - failed }/${ results.length } passed` );
 process.exitCode = failed ? 1 : 0;

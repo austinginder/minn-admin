@@ -33083,9 +33083,6 @@
 		rawBlockPending.set( key, { kind, raw, inner } );
 		return `<div class="minn-raw-block" data-minn-raw="${ esc( key ) }"><br></div>`;
 	}
-	// True when markup opens and closes everything it touches: parsed inside
-	// a box, nothing of it lands outside the box and nothing after the box
-	// lands inside it.
 	// Stored markup an island shows (its preview, a Details body), held for
 	// adoptEditorMarkup to import as nodes: glued into the joined string it
 	// could close the island early or swallow what follows it, as a Custom
@@ -33096,12 +33093,59 @@
 		return key;
 	}
 	const previewFill = ( html ) => markupFill( html, true );
+	// True when markup opens and closes everything it touches, so whatever
+	// follows it in the joined string lands beside it, never inside it.
+	// Parsed inside a box: a block probe right after it must be the box's
+	// own child (an <h2> or <li> left open would take it in), nothing may
+	// land outside the box, and the formatting probe after the box catches
+	// an unclosed <a> or <b> that the parser would rebuild around the next
+	// block.
 	function rtSelfContained( html ) {
-		const box = inertParse( '<div data-o=""><div data-w="">' + String( html || '' ) + '</div><i data-p=""></i></div><i data-q=""></i>' );
+		const box = inertParse( '<div data-o=""><div data-w="">' + String( html || '' ) + '<div data-s=""></div></div><i data-p=""></i></div><i data-q=""></i>' );
 		const top = box.childNodes;
 		if ( 2 !== top.length || 1 !== top[ 0 ].nodeType || ! top[ 0 ].hasAttribute( 'data-o' ) || 1 !== top[ 1 ].nodeType || ! top[ 1 ].hasAttribute( 'data-q' ) ) return false;
 		const kids = top[ 0 ].childNodes;
-		return 2 === kids.length && 1 === kids[ 0 ].nodeType && kids[ 0 ].hasAttribute( 'data-w' ) && 1 === kids[ 1 ].nodeType && kids[ 1 ].hasAttribute( 'data-p' );
+		if ( 2 !== kids.length || 1 !== kids[ 0 ].nodeType || ! kids[ 0 ].hasAttribute( 'data-w' ) || 1 !== kids[ 1 ].nodeType || ! kids[ 1 ].hasAttribute( 'data-p' ) ) return false;
+		const last = kids[ 0 ].lastElementChild;
+		return !! last && last.hasAttribute( 'data-s' ) && last === kids[ 0 ].lastChild;
+	}
+	// True when freeform holds nothing but comments and whitespace as the
+	// parser reads it. A regex over <!--…--> disagrees with the tokenizer
+	// (<!-->, <!--->, --!> end a comment early), and live markup it took
+	// for comment text was glued into the joined string unchecked.
+	function rtCommentOnly( html ) {
+		return Array.from( inertParse( String( html || '' ) ).childNodes ).every( ( n ) => 8 === n.nodeType || ( 3 === n.nodeType && ! n.data.trim() ) );
+	}
+	// The closers for stored wrapper bytes that open around a slot, read
+	// from the parse of those bytes, never counted by pattern: the slot div
+	// goes where the bytes end, and the elements left open around it are
+	// closed innermost first. Null when the bytes do not wrap a slot
+	// cleanly (a <textarea> swallowing the rest, an unclosed <a> the parser
+	// would rebuild after the island, a probe moved out of place), so the
+	// caller keeps the block a plain island saved byte for byte.
+	const RT_SLOT_PROBE = '<div data-minn-slot-probe=""></div>';
+	function rtSlotClosers( before ) {
+		const chainOf = ( box ) => {
+			const probe = box.querySelector( '[data-minn-slot-probe]' );
+			if ( ! probe ) return null;
+			const chain = [];
+			for ( let n = probe.parentElement; n && n !== box; n = n.parentElement ) {
+				if ( RT_HTML_NS !== n.namespaceURI ) return null;
+				chain.push( n.localName );
+			}
+			return chain;
+		};
+		const open = chainOf( inertParse( String( before || '' ) + RT_SLOT_PROBE ) );
+		if ( ! open ) return null;
+		const closers = open.map( ( tag ) => `</${ tag }>` ).join( '' );
+		const whole = String( before || '' ) + RT_SLOT_PROBE + closers;
+		if ( ! rtSelfContained( whole ) ) return null;
+		const box = inertParse( whole );
+		const again = chainOf( box );
+		if ( ! again || again.join( ' ' ) !== open.join( ' ' ) ) return null;
+		// One wrapper (or the bare slot) at the top, nothing around it.
+		const top = Array.from( box.childNodes ).filter( ( n ) => ! ( 3 === n.nodeType && ! n.data.trim() ) );
+		return 1 === top.length && 1 === top[ 0 ].nodeType ? closers : null;
 	}
 	// The wrapper's content as it would be saved: an inert copy, Minn's own
 	// clean-ups, the writer's parked attributes put back.
@@ -33138,11 +33182,17 @@
 		adoptRawBlocks( root );
 		return root;
 	}
-	// An editable segment's HTML, a Custom HTML block inside its wrapper (null
-	// when its markup is not self-contained: the caller islands it).
-	const editableBlockHtml = ( seg ) => ( 'html' === seg.name.replace( /^core\//, '' )
-		? rawBlockHtml( 'html', seg.raw, editableSegmentHtml( seg ) )
-		: editableSegmentHtml( seg ) );
+	// An editable segment's HTML, a Custom HTML block inside its wrapper.
+	// Null when its markup is not self-contained (an unclosed <a> in a
+	// paragraph, a heading left open, a stray close): glued into the joined
+	// string it swallowed the blocks after it, and the save wrote their
+	// island chrome and server preview into the post. The caller islands
+	// it, so it saves its stored bytes.
+	const editableBlockHtml = ( seg ) => {
+		if ( 'html' === seg.name.replace( /^core\//, '' ) ) return rawBlockHtml( 'html', seg.raw, editableSegmentHtml( seg ) );
+		const html = editableSegmentHtml( seg );
+		return rtSelfContained( html ) ? html : null;
+	};
 	// Run after markup built by appendEditableContent lands under root.
 	function adoptRawBlocks( root ) {
 		if ( ! root || ! rawBlockPending.size ) return root;
@@ -33177,7 +33227,7 @@
 		if ( ! ed.islands ) ed.islands = [];
 		return segments.map( ( seg ) => {
 			if ( seg.type === 'html' ) {
-				if ( ! /\S/.test( seg.raw.replace( /<!--[\s\S]*?-->/g, '' ) ) ) return seg.raw;
+				if ( rtCommentOnly( seg.raw ) ) return seg.raw;
 				const wrapped = rawBlockHtml( 'freeform', seg.raw, seg.raw );
 				if ( null != wrapped ) return wrapped;
 				const fi = ed.islands.push( seg.raw ) - 1;
@@ -33437,8 +33487,6 @@
 	// DOM-side helpers for vendor wrappers. The stored raw is never touched —
 	// these decorate the LIVE wrapper markup so Minn CSS can lay columns out
 	// without keying on any vendor's class names.
-	const domOpenDivs = ( str ) =>
-		( String( str ).match( /<div\b/gi ) || [] ).length - ( String( str ).match( /<\/div>/gi ) || [] ).length;
 	const addDomClass = ( tagStr, cls ) => String( tagStr ).replace( /^<([a-z][a-z0-9]*)([^>]*)>/i, ( m, t, attrs ) =>
 		/class\s*=\s*"/i.test( attrs )
 			? `<${ t }${ attrs.replace( /class\s*=\s*"/i, ( c ) => c + cls + ' ' ) }>`
@@ -33452,7 +33500,7 @@
 	// AI-generated markup labels sections that way (<!-- Testimonial 1 -->).
 	// Preservable in a slot: comments become DOM comment nodes and the
 	// serializer re-emits them.
-	const slotIgnorableHtml = ( raw ) => String( raw ).replace( /<!--[\s\S]*?-->/g, '' ).trim() === '';
+	const slotIgnorableHtml = ( raw ) => rtCommentOnly( raw );
 
 	// A slot candidate's children: editable segments render as prose,
 	// complex segments become NESTED islands (or nested slot containers),
@@ -33505,7 +33553,9 @@
 		// renders as a plain island and upgrades on the next load (the
 		// insert-path asymmetry convention).
 		const childHtml = ( seg ) => {
-			if ( seg.type === 'html' ) return seg.raw.trim(); // comment-only freeform → DOM comment nodes
+			// Comment-only freeform → DOM comment nodes (slotChildSegments
+			// lets no other freeform through).
+			if ( seg.type === 'html' ) return rtCommentOnly( seg.raw ) ? seg.raw.trim() : null;
 			if ( segmentEditable( seg ) ) {
 				const h = editableBlockHtml( seg );
 				if ( null != h ) return h;
@@ -33551,12 +33601,16 @@
 				if ( ! kids ) return null;
 				const inner = joinKids( kids );
 				if ( inner == null ) return null;
-				cols.push( `${ addDomClass( cp.open, 'minn-slot-col' ) }${ cp.preamble }<div class="minn-slot" contenteditable="true">${ inner }</div>${ vendor ? '</div>'.repeat( Math.max( 1, domOpenDivs( cp.open + cp.preamble ) ) ) : '</' + cp.tag + '>' }` );
+				const colOpen = `${ addDomClass( cp.open, 'minn-slot-col' ) }${ cp.preamble }`;
+				const colClose = rtSlotClosers( colOpen );
+				if ( null == colClose ) return null;
+				cols.push( `${ colOpen }<div class="minn-slot" contenteditable="true">${ inner }</div>${ colClose }` );
 				colCount++;
 			}
 			if ( ! colCount ) return null;
 			const rowOpen = vendor ? addDomClassLast( parts.preamble, 'minn-slot-row' ) : '';
-			const closers = vendor ? '</div>'.repeat( Math.max( 1, domOpenDivs( parts.open + parts.preamble ) ) ) : '</' + parts.tag + '>';
+			const closers = rtSlotClosers( parts.open + rowOpen );
+			if ( null == closers ) return null;
 			return `<div class="minn-block-island minn-slot-island minn-cols-island" contenteditable="false" data-island="${ idx }" data-block="${ esc( name ) }">
 			${ chip }
 			${ parts.open }${ rowOpen }${ cols.join( '' ) }${ closers }
@@ -33569,7 +33623,8 @@
 		// SLOT_CONTENT blocks (cover, media-text): the preamble carries the
 		// background/media bytes plus the content container's OPEN tag, so
 		// the slot nests inside the content container; the tail closes it.
-		const closers = parts.preamble ? '</div></' + parts.tag + '>' : '</' + parts.tag + '>';
+		const closers = rtSlotClosers( parts.open + parts.preamble );
+		if ( null == closers ) return null;
 		return `<div class="minn-block-island minn-slot-island${ parts.preamble ? ' minn-media-slot-island' : '' }" contenteditable="false" data-island="${ idx }" data-block="${ esc( name ) }">
 			${ chip }
 			${ parts.open }${ parts.preamble }<div class="${ slotCls }" contenteditable="true">${ childrenHtml }</div>${ closers }
