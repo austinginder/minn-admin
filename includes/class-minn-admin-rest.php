@@ -3059,6 +3059,28 @@ class Minn_Admin_REST {
 	 * @return string
 	 */
 	private static function preview_embeds( $raw, $html, $post_id, &$budget, array &$seen, array &$frames = array() ) {
+		foreach ( self::embed_wrappers( $raw ) as $wrapper => $url ) {
+			if ( false === strpos( $html, $wrapper ) ) {
+				continue;
+			}
+			$embed = self::preview_embed( $url, $post_id, $budget, $seen );
+			if ( is_string( $embed ) && '' !== $embed ) {
+				$html = str_replace( $wrapper, str_replace( $url, $embed, $wrapper ), $html );
+				foreach ( self::vouched_embed_frames( $url, $embed ) as $src ) {
+					$frames[ $src ] = true;
+				}
+			}
+		}
+		return $html;
+	}
+
+	/**
+	 * Each core embed block's wrapper in block markup, wrapper => its URL.
+	 *
+	 * @param string $raw Block markup.
+	 * @return array
+	 */
+	private static function embed_wrappers( $raw ) {
 		$wrappers = array();
 		$walk     = static function ( $blocks ) use ( &$walk, &$wrappers ) {
 			foreach ( (array) $blocks as $block ) {
@@ -3074,20 +3096,8 @@ class Minn_Admin_REST {
 				}
 			}
 		};
-		$walk( parse_blocks( $raw ) );
-		foreach ( $wrappers as $wrapper => $url ) {
-			if ( false === strpos( $html, $wrapper ) ) {
-				continue;
-			}
-			$embed = self::preview_embed( $url, $post_id, $budget, $seen );
-			if ( is_string( $embed ) && '' !== $embed ) {
-				$html = str_replace( $wrapper, str_replace( $url, $embed, $wrapper ), $html );
-				foreach ( self::vouched_embed_frames( $url, $embed ) as $src ) {
-					$frames[ $src ] = true;
-				}
-			}
-		}
-		return $html;
+		$walk( parse_blocks( (string) $raw ) );
+		return $wrappers;
 	}
 
 	/**
@@ -3112,8 +3122,11 @@ class Minn_Admin_REST {
 		if ( isset( $GLOBALS['wp_embed'] ) && false !== $GLOBALS['wp_embed']->get_embed_handler_html( array(), $clean ) ) {
 			return array();
 		}
-		$core = self::core_oembed();
-		if ( ! $core || false === $core->get_provider( $clean, array( 'discover' => false ) ) ) {
+		$core     = self::core_oembed();
+		$provider = $core ? $core->get_provider( $clean, array( 'discover' => false ) ) : false;
+		// The answer came from the live object: a provider a plugin put ahead
+		// of core's, or core's removed (so discovery answered), is not core's.
+		if ( false === $provider || _wp_oembed_get_object()->get_provider( $clean, array( 'discover' => false ) ) !== $provider ) {
 			return array();
 		}
 		$home   = wp_parse_url( home_url() );
@@ -3199,12 +3212,20 @@ class Minn_Admin_REST {
 			return $handled;
 		}
 		$suffix = md5( $clean . serialize( $attr ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- WP_Embed's own cache key.
-		// Only a URL the post already holds is cached in its meta, where the
-		// front end reads it; one only typed into the editor goes to an
-		// expiring transient, so previews can't grow the post's meta.
-		$saved = $post_id ? (string) get_post_field( 'post_content', $post_id, 'raw' ) : '';
-		if ( $post_id && false === strpos( $saved, $url ) && false === strpos( $saved, $clean ) ) {
-			$post_id = 0;
+		// Only an embed block URL the post already holds is cached in its
+		// meta, where the front end reads it; one only typed into the editor
+		// goes to an expiring transient, so previews can't grow the post's meta.
+		if ( $post_id ) {
+			// Read once per content, not once per embed.
+			static $saved = array( '', array() );
+			$content = (string) get_post_field( 'post_content', $post_id, 'raw' );
+			$key     = $post_id . ':' . md5( $content );
+			if ( $saved[0] !== $key ) {
+				$saved = array( $key, array_flip( self::embed_wrappers( $content ) ) );
+			}
+			if ( ! isset( $saved[1][ $url ] ) ) {
+				$post_id = 0;
+			}
 		}
 		if ( $post_id ) {
 			if ( '' === get_post_meta( $post_id, '_oembed_' . $suffix, true ) ) {

@@ -175,6 +175,41 @@ $tag = substr( md5( (string) microtime( true ) ), 0, 8 );
 		$check( 'N-7 an embed not in the draft\'s saved content still previews', 200 === $st && 1 === $iframes( $out ), substr( (string) ( $out[0] ?? '' ), 0, 200 ) );
 		$check( 'N-7 and adds no row to the draft\'s meta, only expiring transients', ! array_diff( $own_meta(), $meta_before ) && 2 === count( array_diff( $transients(), $tr_unsaved ) ), wp_json_encode( array_values( array_diff( $own_meta(), $meta_before ) ) ) );
 
+		// Review 2 (N2-7): the saved URL is matched whole, not as a substring.
+		$meta_before = $own_meta();
+		$render( array( $embed( "https://minn-v049.example/ok/{$tag}-ow" ), $embed( "https://minn-v049.example/ok/{$tag}" ) ), $own );
+		$check( 'N2-7 a prefix of a saved embed URL adds no row to the draft\'s meta', ! array_diff( $own_meta(), $meta_before ), wp_json_encode( array_values( array_diff( $own_meta(), $meta_before ) ) ) );
+
+		// Review 2 (N2-6): a player frame is vouched only when the live oEmbed
+		// object answers the URL with core's own provider.
+		$yt     = 'https://www.youtube.com/watch?v=minnv049' . $tag;
+		$player = 'https://www.youtube.com/embed/minnv049' . $tag;
+		$yt_answer = function ( $result, $url ) use ( $yt, $player ) {
+			return $url === $yt ? '<iframe title="minn-v049-yt" src="' . esc_url( $player ) . '"></iframe>' : $result;
+		};
+		add_filter( 'pre_oembed_result', $yt_answer, 98, 2 );
+		$frames = function () use ( $call, $embed, $yt ) {
+			list( $st, $d ) = $call( 'POST', '/minn-admin/v1/render-blocks', array( 'blocks' => array( $embed( $yt ) ), 'post' => 0 ) );
+			return array( $st, array_merge( array(), ...array_values( array_map( 'array_values', (array) ( $d['embed_frames'] ?? array() ) ) ) ) );
+		};
+		$live      = _wp_oembed_get_object();
+		$providers = $live->providers;
+		try {
+			list( $st, $vouched ) = $frames();
+			$check( 'N2-6 control: a core provider\'s player frame is vouched', 200 === $st && array( $player ) === $vouched, wp_json_encode( $vouched ) );
+			$live->providers = array_filter( $providers, function ( $p ) {
+				return false === strpos( (string) $p[0], 'youtube.com/oembed' );
+			} );
+			list( $st, $vouched ) = $frames();
+			$check( 'N2-6 with core\'s provider removed on the live object, no frame is vouched', 200 === $st && ! $vouched, wp_json_encode( $vouched ) );
+			$live->providers = array( '#https?://((m|www)\.)?youtube\.com/watch.*#i' => array( 'https://minn-v049.example/oembed', true ) ) + $providers;
+			list( $st, $vouched ) = $frames();
+			$check( 'N2-6 with a plugin provider ahead of core\'s, no frame is vouched', 200 === $st && ! $vouched, wp_json_encode( $vouched ) );
+		} finally {
+			$live->providers = $providers;
+			remove_filter( 'pre_oembed_result', $yt_answer, 98 );
+		}
+
 		$held = $wp_embed->post_ID;
 		list( $st, $out ) = $render( array( $embed( "https://minn-v049.example/ok/{$tag}-nopost" ) ), 0 );
 		$check( '08-1 control: with no post an embed block previews too', 200 === $st && 1 === $iframes( $out ), substr( (string) ( $out[0] ?? '' ), 0, 200 ) );
