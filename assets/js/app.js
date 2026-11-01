@@ -1517,7 +1517,7 @@
 
 	let toastTimer = null;
 	function toast( msg, isError ) {
-		$$( '.minn-toast' ).forEach( ( el ) => el.remove() );
+		$$( '.minn-toast' ).filter( isChrome ).forEach( ( el ) => el.remove() );
 		const el = document.createElement( 'div' );
 		el.className = 'minn-toast';
 		// status/alert + live region so assistive tech hears save/error toasts.
@@ -1548,7 +1548,7 @@
 	}
 
 	function toastAction( msg, actionLabel, onAction, duration = 7000 ) {
-		$$( '.minn-toast' ).forEach( ( t ) => t.remove() );
+		$$( '.minn-toast' ).filter( isChrome ).forEach( ( t ) => t.remove() );
 		clearTimeout( toastTimer );
 		clearPendingToastUndo();
 		const el = document.createElement( 'div' );
@@ -2482,6 +2482,11 @@
 		}
 	};
 	const UPLOAD_KEY = 'u' + PAGE_TOKEN + '-';
+	// Stored content renders inside these hosts and can wear any of Minn's
+	// classes (post kses keeps class), so a document-wide lookup of Minn's
+	// own chrome by class keeps only what lies outside them.
+	const CONTENT_HOSTS = '#minn-editor-body, .minn-rt-body, .minn-revision-preview, .minn-diff, .minn-island-preview, .minn-email-frame';
+	const isChrome = ( el ) => ! ( el && el.closest && el.closest( CONTENT_HOSTS ) );
 	// Custom HTML and freeform wrappers (rawBlockHtml), keyed by reference.
 	const RAW_BLOCK_KEY = 'r' + PAGE_TOKEN + '-';
 	// Island previews built as markup start as an empty placeholder, filled
@@ -4121,7 +4126,7 @@
 		return !! view && SAVE_SHORTCUT_HELD_IDS.some( ( id ) => view.querySelector( '#' + id ) );
 	}
 	function pageSaveButton() {
-		const dialogs = $$( '.minn-modal-overlay' );
+		const dialogs = $$( '.minn-modal-overlay' ).filter( isChrome );
 		const scope = dialogs.length ? dialogs[ dialogs.length - 1 ] : $( '#minn-view' );
 		if ( ! scope ) return null;
 		const sel = SAVE_SHORTCUT_IDS.map( ( id ) => '#' + id ).join( ', ' );
@@ -5044,7 +5049,7 @@
 		if ( dot && prev.dotHidden === false ) dot.hidden = false;
 		// Active highlight for the current route.
 		const refreshHint = navRefreshDef( state.route ) ? __( 'Click again to refresh' ) : '';
-		$$( '.minn-nav-btn' ).forEach( ( btn ) => {
+		$$( '.minn-nav-btn' ).filter( isChrome ).forEach( ( btn ) => {
 			const surface = surfaceById( state.route );
 			const on = btn.dataset.nav === state.route
 				// Structure folds Terms in: an admin on the 'terms' route (deep
@@ -5347,7 +5352,7 @@
 		// Family members all light the same sidebar item.
 		const activeFamily = surface && surface.family ? surface.family : '';
 		const refreshHint = navRefreshDef( state.route ) ? __( 'Click again to refresh' ) : '';
-		$$( '.minn-nav-btn' ).forEach( ( btn ) => {
+		$$( '.minn-nav-btn' ).filter( isChrome ).forEach( ( btn ) => {
 			const on = btn.dataset.nav === state.route
 				// Structure folds Terms in — an admin on the 'terms' route keeps
 				// the 'posttypes' Structure item highlighted.
@@ -17875,7 +17880,7 @@
 		const tax = currentTermTax();
 		const c = state.cache.terms;
 		if ( ! tax || ! c ) return;
-		$$( '.minn-term-edit' ).forEach( ( el ) => el.remove() );
+		$$( '.minn-term-edit' ).filter( isChrome ).forEach( ( el ) => el.remove() );
 		// Parent choices exclude the term itself and its descendants (a
 		// term cannot live under its own subtree).
 		const excluded = new Set();
@@ -17998,7 +18003,7 @@
 	function openTermMerge( t ) {
 		const tax = currentTermTax();
 		if ( ! tax ) return;
-		$$( '.minn-term-edit' ).forEach( ( el ) => el.remove() );
+		$$( '.minn-term-edit' ).filter( isChrome ).forEach( ( el ) => el.remove() );
 		const row = $( `[data-term="${ t.id }"]` );
 		if ( ! row ) return;
 		const editor = document.createElement( 'div' );
@@ -41346,7 +41351,7 @@
 						// The popover paints its fields after this resolves,
 						// so reach for the field on the next frame.
 						requestAnimationFrame( () => {
-							const field = document.querySelector( `[data-insplink="${ hit >= 0 ? hit : 0 }"]` );
+							const field = inspectorEl ? inspectorEl.querySelector( `[data-insplink="${ hit >= 0 ? hit : 0 }"]` ) : null;
 							if ( ! field ) return;
 							field.focus();
 							field.select();
@@ -44620,7 +44625,7 @@
 		// Nested containers stack their ⚙ chips in the same corner, so two
 		// popovers can read as one changing its mind
 		// — the open popover's island wears a highlight instead.
-		$$( '.minn-insp-target' ).forEach( ( el ) => el.classList.remove( 'minn-insp-target' ) );
+		$$( '.minn-insp-target' ).filter( isChrome ).forEach( ( el ) => el.classList.remove( 'minn-insp-target' ) );
 		if ( inspectorEl && inspectorEl._minnA11yEsc ) {
 			document.removeEventListener( 'keydown', inspectorEl._minnA11yEsc, true );
 		}
@@ -55749,7 +55754,7 @@
 	// scroll). Aux groups (a pinned slice like Content's Trash) are skipped —
 	// they must never scroll out of sight with the main strip.
 	function enhanceTabStrips() {
-		$$( '.minn-tabs:not([data-scroll]):not(.minn-tabs-aux)' ).forEach( ( tabs ) => {
+		$$( '.minn-tabs:not([data-scroll]):not(.minn-tabs-aux)' ).filter( isChrome ).forEach( ( tabs ) => {
 			tabs.setAttribute( 'data-scroll', '1' );
 			const wrap = document.createElement( 'div' );
 			wrap.className = 'minn-tabscroll';
@@ -57999,7 +58004,7 @@
 	// inserted at the cursor of the field it was opened from. Address fields
 	// leave out {all_fields} (their picker does the same).
 	function gfnOpenTags( btn, target, isMessage, groupsIn ) {
-		$$( '.minn-gfn-tagpop' ).forEach( ( el ) => el.remove() );
+		$$( '.minn-gfn-tagpop' ).filter( isChrome ).forEach( ( el ) => el.remove() );
 		const groups = ( groupsIn || gfnCur().data.mergeTags || [] ).map( ( g ) => ( {
 			label: g.label,
 			tags: g.tags.filter( ( t ) => isMessage || '{all_fields}' !== t.tag ),
@@ -59691,7 +59696,7 @@
 		closeWritingGoalPop();
 		hideFloatTip();
 		hideMinnMenu();
-		$$( '.minn-row-menu' ).forEach( ( el ) => el.remove() );
+		$$( '.minn-row-menu' ).filter( isChrome ).forEach( ( el ) => el.remove() );
 		hideImgPop();
 		hideLinkPop();
 		closeVisPopover();
@@ -59720,7 +59725,7 @@
 		if ( state.route !== 'cf7form' ) state.c7 = null;
 		if ( state.route !== 'ffemails' ) state.ffe = null;
 		if ( state.route !== 'wpfemails' ) state.wpfe = null;
-		if ( ! [ 'gfnotification', 'gfconfirmation', 'gfbuilder', 'cf7form', 'ffemails', 'wpfemails' ].includes( state.route ) ) $$( '.minn-gfn-tagpop' ).forEach( ( el ) => el.remove() );
+		if ( ! [ 'gfnotification', 'gfconfirmation', 'gfbuilder', 'cf7form', 'ffemails', 'wpfemails' ].includes( state.route ) ) $$( '.minn-gfn-tagpop' ).filter( isChrome ).forEach( ( el ) => el.remove() );
 		// A finished or abandoned migration should not reappear on return.
 		if ( state.route !== 'migrate' && state.mig && ! state.mig.running ) state.mig = null;
 		if ( state.route !== 'surfaceitem' ) state.surfaceItem = null;
@@ -61090,7 +61095,7 @@
 					e.preventDefault();
 					e.stopPropagation();
 					btn.click();
-				} else if ( ! $$( '.minn-modal-overlay' ).length && pageHoldsSave() ) {
+				} else if ( ! $$( '.minn-modal-overlay' ).filter( isChrome ).length && pageHoldsSave() ) {
 					e.preventDefault();
 				}
 				return;

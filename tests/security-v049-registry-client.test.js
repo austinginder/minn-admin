@@ -26,6 +26,10 @@
  *         filled for its block, gets its own origin back (the server vouches
  *         for it); any other frame in that preview and every stored frame
  *         stays strict. Content's contenteditable is parked in a preview.
+ *   Review: only the exact player frame the server inserted is vouched
+ *         (never a caption frame, its name parked); island text stays
+ *         editable after a paste and an insert; content wearing minn-tabs
+ *         gets no tab chrome.
  *   17-2  The notification panel and the modals bind their controls inside
  *         their own root: post content wearing data-nupd, minn-notif-link
  *         or data-revlist gets no click listener when the bell or the
@@ -40,7 +44,22 @@
 const fs = require( 'fs' );
 const path = require( 'path' );
 const { execFileSync } = require( 'child_process' );
-const { launch, login, createPost, openEditor, freshParagraph, reporter, onExit, BASE, WP } = require( './helpers' );
+const { launch, login, createPost, openEditor: openEditorQuick, freshParagraph, reporter, onExit, BASE, WP } = require( './helpers' );
+// The shared opener waits 15 s a try; this lab runs at load 40-100, where an
+// editor with several islands takes longer, so these suites wait longer.
+const openEditor = async ( page, id ) => {
+	for ( let i = 0; i < 3; i++ ) {
+		try {
+			await page.goto( `${ BASE }/minn-admin/editor/posts/${ id }`, { waitUntil: 'domcontentloaded', timeout: 120000 } );
+			await page.waitForSelector( '#minn-editor-body', { timeout: 120000 } );
+			await page.waitForTimeout( 800 );
+			return;
+		} catch ( e ) {
+			if ( 2 === i ) return openEditorQuick( page, id );
+			await page.waitForTimeout( 3000 );
+		}
+	}
+};
 
 const wp = ( args ) => {
 	try {
@@ -133,7 +152,7 @@ const wp = ( args ) => {
 		const errorsBefore = errors.length;
 		const framed = [ 'iframe', 'own' ].map( ( k ) => page.waitForResponse( ( r ) => r.url().includes( `page_id=${ target }&k=${ k }` ), { timeout: 90000 } ).catch( () => null ) );
 		await openEditor( page, fid );
-		await page.waitForSelector( '#minn-editor-body iframe', { timeout: 15000 } );
+		await page.waitForSelector( '#minn-editor-body iframe', { timeout: 90000 } );
 		const got = await Promise.all( framed );
 		t.check( 'both content frames loaded their page (premise)', got.every( Boolean ), '' );
 		await page.waitForTimeout( 3000 );
@@ -203,7 +222,7 @@ const wp = ( args ) => {
 			const rows = document.querySelectorAll( '[data-revlist]' );
 			rows[ rows.length - 1 ].click();
 		} );
-		await page.waitForSelector( '#minn-diff .minn49-cmd', { timeout: 15000 } );
+		await page.waitForSelector( '#minn-diff .minn49-cmd', { timeout: 90000 } );
 		const topLayer = () => page.evaluate( () => ( {
 			modal: !! document.querySelector( ':modal' ),
 			popover: !! document.querySelector( ':popover-open' ),
@@ -220,7 +239,7 @@ const wp = ( args ) => {
 			if ( d && d.close ) d.close();
 		} );
 		await openEditor( page, tid );
-		await page.waitForSelector( '#minn-editor-body .minn49-cmd', { timeout: 15000 } );
+		await page.waitForSelector( '#minn-editor-body .minn49-cmd', { timeout: 90000 } );
 		await page.click( '#minn-editor-body .minn49-cmd', { force: true } );
 		await page.click( '#minn-editor-body .minn49-pop', { force: true } ).catch( () => {} );
 		await page.waitForTimeout( 300 );
@@ -277,38 +296,91 @@ const wp = ( args ) => {
 			const r = await fetch( window.MINN.restUrl + 'minn-admin/v1/render-blocks', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': window.MINN.nonce }, body: JSON.stringify( { blocks, post: 0 } ) } );
 			return r.json();
 		}, [ emb( YT, 'youtube' ), '<!-- wp:html --><iframe src="https://www.youtube.com/embed/x"></iframe><!-- /wp:html -->', emb( 'https://example.invalid/not-a-provider', 'example' ) ] );
-		const vo = answer.embed_origins || {};
-		t.check( 'render-blocks vouches a core provider\'s player origin for its own block only',
-			JSON.stringify( vo[ 0 ] ) === '["https://www.youtube.com"]' && ! vo[ 1 ] && ! vo[ 2 ], JSON.stringify( vo ) );
-		const EPOST = emb( YT, 'youtube', '<figcaption class="wp-element-caption"><iframe class="minn49-cap" src="https://player.vimeo.com/robots.txt" width="20" height="20"></iframe></figcaption>' )
+		const PLAYER = 'https://www.youtube.com/embed/dQw4w9WgXcQ?feature=oembed';
+		const vf = answer.embed_frames || {};
+		t.check( 'render-blocks names the exact player frame a core provider answered with, for its own block only',
+			Array.isArray( vf[ 0 ] ) && 1 === vf[ 0 ].length && vf[ 0 ][ 0 ] === PLAYER && ! vf[ 1 ] && ! vf[ 2 ] && ! answer.embed_origins, JSON.stringify( vf ) );
+		// The writer's own frames in the same block: one of the player's
+		// origin in the caption, the exact player src in the caption, and the
+		// exact player src outside it under a name a link targets.
+		const CAPTION = `<figcaption class="wp-element-caption"><iframe class="minn49-cap" src="https://www.youtube.com/robots.txt" width="20" height="20"></iframe><iframe class="minn49-capplayer" src="${ PLAYER }" width="20" height="20"></iframe></figcaption>`
+			+ `<iframe class="minn49-named" name="minn49nav" src="${ PLAYER }" width="20" height="20"></iframe><a class="minn49-navlink" target="minn49nav" href="/">go</a>`;
+		const EPOST = emb( YT, 'youtube', CAPTION )
 			+ '\n\n<!-- wp:html -->\n<iframe class="minn49-raw" src="https://www.youtube.com/robots.txt" width="20" height="20"></iframe>\n<!-- /wp:html -->';
+		// The caption's copy of the player runs sandboxed without its origin,
+		// and YouTube's script complains (cache storage, writeEmbed): that is
+		// the sandbox working, so those errors are dropped from the gate.
+		const embedErrorsBefore = errors.length;
 		const eid = await createPost( page, { title: 'Minn v049 embeds', content: EPOST, status: 'draft' } );
 		made.push( eid );
 		await openEditor( page, eid );
-		await page.waitForSelector( '#minn-editor-body .minn-island-preview iframe[src*="youtube.com/embed/dQw4w9WgXcQ"]', { timeout: 90000 } );
+		await page.waitForSelector( '#minn-editor-body .minn-island-preview .wp-block-embed__wrapper iframe', { timeout: 90000 } );
 		const sb = await page.evaluate( () => {
 			const q = ( sel ) => {
 				const f = document.querySelector( sel );
 				return f ? f.getAttribute( 'sandbox' ) : 'missing';
 			};
 			return {
-				player: q( '#minn-editor-body .minn-island-preview iframe[src*="youtube.com/embed/dQw4w9WgXcQ"]' ),
+				player: q( '#minn-editor-body .minn-island-preview .wp-block-embed__wrapper iframe' ),
 				caption: q( '#minn-editor-body .minn-island-preview iframe.minn49-cap' ),
+				capPlayer: q( '#minn-editor-body .minn-island-preview iframe.minn49-capplayer' ),
+				named: q( '#minn-editor-body .minn-island-preview iframe.minn49-named' ),
+				nameLeft: !! document.querySelector( 'iframe[name="minn49nav"]' ),
 				raw: q( '#minn-editor-body iframe.minn49-raw' ),
 			};
 		} );
 		t.check( 'the provider\'s player in its own preview gets its origin back', /allow-same-origin/.test( sb.player ) && /allow-scripts/.test( sb.player ), JSON.stringify( sb ) );
-		t.check( 'a frame of another origin in the same preview stays strict', 'missing' !== sb.caption && ! /allow-same-origin/.test( sb.caption ), JSON.stringify( sb ) );
+		t.check( 'a caption frame of the player\'s origin stays strict', 'missing' !== sb.caption && ! /allow-same-origin/.test( sb.caption ), JSON.stringify( sb ) );
+		t.check( 'a caption frame with the player\'s exact src stays strict', 'missing' !== sb.capPlayer && ! /allow-same-origin/.test( sb.capPlayer ), JSON.stringify( sb ) );
+		t.check( 'a vouched frame keeps no name a link or form could target', ! sb.nameLeft, JSON.stringify( sb ) );
 		t.check( 'a stored iframe of the provider\'s origin stays strict', 'missing' !== sb.raw && null !== sb.raw && ! /allow-same-origin/.test( sb.raw ), JSON.stringify( sb ) );
 
+		/* ===== Island text stays editable after a paste and an insert ===== */
+		const RUNS = '<!-- wp:acme/panel -->\n<div class="acme-panel"><h2 class="wp-block-heading">Welcome back</h2><p>Reminders are in the Noted link.</p></div>\n<!-- /wp:acme/panel -->\n\n<!-- wp:paragraph -->\n<p>After.</p>\n<!-- /wp:paragraph -->';
+		const rid = await createPost( page, { title: 'Minn v049 runs', content: RUNS, status: 'draft' } );
+		made.push( rid );
+		await openEditor( page, rid );
+		// The embed post is gone now; whatever its strict player logged is behind us.
+		for ( let i = errors.length - 1; i >= embedErrorsBefore; i-- ) {
+			if ( /sandboxed and lacks the 'allow-same-origin' flag|^pageerror: writeEmbed is not defined|^pageerror: Uncaught undefined/.test( errors[ i ] ) ) {
+				console.log( `INFO  strict player error (dropped from the gate): ${ errors[ i ].slice( 0, 140 ) }` );
+				errors.splice( i, 1 );
+			}
+		}
+		await page.waitForSelector( '#minn-editor-body .minn-block-island[data-block="acme/panel"] .minn-island-run', { timeout: 90000 } );
+		const runsEditable = () => page.evaluate( () => {
+			const runs = [ ...document.querySelectorAll( '#minn-editor-body .minn-block-island[data-block="acme/panel"] .minn-island-run' ) ];
+			return runs.length > 0 && runs.every( ( r ) => r.isContentEditable );
+		} );
+		t.check( 'island text is editable in place (premise)', await runsEditable(), '' );
+		const pasteFlavors = ( flavors ) => page.evaluate( ( f ) => {
+			const body = document.querySelector( '#minn-editor-body' );
+			const dt = new DataTransfer();
+			for ( const [ k, v ] of Object.entries( f ) ) dt.setData( k, v );
+			body.dispatchEvent( new ClipboardEvent( 'paste', { bubbles: true, cancelable: true, clipboardData: dt } ) );
+		}, flavors );
+		await freshParagraph( page );
+		await pasteFlavors( { 'text/plain': 'pasted words' } );
+		await page.waitForTimeout( 500 );
+		await freshParagraph( page );
+		await pasteFlavors( { 'text/x-minn-blocks': '<!-- wp:acme/duo -->\n<div class="acme-duo"><p>Inserted island.</p></div>\n<!-- /wp:acme/duo -->', 'text/plain': 'x' } );
+		await page.waitForTimeout( 1500 );
+		t.check( 'island text stays editable after a paste and an insert', await runsEditable(), '' );
+
 		/* ===== 17-2 overlay bindings stay in their root ===== */
+		const TABS = '<!-- wp:html -->\n<div class="minn-tabs minn49-tabs"><span class="minn-tab">tab</span></div>\n<!-- /wp:html -->';
 		const PLANT = '<!-- wp:paragraph -->\n<p class="minn49-plant">x <span data-nupd="plugin-hello-1.0" class="minn49-nupd">update</span> <span class="minn-notif-link minn49-nl" data-nid="notice-x" data-li="0">act</span> <span class="minn-notif-row minn49-row" data-nid="notice-x">row</span> <span class="minn-notif-hide minn49-hide" data-nid="notice-x">hide</span> <span data-revlist="1" class="minn49-rev">rev</span></p>\n<!-- /wp:paragraph -->';
 		const pid = await createPost( page, { title: 'Minn v049 overlay scope', content: '<p>seed</p>', status: 'draft' } );
 		made.push( pid );
-		await update( pid, PLANT + '\n\n<!-- wp:paragraph -->\n<p>one</p>\n<!-- /wp:paragraph -->' );
-		await update( pid, PLANT + '\n\n<!-- wp:paragraph -->\n<p>two</p>\n<!-- /wp:paragraph -->' );
+		await update( pid, PLANT + '\n\n' + TABS + '\n\n<!-- wp:paragraph -->\n<p>one</p>\n<!-- /wp:paragraph -->' );
+		await update( pid, PLANT + '\n\n' + TABS + '\n\n<!-- wp:paragraph -->\n<p>two</p>\n<!-- /wp:paragraph -->' );
 		await openEditor( page, pid );
-		await page.waitForSelector( '#minn-editor-body .minn49-nupd', { timeout: 15000 } );
+		await page.waitForSelector( '#minn-editor-body .minn49-nupd', { timeout: 90000 } );
+		await page.waitForTimeout( 1000 );
+		t.check( 'content wearing minn-tabs gets none of Minn\'s tab chrome', await page.evaluate( () => {
+			const tabs = document.querySelector( '#minn-editor-body .minn49-tabs' );
+			return !! tabs && ! tabs.hasAttribute( 'data-scroll' ) && ! document.querySelector( '#minn-editor-body .minn-tabscroll' );
+		} ), '' );
 		await page.click( '#minn-notif-btn' );
 		await page.waitForSelector( '.minn-notif-panel', { timeout: 15000 } );
 		await page.waitForTimeout( 1500 );
