@@ -2608,31 +2608,34 @@
 			: own.toLowerCase().split( /\s+/ ).filter( ( tok ) => RT_FRAME_SANDBOX.includes( tok ) );
 		el.setAttribute( 'sandbox', tokens.join( ' ' ) );
 	}
-	// A server-rendered embed preview names the https origins of the frames
-	// a core oEmbed provider answered with (render-blocks, embed_origins).
-	// Those frames, and only inside the preview that render fills, get their
-	// own origin back, which a provider's player needs to run. The list comes
-	// from the response, never from markup, so content cannot vouch for a
-	// frame; this page's own origin is never accepted.
+	// A server-rendered embed preview names the exact src of each player
+	// frame a core oEmbed provider answered with (render-blocks,
+	// embed_frames). Those frames, and only inside the preview that render
+	// fills and never in a caption, get their own origin back, which a
+	// provider's player needs to run. Content cannot vouch for a frame: the
+	// list comes from the response, never from markup. A vouched frame keeps
+	// no name or id, so no link or form in the content can target it and
+	// navigate it, its sandbox and all, to this site.
 	function rtVouchFrames( root, vouched ) {
-		const ok = ( Array.isArray( vouched ) ? vouched : [] ).filter( ( o ) => 'string' === typeof o
-			&& /^https:\/\/[a-z0-9.-]+(?::\d+)?$/i.test( o ) && o.toLowerCase() !== location.origin.toLowerCase() );
-		if ( ! ok.length ) return;
+		const srcs = ( Array.isArray( vouched ) ? vouched : [] ).filter( ( u ) => {
+			if ( 'string' !== typeof u ) return false;
+			try {
+				const p = new URL( u );
+				return 'https:' === p.protocol && p.origin !== location.origin;
+			} catch ( e ) {
+				return false;
+			}
+		} );
+		if ( ! srcs.length ) return;
 		const allow = RT_FRAME_SANDBOX.concat( 'allow-same-origin' );
 		$$( 'iframe', root ).forEach( ( f ) => {
 			if ( ! rtIsFrame( f ) || ! f.hasAttribute( RT_PARK_FRAME ) ) return;
-			let origin = '';
-			try {
-				const u = new URL( f.getAttribute( 'src' ) || '', location.href );
-				if ( 'https:' === u.protocol ) origin = u.origin;
-			} catch ( e ) {
-				return;
-			}
-			if ( ! origin || ! ok.some( ( o ) => o.toLowerCase() === origin.toLowerCase() ) ) return;
+			if ( f.closest( 'figcaption' ) || ! srcs.includes( f.getAttribute( 'src' ) || '' ) ) return;
 			const own = f.getAttribute( RT_PARK_FRAME );
 			const tokens = '1' === own.charAt( 0 )
 				? own.slice( 1 ).toLowerCase().split( /\s+/ ).filter( ( tok ) => allow.includes( tok ) )
 				: allow;
+			rtRenameAttrs( f, ( name ) => ( [ 'name', 'id' ].includes( name.toLowerCase() ) ? RT_PARK_PREFIX + name : name ) );
 			f.setAttribute( 'sandbox', tokens.join( ' ' ) );
 		} );
 	}
@@ -35176,7 +35179,7 @@
 				injectPreviewStyles( r && r.styles );
 				const rendered = r && r.rendered && r.rendered[ 0 ];
 				const prev = islandPreview( islandEl );
-				if ( prev && rendered && rendered.trim() ) setPreviewHtml( prev, rendered, embedOrigins( r, 0 ) );
+				if ( prev && rendered && rendered.trim() ) setPreviewHtml( prev, rendered, embedFrames( r, 0 ) );
 				updateEditorStats();
 			} )
 			.catch( () => {} );
@@ -35690,7 +35693,7 @@
 	// start from a clean slate or a re-render (Apply, a server render landing)
 	// leaves the slider stack un-collapsed with the flag still saying "done"
 	//.
-	// vouched: the embed origins render-blocks answered for this block.
+	// vouched: the player frames render-blocks answered for this block.
 	function setPreviewHtml( prev, html, vouched ) {
 		if ( ! prev ) return;
 		delete prev.dataset.sliderCollapsed;
@@ -35699,7 +35702,7 @@
 		delete prev._minnCollapsedSlides;
 		rtPreviewInto( prev, html, vouched );
 	}
-	const embedOrigins = ( r, i ) => ( r && r.embed_origins && r.embed_origins[ i ] ) || null;
+	const embedFrames = ( r, i ) => ( r && r.embed_frames && r.embed_frames[ i ] ) || null;
 
 	let previewRevealRaf = 0;
 	function schedulePreviewReveal() {
@@ -45126,7 +45129,7 @@
 			.then( ( r ) => {
 				injectPreviewStyles( r && r.styles );
 				const html = r && r.rendered && r.rendered[ 0 ];
-				if ( prev && html && html.trim() ) setPreviewHtml( prev, html, embedOrigins( r, 0 ) );
+				if ( prev && html && html.trim() ) setPreviewHtml( prev, html, embedFrames( r, 0 ) );
 				schedulePreviewReveal();
 				// Re-arm in-place text editing against the new markup.
 				const body = islandEl && islandEl.closest( '.minn-editor-body' );
@@ -45653,7 +45656,7 @@
 			const r = await api( 'minn-admin/v1/render-blocks', { method: 'POST', body: JSON.stringify( { blocks: [ newRaw ], post: ( state.editor && state.editor.id ) || 0 } ) } );
 			injectPreviewStyles( r && r.styles );
 			const html = r && r.rendered && r.rendered[ 0 ];
-			if ( previewEl && html && html.trim() ) rtPreviewInto( previewEl, html, embedOrigins( r, 0 ) );
+			if ( previewEl && html && html.trim() ) rtPreviewInto( previewEl, html, embedFrames( r, 0 ) );
 			rearm();
 			updateEditorStats();
 		} catch ( e ) {
@@ -45691,7 +45694,7 @@
 					// Shortcode/details host live fields — never clobber them.
 					if ( isLiveFieldIsland( island ) ) return;
 					const el = islandPreview( island );
-					if ( el && html && html.trim() ) setPreviewHtml( el, html, embedOrigins( r, i ) );
+					if ( el && html && html.trim() ) setPreviewHtml( el, html, embedFrames( r, i ) );
 				} );
 				// Rendered previews are the arming surface for in-place island
 				// text editing — align text nodes against the raw's text runs.
@@ -48893,7 +48896,7 @@
 					injectPreviewStyles( r && r.styles );
 					const html = r && r.rendered && r.rendered[ 0 ];
 					const prev = islandPreview( islandEl );
-					if ( prev && html && html.trim() ) setPreviewHtml( prev, html, embedOrigins( r, 0 ) );
+					if ( prev && html && html.trim() ) setPreviewHtml( prev, html, embedFrames( r, 0 ) );
 					updateEditorStats();
 				} )
 				.catch( () => {} );

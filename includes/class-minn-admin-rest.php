@@ -3053,11 +3053,11 @@ class Minn_Admin_REST {
 	 * @param int    $post_id A post the caller may edit, or 0.
 	 * @param int    $budget  Lookups left for this request (counted down).
 	 * @param array  $seen    URL => answer, for this request.
-	 * @param array  $origins Filled with the https origins of the frames a
-	 *                        core oEmbed provider answered with.
+	 * @param array  $frames  Filled with the exact src of each frame a core
+	 *                        oEmbed provider answered with.
 	 * @return string
 	 */
-	private static function preview_embeds( $raw, $html, $post_id, &$budget, array &$seen, array &$origins = array() ) {
+	private static function preview_embeds( $raw, $html, $post_id, &$budget, array &$seen, array &$frames = array() ) {
 		$wrappers = array();
 		$walk     = static function ( $blocks ) use ( &$walk, &$wrappers ) {
 			foreach ( (array) $blocks as $block ) {
@@ -3081,8 +3081,8 @@ class Minn_Admin_REST {
 			$embed = self::preview_embed( $url, $post_id, $budget, $seen );
 			if ( is_string( $embed ) && '' !== $embed ) {
 				$html = str_replace( $wrapper, str_replace( $url, $embed, $wrapper ), $html );
-				foreach ( self::vouched_embed_origins( $url, $embed ) as $origin ) {
-					$origins[ $origin ] = true;
+				foreach ( self::vouched_embed_frames( $url, $embed ) as $src ) {
+					$frames[ $src ] = true;
 				}
 			}
 		}
@@ -3090,32 +3090,38 @@ class Minn_Admin_REST {
 	}
 
 	/**
-	 * The https origins of the frames in an embed's answer, when the URL
-	 * belongs to one of core's oEmbed providers without discovery. The
-	 * editor keeps every content frame in an opaque-origin sandbox; a
-	 * provider's own player needs its origin to run, and these are the only
-	 * frames it is given back to, inside the preview this render fills.
-	 * A discovered embed, a handler's answer and anything a URL merely
-	 * points at stay sandboxed. The site's own origin is never vouched.
+	 * The exact src of each frame in an embed's answer, when the URL belongs
+	 * to one of core's own oEmbed providers (no discovery, nothing a plugin
+	 * added through oembed_providers or wp_oembed_add_provider) and no embed
+	 * handler answered it. The editor keeps every content frame in an
+	 * opaque-origin sandbox; a provider's own player needs its origin to
+	 * run, and these are the only frames given it back, matched by exact
+	 * src inside the preview this render fills and never in a caption. The
+	 * site's own origin is never named.
 	 *
 	 * @param string $url   The URL as the block holds it.
 	 * @param string $embed Its embed HTML.
 	 * @return string[]
 	 */
-	private static function vouched_embed_origins( $url, $embed ) {
-		if ( ! function_exists( '_wp_oembed_get_object' ) || false === stripos( $embed, '<iframe' ) ) {
+	private static function vouched_embed_frames( $url, $embed ) {
+		if ( false === stripos( $embed, '<iframe' ) ) {
 			return array();
 		}
 		$clean = str_replace( '&amp;', '&', $url );
-		if ( false === _wp_oembed_get_object()->get_provider( $clean, array( 'discover' => false ) ) ) {
+		if ( isset( $GLOBALS['wp_embed'] ) && false !== $GLOBALS['wp_embed']->get_embed_handler_html( array(), $clean ) ) {
 			return array();
 		}
-		$home    = wp_parse_url( home_url() );
-		$own     = strtolower( (string) ( $home['host'] ?? '' ) );
-		$origins = array();
+		$core = self::core_oembed();
+		if ( ! $core || false === $core->get_provider( $clean, array( 'discover' => false ) ) ) {
+			return array();
+		}
+		$home   = wp_parse_url( home_url() );
+		$own    = strtolower( (string) ( $home['host'] ?? '' ) );
+		$frames = array();
 		if ( preg_match_all( '#<iframe\b[^>]*?\ssrc\s*=\s*(["\'])(.*?)\1#is', $embed, $m ) ) {
 			foreach ( $m[2] as $src ) {
-				$parts = wp_parse_url( html_entity_decode( $src, ENT_QUOTES ) );
+				$src   = html_entity_decode( $src, ENT_QUOTES );
+				$parts = wp_parse_url( $src );
 				if ( ! is_array( $parts ) || 'https' !== strtolower( (string) ( $parts['scheme'] ?? '' ) ) || empty( $parts['host'] ) ) {
 					continue;
 				}
@@ -3123,10 +3129,47 @@ class Minn_Admin_REST {
 				if ( $host === $own || ! preg_match( '/^[a-z0-9.-]+$/', $host ) ) {
 					continue;
 				}
-				$origins[] = 'https://' . $host . ( empty( $parts['port'] ) || 443 === (int) $parts['port'] ? '' : ':' . (int) $parts['port'] );
+				$frames[] = $src;
 			}
 		}
-		return array_values( array_unique( $origins ) );
+		return array_values( array_unique( $frames ) );
+	}
+
+	/**
+	 * A WP_oEmbed holding core's own provider list only: built with the
+	 * oembed_providers filter and the early (wp_oembed_add_provider) list
+	 * held aside, both put back at once. Core does not expose its unfiltered
+	 * list any other way.
+	 *
+	 * @return WP_oEmbed|null
+	 */
+	private static function core_oembed() {
+		static $core = null;
+		if ( null !== $core ) {
+			return $core ? $core : null;
+		}
+		if ( ! class_exists( 'WP_oEmbed' ) ) {
+			require_once ABSPATH . WPINC . '/class-wp-oembed.php';
+		}
+		global $wp_filter;
+		$held_filter = $wp_filter['oembed_providers'] ?? null;
+		$held_early  = WP_oEmbed::$early_providers;
+		unset( $wp_filter['oembed_providers'] );
+		WP_oEmbed::$early_providers = array();
+		try {
+			$core = new WP_oEmbed();
+			// The constructor hooks the instance into oembed_dataparse; this
+			// copy only matches URLs and must not filter real answers.
+			remove_filter( 'oembed_dataparse', array( $core, '_strip_newlines' ), 10 );
+		} catch ( \Throwable $e ) {
+			$core = false;
+		} finally {
+			WP_oEmbed::$early_providers = $held_early;
+			if ( null !== $held_filter ) {
+				$wp_filter['oembed_providers'] = $held_filter;
+			}
+		}
+		return $core ? $core : null;
 	}
 
 	/**
@@ -3381,8 +3424,8 @@ class Minn_Admin_REST {
 		$rendered     = array();
 		$embed_budget = self::PREVIEW_EMBED_LOOKUPS;
 		$embed_seen   = array();
-		// Block index => the origins its embed preview vouches for.
-		$embed_origins = array();
+		// Block index => the exact player frames its embed preview vouches for.
+		$embed_frames = array();
 		// The resolvers and the preview clamps come back off however the
 		// render ends, a block that throws included.
 		try {
@@ -3447,7 +3490,7 @@ class Minn_Admin_REST {
 					$vouched = array();
 					$html    = self::preview_embeds( $raw, $html, $post_id, $embed_budget, $embed_seen, $vouched );
 					if ( $vouched ) {
-						$embed_origins[ count( $rendered ) ] = array_keys( $vouched );
+						$embed_frames[ count( $rendered ) ] = array_keys( $vouched );
 					}
 				}
 				/**
@@ -3494,9 +3537,9 @@ class Minn_Admin_REST {
 			}
 		}
 		$out         = array( 'rendered' => $rendered );
-		if ( $embed_origins ) {
+		if ( $embed_frames ) {
 			// An object keyed by block index, beside rendered.
-			$out['embed_origins'] = (object) $embed_origins;
+			$out['embed_frames'] = (object) $embed_frames;
 		}
 		$new_handles = array_values( array_diff( wp_styles()->queue, $queue_before ) );
 		$styles      = $new_handles ? self::collect_style_urls( $new_handles ) : array(
