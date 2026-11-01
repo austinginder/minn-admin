@@ -2672,10 +2672,12 @@
 		// The CSSOM decodes escapes when it re-serializes (a string written as
 		// "\3c/style\3e" comes back as a literal "</style>"), and this text
 		// can be turned back into markup by an insertHTML or innerHTML sink.
-		// Only "</" can end a raw-text <style>, so that pair goes back out as
-		// a CSS escape (identical inside a string); a bare "<" is left alone
-		// because it is real syntax elsewhere (@media (width < 600px)).
-		el.textContent = css ? scopeCssToPreviews( css, '.minn-editor-body' ).replace( /<\//g, '\\3c /' ) : '';
+		// "</" ends a raw-text <style>, and a re-parse that moves the style
+		// into MathML reads any "<" opening a tag as markup, so each of those
+		// goes back out as a CSS escape (identical inside a string). Range
+		// syntax ("<" then a space or "=", @media (width < 600px)) is real
+		// CSS and is left alone.
+		el.textContent = css ? scopeCssToPreviews( css, '.minn-editor-body' ).replace( /<(?=[a-zA-Z!\/?])/g, '\\3c ' ) : '';
 	}
 	function rtUnparkStyle( el ) {
 		if ( rtIsStyle( el ) && el.hasAttribute( RT_PARK_MEDIA ) ) {
@@ -2704,7 +2706,7 @@
 	// tag's attributes parse the same every time) and goes back on the
 	// serializer's inert copy.
 	const RT_PARK_RAW = RT_PARK_PREFIX + 'raw';
-	const RT_RAW_CARRIERS = [ 'noscript', 'xmp', 'iframe', 'noembed', 'noframes', 'plaintext' ];
+	const RT_RAW_CARRIERS = [ 'noscript', 'xmp', 'iframe', 'noembed', 'noframes', 'plaintext', 'script' ];
 	const rtIsRawCarrier = ( el ) => RT_HTML_NS === el.namespaceURI && RT_RAW_CARRIERS.includes( el.localName );
 	function rtParkRaw( el ) {
 		if ( ! rtIsRawCarrier( el ) ) return;
@@ -2833,13 +2835,16 @@
 		adoptEditorMarkup( document.getElementById( 'minn-editor-body' ) );
 		return done;
 	}
+	// Nodes, never a string: insertAdjacentHTML parses in the target's
+	// context (a content <form> or foreign element above it), which the
+	// inert walk cannot reproduce, so the tree is built inertly and imported.
 	function rtInsertAdjacentHtml( el, where, html ) {
-		const safe = rtNeutralizedHtml( html );
-		if ( null === safe ) {
-			rtRefusedToast();
-			return false;
-		}
-		el.insertAdjacentHTML( where, safe );
+		const holder = rtNeutralizeInto( document.createElement( 'div' ), html );
+		const nodes = Array.from( holder.childNodes );
+		if ( 'beforebegin' === where ) el.before( ...nodes );
+		else if ( 'afterend' === where ) el.after( ...nodes );
+		else if ( 'afterbegin' === where ) el.prepend( ...nodes );
+		else el.append( ...nodes );
 		adoptEditorMarkup( document.getElementById( 'minn-editor-body' ) );
 		return true;
 	}

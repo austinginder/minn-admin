@@ -99,11 +99,13 @@ check( 'every reviewed assignment line still exists', 0 === assignStale.length, 
 const settle = fnBody( 'rtNeutralizedHtml' );
 check( 'rtNeutralizedHtml repeats the inert walk until the markup is a fixed point',
 	/for \( let i = 0; i < RT_SETTLE_PASSES; i\+\+ \)/.test( settle ) && /if \( next === s \) return s;/.test( settle ) && /return null;/.test( settle ) );
-[ 'rtInsertHtml', 'rtInsertAdjacentHtml' ].forEach( ( fn ) => {
-	const b = fnBody( fn );
-	check( `${ fn } settles first and inserts nothing it could not settle`,
-		/const safe = rtNeutralizedHtml\( html \);/.test( b ) && /if \( null === safe \)/.test( b ) );
-} );
+check( 'rtInsertHtml settles first and inserts nothing it could not settle',
+	/const safe = rtNeutralizedHtml\( html \);/.test( fnBody( 'rtInsertHtml' ) ) && /if \( null === safe \)/.test( fnBody( 'rtInsertHtml' ) ) );
+// insertAdjacentHTML parses in the target's own context (a content <form>
+// or a foreign element above it), which no inert walk reproduces: the
+// helper builds the tree inertly and inserts nodes.
+check( 'rtInsertAdjacentHtml imports an inert tree instead of parsing in the target\'s context',
+	/rtNeutralizeInto\( document\.createElement\( 'div' \), html \)/.test( fnBody( 'rtInsertAdjacentHtml' ) ) && ! /insertAdjacentHTML/.test( fnBody( 'rtInsertAdjacentHtml' ) ) );
 // Island previews and Custom HTML wrappers go into joined markup empty and
 // are filled as nodes, so stored markup is never glued to its neighbours.
 check( 'island previews and Custom HTML wrappers are filled from nodes, never glued into the joined markup',
