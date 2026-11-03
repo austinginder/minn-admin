@@ -496,19 +496,34 @@ minn_admin_resource( 'wcgc/gift-cards', function () {
 					if ( is_wp_error( $card ) ) {
 						return $card;
 					}
-					// Remaining is schema-readonly on their REST. set_balance writes
-					// the remaining column; issued amount is left alone. The new
-					// balance is the one read here plus the amount asked for, as
-					// their own credit() computes it, never a balance typed
-					// against an older read.
+					// Remaining is schema-readonly on their REST; issued amount is
+					// left alone. The new balance is the one read here plus the
+					// amount asked for, as their own credit() computes it, never a
+					// balance typed against an older read. An increase saves the
+					// card as credit() does.
 					$old    = (float) $card->get_balance();
 					$target = minn_admin_gift_balance_target( $r, $old, 'minn_wcgc_amount', minn_admin_gift_money( $old, minn_admin_wcgc_currency( $card ) ) );
 					if ( is_wp_error( $target ) ) {
 						return $target;
 					}
 					$balance = $target['balance'];
-					$card->set_balance( $balance );
-					$card->save();
+					$db      = WC_GC()->db->giftcards;
+					if ( $balance < $old && is_callable( array( $db, 'debit_giftcard' ) ) ) {
+						// Taken off the way their checkout takes it: the row locked
+						// and only remaining written, so a purchase or a redeem
+						// that lands after the read above is not written back over.
+						if ( ! $db->debit_giftcard( $id, round( $old - $balance, wc_get_rounding_precision() ) ) ) {
+							return new WP_Error( 'minn_gift_balance_changed', __( 'This gift card’s balance changed while you were editing it. Reload it and try again.', 'minn-admin' ), array( 'status' => 409 ) );
+						}
+						$card = minn_admin_wcgc_load( $id );
+						if ( is_wp_error( $card ) ) {
+							return $card;
+						}
+						$balance = (float) $card->get_balance();
+					} else {
+						$card->set_balance( $balance );
+						$card->save();
+					}
 					// No Activity row: their types are all sales or order
 					// movements (issued, used, refunded…), each summed by their
 					// analytics, and there is no manual-adjustment type to use.
