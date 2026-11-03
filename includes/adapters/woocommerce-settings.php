@@ -615,9 +615,12 @@ function minn_admin_wc_settings_sections() {
  *
  * @param array $fields Raw WC fields for the section.
  * @param array $edited Values keyed by Minn field key (only the edited ones).
+ * @param array $keep   Filled with the names of untouched selects whose stored
+ *                      value is not among the options this user is offered
+ *                      (minn_admin_wc_settings_run_save() holds them).
  * @return array|WP_Error Unslashed post data keyed by option id.
  */
-function minn_admin_wc_settings_post_data( $fields, $edited ) {
+function minn_admin_wc_settings_post_data( $fields, $edited, &$keep = array() ) {
 	$post = array();
 	foreach ( $fields as $f ) {
 		$type = isset( $f['type'] ) ? (string) $f['type'] : '';
@@ -694,6 +697,16 @@ function minn_admin_wc_settings_post_data( $fields, $edited ) {
 				$v           = $touched ? $edited[ $id ] : $cur;
 				minn_admin_wc_post_set( $post, $name, null === $v ? '' : (string) $v );
 				break;
+			case 'select':
+				// save_fields() swaps a value outside the options for the
+				// field default, and the options can depend on who is saving
+				// (a role list holds only the roles this user may assign), so
+				// an untouched choice an administrator made would be rewritten.
+				if ( ! $touched && is_scalar( $cur ) && ! empty( $f['options'] ) && is_array( $f['options'] )
+					&& ! in_array( (string) $cur, array_map( 'strval', array_keys( $f['options'] ) ), true ) ) {
+					$keep[] = $name; // the key save_fields() writes under
+				}
+				// Posted like any other field; the hold restores it.
 			default:
 				$v           = $touched ? $edited[ $id ] : $cur;
 				minn_admin_wc_post_set( $post, $name, is_scalar( $v ) ? (string) $v : ( null === $v ? '' : $v ) );
@@ -734,9 +747,36 @@ function minn_admin_wc_post_set( &$post, $name, $value ) {
  * @param WC_Settings_Page $page    Page.
  * @param string           $section Section id.
  * @param array            $post    Unslashed post data keyed by option id.
+ * @param array            $keep    Option names (name or name[key]) that keep
+ *                                  their stored value through this save.
  */
-function minn_admin_wc_settings_run_save( $page, $section, $post ) {
+function minn_admin_wc_settings_run_save( $page, $section, $post, $keep = array() ) {
 	global $current_tab, $current_section;
+	$holds = array();
+	foreach ( (array) $keep as $id ) {
+		$id   = (string) $id;
+		$base = $id;
+		$sub  = '';
+		if ( false !== strpos( $id, '[' ) ) {
+			parse_str( $id . '=', $parsed );
+			$base = (string) key( $parsed );
+			$sub  = is_array( $parsed[ $base ] ?? null ) ? (string) key( $parsed[ $base ] ) : '';
+		}
+		if ( '' === $base ) {
+			continue;
+		}
+		$hold = static function ( $value, $old ) use ( $sub ) {
+			if ( '' === $sub ) {
+				return $old;
+			}
+			if ( is_array( $value ) && is_array( $old ) && array_key_exists( $sub, $old ) ) {
+				$value[ $sub ] = $old[ $sub ];
+			}
+			return $value;
+		};
+		add_filter( 'pre_update_option_' . $base, $hold, PHP_INT_MAX, 2 );
+		$holds[] = array( 'pre_update_option_' . $base, $hold );
+	}
 	$tab            = $page->get_id();
 	$prev_post      = $_POST;
 	$prev_tab       = $current_tab;
@@ -761,6 +801,9 @@ function minn_admin_wc_settings_run_save( $page, $section, $post ) {
 		$_POST           = $prev_post;
 		$current_tab     = $prev_tab;
 		$current_section = $prev_section;
+		foreach ( $holds as $h ) {
+			remove_filter( $h[0], $h[1], PHP_INT_MAX );
+		}
 	}
 }
 
@@ -1712,7 +1755,8 @@ add_action(
 							return new WP_Error( 'minn_wc_not_editable', __( 'That settings section is not editable here.', 'minn-admin' ), array( 'status' => 400 ) );
 						}
 						$fields = minn_admin_wc_settings_raw_fields( $page, $section );
-						$post   = minn_admin_wc_settings_post_data( $fields, $edited );
+						$keep   = array();
+						$post   = minn_admin_wc_settings_post_data( $fields, $edited, $keep );
 						if ( is_wp_error( $post ) ) {
 							return $post;
 						}
@@ -1724,7 +1768,7 @@ add_action(
 							$post = array( 'save' => 'Save changes' );
 						}
 						try {
-							minn_admin_wc_settings_run_save( $page, $section, $post );
+							minn_admin_wc_settings_run_save( $page, $section, $post, $keep );
 						} catch ( Throwable $e ) {
 							return new WP_Error( 'minn_wc_save_failed', $e->getMessage(), array( 'status' => 500 ) );
 						}
