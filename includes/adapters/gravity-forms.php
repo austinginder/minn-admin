@@ -556,10 +556,9 @@ function minn_admin_gf_can_manage_feed( $feed ) {
 	if ( ! isset( $addons[ $slug ] ) || ! is_object( $addons[ $slug ] ) || ! method_exists( $addons[ $slug ], 'get_form_settings_capabilities' ) ) {
 		return true;
 	}
+	// An empty list is the framework default, and current_user_can_any()
+	// reads it as gform_full_access only, so it goes through that check too.
 	$caps = $addons[ $slug ]->get_form_settings_capabilities();
-	if ( empty( $caps ) ) {
-		return true;
-	}
 	return (bool) $addons[ $slug ]->current_user_can_any( $caps );
 }
 
