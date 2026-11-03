@@ -22,11 +22,24 @@
  *  - C7 Public Post Preview: a toggle body without "enabled" switched a
  *    shared preview link off.
  *
+ * Round 2 (RC2):
+ *
+ *  - C8 Block previews: once the budget was spent, a Query loop's post
+ *    content kept the refused lookup as a failure in that post's own
+ *    _oembed_ meta, which the front end never retries.
+ *  - C9 WooCommerce Gift Cards: a reduction saved the whole card it had
+ *    read, writing back over a purchase that landed in between.
+ *  - C10 Visibility: a toggle body without "on" switched the mode off.
+ *  - C11 Snippet switches (Custom CSS & JS, HFCM): a body without "active"
+ *    switched a snippet off, and one that was not JSON switched it on.
+ *  - C12 Redirection: switching the monitor off and on again lost every
+ *    monitored type but posts and pages, and the associated path.
+ *
  * Each section calls what the route calls, as the role the finding named,
  * with a control where the fix could over-block. Fixtures (users, posts, a
  * feed row, options) are put back at the end however the run ends.
  *
- * Run: MINN_SWAP_ADD=custom-css-js/custom-css-js.php wp eval-file <ABSOLUTE path>/tests/security-v049-rc.test.php --user=admin --path=<site> --require=<ABSOLUTE path>/tests/lib/plugin-swap.php
+ * Run: MINN_SWAP_ADD=custom-css-js/custom-css-js.php,header-footer-code-manager/99robots-header-footer-code-manager.php wp eval-file <ABSOLUTE path>/tests/security-v049-rc.test.php --user=admin --path=<site> --require=<ABSOLUTE path>/tests/lib/plugin-swap.php
  *
  * @package minn-admin
  */
@@ -395,6 +408,270 @@ $drop_users = $once( static function () use ( &$users ) {
 			list( $st, $d ) = $call( 'POST', "/minn-admin/v1/ppp/$draft", array( 'enabled' => true ) );
 			$check( 'C7 PPP control: and on again', 200 === $st && ! empty( $d['enabled'] ), (string) $st );
 		} );
+	} finally {
+		$clean();
+	}
+} )();
+
+/*
+ * C8 Block previews, round 2. The covers spend the lookup budget, then a
+ * Query loop renders another post's content, whose bare URL autoembed looks
+ * up on that post.
+ */
+( static function () use ( $check, $call, $as, $admin, $tag ) {
+	global $wpdb;
+	$fake = static function ( $pre, $args, $url ) {
+		if ( false !== strpos( (string) $url, 'minn-v049rc' ) ) {
+			return array( 'headers' => array(), 'body' => '', 'response' => array( 'code' => 404, 'message' => 'Not Found' ), 'cookies' => array(), 'filename' => null );
+		}
+		return $pre;
+	};
+	$title = 'minn-v049rc2-loop-' . $tag;
+	$other = wp_insert_post( array( 'post_title' => $title, 'post_status' => 'publish', 'post_type' => 'post', 'post_author' => $admin, 'post_content' => "<!-- wp:paragraph -->\n<p>x</p>\n<!-- /wp:paragraph -->\n\nhttps://example.org/minn-v049rc-loop-$tag\n" ) );
+	$other = is_int( $other ) ? $other : 0;
+	if ( $other < 2 ) {
+		$check( 'C8 Preview: loop post fixture created', false );
+		return;
+	}
+	// The insert itself can cache the URL (Yoast's link indexer runs
+	// autoembed on save): only what the preview writes counts.
+	$embed_keys = static function () use ( $other ) {
+		global $wpdb;
+		return $wpdb->get_col( $wpdb->prepare( "SELECT meta_key FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key LIKE %s", $other, $wpdb->esc_like( '_oembed_' ) . '%' ) );
+	};
+	foreach ( $embed_keys() as $k ) {
+		delete_post_meta( $other, $k );
+	}
+	$covers = '';
+	for ( $i = 0; $i < 12; $i++ ) {
+		$covers .= '<!-- wp:cover {"url":"https://example.org/minn-v049rc-l' . $i . '-' . $tag . '","backgroundType":"embed-video","dimRatio":50} --><div class="wp-block-cover"><div class="wp-block-cover__inner-container"></div></div><!-- /wp:cover -->';
+	}
+	$query = '<!-- wp:query {"queryId":7,"query":{"perPage":1,"pages":0,"offset":0,"postType":"post","order":"desc","orderBy":"date","search":"' . $title . '","inherit":false}} --><div class="wp-block-query"><!-- wp:post-template --><!-- wp:post-content /--><!-- /wp:post-template --></div><!-- /wp:query -->';
+	$max   = (int) $wpdb->get_var( "SELECT MAX(ID) FROM {$wpdb->posts}" );
+	add_filter( 'pre_http_request', $fake, 10, 3 );
+	try {
+		list( $st, $d ) = $as( $admin, static function () use ( $call, $covers, $query ) {
+			return $call( 'POST', '/minn-admin/v1/render-blocks', array( 'blocks' => array( $covers, $query ), 'post' => 0 ) );
+		} );
+		$meta = $wpdb->get_col( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key LIKE %s", $other, $wpdb->esc_like( '_oembed_' ) . '%' ) );
+	} finally {
+		remove_filter( 'pre_http_request', $fake, 10 );
+		wp_delete_post( $other, true );
+		foreach ( array_map( 'intval', $wpdb->get_col( $wpdb->prepare( "SELECT ID FROM {$wpdb->posts} WHERE post_type = 'oembed_cache' AND ID > %d", $max ) ) ) as $pid ) {
+			if ( $pid > $max ) {
+				wp_delete_post( $pid, true );
+			}
+		}
+	}
+	$check( 'C8 Preview control: the loop renders the other post', 200 === $st && false !== strpos( (string) ( $d['rendered'][1] ?? '' ), 'minn-v049rc-loop-' ), $st . ' ' . substr( wp_json_encode( $d['rendered'][1] ?? null ), 0, 160 ) );
+	$check( 'C8 Preview: a loop post keeps no embed cache the preview wrote', ! $meta, wp_json_encode( $meta ) );
+} )();
+
+/*
+ * C9 WooCommerce Gift Cards, round 2. A checkout's debit commits after the
+ * adjustment read the card and before it wrote: the query filter runs it
+ * just ahead of the adjustment's first write to the card row.
+ */
+( static function () use ( $check, $skip, $call, $as, $admin, $once ) {
+	global $wpdb;
+	if ( ! function_exists( 'WC_GC' ) || ! function_exists( 'minn_admin_wcgc_load' ) ) {
+		$skip( 'C9 WooCommerce Gift Cards: not active' );
+		return;
+	}
+	$cards = $wpdb->prefix . 'woocommerce_gc_cards';
+	$act   = $wpdb->prefix . 'woocommerce_gc_activity';
+	$card  = $wpdb->get_row( "SELECT id, remaining FROM $cards WHERE is_active = 'on' AND remaining > 5 ORDER BY id LIMIT 1" );
+	if ( ! $card ) {
+		$skip( 'C9 WooCommerce Gift Cards: no active card with a balance' );
+		return;
+	}
+	$id    = (int) $card->id;
+	$was   = (string) $card->remaining;
+	$max   = (int) $wpdb->get_var( "SELECT MAX(id) FROM $act" );
+	$clean = $once( static function () use ( $cards, $act, $id, $was, $max ) {
+		global $wpdb;
+		$wpdb->update( $cards, array( 'remaining' => $was ), array( 'id' => $id ) );
+		$wpdb->query( $wpdb->prepare( "DELETE FROM $act WHERE id > %d AND gc_id = %d", $max, $id ) );
+	} );
+	$fired = false;
+	$race  = static function ( $q ) use ( &$fired, $cards, $id ) {
+		global $wpdb;
+		if ( ! $fired && false !== stripos( $q, $cards ) && ( false !== stripos( $q, 'FOR UPDATE' ) || 0 === stripos( ltrim( $q ), 'UPDATE' ) ) ) {
+			$fired = true;
+			$wpdb->query( $wpdb->prepare( "UPDATE $cards SET remaining = remaining - 2 WHERE id = %d", $id ) );
+		}
+		return $q;
+	};
+	try {
+		add_filter( 'query', $race );
+		try {
+			list( $st ) = $as( $admin, static function () use ( $call, $id ) {
+				return $call( 'POST', "/minn-admin/v1/wcgc/gift-cards/$id/balance", array( 'adjust' => -1 ) );
+			} );
+		} finally {
+			remove_filter( 'query', $race );
+		}
+		$now = (float) $wpdb->get_var( $wpdb->prepare( "SELECT remaining FROM $cards WHERE id = %d", $id ) );
+		$check( 'C9 WCGC: a reduction keeps a purchase that landed after its read', $fired && 200 === $st && abs( $now - ( (float) $was - 3 ) ) < 0.001, ( $fired ? 'raced' : 'no race' ) . " $st $was -> $now" );
+		$wpdb->update( $cards, array( 'remaining' => $was ), array( 'id' => $id ) );
+		list( $st ) = $as( $admin, static function () use ( $call, $id ) {
+			return $call( 'POST', "/minn-admin/v1/wcgc/gift-cards/$id/balance", array( 'adjust' => -1 ) );
+		} );
+		$now = (float) $wpdb->get_var( $wpdb->prepare( "SELECT remaining FROM $cards WHERE id = %d", $id ) );
+		$check( 'C9 WCGC control: an unraced reduction takes exactly its amount', 200 === $st && abs( $now - ( (float) $was - 1 ) ) < 0.001, "$st $was -> $now" );
+		list( $st ) = $as( $admin, static function () use ( $call, $id, $was ) {
+			return $call( 'POST', "/minn-admin/v1/wcgc/gift-cards/$id/balance", array( 'adjust' => -1 * ( (float) $was + 1 ) ) );
+		} );
+		$check( 'C9 WCGC control: more than the card holds is still refused', 400 === $st, (string) $st );
+	} finally {
+		$clean();
+	}
+} )();
+
+/*
+ * C10 Visibility toggle. A fixture writer records what it is asked to do.
+ */
+( static function () use ( $check, $call, $as, $admin ) {
+	if ( ! function_exists( 'minn_admin_visibility_toggles' ) ) {
+		$check( 'C10 Visibility: site-status adapter loaded', false );
+		return;
+	}
+	$asked = array();
+	$add   = static function ( $t ) use ( &$asked ) {
+		$t['minn_v049rc2'] = array( 'set' => static function ( $on ) use ( &$asked ) {
+			$asked[] = (bool) $on;
+		} );
+		return $t;
+	};
+	add_filter( 'minn_admin_visibility_toggles', $add );
+	try {
+		$st = $as( $admin, static function () use ( $call ) {
+			$out = array();
+			list( $out[] ) = $call( 'POST', '/minn-admin/v1/visibility/toggle', array( 'id' => 'minn_v049rc2' ) );
+			list( $out[] ) = $call( 'POST', '/minn-admin/v1/visibility/toggle', array( 'id' => 'minn_v049rc2', 'on' => false ) );
+			list( $out[] ) = $call( 'POST', '/minn-admin/v1/visibility/toggle', array( 'id' => 'minn_v049rc2', 'on' => true ) );
+			return $out;
+		} );
+	} finally {
+		remove_filter( 'minn_admin_visibility_toggles', $add );
+	}
+	$check( 'C10 Visibility: a body without on is refused and no writer runs', 400 === $st[0] && array( false, true ) === $asked, wp_json_encode( $st ) . ' ' . wp_json_encode( $asked ) );
+	$check( 'C10 Visibility control: explicit off and on reach the writer', 200 === $st[1] && 200 === $st[2], wp_json_encode( $st ) );
+} )();
+
+/*
+ * C11 Snippet switches: Custom CSS & JS (an HTML snippet, so no upload file
+ * is touched) and HFCM. A body without active, and one that is not JSON.
+ */
+( static function () use ( $check, $skip, $as, $admin, $once ) {
+	global $wpdb;
+	$raw = static function ( $route, $body, $type ) {
+		$r = new WP_REST_Request( 'POST', $route );
+		$r->set_header( 'content-type', $type );
+		$r->set_body( $body );
+		return rest_do_request( $r )->get_status();
+	};
+	if ( function_exists( 'minn_admin_ccj_is_active' ) && post_type_exists( 'custom-css-js' ) ) {
+		$on    = (int) wp_insert_post( array( 'post_title' => 'minn v049rc2 on', 'post_status' => 'publish', 'post_type' => 'custom-css-js', 'post_content' => '<!-- minn -->', 'post_author' => $admin ) );
+		$off   = (int) wp_insert_post( array( 'post_title' => 'minn v049rc2 off', 'post_status' => 'draft', 'post_type' => 'custom-css-js', 'post_content' => '<!-- minn -->', 'post_author' => $admin ) );
+		$clean = $once( static function () use ( $on, $off ) {
+			foreach ( array( $on, $off ) as $pid ) {
+				if ( $pid > 1 && 'custom-css-js' === get_post_type( $pid ) ) {
+					wp_delete_post( $pid, true );
+				}
+			}
+			if ( function_exists( 'minn_admin_ccj_rebuild_tree' ) ) {
+				minn_admin_ccj_rebuild_tree();
+			}
+		} );
+		try {
+			$opts = array_merge( minn_admin_ccj_default_options( 'html' ), array( 'language' => 'html', 'type' => 'footer', 'side' => 'frontend' ) );
+			update_post_meta( $on, 'options', $opts );
+			update_post_meta( $off, 'options', $opts );
+			update_post_meta( $on, '_active', 'yes' );
+			update_post_meta( $off, '_active', 'no' );
+			$st = $as( $admin, static function () use ( $raw, $on, $off ) {
+				return array( $raw( "/minn-admin/v1/ccj/snippets/$on/active", '{}', 'application/json' ), $raw( "/minn-admin/v1/ccj/snippets/$off/active", 'on', 'text/plain' ), $raw( "/minn-admin/v1/ccj/snippets/$off/active", '{"active":false}', 'application/json' ) );
+			} );
+			$check( 'C11 CCJ: a body without active leaves a live snippet on', 400 === $st[0] && minn_admin_ccj_is_active( $on ), wp_json_encode( $st ) );
+			$check( 'C11 CCJ: a body that is not JSON leaves an off snippet off', 400 === $st[1] && ! minn_admin_ccj_is_active( $off ), wp_json_encode( $st ) );
+			$check( 'C11 CCJ control: an explicit off answers', 200 === $st[2], wp_json_encode( $st ) );
+		} finally {
+			$clean();
+		}
+	} else {
+		$skip( 'C11 CCJ: not loaded (MINN_SWAP_ADD=custom-css-js/custom-css-js.php)' );
+	}
+	$table = $wpdb->prefix . 'hfcm_scripts';
+	if ( function_exists( 'minn_admin_hfcm_active' ) && minn_admin_hfcm_active() ) {
+		$row = $wpdb->get_row( "SELECT script_id, status FROM $table ORDER BY script_id ASC LIMIT 1" );
+		if ( ! $row ) {
+			$skip( 'C11 HFCM: no snippet' );
+			return;
+		}
+		$sid   = (int) $row->script_id;
+		$clean = $once( static function () use ( $row, $sid, $table ) {
+			global $wpdb;
+			$wpdb->update( $table, array( 'status' => $row->status ), array( 'script_id' => $sid ) );
+		} );
+		$status = static function () use ( $sid, $table ) {
+			global $wpdb;
+			return (string) $wpdb->get_var( $wpdb->prepare( "SELECT status FROM $table WHERE script_id = %d", $sid ) );
+		};
+		try {
+			$wpdb->update( $table, array( 'status' => 'active' ), array( 'script_id' => $sid ) );
+			$st = $as( $admin, static function () use ( $raw, $sid ) {
+				return $raw( "/minn-admin/v1/hfcm/snippets/$sid/active", '{}', 'application/json' );
+			} );
+			$check( 'C11 HFCM: a body without active leaves a live snippet on', 400 === $st && 'active' === $status(), $st . ' ' . $status() );
+			$wpdb->update( $table, array( 'status' => 'inactive' ), array( 'script_id' => $sid ) );
+			$st = $as( $admin, static function () use ( $raw, $sid ) {
+				return $raw( "/minn-admin/v1/hfcm/snippets/$sid/active", 'on', 'text/plain' );
+			} );
+			$check( 'C11 HFCM: a body that is not JSON leaves an off snippet off', 400 === $st && 'inactive' === $status(), $st . ' ' . $status() );
+			$st = $as( $admin, static function () use ( $raw, $sid ) {
+				return $raw( "/minn-admin/v1/hfcm/snippets/$sid/active", '{"active":true}', 'application/json' );
+			} );
+			$check( 'C11 HFCM control: an explicit on switches it on', 200 === $st && 'active' === $status(), $st . ' ' . $status() );
+		} finally {
+			$clean();
+		}
+	} else {
+		$skip( 'C11 HFCM: not loaded (MINN_SWAP_ADD=header-footer-code-manager/99robots-header-footer-code-manager.php)' );
+	}
+} )();
+
+/*
+ * C12 Redirection's permalink monitor: off, then on, through the Minn switch.
+ */
+( static function () use ( $check, $skip, $call, $as, $admin, $once ) {
+	if ( ! function_exists( 'red_get_options' ) || ! function_exists( 'red_set_options' ) || ! post_type_exists( 'product' ) ) {
+		$skip( 'C12 Redirection: not active, or no product type' );
+		return;
+	}
+	$had   = get_option( 'redirection_options' );
+	$kept  = get_option( 'minn_admin_redirection_monitor', null );
+	$clean = $once( static function () use ( $had, $kept ) {
+		update_option( 'redirection_options', $had );
+		null === $kept ? delete_option( 'minn_admin_redirection_monitor' ) : update_option( 'minn_admin_redirection_monitor', $kept, false );
+	} );
+	try {
+		red_set_options( array( 'monitor_types' => array( 'post', 'page', 'product' ), 'monitor_post' => 1, 'associated_redirect' => '/minn-old/' ) );
+		$save = static function ( $on ) use ( $call, $as, $admin ) {
+			return $as( $admin, static function () use ( $call, $on ) {
+				list( $st ) = $call( 'POST', '/minn-admin/v1/redirection/settings/general', array( 'values' => array( 'monitor' => $on ) ) );
+				return $st;
+			} );
+		};
+		$st0 = $save( true );
+		$o   = red_get_options();
+		$check( 'C12 Redirection: on while already on keeps the types', 200 === $st0 && array( 'post', 'page', 'product' ) === array_values( $o['monitor_types'] ), $st0 . ' ' . wp_json_encode( $o['monitor_types'] ) );
+		$st1 = $save( false );
+		$o   = red_get_options();
+		$check( 'C12 Redirection control: off is their own off', 200 === $st1 && empty( $o['monitor_post'] ) && ! $o['monitor_types'], $st1 . ' ' . wp_json_encode( array( $o['monitor_post'], $o['monitor_types'] ) ) );
+		$st2 = $save( true );
+		$o   = red_get_options();
+		$check( 'C12 Redirection: on again brings back every type and the associated path', 200 === $st2 && array( 'post', 'page', 'product' ) === array_values( $o['monitor_types'] ) && '/minn-old/' === $o['associated_redirect'] && 1 === (int) $o['monitor_post'], $st2 . ' ' . wp_json_encode( array( $o['monitor_post'], $o['monitor_types'], $o['associated_redirect'] ) ) );
 	} finally {
 		$clean();
 	}
