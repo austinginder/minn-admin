@@ -466,33 +466,38 @@ minn_admin_endpoint( 'redirection/settings/(?P<tab>[a-z0-9_-]+)', array(
 		$vals = is_array( $vals ) ? $vals : array();
 		$opts = red_get_options();
 		$save = array();
+		$kept = null;
 		if ( array_key_exists( 'monitor', $vals ) ) {
 			$on      = ! empty( $vals['monitor'] );
 			$running = ! empty( $opts['monitor_post'] ) && ! empty( $opts['monitor_types'] );
 			if ( ! $on ) {
 				// Off is Redirection's own off (no types), which also clears
-				// the group and the associated path: those are kept here, so
-				// turning it back on brings back what was monitored.
+				// the group and the associated path: those are kept below,
+				// once the save is taken, so turning it back on brings back
+				// what was monitored.
 				if ( $running ) {
-					update_option( 'minn_admin_redirection_monitor', array(
+					$kept = array(
 						'group'      => (int) $opts['monitor_post'],
 						'types'      => array_values( (array) $opts['monitor_types'] ),
 						'associated' => (string) ( $opts['associated_redirect'] ?? '' ),
-					), false );
+					);
 				}
 				$save['monitor_post']  = 0;
 				$save['monitor_types'] = array();
 			} elseif ( ! $running ) {
 				// What was kept at off, or the setup wizard's own first
-				// choice: group 1 and posts and pages.
-				$kept = get_option( 'minn_admin_redirection_monitor' );
-				$kept = is_array( $kept ) && ! empty( $kept['types'] ) ? $kept : array();
+				// choice: group 1 and posts and pages. A kept type that is
+				// no longer registered is one Redirection would drop, and
+				// with none left it would stay off.
+				$kept  = get_option( 'minn_admin_redirection_monitor' );
+				$kept  = is_array( $kept ) && ! empty( $kept['types'] ) ? $kept : array();
+				$types = $kept ? array_values( array_intersect( (array) $kept['types'], red_get_post_types( false ) ) ) : array();
 				$save['monitor_post']  = ! empty( $opts['monitor_post'] ) ? (int) $opts['monitor_post'] : ( ! empty( $kept['group'] ) ? (int) $kept['group'] : 1 );
-				$save['monitor_types'] = $kept ? array_values( (array) $kept['types'] ) : array( 'post', 'page' );
+				$save['monitor_types'] = $types ? $types : array( 'post', 'page' );
 				if ( $kept && '' !== (string) ( $kept['associated'] ?? '' ) ) {
 					$save['associated_redirect'] = (string) $kept['associated'];
 				}
-				delete_option( 'minn_admin_redirection_monitor' );
+				$kept = false;
 			}
 		}
 		// Each retention is written only when it was sent: -1 is Redirection's
@@ -517,6 +522,16 @@ minn_admin_endpoint( 'redirection/settings/(?P<tab>[a-z0-9_-]+)', array(
 		}
 		if ( $save ) {
 			red_set_options( $save );
+		}
+		// The snapshot changes only after the save is taken: a refused
+		// retention above leaves it as it was.
+		if ( is_array( $kept ) ) {
+			update_option( 'minn_admin_redirection_monitor', $kept, false );
+		} elseif ( false === $kept ) {
+			$now = red_get_options();
+			if ( ! empty( $now['monitor_post'] ) && ! empty( $now['monitor_types'] ) ) {
+				delete_option( 'minn_admin_redirection_monitor' );
+			}
 		}
 		// The fresh tab, so the client repaints.
 		return minn_admin_redirection_settings();
