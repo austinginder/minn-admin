@@ -35,6 +35,16 @@
  *  - C12 Redirection: switching the monitor off and on again lost every
  *    monitored type but posts and pages, and the associated path.
  *
+ * Round 3 (RC3):
+ *
+ *  - C13 Gravity Forms notifications: a blank stored event was read as
+ *    form_submission, so a subject-only save started sending a notification
+ *    Gravity Forms' own Update refuses to save until an event is picked.
+ *  - C14 JetReviews: an approve body without "approved" unapproved the review.
+ *  - C15 WPForms: a star body without "on" unstarred the entry.
+ *  - C16 Redirection: turning the monitor on dropped its kept snapshot before
+ *    a refused retention, and kept types no longer registered left it off.
+ *
  * Each section calls what the route calls, as the role the finding named,
  * with a control where the fix could over-block. Fixtures (users, posts, a
  * feed row, options) are put back at the end however the run ends.
@@ -672,6 +682,179 @@ $drop_users = $once( static function () use ( &$users ) {
 		$st2 = $save( true );
 		$o   = red_get_options();
 		$check( 'C12 Redirection: on again brings back every type and the associated path', 200 === $st2 && array( 'post', 'page', 'product' ) === array_values( $o['monitor_types'] ) && '/minn-old/' === $o['associated_redirect'] && 1 === (int) $o['monitor_post'], $st2 . ' ' . wp_json_encode( array( $o['monitor_post'], $o['monitor_types'], $o['associated_redirect'] ) ) );
+	} finally {
+		$clean();
+	}
+} )();
+
+/*
+ * C13 Gravity Forms notification with a blank stored event.
+ */
+( static function () use ( $check, $skip, $call, $as, $admin, $once ) {
+	if ( ! class_exists( 'GFAPI' ) || ! function_exists( 'minn_admin_gfn_payload' ) ) {
+		$skip( 'C13 Gravity Forms notifications: not active' );
+		return;
+	}
+	$forms = GFAPI::get_forms();
+	if ( ! $forms ) {
+		$skip( 'C13 Gravity Forms notifications: no form' );
+		return;
+	}
+	$fid   = (int) $forms[0]['id'];
+	$nid   = 'minnv049rc3';
+	$clean = $once( static function () use ( $fid, $nid ) {
+		$form = GFAPI::get_form( $fid );
+		if ( $form && isset( $form['notifications'][ $nid ] ) ) {
+			unset( $form['notifications'][ $nid ] );
+			GFAPI::update_form( $form );
+		}
+	} );
+	try {
+		$form                           = GFAPI::get_form( $fid );
+		$form['notifications'][ $nid ] = array(
+			'id'       => $nid,
+			'name'     => 'minn v049rc3 blank event',
+			'isActive' => true,
+			'service'  => 'wordpress',
+			'event'    => '',
+			'toType'   => 'email',
+			'to'       => '{admin_email}',
+			'from'     => '{admin_email}',
+			'subject'  => 'Before',
+			'message'  => 'Body',
+		);
+		GFAPI::update_form( $form );
+		$route = "/minn-admin/v1/gf/notifications/$fid:$nid/full";
+		$read   = $as( $admin, static function () use ( $call, $route ) {
+			return $call( 'GET', $route );
+		} );
+		$save   = $as( $admin, static function () use ( $call, $route ) {
+			return $call( 'POST', $route, array( 'subject' => 'After' ) );
+		} );
+		$stored = rgar( GFAPI::get_form( $fid )['notifications'], $nid );
+		$check( 'C13 GF: a blank stored event reads blank', 200 === $read[0] && '' === ( $read[1]['notification']['event'] ?? null ), wp_json_encode( $read[1]['notification']['event'] ?? null ) );
+		$check( 'C13 GF: a subject-only save is refused and the event stays blank', 400 === $save[0] && '' === ( $stored['event'] ?? null ) && 'Before' === ( $stored['subject'] ?? null ), $save[0] . ' ' . wp_json_encode( array( $stored['event'] ?? null, $stored['subject'] ?? null ) ) );
+		$ctl    = $as( $admin, static function () use ( $call, $route ) {
+			return $call( 'POST', $route, array( 'subject' => 'After', 'event' => 'form_submission' ) );
+		} );
+		$stored = rgar( GFAPI::get_form( $fid )['notifications'], $nid );
+		$check( 'C13 GF control: picking an event saves it', 200 === $ctl[0] && 'form_submission' === ( $stored['event'] ?? null ) && 'After' === ( $stored['subject'] ?? null ), $ctl[0] . ' ' . wp_json_encode( array( $stored['event'] ?? null, $stored['subject'] ?? null ) ) );
+	} finally {
+		$clean();
+	}
+} )();
+
+/*
+ * C14 JetReviews approve, on an approved review, restored after.
+ */
+( static function () use ( $check, $skip, $call, $as, $admin, $once ) {
+	global $wpdb;
+	if ( ! function_exists( 'minn_admin_jet_reviews_sync' ) ) {
+		$skip( 'C14 JetReviews: not active' );
+		return;
+	}
+	$table = $wpdb->prefix . 'jet_reviews';
+	$row   = $wpdb->get_row( "SELECT * FROM $table ORDER BY id LIMIT 1" ); // phpcs:ignore WordPress.DB
+	if ( ! $row ) {
+		$skip( 'C14 JetReviews: no review row' );
+		return;
+	}
+	$id    = (int) $row->id;
+	$was   = (int) $row->approved;
+	$clean = $once( static function () use ( $wpdb, $table, $id, $was ) {
+		$wpdb->update( $table, array( 'approved' => $was ), array( 'id' => $id ) ); // phpcs:ignore WordPress.DB
+		minn_admin_jet_reviews_sync( $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $table WHERE id = %d", $id ) ) ); // phpcs:ignore WordPress.DB
+	} );
+	try {
+		$wpdb->update( $table, array( 'approved' => 1 ), array( 'id' => $id ) ); // phpcs:ignore WordPress.DB
+		$st  = $as( $admin, static function () use ( $call, $id ) {
+			return $call( 'POST', "/minn-admin/v1/jet-reviews/reviews/$id/approve", array() )[0];
+		} );
+		$now = (int) $wpdb->get_var( $wpdb->prepare( "SELECT approved FROM $table WHERE id = %d", $id ) ); // phpcs:ignore WordPress.DB
+		$check( 'C14 JetReviews: a body without approved leaves the review approved', 400 === $st && 1 === $now, $st . ' approved=' . $now );
+		$ctl = $as( $admin, static function () use ( $call, $id ) {
+			return $call( 'POST', "/minn-admin/v1/jet-reviews/reviews/$id/approve", array( 'approved' => false ) )[0];
+		} );
+		$now = (int) $wpdb->get_var( $wpdb->prepare( "SELECT approved FROM $table WHERE id = %d", $id ) ); // phpcs:ignore WordPress.DB
+		$check( 'C14 JetReviews control: an explicit unapprove answers', 200 === $ctl && 0 === $now, $ctl . ' approved=' . $now );
+	} finally {
+		$clean();
+	}
+} )();
+
+/*
+ * C15 WPForms star, on a starred entry, restored after.
+ */
+( static function () use ( $check, $skip, $call, $as, $admin, $once ) {
+	global $wpdb;
+	if ( ! function_exists( 'wpforms' ) || ! wpforms()->obj( 'entry' ) ) {
+		$skip( 'C15 WPForms: not active, or no entries' );
+		return;
+	}
+	$table = $wpdb->prefix . 'wpforms_entries';
+	$row   = $wpdb->get_row( "SELECT entry_id, starred FROM $table ORDER BY entry_id LIMIT 1" ); // phpcs:ignore WordPress.DB
+	if ( ! $row ) {
+		$skip( 'C15 WPForms: no entry row' );
+		return;
+	}
+	$id    = (int) $row->entry_id;
+	$was   = (int) $row->starred;
+	$clean = $once( static function () use ( $wpdb, $table, $id, $was ) {
+		$wpdb->update( $table, array( 'starred' => $was ), array( 'entry_id' => $id ) ); // phpcs:ignore WordPress.DB
+	} );
+	try {
+		$wpdb->update( $table, array( 'starred' => 1 ), array( 'entry_id' => $id ) ); // phpcs:ignore WordPress.DB
+		$st  = $as( $admin, static function () use ( $call, $id ) {
+			return array( $call( 'POST', "/minn-admin/v1/wpforms/entries/$id/star", array() )[0] );
+		} );
+		$now = (int) $wpdb->get_var( $wpdb->prepare( "SELECT starred FROM $table WHERE entry_id = %d", $id ) ); // phpcs:ignore WordPress.DB
+		$check( 'C15 WPForms: a body without on leaves the entry starred', 400 === $st[0] && 1 === $now, wp_json_encode( $st ) . ' starred=' . $now );
+		$ctl = $as( $admin, static function () use ( $call, $id ) {
+			return $call( 'POST', "/minn-admin/v1/wpforms/entries/$id/star", array( 'on' => 0 ) )[0];
+		} );
+		$now = (int) $wpdb->get_var( $wpdb->prepare( "SELECT starred FROM $table WHERE entry_id = %d", $id ) ); // phpcs:ignore WordPress.DB
+		$check( 'C15 WPForms control: an explicit unstar answers', 200 === $ctl && 0 === $now, $ctl . ' starred=' . $now );
+	} finally {
+		$clean();
+	}
+} )();
+
+/*
+ * C16 Redirection's monitor restore: a refused retention, then kept types
+ * that are no longer registered.
+ */
+( static function () use ( $check, $skip, $call, $as, $admin, $once ) {
+	if ( ! function_exists( 'red_get_options' ) || ! function_exists( 'red_set_options' ) || ! post_type_exists( 'product' ) ) {
+		$skip( 'C16 Redirection: not active, or no product type' );
+		return;
+	}
+	$had   = get_option( 'redirection_options' );
+	$kept  = get_option( 'minn_admin_redirection_monitor', null );
+	$clean = $once( static function () use ( $had, $kept ) {
+		update_option( 'redirection_options', $had );
+		null === $kept ? delete_option( 'minn_admin_redirection_monitor' ) : update_option( 'minn_admin_redirection_monitor', $kept, false );
+	} );
+	try {
+		$save = static function ( array $vals ) use ( $call, $as, $admin ) {
+			return $as( $admin, static function () use ( $call, $vals ) {
+				return $call( 'POST', '/minn-admin/v1/redirection/settings/general', array( 'values' => $vals ) )[0];
+			} );
+		};
+		red_set_options( array( 'monitor_types' => array( 'post', 'page', 'product' ), 'monitor_post' => 1, 'associated_redirect' => '/minn-old/' ) );
+		$save( array( 'monitor' => false ) );
+		$bad = $save( array( 'monitor' => true, 'expire_redirect' => 99999 ) );
+		$o   = red_get_options();
+		$check( 'C16 Redirection: a refused retention keeps the snapshot and stays off', 400 === $bad && is_array( get_option( 'minn_admin_redirection_monitor' ) ) && ! $o['monitor_types'], $bad . ' ' . wp_json_encode( get_option( 'minn_admin_redirection_monitor' ) ) );
+		$ok = $save( array( 'monitor' => true ) );
+		$o  = red_get_options();
+		$check( 'C16 Redirection control: the next on still restores every type and the path', 200 === $ok && array( 'post', 'page', 'product' ) === array_values( $o['monitor_types'] ) && '/minn-old/' === $o['associated_redirect'] && false === get_option( 'minn_admin_redirection_monitor' ), $ok . ' ' . wp_json_encode( array( $o['monitor_types'], $o['associated_redirect'] ) ) );
+
+		// Kept types Redirection no longer offers: on still turns it on.
+		$save( array( 'monitor' => false ) );
+		update_option( 'minn_admin_redirection_monitor', array( 'group' => 1, 'types' => array( 'minn_gone_type' ), 'associated' => '/minn-old/' ), false );
+		$st = $save( array( 'monitor' => true ) );
+		$o  = red_get_options();
+		$check( 'C16 Redirection: kept types that are gone still turn the monitor on, path kept', 200 === $st && ! empty( $o['monitor_post'] ) && array( 'post', 'page' ) === array_values( $o['monitor_types'] ) && '/minn-old/' === $o['associated_redirect'], $st . ' ' . wp_json_encode( array( $o['monitor_post'], $o['monitor_types'], $o['associated_redirect'] ) ) );
 	} finally {
 		$clean();
 	}
