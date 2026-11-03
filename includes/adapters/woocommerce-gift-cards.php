@@ -509,35 +509,9 @@ minn_admin_resource( 'wcgc/gift-cards', function () {
 					$balance = $target['balance'];
 					$card->set_balance( $balance );
 					$card->save();
-					// The vendor only moves a balance through credit()/debit(), which
-					// each write an Activity row; set_balance() writes none, so a
-					// top-up made here would be invisible in the ledger their own edit
-					// screen renders. Record the adjustment ourselves, naming the
-					// acting user, so the change is auditable. Never let a ledger
-					// failure break the save that already landed.
-					$delta = round( $balance - $old, minn_admin_gift_decimals() );
-					if ( abs( $delta ) > 0 && WC_GC()->db && WC_GC()->db->activity ) {
-						try {
-							$actor = wp_get_current_user();
-							WC_GC()->db->activity->add( array(
-								'type'       => $delta > 0 ? 'issued' : 'used',
-								'gc_id'      => $card->get_id(),
-								'gc_code'    => $card->get_code(),
-								'user_id'    => $actor ? $actor->ID : 0,
-								'user_email' => $actor ? $actor->user_email : '',
-								'amount'     => abs( $delta ),
-								'note'       => sprintf(
-									/* translators: %1$s: the user who adjusted the balance, %2$s: the new balance. */
-									__( 'Balance adjusted to %2$s in Minn Admin by %1$s.', 'minn-admin' ),
-									$actor ? $actor->user_login : __( 'a site administrator', 'minn-admin' ),
-									minn_admin_gift_money( $balance, minn_admin_wcgc_currency( $card ) )
-								),
-							) );
-						} catch ( \Throwable $e ) {
-							// Ledger row is best-effort; the balance change stands.
-							unset( $e );
-						}
-					}
+					// No Activity row: their types are all sales or order
+					// movements (issued, used, refunded…), each summed by their
+					// analytics, and there is no manual-adjustment type to use.
 					return array( 'balance' => $balance, 'code' => minn_admin_wcgc_code( $card->get_code() ), 'currency' => minn_admin_wcgc_currency( $card ) );
 				},
 				'expect' => function ( $id, $fresh, $ran ) {
