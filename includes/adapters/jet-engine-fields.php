@@ -254,11 +254,13 @@ function minn_admin_jet_roles_allow( $args, $active ) {
 	}
 	$roles = array_map( 'strval', (array) $user->roles );
 
-	$include = ( in_array( 'include_roles', $active, true ) || ! empty( $args['include_roles'] ) )
-		? array_map( 'strval', (array) ( $args['include_roles'] ?? array() ) )
-		: array();
-	if ( $include && ! array_intersect( $include, $roles ) ) {
-		return false;
+	// A switched-on include list that names nobody matches nobody, as their
+	// check() reads an empty intersection.
+	if ( in_array( 'include_roles', $active, true ) || ! empty( $args['include_roles'] ) ) {
+		$include = array_map( 'strval', (array) ( $args['include_roles'] ?? array() ) );
+		if ( ! array_intersect( $include, $roles ) ) {
+			return false;
+		}
 	}
 
 	$exclude = ( in_array( 'exclude_roles', $active, true ) || ! empty( $args['exclude_roles'] ) )
@@ -319,9 +321,11 @@ function minn_admin_jet_groups_for( $post_type, $post_id = 0 ) {
 				continue;
 			}
 			if ( $post_id ) {
-				$allowed  = ( in_array( 'allowed_posts', $active, true ) || ! empty( $args['allowed_posts'] ) ) ? array_map( 'intval', (array) ( $args['allowed_posts'] ?? array() ) ) : array();
+				$allows   = in_array( 'allowed_posts', $active, true ) || ! empty( $args['allowed_posts'] );
+				$allowed  = $allows ? array_map( 'intval', (array) ( $args['allowed_posts'] ?? array() ) ) : array();
 				$excluded = ( in_array( 'excluded_posts', $active, true ) || ! empty( $args['excluded_posts'] ) ) ? array_map( 'intval', (array) ( $args['excluded_posts'] ?? array() ) ) : array();
-				if ( $allowed && ! in_array( (int) $post_id, $allowed, true ) ) {
+				// Switched on and empty includes no post, as above for roles.
+				if ( $allows && ! in_array( (int) $post_id, $allowed, true ) ) {
 					continue;
 				}
 				if ( $excluded && in_array( (int) $post_id, $excluded, true ) ) {
