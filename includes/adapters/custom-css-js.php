@@ -8,7 +8,7 @@
  * meta, then rebuild the frontend search tree (custom-css-js-tree) and
  * write the upload file the way their save_post handler does.
  *
- * Cap: manage_options or edit_custom_csss (their Web Designer role).
+ * Cap: edit_custom_csss and their per-snippet caps, as their own screens check.
  *
  * @package minn-admin
  */
@@ -49,8 +49,16 @@ function minn_admin_ccj_update_post_meta_only( $update ) {
 	return $result;
 }
 
+/**
+ * Their own gate, and only theirs: the snippet caps their installer grants.
+ * manage_options is not one of them, so an administrator the installer
+ * skipped (a WP-CLI or file-copy activation) sees no snippets in wp-admin
+ * and none here.
+ *
+ * @return bool
+ */
 function minn_admin_ccj_can() {
-	return current_user_can( 'manage_options' ) || current_user_can( 'edit_custom_csss' );
+	return current_user_can( 'edit_custom_csss' );
 }
 
 /**
@@ -122,13 +130,6 @@ function minn_admin_ccj_can_write_code( $opts, $writing = true ) {
  * @return bool
  */
 function minn_admin_ccj_obj_can( $verb, $post_id = 0 ) {
-	// Administrators are in, as minn_admin_ccj_can() already lets them: their
-	// installer grants admins the snippet caps only when an admin activates
-	// the plugin in wp-admin, so a WP-CLI, network or file-copy install leaves
-	// admins listing snippets they could then not edit.
-	if ( current_user_can( 'manage_options' ) ) {
-		return true;
-	}
 	if ( 'publish' === $verb ) {
 		$pto = get_post_type_object( 'custom-css-js' );
 		return $pto && current_user_can( $pto->cap->publish_posts );
