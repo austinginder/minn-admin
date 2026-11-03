@@ -1089,14 +1089,15 @@ add_action( 'rest_api_init', function () {
 			'form_saved'                => __( 'Draft is saved', 'minn-admin' ),
 			'form_save_email_requested' => __( 'Draft link is requested', 'minn-admin' ),
 		);
-		$event  = isset( $n['event'] ) && '' !== $n['event'] ? (string) $n['event'] : 'form_submission';
+		// A stored blank sends on no event; only an absent one is a submission.
+		$event  = isset( $n['event'] ) ? (string) $n['event'] : 'form_submission';
 		return array(
 			'id'       => $form['id'] . ':' . $n['id'],
 			'form_id'  => (int) $form['id'],
 			'nid'      => (string) $n['id'],
 			'name'     => (string) ( isset( $n['name'] ) ? $n['name'] : '' ),
 			'form'     => (string) $form['title'],
-			'event'    => isset( $events[ $event ] ) ? $events[ $event ] : ucfirst( str_replace( '_', ' ', $event ) ),
+			'event'    => '' === $event ? '—' : ( isset( $events[ $event ] ) ? $events[ $event ] : ucfirst( str_replace( '_', ' ', $event ) ) ),
 			'to'       => $to,
 			'subject'  => (string) ( isset( $n['subject'] ) ? $n['subject'] : '' ),
 			'message'  => (string) ( isset( $n['message'] ) ? $n['message'] : '' ),

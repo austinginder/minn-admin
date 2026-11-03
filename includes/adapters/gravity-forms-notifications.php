@@ -228,9 +228,12 @@ function minn_admin_gfn_as_read( $body, $key, $read ) {
 function minn_admin_gfn_payload( $form, $n, $is_new ) {
 	$to_type = rgar( $n, 'toType' ) ? (string) $n['toType'] : 'email';
 	$events  = GFNotification::get_notification_events( $form );
-	$event   = rgar( $n, 'event' ) ? (string) $n['event'] : 'form_submission';
+	// A stored blank stays blank, as their select shows it (it falls back
+	// to form_submission only when the key is absent), so a save has to
+	// pick an event: read as form_submission, any save started sending it.
+	$event   = isset( $n['event'] ) ? (string) $n['event'] : 'form_submission';
 	$evpairs = minn_admin_gfn_pairs( $events );
-	if ( ! isset( $events[ $event ] ) ) {
+	if ( '' !== $event && ! isset( $events[ $event ] ) ) {
 		$evpairs[] = array( sanitize_key( $event ), GFNotification::get_missing_notification_event_label( sanitize_key( $event ) ) );
 	}
 	$routing = minn_admin_gfn_routing_out( rgar( $n, 'routing' ) );
