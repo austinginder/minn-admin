@@ -3268,9 +3268,12 @@ class Minn_Admin_REST {
 	 * do_blocks() for a preview, with the embed lookups core's own renderers
 	 * start (cover's video background through wp_oembed_get, autoembed in
 	 * synced patterns, patterns and template parts) drawn on the request's
-	 * lookup budget like preview_embeds' own. No oembed_cache post is written
+	 * lookup budget like preview_embeds' own. No embed cache is written
 	 * meanwhile: with no post, WP_Embed keeps every answer, a failure
-	 * included, as a published one that nothing removes.
+	 * included, as a published oembed_cache post that nothing removes, and
+	 * inside a Latest Posts or Query loop it keeps it in that post's
+	 * _oembed_ meta, where a lookup the spent budget refused would stay as
+	 * a failure the front end never retries.
 	 *
 	 * @param string $raw    Block markup.
 	 * @param int    $budget Lookups left for this request (counted down).
@@ -3290,13 +3293,20 @@ class Minn_Admin_REST {
 		$no_cache_post = static function ( $empty, $postarr ) {
 			return ( is_array( $postarr ) && isset( $postarr['post_type'] ) && 'oembed_cache' === $postarr['post_type'] ) ? true : $empty;
 		};
+		$no_cache_meta = static function ( $check, $object_id, $meta_key ) {
+			return ( is_string( $meta_key ) && 0 === strpos( $meta_key, '_oembed_' ) ) ? false : $check;
+		};
 		add_filter( 'pre_oembed_result', $count, PHP_INT_MAX );
 		add_filter( 'wp_insert_post_empty_content', $no_cache_post, PHP_INT_MAX, 2 );
+		add_filter( 'update_post_metadata', $no_cache_meta, PHP_INT_MAX, 3 );
+		add_filter( 'add_post_metadata', $no_cache_meta, PHP_INT_MAX, 3 );
 		try {
 			return do_blocks( $raw );
 		} finally {
 			remove_filter( 'pre_oembed_result', $count, PHP_INT_MAX );
 			remove_filter( 'wp_insert_post_empty_content', $no_cache_post, PHP_INT_MAX );
+			remove_filter( 'update_post_metadata', $no_cache_meta, PHP_INT_MAX );
+			remove_filter( 'add_post_metadata', $no_cache_meta, PHP_INT_MAX );
 		}
 	}
 
