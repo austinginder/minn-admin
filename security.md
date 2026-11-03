@@ -346,6 +346,9 @@ A few properties worth knowing before auditing (details in
   block's own URL, at most ten new ones per request, and caches the answer
   in the post being edited when one of its saved embed blocks holds that
   exact URL, otherwise for a day, never in a stored `oembed_cache` post.
+  The lookups core's own renderers start inside a preview (a cover's video
+  background, autoembed in patterns and template parts) draw on the same
+  ten and write no `oembed_cache` post either.
   Controls of the notification panel and of modals answer only inside
   `#minn-overlays`, and every document-wide sweep of Minn's chrome classes
   skips content, so content wearing their markup is inert
