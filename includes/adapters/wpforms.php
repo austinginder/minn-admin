@@ -401,8 +401,11 @@ minn_admin_resource( 'wpforms/entries', function () use ( $minn_admin_wpforms_in
 		'actions'   => array(
 			'star'   => array(
 				'gate'   => 'edit',
+				// Required: read loosely, a body without it unstarred the
+				// entry, where WPForms' own action refuses an empty task.
+				'args'   => array( 'on' => array( 'type' => 'boolean', 'required' => true ) ),
 				'run'    => function ( $id, $row, WP_REST_Request $request ) {
-					$on = (int) (bool) $request->get_param( 'on' );
+					$on = $request['on'] ? 1 : 0;
 					wpforms()->obj( 'entry' )->update( $id, array( 'starred' => $on ) );
 					return $on;
 				},
