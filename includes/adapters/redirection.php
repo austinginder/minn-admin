@@ -467,10 +467,33 @@ minn_admin_endpoint( 'redirection/settings/(?P<tab>[a-z0-9_-]+)', array(
 		$opts = red_get_options();
 		$save = array();
 		if ( array_key_exists( 'monitor', $vals ) ) {
-			$on = ! empty( $vals['monitor'] );
-			// Same shape the setup wizard writes: default group 1 + post/page types.
-			$save['monitor_post']  = $on ? ( ! empty( $opts['monitor_post'] ) ? (int) $opts['monitor_post'] : 1 ) : 0;
-			$save['monitor_types'] = $on ? array( 'post', 'page' ) : array();
+			$on      = ! empty( $vals['monitor'] );
+			$running = ! empty( $opts['monitor_post'] ) && ! empty( $opts['monitor_types'] );
+			if ( ! $on ) {
+				// Off is Redirection's own off (no types), which also clears
+				// the group and the associated path: those are kept here, so
+				// turning it back on brings back what was monitored.
+				if ( $running ) {
+					update_option( 'minn_admin_redirection_monitor', array(
+						'group'      => (int) $opts['monitor_post'],
+						'types'      => array_values( (array) $opts['monitor_types'] ),
+						'associated' => (string) ( $opts['associated_redirect'] ?? '' ),
+					), false );
+				}
+				$save['monitor_post']  = 0;
+				$save['monitor_types'] = array();
+			} elseif ( ! $running ) {
+				// What was kept at off, or the setup wizard's own first
+				// choice: group 1 and posts and pages.
+				$kept = get_option( 'minn_admin_redirection_monitor' );
+				$kept = is_array( $kept ) && ! empty( $kept['types'] ) ? $kept : array();
+				$save['monitor_post']  = ! empty( $opts['monitor_post'] ) ? (int) $opts['monitor_post'] : ( ! empty( $kept['group'] ) ? (int) $kept['group'] : 1 );
+				$save['monitor_types'] = $kept ? array_values( (array) $kept['types'] ) : array( 'post', 'page' );
+				if ( $kept && '' !== (string) ( $kept['associated'] ?? '' ) ) {
+					$save['associated_redirect'] = (string) $kept['associated'];
+				}
+				delete_option( 'minn_admin_redirection_monitor' );
+			}
 		}
 		// Each retention is written only when it was sent: -1 is Redirection's
 		// "no logs", 0 its "forever", any other value days. A value outside
