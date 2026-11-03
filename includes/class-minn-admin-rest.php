@@ -3264,6 +3264,42 @@ class Minn_Admin_REST {
 		return $seen[ $url ];
 	}
 
+	/**
+	 * do_blocks() for a preview, with the embed lookups core's own renderers
+	 * start (cover's video background through wp_oembed_get, autoembed in
+	 * synced patterns, patterns and template parts) drawn on the request's
+	 * lookup budget like preview_embeds' own. No oembed_cache post is written
+	 * meanwhile: with no post, WP_Embed keeps every answer, a failure
+	 * included, as a published one that nothing removes.
+	 *
+	 * @param string $raw    Block markup.
+	 * @param int    $budget Lookups left for this request (counted down).
+	 * @return string
+	 */
+	private static function do_blocks_budgeted( $raw, &$budget ) {
+		$count = static function ( $pre ) use ( &$budget ) {
+			if ( null !== $pre ) {
+				return $pre; // answered without a fetch (a local embed)
+			}
+			if ( $budget < 1 ) {
+				return false;
+			}
+			--$budget;
+			return null;
+		};
+		$no_cache_post = static function ( $empty, $postarr ) {
+			return ( is_array( $postarr ) && isset( $postarr['post_type'] ) && 'oembed_cache' === $postarr['post_type'] ) ? true : $empty;
+		};
+		add_filter( 'pre_oembed_result', $count, PHP_INT_MAX );
+		add_filter( 'wp_insert_post_empty_content', $no_cache_post, PHP_INT_MAX, 2 );
+		try {
+			return do_blocks( $raw );
+		} finally {
+			remove_filter( 'pre_oembed_result', $count, PHP_INT_MAX );
+			remove_filter( 'wp_insert_post_empty_content', $no_cache_post, PHP_INT_MAX );
+		}
+	}
+
 	public static function render_blocks( WP_REST_Request $request ) {
 		$blocks = $request['blocks'];
 		if ( ! is_array( $blocks ) ) {
@@ -3489,7 +3525,7 @@ class Minn_Admin_REST {
 						continue 2;
 					}
 				}
-				$html = do_blocks( $raw );
+				$html = self::do_blocks_budgeted( $raw, $embed_budget );
 				// A resolver a vendor re-armed while this block rendered (Otter's
 				// own excerpt reader does exactly that) may have run on part of
 				// it: that block previews empty, and every re-armed resolver
