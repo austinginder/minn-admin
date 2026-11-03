@@ -272,9 +272,11 @@ minn_admin_resource( 'jet-reviews/reviews', function () {
 				'method' => 'POST',
 				'gate'   => 'view',
 				// Their toggle-review-approve endpoint: the same table update,
-				// then the source sync.
+				// then the source sync. Required: read loosely, a body
+				// without it unapproved the review.
+				'args'   => array( 'approved' => array( 'type' => 'boolean', 'required' => true ) ),
 				'run'    => function ( $id, array $row, WP_REST_Request $request ) {
-					$on = filter_var( $request->get_param( 'approved' ), FILTER_VALIDATE_BOOLEAN ) ? 1 : 0;
+					$on = $request['approved'] ? 1 : 0;
 					Minn_Admin_Kernel_SQL::update( minn_admin_jet_reviews_spec(), 'id', $id, array( 'approved' => $on ) );
 					minn_admin_jet_reviews_sync( (object) $row );
 					return $on;
