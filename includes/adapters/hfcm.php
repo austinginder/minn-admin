@@ -365,9 +365,11 @@ minn_admin_resource( 'hfcm/snippets', function () {
 			// visitor, so switching a row on runs it. Off is always allowed.
 			'active' => array(
 				'gate'   => 'view',
+				// Required: read loosely, a body without it switched the
+				// snippet off and one that was not JSON switched it on.
+				'args'   => array( 'active' => array( 'type' => 'boolean', 'required' => true ) ),
 				'run'    => function ( $id, array $row, WP_REST_Request $request ) {
-					$body   = $request->get_json_params();
-					$active = is_array( $body ) ? ! empty( $body['active'] ) : true;
+					$active = (bool) $request['active'];
 					if ( $active && ! minn_admin_hfcm_can_write_code() ) {
 						return minn_admin_hfcm_code_error();
 					}

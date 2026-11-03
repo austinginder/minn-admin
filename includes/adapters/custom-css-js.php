@@ -991,13 +991,15 @@ minn_admin_resource( 'ccj/snippets', function () {
 			),
 			'active' => array(
 				'gate'   => 'view',
+				// Required: read loosely, a body without it switched the
+				// snippet off and one that was not JSON switched it on.
+				'args'   => array( 'active' => array( 'type' => 'boolean', 'required' => true ) ),
 				'run'    => function ( $id, array $row, WP_REST_Request $request ) {
 					$post = get_post( $id );
 					if ( ! minn_admin_ccj_obj_can( 'edit', $id ) ) {
 						return minn_admin_ccj_obj_error();
 					}
-					$body   = $request->get_json_params();
-					$active = is_array( $body ) ? ! empty( $body['active'] ) : true;
+					$active = (bool) $request['active'];
 					if ( $active && 'publish' !== $post->post_status && ! minn_admin_ccj_obj_can( 'publish' ) ) {
 						return minn_admin_ccj_obj_error();
 					}
