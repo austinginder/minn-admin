@@ -171,6 +171,11 @@ add_action( 'rest_api_init', function () {
 	minn_admin_endpoint( '/ppp/(?P<id>\d+)', array(
 		'methods'             => 'POST',
 		'gate'                => $can,
+		// Required, as their own toggle refuses anything but true or false:
+		// a body without it must not read as "off" and kill a shared link.
+		'args'                => array(
+			'enabled' => array( 'type' => 'boolean', 'required' => true ),
+		),
 		'run'                 => function ( WP_REST_Request $request ) {
 			$post = get_post( (int) Minn_Admin::path_param( $request ) );
 			if ( ! $post ) {
@@ -180,12 +185,7 @@ add_action( 'rest_api_init', function () {
 			if ( is_wp_error( $eligible ) ) {
 				return $eligible;
 			}
-			$body    = $request->get_json_params();
-			if ( ! is_array( $body ) ) {
-				$body = array();
-			}
-			$enabled = ! empty( $body['enabled'] );
-			$set     = minn_admin_ppp_set( (int) $post->ID, $enabled );
+			$set = minn_admin_ppp_set( (int) $post->ID, (bool) $request['enabled'] );
 			if ( is_wp_error( $set ) ) {
 				return $set;
 			}
