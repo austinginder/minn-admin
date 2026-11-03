@@ -529,14 +529,19 @@ add_action( 'rest_api_init', function () {
 	// writer. Turning off remembers which mode was on (option map, capped) so
 	// an Undo restores exactly it; the response is the fresh visibility state
 	// so the client repaints in one round trip (license-action precedent).
+	// `on` is required: read as empty(), a body that left it out switched
+	// the mode off and put a closed site on view.
 	minn_admin_endpoint( '/visibility/toggle', array(
 		'methods'             => 'POST',
 		'gate'                => function () {
 			return current_user_can( 'manage_options' );
 		},
+		'args'                => array(
+			'on' => array( 'type' => 'boolean', 'required' => true ),
+		),
 		'run'                 => function ( $request ) {
 			$id      = sanitize_key( (string) $request['id'] );
-			$on      = ! empty( $request['on'] );
+			$on      = (bool) $request['on'];
 			$toggles = minn_admin_visibility_toggles();
 			if ( '' === $id || ! isset( $toggles[ $id ] ) ) {
 				return new WP_Error( 'minn_no_toggle', __( 'No visibility toggle is registered for that provider.', 'minn-admin' ), array( 'status' => 404 ) );
