@@ -172,7 +172,7 @@ run security-v049-registry-followups single --user=admin
 # Post SMTP, SureMails and Site Mailer stay inactive on the lab; the swap loads them for this process only.
 MINN_SWAP_ADD=post-smtp/postman-smtp.php,suremails/suremails.php,site-mailer/site-mailer.php run security-v049-registry-followups single --user=admin --require=tests/lib/plugin-swap.php
 # Custom CSS & JS is kept inactive here; its section loads it for the run.
-MINN_SWAP_ADD=custom-css-js/custom-css-js.php run security-v049-rc single --user=admin --require=tests/lib/plugin-swap.php
+MINN_SWAP_ADD=custom-css-js/custom-css-js.php,header-footer-code-manager/99robots-header-footer-code-manager.php run security-v049-rc single --user=admin --require=tests/lib/plugin-swap.php
 # Header Footer Code Manager stays inactive on the lab; the swap loads it for this process only.
 MINN_SWAP_ADD=header-footer-code-manager/99robots-header-footer-code-manager.php run hfcm-storage single --user=admin --require=tests/lib/plugin-swap.php
 # The SEO panel's per-type switch, once per provider: Yoast resident, the rest swapped in for this process only.
