@@ -178,7 +178,9 @@ function minn_admin_fluent_confirmation_out( $c ) {
 	$c    = (array) $c;
 	$page = ! empty( $c['customPage'] ) ? get_post( (int) $c['customPage'] ) : null;
 	return array(
-		'redirectTo'           => (string) ( $c['redirectTo'] ?? 'samePage' ),
+		// One never stored reads blank: their submit handler redirects for
+		// anything but samePage, and their validator wants one picked.
+		'redirectTo'           => (string) ( $c['redirectTo'] ?? '' ),
 		'messageToShow'        => (string) ( $c['messageToShow'] ?? '' ),
 		'samePageFormBehavior' => 'reset_form' === ( $c['samePageFormBehavior'] ?? '' ) ? 'reset_form' : 'hide_form',
 		'customPage'           => $page ? (string) $page->ID : '',
@@ -405,12 +407,7 @@ function minn_admin_fluent_emails_validate( $changes, $fields, $ctx ) {
 		if ( array_key_exists( 'customUrl', $conf ) ) {
 			$c['customUrl'] = '' !== trim( $text( $conf, 'customUrl' ) ) ? trim( $text( $conf, 'customUrl' ) ) : null;
 		}
-		// Their validator requires a type; one never stored reads as the
-		// same page.
-		if ( ! isset( $c['redirectTo'] ) ) {
-			$c['redirectTo'] = 'samePage';
-		}
-		if ( ( array_key_exists( 'redirectTo', $conf ) || array_key_exists( 'customPage', $conf ) ) && 'customPage' === $c['redirectTo'] && ! empty( $c['customPage'] ) && ( ! get_post( (int) $c['customPage'] ) || ! current_user_can( 'read_post', (int) $c['customPage'] ) ) ) {
+		if ( ( array_key_exists( 'redirectTo', $conf ) || array_key_exists( 'customPage', $conf ) ) && 'customPage' === ( $c['redirectTo'] ?? '' ) && ! empty( $c['customPage'] ) && ( ! get_post( (int) $c['customPage'] ) || ! current_user_can( 'read_post', (int) $c['customPage'] ) ) ) {
 			return new WP_Error( 'minn_ffe_invalid', __( 'Choose a published page.', 'minn-admin' ), array( 'status' => 400, 'field' => 'confirmation.customPage' ) );
 		}
 		try {
