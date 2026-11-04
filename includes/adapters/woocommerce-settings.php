@@ -372,13 +372,17 @@ function minn_admin_wc_settings_map_field( $f, &$values ) {
 		case 'single_select_page':
 		case 'single_select_page_with_search':
 			$exclude       = isset( $f['args']['exclude'] ) ? (array) $f['args']['exclude'] : array();
-			$values[ $id ] = '' === (string) $cur || '0' === (string) $cur ? '' : (string) (int) $cur;
+			// wc_get_page_id()'s -1 (no page yet) reads as none, as their
+			// page search shows it.
+			$values[ $id ] = is_scalar( $cur ) && (int) $cur > 0 ? (string) (int) $cur : '';
 			return array( $base + array( 'type' => 'combobox', 'options' => minn_admin_wc_settings_page_options( $exclude, $cur ) ) );
 		case 'relative_date_selector':
 			$cur                     = is_array( $cur ) ? $cur : array();
 			$num                     = isset( $cur['number'] ) ? (string) $cur['number'] : '';
 			$values[ $id ]           = '' === $num ? null : ( is_numeric( $num ) ? $num + 0 : $num );
-			$values[ $id . '__unit' ] = isset( $cur['unit'] ) && '' !== (string) $cur['unit'] ? (string) $cur['unit'] : 'months';
+			// A missing or unknown unit is days, as wc_parse_relative_date_option()
+			// reads it for their control and for the cleanups that use it.
+			$values[ $id . '__unit' ] = isset( $cur['unit'] ) && in_array( (string) $cur['unit'], wp_list_pluck( minn_admin_wc_settings_relative_units(), 0 ), true ) ? (string) $cur['unit'] : 'days';
 			return array(
 				$base + array( 'type' => 'number', 'min' => 0 ),
 				array(
@@ -675,7 +679,7 @@ function minn_admin_wc_settings_post_data( $fields, $edited, &$keep = array() ) 
 				$num = array_key_exists( $id, $edited ) ? $edited[ $id ] : ( isset( $cur['number'] ) ? $cur['number'] : '' );
 				minn_admin_wc_post_set( $post, $name, array(
 					'number' => null === $num ? '' : (string) $num,
-					'unit'   => array_key_exists( $id . '__unit', $edited ) ? (string) $edited[ $id . '__unit' ] : ( isset( $cur['unit'] ) ? (string) $cur['unit'] : 'months' ),
+					'unit'   => array_key_exists( $id . '__unit', $edited ) ? (string) $edited[ $id . '__unit' ] : ( isset( $cur['unit'] ) ? (string) $cur['unit'] : 'days' ),
 				) );
 				break;
 			case 'email_image_url':
@@ -692,6 +696,14 @@ function minn_admin_wc_settings_post_data( $fields, $edited, &$keep = array() ) 
 				} else {
 					minn_admin_wc_post_set( $post, $name, is_scalar( $cur ) ? (string) $cur : '' );
 				}
+				break;
+			case 'single_select_page':
+			case 'single_select_page_with_search':
+				// No page is posted blank, as their page search posts it: the
+				// -1 wc_get_page_id() answers for a page never set, stored as
+				// "-1", came back from it as absint( "-1" ), post 1.
+				$v = $touched ? $edited[ $id ] : $cur;
+				minn_admin_wc_post_set( $post, $name, is_scalar( $v ) && (int) $v > 0 ? (string) (int) $v : '' );
 				break;
 			case 'number':
 				$v           = $touched ? $edited[ $id ] : $cur;
