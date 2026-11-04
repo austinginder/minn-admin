@@ -733,21 +733,12 @@ function minn_admin_seo_rank_math_provider() {
 			if ( isset( $adv_keys[ $field ] ) ) {
 				$adv = get_post_meta( $post_id, 'rank_math_advanced_robots', true );
 				$adv = is_array( $adv ) && $adv ? $adv : minn_admin_seo_rank_math_robots_default( $post_id, true );
-				if ( '' === $clean || null === $clean ) {
-					unset( $adv[ $adv_keys[ $field ] ] );
-				} else {
-					$adv[ $adv_keys[ $field ] ] = 'adv_max_image_preview' === $field ? (string) $clean : (int) $clean;
-				}
-				// Drop their disabled-directive false sentinels so an
-				// all-cleared map deletes cleanly (absent = inherit).
-				$adv = array_filter( $adv, function ( $v ) {
-					return false !== $v && '' !== $v && null !== $v;
-				} );
-				if ( $adv ) {
-					update_post_meta( $post_id, 'rank_math_advanced_robots', $adv );
-				} else {
-					delete_post_meta( $post_id, 'rank_math_advanced_robots' );
-				}
+				// A cleared directive is stored off (false), as their
+				// sanitize_advanced_robots() stores it. Deleting an all-off
+				// map made the post inherit the global directives, which put
+				// back on the page the ones it was suppressing.
+				$adv[ $adv_keys[ $field ] ] = ( '' === $clean || null === $clean ) ? false : ( 'adv_max_image_preview' === $field ? (string) $clean : (int) $clean );
+				update_post_meta( $post_id, 'rank_math_advanced_robots', $adv );
 				return;
 			}
 
