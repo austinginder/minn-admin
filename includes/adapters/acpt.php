@@ -2030,7 +2030,16 @@ function minn_admin_acpt_builder_belongs_in( $location, $stored_belongs ) {
 				$logic = isset( $by_id[ $id ] ) ? (string) ( $by_id[ $id ]['logic'] ?? '' ) : '';
 			}
 			if ( isset( $map[ $param ] ) ) {
-				$operator = '!=' === (string) ( $rule['operator'] ?? '' ) ? '!=' : '=';
+				// A rule without an operator keeps the stored one. Filled as
+				// "=", a group ACPT shows nowhere (its null operator never
+				// matches) appeared, and a stored "!=" flipped to "=".
+				$rid      = (string) ( $rule['id'] ?? '' );
+				// The page sends "==" for ACPT's "=".
+				$operator = isset( $rule['operator'] ) ? (string) $rule['operator'] : (string) ( $by_id[ $rid ]['operator'] ?? '' );
+				$operator = '==' === $operator ? '=' : $operator;
+				if ( ! in_array( $operator, array( '=', '!=' ), true ) ) {
+					return new WP_Error( 'minn_bad_location', __( 'Choose whether each location rule is or is not a match.', 'minn-admin' ), array( 'status' => 400 ) );
+				}
 				$value    = (string) ( $rule['value'] ?? '' );
 				$allowed  = wp_list_pluck( $choices[ $param ]['values'] ?? array(), 0 );
 				if ( ! in_array( $value, array_map( 'strval', $allowed ), true ) ) {
