@@ -112,12 +112,16 @@ function minn_admin_forminator_titles() {
  * @return array<string,string>
  */
 function minn_admin_forminator_answers( $entry_id ) {
-	$out = array();
+	// Keys they keep on an entry that are not answers, which their own
+	// entry screen never prints: a lead's ownership token, the signup's
+	// activation key (it activates the account), and draft and quiz flags.
+	$internal = array( 'entry_token', 'activation_key', 'skip_form', 'draft_page', 'product_shipping' );
+	$out      = array();
 	try {
 		$entry = new Forminator_Form_Entry_Model( (int) $entry_id );
 		foreach ( (array) $entry->meta_data as $key => $meta ) {
 			$key = (string) $key;
-			if ( 0 === strpos( $key, 'forminator_addon_' ) || 0 === strpos( $key, '_' ) ) {
+			if ( 0 === strpos( $key, 'forminator_addon_' ) || 0 === strpos( $key, '_' ) || in_array( $key, $internal, true ) ) {
 				continue;
 			}
 			$v = isset( $meta['value'] ) ? $meta['value'] : '';
