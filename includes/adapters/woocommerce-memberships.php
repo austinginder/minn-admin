@@ -1082,14 +1082,22 @@ function minn_admin_wcm_plan_rules_clean( $rules_in, $plan = null, $known = null
 				$clean['access_type'] = isset( $r['access_type'] ) && 'purchase' === $r['access_type'] ? 'purchase' : 'view';
 			}
 			if ( 'purchasing_discount' === $type ) {
-				$dtype  = isset( $r['discount_type'] ) && 'amount' === $r['discount_type'] ? 'amount' : 'percentage';
+				// As their setDiscountFields(): a type is set only when sent
+				// (one they don't know is refused), and a rule without active
+				// is off. Filled in, a fixed amount became that many percent
+				// and an inactive discount started applying at checkout.
+				if ( isset( $r['discount_type'] ) && ! in_array( $r['discount_type'], array( 'percentage', 'amount' ), true ) ) {
+					return new WP_Error( 'minn_wcm_rule', __( 'Choose a percentage or a fixed amount for each discount.', 'minn-admin' ), array( 'status' => 400 ) );
+				}
 				$amount = isset( $r['discount_amount'] ) ? $r['discount_amount'] : '';
 				if ( '' === (string) $amount || ! is_numeric( $amount ) || (float) $amount < 0 ) {
 					return new WP_Error( 'minn_wcm_rule', __( 'Each discount needs an amount.', 'minn-admin' ), array( 'status' => 400 ) );
 				}
-				$clean['discount_type']   = $dtype;
+				if ( isset( $r['discount_type'] ) ) {
+					$clean['discount_type'] = $r['discount_type'];
+				}
 				$clean['discount_amount'] = (float) $amount;
-				$clean['active']          = ! isset( $r['active'] ) || rest_sanitize_boolean( $r['active'] );
+				$clean['active']          = isset( $r['active'] ) && rest_sanitize_boolean( $r['active'] );
 			}
 			$out[ $type ][] = $clean;
 		}
