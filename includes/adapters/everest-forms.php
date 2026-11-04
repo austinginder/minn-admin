@@ -401,10 +401,8 @@ function minn_admin_everest_view( array $row ) {
 	if ( ! empty( $row['user_ip_address'] ) ) {
 		$meta[] = array( 'label' => 'IP', 'value' => (string) $row['user_ip_address'] );
 	}
-	// Opening a detail marks the entry viewed (their semantics).
-	if ( empty( $row['viewed'] ) ) {
-		Minn_Admin_Kernel_SQL::update( 'evf_entries', 'entry_id', (int) $id, array( 'viewed' => 1 ) );
-	}
+	// Opening an entry leaves it unread: their own view marks one viewed
+	// only while migrating a legacy row (evf_get_entry), never on open.
 	// The page's pill; a raw "publish" read as a published post.
 	return minn_admin_forms_entry( $rows, $meta, admin_url( 'admin.php?page=evf-entries&form_id=' . $form_id . '&view-entry=' . $id ), array( 'status' => minn_admin_everest_state( $row['status'] ) ) );
 }
