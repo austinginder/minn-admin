@@ -228,11 +228,7 @@ function minn_admin_gfc_build( $form, $stored, $body, $is_new ) {
 			}
 		}
 		if ( $rules ) {
-			$logic = array(
-				'actionType' => 'hide' === ( $body['conditionalLogic']['actionType'] ?? '' ) ? 'hide' : 'show',
-				'logicType'  => 'any' === ( $body['conditionalLogic']['logicType'] ?? '' ) ? 'any' : 'all',
-				'rules'      => $rules,
-			);
+			$logic = minn_admin_gf_logic_head( $body['conditionalLogic'] ) + array( 'rules' => $rules );
 		}
 	}
 

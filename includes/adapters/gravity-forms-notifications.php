@@ -468,11 +468,7 @@ function minn_admin_gfn_build( $form, $stored, $body, $is_new ) {
 			}
 		}
 		if ( $rules ) {
-			$logic = minn_admin_gfn_sanitize_rules( array(
-				'actionType' => 'hide' === ( $body['conditionalLogic']['actionType'] ?? '' ) ? 'hide' : 'show',
-				'logicType'  => 'any' === ( $body['conditionalLogic']['logicType'] ?? '' ) ? 'any' : 'all',
-				'rules'      => $rules,
-			), rgars( $stored, 'conditionalLogic/rules' ) );
+			$logic = minn_admin_gfn_sanitize_rules( minn_admin_gf_logic_head( $body['conditionalLogic'] ) + array( 'rules' => $rules ), rgars( $stored, 'conditionalLogic/rules' ) );
 		}
 	}
 

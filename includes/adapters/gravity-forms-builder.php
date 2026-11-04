@@ -961,17 +961,16 @@ function minn_admin_gfb_overlay( $arr, $row, $allowed, $form_id ) {
 				if ( '' === $ref ) {
 					continue;
 				}
-				$rules[] = array(
-					'fieldId'  => $ref,
-					'operator' => in_array( (string) ( $r['operator'] ?? '' ), $ops, true ) ? (string) $r['operator'] : 'is',
-					'value'    => is_scalar( $r['value'] ?? '' ) ? (string) $r['value'] : '',
-				);
+				// A missing operator stays missing, as their sanitizer
+				// leaves it; one it does not know becomes "is", as there.
+				$rule = array( 'fieldId' => $ref );
+				if ( isset( $r['operator'] ) ) {
+					$rule['operator'] = in_array( (string) $r['operator'], $ops, true ) ? (string) $r['operator'] : 'is';
+				}
+				$rule['value'] = is_scalar( $r['value'] ?? '' ) ? (string) $r['value'] : '';
+				$rules[]       = $rule;
 			}
-			$arr['conditionalLogic'] = $rules ? array(
-				'actionType' => 'hide' === ( $logic['actionType'] ?? '' ) ? 'hide' : 'show',
-				'logicType'  => 'any' === ( $logic['logicType'] ?? '' ) ? 'any' : 'all',
-				'rules'      => $rules,
-			) : '';
+			$arr['conditionalLogic'] = $rules ? minn_admin_gf_logic_head( $logic ) + array( 'rules' => $rules ) : '';
 		}
 	}
 	return $arr;

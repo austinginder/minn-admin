@@ -533,6 +533,27 @@ add_filter( 'minn_admin_surfaces', function ( $surfaces ) {
  * gf/v2's wire contract so the descriptor reads like their API.
  */
 /**
+ * A condition's action and logic type as Gravity Forms'
+ * sanitize_conditional_logic() leaves them: an unknown value becomes show or
+ * all, and a missing one stays missing. Filled in, a missing logicType (which
+ * their evaluator reads as never matching) became "all" and started sending
+ * a notification, running a confirmation or hiding a field.
+ *
+ * @param mixed $logic The posted conditionalLogic.
+ * @return array actionType and logicType, each only when sent.
+ */
+function minn_admin_gf_logic_head( $logic ) {
+	$head = array();
+	if ( is_array( $logic ) && isset( $logic['actionType'] ) ) {
+		$head['actionType'] = 'hide' === $logic['actionType'] ? 'hide' : 'show';
+	}
+	if ( is_array( $logic ) && isset( $logic['logicType'] ) ) {
+		$head['logicType'] = 'any' === $logic['logicType'] ? 'any' : 'all';
+	}
+	return $head;
+}
+
+/**
  * The add-on's own form-settings capability for a feed, checked the way its
  * feed list checks toggle and delete (GFFeedAddOn::current_user_can_any of
  * get_form_settings_capabilities). GF's gf/v2 gates feed writes at
