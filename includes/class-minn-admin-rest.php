@@ -2283,6 +2283,25 @@ class Minn_Admin_REST {
 			)
 		);
 
+		// Whether this person may delete this record. Core's REST links name
+		// publish and assign but never delete, so the trash controls had nothing
+		// to ask, and a record they can't delete answered their click with a 403.
+		register_rest_field(
+			array_values( $modified_types ),
+			'minn_can_delete',
+			array(
+				'get_callback' => function ( $item ) {
+					$id = isset( $item['id'] ) ? (int) $item['id'] : 0;
+					return $id && current_user_can( 'delete_post', $id );
+				},
+				'schema'       => array(
+					'type'        => 'boolean',
+					'description' => __( 'Whether the current user may delete this post.', 'minn-admin' ),
+					'context'     => array( 'edit' ),
+				),
+			)
+		);
+
 		// Months that actually hold uploads — feeds the Media view's date
 		// filter combobox (wp-admin's months_dropdown, minus the markup).
 		// Counts every author's uploads, so it asks what core's Media

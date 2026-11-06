@@ -6840,6 +6840,7 @@
 		builder: p.minn_builder || null,
 		unsaved: !! p.minn_modified,
 		lockedBy: ( p.minn_lock && p.minn_lock.name ) || null,
+		canDelete: false !== p.minn_can_delete,
 		thumb: contentFeaturedThumb( p ),
 	} );
 
@@ -6863,7 +6864,7 @@
 		const order = state.contentOrder === 'asc' ? 'asc' : 'desc';
 		let q = `context=edit&status=${ statuses }&per_page=25&orderby=${ orderby }&order=${ order }`
 			+ `&_embed=author,wp:featuredmedia`
-			+ `&_fields=id,title,slug,status,date,modified,link,author,featured_media,minn_builder,minn_modified,minn_lock,_links,_embedded&page=${ page }`;
+			+ `&_fields=id,title,slug,status,date,modified,link,author,featured_media,minn_builder,minn_modified,minn_lock,minn_can_delete,_links,_embedded&page=${ page }`;
 		if ( state.contentSearch ) q += '&search=' + encodeURIComponent( state.contentSearch );
 		// Types where this user edits only their own items: core drops other
 		// authors' rows from an edit-context body but still counts them in
@@ -6947,7 +6948,7 @@
 	// Types the create entry points (+ New menu, ⌘K) can target: the content
 	// map minus patterns (dedicated row) and minus any rest_base carrying a
 	// slash — the /editor/<type> route is path-segmented and can't hold one.
-	const creatableCpts = () => ( state.cache.types || [] ).filter( ( t ) => t.slug !== 'wp_block' && ! String( t.restBase ).includes( '/' ) );
+	const creatableCpts = () => ( state.cache.types || [] ).filter( ( t ) => t.slug !== 'wp_block' && ! String( t.restBase ).includes( '/' ) && ! ( B.noCreate || {} )[ t.restBase ] );
 
 	// The query context a content load belongs to. A load started before a
 	// context change (trash toggle, search, tax filter) must not land its rows
@@ -7418,11 +7419,11 @@
 				${ builderEdit ? `<a href="${ esc( builderEdit ) }" target="_blank" rel="noopener">${ esc( sprintf( /* translators: %s: the page builder's name. */ __( 'Edit in %s' ), p.builder.name ) ) } ↗</a>` : '' }
 				${ ENGINE ? '' : `<a href="${ esc( B.site.adminUrl ) }post.php?post=${ p.id }&action=edit" target="_blank" rel="noopener">${ esc( __( 'Edit in block editor ↗' ) ) }</a>` }
 				${ B.ppp && p.status !== 'publish' && p.status !== 'private' && p.status !== 'trash' ? `<button type="button" data-ract="ppp">${ esc( __( 'Copy public preview link' ) ) }</button>` : '' }
-				<button type="button" data-ract="duplicate">${ esc( __( 'Duplicate' ) ) }</button>
+				${ ( B.noCreate || {} )[ p.type ] ? '' : `<button type="button" data-ract="duplicate">${ esc( __( 'Duplicate' ) ) }</button>` }
 				<div class="minn-new-menu-label">${ esc( __( 'Status' ) ) }</div>
 				${ p.status !== 'publish' ? `<button type="button" data-ract="publish">${ esc( __( 'Publish now' ) ) }</button>` : '' }
 				${ p.status !== 'draft' ? `<button type="button" data-ract="draft">${ esc( __( 'Move to draft' ) ) }</button>` : '' }
-				<button type="button" data-ract="trash" class="danger">${ esc( __( 'Move to trash' ) ) }</button>`;
+				${ p.canDelete ? `<button type="button" data-ract="trash" class="danger">${ esc( __( 'Move to trash' ) ) }</button>` : '' }`;
 			document.body.appendChild( rowMenu );
 			stripWpAdminLinks( rowMenu );
 			rowMenu.style.left = menuLeftAt( x, rowMenu.offsetWidth ) + 'px';
@@ -36996,7 +36997,7 @@
 			// A custom type's own taxonomies ride the item as fields named by their rest_base.
 			const taxes = await editorTaxonomies( type ).catch( () => [] );
 			const taxKeys = taxes.map( ( t ) => ',' + t.base ).join( '' );
-			const p = await api( `wp/v2/${ type }/${ id }?context=edit&_fields=id,title,content.raw,status,slug,link,categories,tags,date,modified,featured_media,parent,menu_order,template,excerpt,comment_status,ping_status,password,sticky,format,minn_builder${ syncKeys }${ extraKeys }${ taxKeys }` );
+			const p = await api( `wp/v2/${ type }/${ id }?context=edit&_fields=id,minn_can_delete,title,content.raw,status,slug,link,categories,tags,date,modified,featured_media,parent,menu_order,template,excerpt,comment_status,ping_status,password,sticky,format,minn_builder${ syncKeys }${ extraKeys }${ taxKeys }` );
 			const raw = ( p.content && p.content.raw ) || '';
 			// A builder that OWNS the canvas (Elementor/Beaver/Brizy/Divi-4:
 			// canonical content lives outside post_content) forces locked mode —
@@ -37009,6 +37010,7 @@
 				id: p.id,
 				type: type,
 				title: titleForBox( ( p.title && ( p.title.raw != null ? p.title.raw : p.title.rendered ) ) || '' ),
+				canDelete: p.minn_can_delete,
 				content: '',
 				islands: [],
 				mode,
@@ -40187,7 +40189,7 @@
 				: '' }
 			${ panelDoors }
 		</div>
-		${ ed.id ? `<button class="minn-trash-link" id="minn-trash-post">${ esc( __( 'Move to trash' ) ) }</button>` : '' }
+		${ ed.id && false !== ed.canDelete ? `<button class="minn-trash-link" id="minn-trash-post">${ esc( __( 'Move to trash' ) ) }</button>` : '' }
 		<div class="minn-side-card" id="minn-outline-card" hidden>
 			<div class="minn-side-title">${ esc( __( 'Outline' ) ) }</div>
 			<div id="minn-outline"></div>

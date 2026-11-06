@@ -490,6 +490,21 @@ class Minn_Admin {
 	}
 
 	/**
+	 * REST bases of the types this user can't add to, whatever the type's other
+	 * caps say: a type can hold a fixed set of records that are edited but
+	 * never added (create_posts mapped to do_not_allow).
+	 */
+	public static function no_create_types() {
+		$out = array();
+		foreach ( get_post_types( array( 'show_in_rest' => true ), 'objects' ) as $pt ) {
+			if ( ! empty( $pt->cap->create_posts ) && ! current_user_can( $pt->cap->create_posts ) ) {
+				$out[ $pt->rest_base ? $pt->rest_base : $pt->name ] = true;
+			}
+		}
+		return (object) $out;
+	}
+
+	/**
 	 * Minn editor URL for a post, or '' when the type isn't REST-editable in Minn.
 	 */
 	public static function editor_url_for_post( $post_id ) {
@@ -2313,6 +2328,7 @@ class Minn_Admin {
 			// to author=<me> instead, which makes header and body agree.
 			// Empty for anyone holding edit_others_* everywhere (admins).
 			'ownOnly'  => self::own_only_types(),
+			'noCreate' => self::no_create_types(),
 			// Multisite context: users are network-shared (delete becomes
 			// remove-from-site, profile edits need network caps), plugins can
 			// be network-activated. Client views branch on this.
