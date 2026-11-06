@@ -4730,6 +4730,8 @@ button.minn-ac-item:hover { background: var(--hover); }
    canvas as a white plate behind every island in dark mode. */
 .minn-island-preview { pointer-events: none; opacity: 0.85; overflow: hidden; background: transparent !important; }
 .minn-island-preview > :last-child { margin-bottom: 0; }
+/* A player inside a protected preview stays a player. */
+.minn-island-preview audio, .minn-island-preview video { pointer-events: auto; }
 .minn-island-empty { color: var(--text3); font-size: 13.5px; font-style: italic; }
 /* In-place island text runs: aligned preview text nodes wrapped in nested
    contenteditable spans. pointer-events:auto punches through the preview's

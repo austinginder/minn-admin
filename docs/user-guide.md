@@ -280,6 +280,10 @@ away:
   filter by type (WooCommerce types join while Woo is active), rename, duplicate,
   import or export JSON, restore from Trash, or open the builder in one click.
   Designing the part itself stays in the builder.
+- **Audio and video.** Type `/audio` or `/video` on an empty line, or drop
+  a file on the page, then pick from your library or upload. The player
+  sits in your text and plays right there. Hover it and press the ⚙ chip for
+  a caption, Replace, moving it up or down, Duplicate and Remove.
 - **Galleries and sliders open an images editor.** Hover a gallery-shaped
   block and the card names the action: click anywhere on it for a tile
   grid where you reorder (drag or arrows), replace (click a tile), add,

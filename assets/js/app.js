@@ -35250,6 +35250,29 @@
 		return `<!-- wp:file${ serializeBlockAttrs( attrs ) } -->\n<div class="wp-block-file"><a id="wp-block-file--media-${ id }" href="${ esc( url ) }">${ esc( name ) }</a><a href="${ esc( url ) }" class="wp-block-file__button wp-element-button" download>Download</a></div>\n<!-- /wp:file -->`;
 	}
 
+	// core/audio and core/video are passthrough blocks: the figure sits in the
+	// body as it is, so a new one is built the way a saved one opens, and the
+	// serializer writes what their own save() writes. The attachment id rides
+	// the parked comment attrs.
+	function mediaFigureHtml( kind, item ) {
+		const url = item.url || item.source_url || '';
+		return `<figure data-minn-attrs="${ esc( minnAttrsValue( { id: item.id } ) ) }" class="wp-block-${ kind }"><${ kind } controls src="${ esc( url ) }"></${ kind }></figure>`;
+	}
+
+	function insertMediaFigure( anchor, kind, item ) {
+		const body = $( '#minn-editor-body' );
+		if ( ! body ) return;
+		const html = mediaFigureHtml( kind, item );
+		if ( ! ( anchor && anchor.isConnected && body.contains( anchor )
+			? rtInsertAdjacentHtml( anchor, 'beforebegin', html )
+			: rtInsertAdjacentHtml( body, 'beforeend', html ) ) ) return;
+		ensureTrailingParagraph( body );
+		stampSlotDirtyFor( anchor && anchor.isConnected ? anchor : body );
+		queueTableChips();
+		updateEditorStats();
+		scheduleAutosave();
+	}
+
 	// Shortcode island — free text between the comments is the shortcode body.
 	// Empty/whitespace collapses to "[]" so the block stays a valid placeholder
 	// the writer can select-and-replace in the island field.
@@ -42019,8 +42042,9 @@
 					return;
 				}
 				const files = all.filter( ( f ) => /^image\//.test( f.type ) );
-				if ( ! files.length ) {
-					toast( __( 'Only images can be dropped into the editor' ), true );
+				const players = all.filter( ( f ) => /^(audio|video)\//.test( f.type ) );
+				if ( ! files.length && ! players.length ) {
+					toast( __( 'Only images, audio and video can be dropped into the editor' ), true );
 					return;
 				}
 				// From the prototype: Firefox has no caretRangeFromPoint, so a
@@ -42035,7 +42059,27 @@
 					}
 				}
 				body.focus( { preventScroll: true } );
-				insertImageFiles( body, files );
+				if ( files.length ) insertImageFiles( body, files );
+				if ( players.length ) {
+					// The block under the release point: the figure goes before it,
+					// like an image dropped there.
+					const sel = window.getSelection();
+					let at = sel && sel.rangeCount ? sel.getRangeAt( 0 ).startContainer : null;
+					const root = at ? blockRootOf( at, body ) : body;
+					while ( at && at.parentNode !== root ) at = at.parentNode;
+					( async () => {
+						for ( const file of players ) {
+							try {
+								toast( __( 'Uploading…' ) );
+								const up = await uploadMedia( file );
+								state.cache.media = null;
+								insertMediaFigure( at && 1 === at.nodeType ? at : null, file.type.startsWith( 'audio/' ) ? 'audio' : 'video', { id: up.id, url: up.source_url } );
+							} catch ( err ) {
+								toast( err.message, true );
+							}
+						}
+					} )();
+				}
 			} );
 
 			// Caption edges. Enter exits to the block after the figure —
@@ -46013,6 +46057,7 @@
 					}
 					if ( chip._kind === 'table' ) openTablePop( chip._target );
 					else if ( chip._kind === 'code' ) openCodePop( chip._target );
+					else if ( chip._kind === 'audio' || chip._kind === 'video' ) openMediaPop( chip._target, chip._kind );
 					else openImgPop( chip._target );
 				} );
 				chip.addEventListener( 'mouseenter', () => { showChipFor( chip._target ); setTableHot( chip._target, true ); } );
@@ -46757,6 +46802,85 @@
 		imgPop = null;
 		imgPopTarget = null;
 		document.removeEventListener( 'mousedown', imgPopAway, true );
+	}
+
+	// An audio or video block's settings: the image popover's shape, without the
+	// fields a player has no use for. The player itself stays live in the body.
+	function openMediaPop( figure, kind ) {
+		hideImgPop();
+		hideCodePop();
+		closeInspector();
+		imgPopTarget = figure;
+		const figcap = figure.querySelector( ':scope > figcaption' );
+		const title = 'audio' === kind ? __( 'Audio' ) : __( 'Video' );
+		imgPop = document.createElement( 'div' );
+		imgPop.className = 'minn-inspector minn-img-pop';
+		imgPop.innerHTML = `
+			<div class="minn-insp-head">
+				<span class="minn-insp-title">${ esc( title ) }</span>
+				<button class="minn-x-btn" data-close type="button">×</button>
+			</div>
+			<div class="minn-insp-body">
+				<div class="minn-field-label">${ esc( __( 'Caption' ) ) }</div>
+				<input class="minn-input" data-media-caption placeholder="${ esc( __( 'Optional caption' ) ) }" value="${ esc( figcap ? figcap.textContent : '' ) }">
+			</div>
+			<div class="minn-insp-actions">
+				<button class="minn-btn-primary" data-media-apply type="button">${ esc( __( 'Apply' ) ) }</button>
+				<button class="minn-btn-soft" data-media-replace type="button">${ icon( 'upload' ) } ${ esc( __( 'Replace' ) ) }</button>
+				${ blockMoveButtons() }
+				<button class="minn-btn-soft" data-media-dup type="button" title="${ esc( __( 'Duplicate' ) ) }">${ icon( 'copy' ) }</button>
+				<button class="minn-btn-soft danger" data-media-remove type="button" title="${ esc( __( 'Remove' ) ) }">${ icon( 'trash' ) }</button>
+			</div>`;
+		document.body.appendChild( imgPop );
+		positionBlockPop( imgPop, figure );
+		document.addEventListener( 'mousedown', imgPopAway, true );
+		imgPop.querySelector( '[data-close]' ).addEventListener( 'click', hideImgPop );
+		armBlockPopA11y( imgPop, { label: 'audio' === kind ? __( 'Audio settings' ) : __( 'Video settings' ), onClose: hideImgPop, focus: '[data-media-caption]' } );
+		const capInput = imgPop.querySelector( '[data-media-caption]' );
+		const seed = capInput.value;
+		imgPop.querySelector( '[data-media-apply]' ).addEventListener( 'click', () => {
+			if ( capInput.value !== seed ) {
+				const cap = capInput.value.trim();
+				let fc = figure.querySelector( ':scope > figcaption' );
+				if ( cap ) {
+					if ( ! fc ) {
+						fc = document.createElement( 'figcaption' );
+						fc.className = 'wp-element-caption';
+						figure.appendChild( fc );
+					}
+					fc.textContent = cap;
+				} else if ( fc ) {
+					fc.remove();
+				}
+				stampSlotDirtyFor( figure );
+				scheduleAutosave();
+			}
+			hideImgPop();
+		} );
+		imgPop.querySelector( '[data-media-replace]' ).addEventListener( 'click', () => {
+			hideImgPop();
+			openMediaPicker( ( picks ) => {
+				const it = Array.isArray( picks ) ? picks[ 0 ] : picks;
+				const player = figure.querySelector( kind );
+				if ( ! it || ! player || ! figure.isConnected ) return;
+				player.setAttribute( 'src', it.url );
+				const attrs = readMinnAttrs( figure ) || {};
+				attrs.id = it.id;
+				figure.setAttribute( 'data-minn-attrs', minnAttrsValue( attrs ) );
+				stampSlotDirtyFor( figure );
+				scheduleAutosave();
+				toast( 'audio' === kind ? __( 'Audio replaced' ) : __( 'Video replaced' ) );
+			}, { multi: false, mediaType: kind } );
+		} );
+		bindBlockMove( imgPop, figure, () => positionBlockPop( imgPop, figure ) );
+		imgPop.querySelector( '[data-media-dup]' ).addEventListener( 'click', () => {
+			duplicateEditableNode( figure );
+			hideImgPop();
+		} );
+		imgPop.querySelector( '[data-media-remove]' ).addEventListener( 'click', () => {
+			if ( removeEditableNode( figure ) ) toast( __( 'Block removed — ⌘Z restores it' ) );
+			hideImgPop();
+		} );
 	}
 
 	function openImgPop( img ) {
@@ -48545,6 +48669,8 @@
 			[ icon( 'table' ), __( 'Table' ), { html: '<figure class="wp-block-table"><table class="has-fixed-layout"><tbody><tr><td>&nbsp;</td><td>&nbsp;</td></tr><tr><td>&nbsp;</td><td>&nbsp;</td></tr></tbody></table></figure>' } ],
 			// "hr" is what people type for this; the label alone never matched.
 			[ icon( 'minus' ), __( 'Divider' ), { html: '<hr>' }, false, '', [ 'hr', 'horizontal rule', 'rule', 'line', 'separator', 'break' ] ],
+			[ icon( 'play' ), __( 'Audio' ), 'audio', false, '', [ 'sound', 'mp3', 'music', 'song', 'podcast' ] ],
+			[ icon( 'play' ), __( 'Video' ), 'video', false, '', [ 'movie', 'mp4', 'clip' ] ],
 			[ icon( 'play' ), __( 'Embed — YouTube, tweet, audio…' ), 'embed' ],
 			[ icon( 'gallery' ), __( 'Gallery' ), 'gallery' ],
 			[ icon( 'minus' ), __( 'Spacer' ), 'spacer' ],
@@ -49112,6 +49238,13 @@
 			openMediaPicker( ( picks ) => {
 				if ( picks && picks.length ) insertIsland( anchor, 'core/gallery', galleryTemplate( picks ) );
 			}, { multi: true } );
+		} else if ( action === 'audio' || action === 'video' ) {
+			if ( ! ensureBlocksMode() ) return;
+			const anchor = target;
+			openMediaPicker( ( picks ) => {
+				const item = Array.isArray( picks ) ? picks[ 0 ] : picks;
+				if ( item ) insertMediaFigure( anchor, action, item );
+			}, { multi: false, mediaType: action } );
 		} else if ( action === 'spacer' ) {
 			if ( ! ensureBlocksMode() ) return;
 			insertIsland( target.isConnected ? target : null, 'core/spacer', spacerTemplate( '40px' ) );
@@ -51465,22 +51598,27 @@
 
 		if ( m.type === 'picker' ) {
 			const items = m.items;
-			const any = !! m.any;
+			// A picker for one kind of media other than images: its tiles read
+			// like the any-file picker's, and it takes uploads of that kind.
+			const kind = m.mediaType && 'image' !== m.mediaType ? m.mediaType : '';
+			const any = !! m.any || !! kind;
+			const kindTitle = { audio: __( 'Insert audio' ), video: __( 'Insert video' ) }[ kind ];
+			const kindDrop = { audio: __( 'Drag & drop an audio file here, or %s' ), video: __( 'Drag & drop a video here, or %s' ) }[ kind ];
 			return `
 			<div class="minn-modal-overlay minn-picker-over" id="minn-modal-overlay">
 				<div class="minn-modal wide">
 					<div class="minn-modal-head">
-						<div class="minn-modal-title">${ m.multi ? esc( __( 'Build a gallery' ) ) : ( any ? esc( __( 'Insert file' ) ) : esc( __( 'Insert image' ) ) ) }</div>
+						<div class="minn-modal-title">${ m.multi ? esc( __( 'Build a gallery' ) ) : esc( kindTitle || ( any ? __( 'Insert file' ) : __( 'Insert image' ) ) ) }</div>
 						${ m.multi ? `<span class="minn-modal-count" id="minn-picker-count">${ esc( __( 'Pick images in order' ) ) }</span>` : '' }
 						<button class="minn-x-btn" id="minn-modal-close">×</button>
 					</div>
-					${ B.caps.upload && ! any ? `
+					${ B.caps.upload && ! m.any ? `
 					<div class="minn-picker-drop" id="minn-picker-drop">
 						${ icon( 'img' ) }
 						<span>${ m.multi
 							? sprintf( esc( /* translators: %s: a "browse" link. */ __( 'Drag & drop images here, or %s' ) ), `<b>${ esc( __( 'browse' ) ) }</b>` )
-							: sprintf( esc( /* translators: %s: a "browse" link. */ __( 'Drag & drop an image here, or %s' ) ), `<b>${ esc( __( 'browse' ) ) }</b>` ) + ' ' + esc( __( '(it’s used right away)' ) ) }</span>
-						<input type="file" id="minn-picker-file" accept="image/*"${ m.multi ? ' multiple' : '' } hidden>
+							: sprintf( esc( kindDrop || /* translators: %s: a "browse" link. */ __( 'Drag & drop an image here, or %s' ) ), `<b>${ esc( __( 'browse' ) ) }</b>` ) + ' ' + esc( __( '(it’s used right away)' ) ) }</span>
+						<input type="file" id="minn-picker-file" accept="${ esc( kind || 'image' ) }/*"${ m.multi ? ' multiple' : '' } hidden>
 					</div>` : '' }
 					${ m.upload ? `
 					<div class="minn-upl" id="minn-picker-upl">
@@ -52205,8 +52343,9 @@
 				 * because it hands its one result back and closes.
 				 */
 				const uploadAndUse = async ( files ) => {
-					const list = Array.from( files || [] ).filter( ( f ) => f && f.type.startsWith( 'image/' ) );
-					if ( ! list.length ) { toast( __( 'Drop an image file' ), true ); return; }
+					const accepts = ( m.mediaType || 'image' ) + '/';
+					const list = Array.from( files || [] ).filter( ( f ) => f && f.type.startsWith( accepts ) );
+					if ( ! list.length ) { toast( { audio: __( 'Drop an audio file' ), video: __( 'Drop a video file' ) }[ m.mediaType ] || __( 'Drop an image file' ), true ); return; }
 					drop.classList.add( 'minn-busy' );
 					toast( __( 'Uploading…' ) );
 					try {
@@ -55682,7 +55821,7 @@
 		// can hand the writer back, picked or cancelled. Null everywhere else
 		// (pages, the images editor's add/replace), where nothing was closed.
 		const ret = editorSideReturn();
-		state.modal = { type: 'picker', items: null, callback, multi: !! opts.multi, picked: [], any: !! opts.any, doneLabel: opts.doneLabel || '', ret };
+		state.modal = { type: 'picker', items: null, callback, multi: !! opts.multi, picked: [], any: !! opts.any, mediaType: opts.mediaType || '', doneLabel: opts.doneLabel || '', ret };
 		renderOverlays();
 		// File block needs any attachment type; image/gallery stay image-only.
 		const typeQ = opts.any ? '' : ( opts.mediaType ? '&media_type=' + encodeURIComponent( opts.mediaType ) : '&media_type=image' );
