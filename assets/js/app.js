@@ -36054,6 +36054,7 @@
 		layerStatement: window.CSSLayerStatementRule,
 		keyframes: window.CSSKeyframesRule,
 		property: window.CSSPropertyRule,
+		container: window.CSSContainerRule,
 	};
 
 	function scopeCssToPreviews( cssText, scope ) {
@@ -36192,6 +36193,11 @@
 					out += '@media ' + rule.conditionText + ' {\n' + walk( rule.cssRules, parent ) + '}\n';
 				} else if ( rule instanceof CSSSupportsRule ) {
 					out += '@supports ' + rule.conditionText + ' {\n' + walk( rule.cssRules, parent ) + '}\n';
+				} else if ( CSS_RULE_TYPES.container && rule instanceof CSS_RULE_TYPES.container ) {
+					// A section that lays out by its own width is the one layout
+					// that fits a preview's narrower column, so it has to survive.
+					// conditionText carries the container's name as well.
+					out += '@container ' + rule.conditionText + ' {\n' + walk( rule.cssRules, parent ) + '}\n';
 				} else if ( CSS_RULE_TYPES.layerBlock && rule instanceof CSS_RULE_TYPES.layerBlock ) {
 					// Compiled Tailwind (atomic-wind et al) wraps everything in
 					// @layer — unwrap and scope the contents. Losing the layer
