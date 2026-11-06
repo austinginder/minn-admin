@@ -4501,9 +4501,11 @@ class Minn_Admin_REST {
 		$series      = array_fill( 0, $buckets, 0 );
 		$since       = gmdate( 'Y-m-d H:i:s', time() - $days * DAY_IN_SECONDS );
 
-		$post_dates = $wpdb->get_col(
+		$activity_types     = self::overview_content_types();
+		$activity_types_sql = self::overview_types_sql( $activity_types );
+		$post_dates         = $wpdb->get_col(
 			$wpdb->prepare(
-				"SELECT post_date_gmt FROM {$wpdb->posts} WHERE post_status = 'publish' AND post_type IN ('post','page') AND post_date_gmt >= %s",
+				"SELECT post_date_gmt FROM {$wpdb->posts} WHERE post_status = 'publish' AND post_type IN ({$activity_types_sql}) AND post_date_gmt >= %s",
 				$since
 			)
 		);
@@ -4624,17 +4626,25 @@ class Minn_Admin_REST {
 		// them and core's wp/v2/posts strips per item. Each row is additionally
 		// filtered through read_post below, the same way the comment rows a few
 		// lines down already gate on moderate_comments.
-		$base_query   = array(
-			'post_type'   => array( 'post', 'page' ),
-			'post_status' => array( 'publish', 'draft', 'future', 'pending' ),
-			'numberposts' => 5,
-			'perm'        => 'editable',
-		);
-		$recent_posts = get_posts( array_merge( $base_query, array( 'orderby' => 'modified' ) ) );
-		$seen_ids     = wp_list_pluck( $recent_posts, 'ID' );
-		foreach ( get_posts( array_merge( $base_query, array( 'orderby' => 'date' ) ) ) as $by_date ) {
-			if ( ! in_array( $by_date->ID, $seen_ids, true ) ) {
-				$recent_posts[] = $by_date;
+		// One type at a time: over several, WP_Query's 'editable' asks for a
+		// capability no role holds (edit_others_multiple_post_types), and an
+		// Editor sees only their own work.
+		$recent_posts = array();
+		$seen_ids     = array();
+		foreach ( array_keys( $activity_types ) as $activity_type ) {
+			$base_query = array(
+				'post_type'   => $activity_type,
+				'post_status' => array( 'publish', 'draft', 'future', 'pending' ),
+				'numberposts' => 5,
+				'perm'        => 'editable',
+			);
+			foreach ( array( 'modified', 'date' ) as $activity_order ) {
+				foreach ( get_posts( array_merge( $base_query, array( 'orderby' => $activity_order ) ) ) as $recent ) {
+					if ( ! in_array( $recent->ID, $seen_ids, true ) ) {
+						$seen_ids[]     = $recent->ID;
+						$recent_posts[] = $recent;
+					}
+				}
 			}
 		}
 		foreach ( $recent_posts as $p ) {
@@ -4674,7 +4684,7 @@ class Minn_Admin_REST {
 				// editor route takes the REST base, not the post type.
 				'goto'  => array(
 					'kind' => 'editor',
-					'type' => $pto && $pto->rest_base ? $pto->rest_base : $p->post_type . 's',
+					'type' => $activity_types[ $p->post_type ] ?? ( $pto && $pto->rest_base ? $pto->rest_base : $p->post_type ),
 					'id'   => $p->ID,
 				),
 			);
@@ -4741,6 +4751,18 @@ class Minn_Admin_REST {
 		// store-wide gate as the strip above, and WooCommerce's own reports
 		// permission inside the helper, as the Sales this month card has.
 		$sales = is_array( $store ) ? self::wc_sales_chart( $bucket_days, $buckets ) : null;
+
+		/**
+		 * The Overview's stat cards. A site that mostly writes one custom type can
+		 * put its count where the posts count is. Each row needs a stable `key`
+		 * and a `label`; `value`, `delta`, `group` and `goto` (an app route) work
+		 * as the built-in cards' do.
+		 *
+		 * @param array[] $stats The cards.
+		 */
+		$stats = array_values( array_filter( (array) apply_filters( 'minn_admin_overview_stats', $stats ), static function ( $row ) {
+			return is_array( $row ) && ! empty( $row['key'] ) && ! empty( $row['label'] );
+		} ) );
 
 		$catalog = self::overview_metric_catalog( $posts, $pages, $comments, $media, $store, $stats );
 		$layout  = self::overview_metric_layout( $catalog, $stats );
@@ -5573,6 +5595,38 @@ class Minn_Admin_REST {
 		);
 	}
 
+	/**
+	 * What the Overview counts as writing: posts, pages and the custom types Minn
+	 * lists as content, as post type => REST base. A site writing in a custom
+	 * type otherwise looks empty on its own dashboard. Stores and builders keep
+	 * their own screens, the same set the Content view leaves out.
+	 *
+	 * @return array<string, string>
+	 */
+	private static function overview_content_types() {
+		$out  = array( 'post' => 'posts', 'page' => 'pages' );
+		$skip = array( 'attachment', 'product', 'product_variation', 'shop_coupon', 'shop_subscription', 'elementor_library', 'e-floating-buttons', 'e-landing-page', 'jet-theme-core', 'jet-engine', 'jet-menu' );
+		foreach ( get_post_types( array( 'public' => true, 'show_in_rest' => true, '_builtin' => false ), 'objects' ) as $pt ) {
+			$base = $pt->rest_base ? $pt->rest_base : $pt->name;
+			if ( ! in_array( $pt->name, $skip, true ) && false === strpos( $base, '/' ) ) {
+				$out[ $pt->name ] = $base;
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * Those types as a quoted list for an IN clause.
+	 *
+	 * @param array<string, string> $types post type => REST base.
+	 * @return string
+	 */
+	private static function overview_types_sql( $types ) {
+		return implode( ',', array_map( static function ( $name ) {
+			return "'" . esc_sql( $name ) . "'";
+		}, array_keys( $types ) ) );
+	}
+
 	public static function overview_activity( WP_REST_Request $request ) {
 		global $wpdb;
 
@@ -5580,10 +5634,13 @@ class Minn_Admin_REST {
 		$to    = $request['to'];
 		$items = array();
 
+		$activity_types     = self::overview_content_types();
+		$activity_types_sql = self::overview_types_sql( $activity_types );
+
 		$posts = $wpdb->get_results(
 			$wpdb->prepare(
 				"SELECT ID, post_title, post_type, post_author, post_date_gmt FROM {$wpdb->posts}
-				 WHERE post_status = 'publish' AND post_type IN ('post','page')
+				 WHERE post_status = 'publish' AND post_type IN ({$activity_types_sql})
 				 AND post_date_gmt > %s AND post_date_gmt <= %s
 				 ORDER BY post_date_gmt DESC LIMIT 100",
 				$from,
@@ -5597,7 +5654,7 @@ class Minn_Admin_REST {
 			$items[] = array(
 				'kind'  => 'post',
 				'id'    => (int) $p->ID,
-				'type'  => 'page' === $p->post_type ? 'pages' : 'posts',
+				'type'  => $activity_types[ $p->post_type ],
 				/* translators: 1: author display name, 2: post title. */
 				'text'  => sprintf( __( '%1$s published “%2$s”', 'minn-admin' ), $author ?: __( 'Someone', 'minn-admin' ), $title ),
 				'time'  => strtotime( $p->post_date_gmt . ' UTC' ),

@@ -490,6 +490,21 @@ class Minn_Admin {
 	}
 
 	/**
+	 * Titles of the blocks plugins and themes register, by block name: what a
+	 * block is called in the editor instead of its code name. Core's names
+	 * already read as words once their namespace goes.
+	 */
+	public static function plugin_block_titles() {
+		$out = array();
+		foreach ( WP_Block_Type_Registry::get_instance()->get_all_registered() as $name => $type ) {
+			if ( 0 !== strpos( $name, 'core/' ) && ! empty( $type->title ) ) {
+				$out[ $name ] = self::plain_text( $type->title );
+			}
+		}
+		return $out;
+	}
+
+	/**
 	 * REST bases of the types this user can't add to, whatever the type's other
 	 * caps say: a type can hold a fixed set of records that are edited but
 	 * never added (create_posts mapped to do_not_allow).
@@ -2329,6 +2344,10 @@ class Minn_Admin {
 			// Empty for anyone holding edit_others_* everywhere (admins).
 			'ownOnly'  => self::own_only_types(),
 			'noCreate' => self::no_create_types(),
+			// REST bases that lead the New menu, for a site that mostly writes one
+			// custom type rather than posts.
+			'newFirst' => array_values( array_filter( array_map( 'strval', (array) apply_filters( 'minn_admin_new_first', array() ) ) ) ),
+			'blockTitles' => (object) self::plugin_block_titles(),
 			// Multisite context: users are network-shared (delete becomes
 			// remove-from-site, profile edits need network caps), plugins can
 			// be network-activated. Client views branch on this.

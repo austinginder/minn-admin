@@ -3824,10 +3824,12 @@
 		// boot-warmed and cap-filtered per type; patterns keep their dedicated
 		// row. A rest_base carrying a slash can't ride the /editor/<type>
 		// route (path segments), so those stay off the menu.
-		const cptRows = creatableCpts()
-			.map( ( t ) => `<button data-newtype="${ esc( t.restBase ) }"><span class="minn-row-icon">${ icon( 'doc' ) }</span> ${ esc( t.singular || t.name ) }</button>` )
-			.join( '' );
+		const newFirst = B.newFirst || [];
+		const cptRow = ( t ) => `<button data-newtype="${ esc( t.restBase ) }"><span class="minn-row-icon">${ icon( 'doc' ) }</span> ${ esc( t.singular || t.name ) }</button>`;
+		const firstRows = creatableCpts().filter( ( t ) => newFirst.includes( t.restBase ) ).map( cptRow ).join( '' );
+		const cptRows = creatableCpts().filter( ( t ) => ! newFirst.includes( t.restBase ) ).map( cptRow ).join( '' );
 		menu.innerHTML = `
+			${ firstRows }
 			<button data-newtype="posts"><span class="minn-row-icon">${ icon( 'pilcrow' ) }</span> ${ esc( __( 'Post' ) ) }</button>
 			${ B.caps.editPages ? `<button data-newtype="pages"><span class="minn-row-icon">${ icon( 'file' ) }</span> ${ esc( __( 'Page' ) ) }</button>` : '' }
 			<button data-newtype="blocks"><span class="minn-row-icon">${ icon( 'block' ) }</span> ${ esc( __( 'Pattern' ) ) }</button>
@@ -7049,7 +7051,7 @@
 		}
 	}
 
-	const STATUS_LABELS = { publish: __( 'Published' ), draft: __( 'Draft' ), future: __( 'Scheduled' ), pending: __( 'Pending' ), private: __( 'Private' ), trash: __( 'Trashed' ) };
+	const STATUS_LABELS = { publish: __( 'Published' ), draft: __( 'Draft' ), 'auto-draft': __( 'Draft' ), future: __( 'Scheduled' ), pending: __( 'Pending' ), private: __( 'Private' ), trash: __( 'Trashed' ) };
 
 	/* What a row's status pill says on hover. Both extra states it can carry
 	 * ride as dots ON the pill rather than as pills of their own: the status
@@ -26411,7 +26413,7 @@
 				out.push( { type: 'link', label: p.name, url: p.url } );
 			}
 		} );
-		if ( v.searchDiscouraged ) {
+		if ( v.searchDiscouraged && B.caps.settings ) {
 			out.push( { type: 'toggle', label: __( 'Search engine visibility' ), setting: 'blog_public', on: false } );
 		}
 		return out;
@@ -34039,7 +34041,7 @@
 			</div>`;
 		}
 		const inner = stripBlockComments( raw ).trim();
-		const chipLabel = short || name || 'block';
+		const chipLabel = ( B.blockTitles || {} )[ name ] || short || name || 'block';
 		// Hover hint: says WHY the block is locked and where edits live. A core
 		// text block that islanded did so because of styling attrs the serializer
 		// can't reproduce; everything else is protected markup. Reveal rides
@@ -34050,7 +34052,7 @@
 		// type here?". Everything else already has the ⚙ chip in view, and a
 		// label repeating it was pure noise.
 		// A Custom HTML block islands for its markup, not for its styling.
-		const hint = SIMPLE_BLOCKS.includes( short ) && 'html' !== short ? __( 'Styled block: edit text via ⚙' ) : '';
+		const hint = SIMPLE_BLOCKS.includes( short ) && ! [ 'html', 'audio', 'video' ].includes( short ) ? __( 'Styled block: edit text via ⚙' ) : '';
 		// Images in the preview are click-through doorways: gallery-shaped
 		// blocks open the Images editor, single-image blocks the replace
 		// picker. The stamp drives the pointer cursor and the click branch.
@@ -39313,6 +39315,38 @@
 		return count + ' · ' + timeAgo( last.when ) + ( last.author ? ' · ' + last.author : '' );
 	}
 
+	// A field a panel names in its door (`inSummary`), as words: the choice a
+	// value stands for rather than its stored key, a count for an ordered list.
+	function panelFieldSummary( f, v ) {
+		if ( null == v || '' === v || false === v ) return '';
+		if ( 'relation' === f.type ) {
+			const n = Array.isArray( v ) ? v.length : 0;
+			/* translators: %d: how many items a field holds. */
+			return n ? sprintf( _n( '%d item', '%d items', n ), n ) : '';
+		}
+		const label = ( one ) => {
+			if ( one && 'object' === typeof one ) return String( one.label || '' );
+			const c = f.choices;
+			if ( Array.isArray( c ) ) {
+				const hit = c.find( ( x ) => String( x.value ) === String( one ) || String( x[ 0 ] ) === String( one ) );
+				return hit ? String( hit.label || hit[ 1 ] || one ) : String( one );
+			}
+			return c && null != c[ one ] ? String( c[ one ] ) : String( one );
+		};
+		return Array.isArray( v ) ? v.map( label ).filter( Boolean ).join( ', ' ) : label( v );
+	}
+
+	// A named field that says what's missing while it's empty can tint the door.
+	function editorPanelEmptyTone( ed, p ) {
+		if ( p.status ) return '';
+		const values = ed.panelValues[ p.desc.id ] || {};
+		const fields = [];
+		p.groups.forEach( ( g ) => ( g.fields || [] ).forEach( ( f ) => fields.push( f ) ) );
+		const named = fields.filter( ( f ) => f.inSummary );
+		if ( ! named.length || named.some( ( f ) => panelFieldSummary( f, values[ f.name ] ) ) ) return '';
+		return named.some( ( f ) => f.emptySummary ) ? 'amber' : '';
+	}
+
 	function editorPanelSummary( ed, p ) {
 		if ( p.status ) {
 			return p.status.summary
@@ -39326,6 +39360,13 @@
 			const v = values[ f.name ];
 			return v != null && v !== '' && v !== false;
 		} );
+		const named = fields.filter( ( f ) => f.inSummary );
+		if ( named.length ) {
+			const said = named.map( ( f ) => panelFieldSummary( f, values[ f.name ] ) ).filter( Boolean );
+			if ( said.length ) return said.join( ' · ' );
+			const empty = named.find( ( f ) => f.emptySummary );
+			if ( empty ) return empty.emptySummary;
+		}
 		const locked = p.groups.reduce( ( n, g ) => n + ( g.locked || 0 ), 0 );
 		if ( p.desc.id === 'seo' ) {
 			if ( values.focus_keyword ) return values.focus_keyword;
@@ -40168,7 +40209,7 @@
 			title: p.desc.label,
 			sub: p.desc.sub || '',
 			summary: editorPanelSummary( ed, p ),
-			tone: p.status && p.status.tone,
+			tone: ( p.status && p.status.tone ) || editorPanelEmptyTone( ed, p ),
 		} ) ).join( '' );
 		el.innerHTML = `
 		<div class="minn-side-card">
@@ -46008,6 +46049,7 @@
 		[ body, ...$$( '.minn-slot', body ).filter( isMinnSlot ) ].forEach( ( root ) => {
 			$$( ':scope > table, :scope > figure.wp-block-table table', root ).forEach( ( t ) => targets.push( { el: t, kind: 'table' } ) );
 			$$( ':scope > figure.wp-block-image img, :scope > img', root ).forEach( ( i ) => targets.push( { el: i, kind: 'image' } ) );
+			$$( ':scope > figure.wp-block-audio, :scope > figure.wp-block-video', root ).forEach( ( f ) => targets.push( { el: f, kind: f.classList.contains( 'wp-block-audio' ) ? 'audio' : 'video' } ) );
 			// Code blocks ride the same persistent chips as tables/images — the
 			// old hover-shown chip flickered and only the chip itself was a hover
 			// target. Verse/preformatted pres have no language to configure.
@@ -46073,10 +46115,14 @@
 			chip.textContent = '\u2699 ' + chipText;
 			chip.title = t.kind === 'table' ? __( 'Table \u2014 rows, columns, header' )
 				: t.kind === 'code' ? __( 'Code block \u2014 syntax highlighting' )
+				: t.kind === 'audio' ? __( 'Audio \u2014 caption, replace' )
+				: t.kind === 'video' ? __( 'Video \u2014 caption, replace' )
 				: __( 'Image \u2014 alt, caption, replace' );
 			chip.setAttribute( 'aria-label',
 				t.kind === 'table' ? __( 'Table settings' )
 				: t.kind === 'code' ? `Code block settings${ chipText !== 'code' ? ', ' + chipText : '' }`
+				: t.kind === 'audio' ? __( 'Audio settings' )
+				: t.kind === 'video' ? __( 'Video settings' )
 				: __( 'Image settings' ) );
 			const box = t.el.closest( 'figure' ) || t.el;
 			const rect = box.getBoundingClientRect();
@@ -50329,10 +50375,13 @@
 
 	function closeModal() {
 		const ret = state.modal && state.modal.ret;
+		const fromDoor = state.modal && 'editor-side' === state.modal.type;
 		state.modal = null;
 		if ( typeof hidePluginTip === 'function' ) hidePluginTip();
 		hideRevHeatTip();
 		renderOverlays();
+		// The door's summary line reads what the dialog just changed.
+		if ( fromDoor && state.editor && $( '#minn-editor-side' ) ) renderEditorSide();
 		// Deferred one tick: a pick's callback runs AFTER closeModal returns,
 		// and its value must be in state before the dialog it came from
 		// reopens and re-renders. The closure's own guards make a stale

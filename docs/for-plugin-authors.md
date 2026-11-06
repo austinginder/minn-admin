@@ -963,6 +963,8 @@ hooks, each with its own section below or its own contract note:
 | `minn_admin_editor_commands` | filter | Register free-form slash-menu / block-picker commands (boilerplate HTML, island templates, async routes) |
 | `minn_admin_before_render_blocks` | action | Register assets before island `do_blocks` |
 | `minn_admin_after_render_blocks` | action | Take off anything the before action armed for that render (same arguments) |
+| `minn_admin_overview_stats` | filter | `( array $cards )`: the Overview's stat cards. Each needs a stable `key` and a `label`; `value`, `delta`, `group` and `goto` (an app route, such as your surface's id) work as the built-in cards' do. Replace the `posts` card on a site that writes mostly in its own type (since 0.49.0) |
+| `minn_admin_new_first` | filter | `( array $rest_bases )`: content types that lead the New menu, ahead of Post (since 0.49.0) |
 | `minn_admin_render_styles` | filter | Extra CSS URLs / inline CSS for island previews |
 | `minn_admin_rendered_html` | filter | Rewrite one island's rendered HTML (maps, fallbacks) |
 | `minn_admin_favicon` | filter | URL of the browser-tab icon for Minn's app on sites without a Site Icon (a theme's brand mark); without one Minn uses its own mark in the viewer's accent (since 0.43.0) |
@@ -1527,6 +1529,13 @@ repeater support is the reference. Values ride the normal
 post save (autosave included), so your plugin only needs its values readable/writable on the
 post REST response (`register_rest_field`, the way the bundled ACF adapter's `minn_acf`
 field works).
+
+**What the door says (since 0.49.0).** By default a panel's door counts its fields ("4 fields ·
+3 set"). Set `inSummary: true` on the fields that say the most and the door shows their values
+instead: a `select`'s choice label, `multicheck` labels, the `{ value, label }` of a `suggest`, a
+count for a `relation`. Add `emptySummary` to one of them ("Choose a region") and, while all the
+named fields are empty, the door shows that text tinted amber. The door repaints when its dialog
+closes.
 
 **What a save sends (since 0.45.0).** The object under `writeKey` holds only the fields
 that changed since the panel loaded or last saved; a field the person left alone is not
