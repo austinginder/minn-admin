@@ -948,6 +948,7 @@ function minn_admin_acf_map_field( $f ) {
 		'min'       => isset( $f['min'] ) && '' !== $f['min'] ? $f['min'] : null,
 		'max'       => isset( $f['max'] ) && '' !== $f['max'] ? $f['max'] : null,
 		'anyChoice' => ! empty( $f['allow_custom'] ) ? true : null,
+		'help'      => ! empty( $f['instructions'] ) ? trim( html_entity_decode( wp_strip_all_tags( (string) $f['instructions'] ), ENT_QUOTES ) ) : null,
 		'key'       => $f['key'],
 	);
 	if ( in_array( $type, array( 'suggest', 'relation' ), true ) ) {
