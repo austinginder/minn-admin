@@ -17,6 +17,7 @@ const fake = ( name, mimeType ) => ( { name, mimeType, buffer: Buffer.from( 'min
 	await login( page );
 	const id = await createPost( page, { title: 'Audio and video', content: '<!-- wp:paragraph -->\n<p>Opening line.</p>\n<!-- /wp:paragraph -->' } );
 	const uploaded = [];
+	let other = 0;
 
 	const rest = ( path, method = 'GET' ) => page.evaluate( async ( [ p, m ] ) => {
 		const r = await fetch( window.MINN.restUrl + p, { method: m, headers: { 'X-WP-Nonce': window.MINN.nonce } } );
@@ -152,7 +153,44 @@ const fake = ( name, mimeType ) => ( { name, mimeType, buffer: Buffer.from( 'min
 		t.check( 'a dropped audio file becomes an audio block', await page.locator( '#minn-editor-body figure.wp-block-audio' ).count() === 2, '' );
 		await save();
 		t.check( 'and saves', ( await saved() ).includes( `<!-- wp:audio {"id":${ dropRes.id }} -->` ), '' );
+
+		// A drop whose upload finishes after the writer opened another post lands
+		// nowhere: the file stays in the library, and the other post is untouched.
+		other = await createPost( page, { title: 'Audio drop elsewhere', content: '<!-- wp:paragraph -->\n<p>Other post.</p>\n<!-- /wp:paragraph -->' } );
+		let release;
+		const gate = new Promise( ( r ) => { release = r; } );
+		await page.route( /wp\/v2\/media(\?|$)/, async ( route ) => {
+			if ( 'POST' === route.request().method() ) await gate;
+			await route.continue();
+		} );
+		await page.locator( '#minn-editor-body > p' ).first().scrollIntoViewIfNeeded();
+		const late = page.waitForResponse( ( r ) => /wp\/v2\/media$/.test( new URL( r.url() ).pathname ) && 'POST' === r.request().method() );
+		await page.evaluate( () => {
+			const dt = new DataTransfer();
+			dt.items.add( new File( [ 'minn test media late' ], 'minn-late-drop.mp3', { type: 'audio/mpeg' } ) );
+			const el = document.querySelector( '#minn-editor-body > p' );
+			const r = el.getBoundingClientRect();
+			el.dispatchEvent( new DragEvent( 'drop', { bubbles: true, cancelable: true, dataTransfer: dt, clientX: r.left + 5, clientY: r.top + 5 } ) );
+		} );
+		await page.waitForTimeout( 300 );
+		await page.evaluate( ( o ) => {
+			history.pushState( {}, '', `/minn-admin/editor/posts/${ o }` );
+			window.dispatchEvent( new PopStateEvent( 'popstate' ) );
+		}, other );
+		await page.waitForFunction( () => {
+			const b = document.querySelector( '#minn-editor-body' );
+			return b && b.innerText.includes( 'Other post.' ) && ! b.innerText.includes( 'Opening line.' );
+		}, null, { timeout: 15000 } );
+		release();
+		const lateRes = await ( await late ).json();
+		uploaded.push( lateRes.id );
+		await page.unroute( /wp\/v2\/media(\?|$)/ );
+		await page.waitForTimeout( 3500 );
+		t.check( 'a late upload adds nothing to the post opened meanwhile', await page.locator( '#minn-editor-body figure.wp-block-audio' ).count() === 0, '' );
+		const otherRaw = ( await rest( `wp/v2/posts/${ other }?context=edit&_fields=content` ) ).content.raw;
+		t.check( 'and nothing is saved into it', ! otherRaw.includes( 'wp:audio' ) && ! otherRaw.includes( 'minn-late-drop' ), otherRaw.slice( 0, 300 ) );
 	} finally {
+		if ( other ) await deletePost( page, other ).catch( () => {} );
 		await deletePost( page, id ).catch( () => {} );
 		for ( const m of uploaded ) await rest( `wp/v2/media/${ m }?force=true`, 'DELETE' ).catch( () => {} );
 		await t.done( browser, errors );

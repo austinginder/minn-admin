@@ -3825,14 +3825,17 @@
 		// row. A rest_base carrying a slash can't ride the /editor/<type>
 		// route (path segments), so those stay off the menu.
 		const newFirst = B.newFirst || [];
+		// Posts, pages and patterns too: a site can map their create_posts
+		// to do_not_allow, as with any type.
+		const noCreate = B.noCreate || {};
 		const cptRow = ( t ) => `<button data-newtype="${ esc( t.restBase ) }"><span class="minn-row-icon">${ icon( 'doc' ) }</span> ${ esc( t.singular || t.name ) }</button>`;
 		const firstRows = creatableCpts().filter( ( t ) => newFirst.includes( t.restBase ) ).map( cptRow ).join( '' );
 		const cptRows = creatableCpts().filter( ( t ) => ! newFirst.includes( t.restBase ) ).map( cptRow ).join( '' );
 		menu.innerHTML = `
 			${ firstRows }
-			<button data-newtype="posts"><span class="minn-row-icon">${ icon( 'pilcrow' ) }</span> ${ esc( __( 'Post' ) ) }</button>
-			${ B.caps.editPages ? `<button data-newtype="pages"><span class="minn-row-icon">${ icon( 'file' ) }</span> ${ esc( __( 'Page' ) ) }</button>` : '' }
-			<button data-newtype="blocks"><span class="minn-row-icon">${ icon( 'block' ) }</span> ${ esc( __( 'Pattern' ) ) }</button>
+			${ noCreate.posts ? '' : `<button data-newtype="posts"><span class="minn-row-icon">${ icon( 'pilcrow' ) }</span> ${ esc( __( 'Post' ) ) }</button>` }
+			${ B.caps.editPages && ! noCreate.pages ? `<button data-newtype="pages"><span class="minn-row-icon">${ icon( 'file' ) }</span> ${ esc( __( 'Page' ) ) }</button>` : '' }
+			${ noCreate.blocks ? '' : `<button data-newtype="blocks"><span class="minn-row-icon">${ icon( 'block' ) }</span> ${ esc( __( 'Pattern' ) ) }</button>` }
 			${ cptRows }
 			${ newProductRow() }
 			${ builderRows }`;
@@ -7247,7 +7250,7 @@
 				<div></div><div>${ contentSortHead( 'title' ) }</div><div>${ esc( __( 'Status' ) ) }</div><div>${ esc( __( 'Author' ) ) }</div><div>${ contentSortHead( 'date' ) }</div><div></div>
 			</div>
 			${ filtered.length ? filtered.map( ( p ) => `
-				<div class="minn-table-row minn-content-cols${ state.contentTrash ? ' trash' : '' }${ sel.has( p.id ) ? ' sel' : '' }" data-id="${ p.id }" data-type="${ esc( p.type ) }" data-status="${ esc( p.status ) }" data-link="${ esc( p.link || '' ) }"${ p.builder && p.builder.active !== false && p.builder.edit_url ? ` data-builder="${ esc( p.builder.name ) }" data-builder-edit="${ esc( p.builder.edit_url ) }"` : '' }>
+				<div class="minn-table-row minn-content-cols${ state.contentTrash ? ' trash' : '' }${ sel.has( p.id ) ? ' sel' : '' }" data-id="${ p.id }" data-type="${ esc( p.type ) }" data-status="${ esc( p.status ) }" data-link="${ esc( p.link || '' ) }"${ p.canDelete ? ' data-can-delete="1"' : '' }${ p.builder && p.builder.active !== false && p.builder.edit_url ? ` data-builder="${ esc( p.builder.name ) }" data-builder-edit="${ esc( p.builder.edit_url ) }"` : '' }>
 					<div class="minn-cbcell"><input type="checkbox" class="minn-cb minn-row-cb" data-cbid="${ p.id }" aria-label="${ esc( sprintf( /* translators: %s: the title or name of the row being selected. */ __( 'Select %s' ), p.title ) ) }"${ sel.has( p.id ) ? ' checked' : '' }></div>
 					<div class="minn-row-icon${ p.thumb ? ' has-thumb' : '' }">${ rowIcon( p ) }</div>
 					<div class="minn-cell-clip">
@@ -7463,6 +7466,7 @@
 			type: el.dataset.type,
 			status: el.dataset.status,
 			link: el.dataset.link,
+			canDelete: el.dataset.canDelete === '1',
 			builder: el.dataset.builderEdit ? { name: el.dataset.builder || '', edit_url: el.dataset.builderEdit } : null,
 		} );
 		if ( ! state.contentTrash ) {
@@ -34041,7 +34045,7 @@
 			</div>`;
 		}
 		const inner = stripBlockComments( raw ).trim();
-		const chipLabel = ( B.blockTitles || {} )[ name ] || short || name || 'block';
+		const chipLabel = ( B.blockTitles && Object.prototype.hasOwnProperty.call( B.blockTitles, name ) ? B.blockTitles[ name ] : '' ) || short || name || 'block';
 		// Hover hint: says WHY the block is locked and where edits live. A core
 		// text block that islanded did so because of styling attrs the serializer
 		// can't reproduce; everything else is protected markup. Reveal rides
@@ -42108,12 +42112,16 @@
 					let at = sel && sel.rangeCount ? sel.getRangeAt( 0 ).startContainer : null;
 					const root = at ? blockRootOf( at, body ) : body;
 					while ( at && at.parentNode !== root ) at = at.parentNode;
+					// The post the file was dropped on: one opened during a slow
+					// upload gets nothing, and the file stays in the library.
+					const ed = state.editor;
 					( async () => {
 						for ( const file of players ) {
 							try {
 								toast( __( 'Uploading…' ) );
 								const up = await uploadMedia( file );
 								state.cache.media = null;
+								if ( state.editor !== ed || state.route !== 'editor' || ! body.isConnected ) continue;
 								insertMediaFigure( at && 1 === at.nodeType ? at : null, file.type.startsWith( 'audio/' ) ? 'audio' : 'video', { id: up.id, url: up.source_url } );
 							} catch ( err ) {
 								toast( err.message, true );
@@ -51652,7 +51660,12 @@
 			const kind = m.mediaType && 'image' !== m.mediaType ? m.mediaType : '';
 			const any = !! m.any || !! kind;
 			const kindTitle = { audio: __( 'Insert audio' ), video: __( 'Insert video' ) }[ kind ];
-			const kindDrop = { audio: __( 'Drag & drop an audio file here, or %s' ), video: __( 'Drag & drop a video here, or %s' ) }[ kind ];
+			const kindDrop = {
+				/* translators: %s: a "browse" link. */
+				audio: __( 'Drag & drop an audio file here, or %s' ),
+				/* translators: %s: a "browse" link. */
+				video: __( 'Drag & drop a video here, or %s' ),
+			}[ kind ];
 			return `
 			<div class="minn-modal-overlay minn-picker-over" id="minn-modal-overlay">
 				<div class="minn-modal wide">
@@ -52403,7 +52416,7 @@
 							const cb = m.callback;
 							closeModal();
 							if ( cb ) cb( it );
-							toast( __( 'Image uploaded' ) );
+							toast( m.mediaType && 'image' !== m.mediaType ? __( 'Uploaded' ) : __( 'Image uploaded' ) );
 							return;
 						}
 						let done = 0;

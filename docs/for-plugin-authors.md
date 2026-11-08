@@ -963,7 +963,7 @@ hooks, each with its own section below or its own contract note:
 | `minn_admin_editor_commands` | filter | Register free-form slash-menu / block-picker commands (boilerplate HTML, island templates, async routes) |
 | `minn_admin_before_render_blocks` | action | Register assets before island `do_blocks` |
 | `minn_admin_after_render_blocks` | action | Take off anything the before action armed for that render (same arguments) |
-| `minn_admin_overview_stats` | filter | `( array $cards )`: the Overview's stat cards. Each needs a stable `key` and a `label`; `value`, `delta`, `group` and `goto` (an app route, such as your surface's id) work as the built-in cards' do. Replace the `posts` card on a site that writes mostly in its own type (since 0.49.0) |
+| `minn_admin_overview_stats` | filter | `( array $cards )`: the Overview's stat cards. Each needs a stable `key` and a `label`; `value`, `delta`, `group` and `goto` (an app route, such as your surface's id) work as the built-in cards' do. Replace the `posts` card on a site that writes mostly in its own type. The cards reach every user who can open the Overview, Contributors included, so add a card only when `current_user_can()` allows the count it shows (the built-in cards follow their views' capabilities) (since 0.49.0) |
 | `minn_admin_new_first` | filter | `( array $rest_bases )`: content types that lead the New menu, ahead of Post (since 0.49.0) |
 | `minn_admin_render_styles` | filter | Extra CSS URLs / inline CSS for island previews |
 | `minn_admin_rendered_html` | filter | Rewrite one island's rendered HTML (maps, fallbacks) |

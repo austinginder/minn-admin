@@ -4756,7 +4756,8 @@ class Minn_Admin_REST {
 		 * The Overview's stat cards. A site that mostly writes one custom type can
 		 * put its count where the posts count is. Each row needs a stable `key`
 		 * and a `label`; `value`, `delta`, `group` and `goto` (an app route) work
-		 * as the built-in cards' do.
+		 * as the built-in cards' do. The cards reach every user who can open the
+		 * Overview, so add one only when the current user may see its count.
 		 *
 		 * @param array[] $stats The cards.
 		 */
@@ -5654,7 +5655,7 @@ class Minn_Admin_REST {
 			$items[] = array(
 				'kind'  => 'post',
 				'id'    => (int) $p->ID,
-				'type'  => $activity_types[ $p->post_type ],
+				'type'  => isset( $activity_types[ $p->post_type ] ) ? $activity_types[ $p->post_type ] : 'posts',
 				/* translators: 1: author display name, 2: post title. */
 				'text'  => sprintf( __( '%1$s published “%2$s”', 'minn-admin' ), $author ?: __( 'Someone', 'minn-admin' ), $title ),
 				'time'  => strtotime( $p->post_date_gmt . ' UTC' ),

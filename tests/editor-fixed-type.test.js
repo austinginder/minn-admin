@@ -73,6 +73,26 @@ const { BASE, launch, login, reporter, onExit } = require( './helpers' );
 		t.check( 'boot names the type nobody can add', true === noCreate[ 'minn-fixed' ], JSON.stringify( noCreate ) );
 		t.check( 'boot leaves ordinary types out', ! noCreate.posts && ! noCreate.pages, JSON.stringify( noCreate ) );
 
+		// The content list's row menu: an ordinary post's row still offers trash.
+		await page.goto( `${ BASE }/minn-admin/content`, { waitUntil: 'domcontentloaded' } );
+		await page.waitForSelector( `.minn-table-row[data-id="${ ordinary }"]`, { timeout: 20000 } );
+		await page.click( `.minn-table-row[data-id="${ ordinary }"] .minn-row-title`, { button: 'right' } );
+		await page.waitForSelector( '.minn-row-menu', { timeout: 5000 } );
+		const rowMenu = await page.$eval( '.minn-row-menu', ( m ) => m.innerText );
+		t.check( 'ordinary post row menu offers Move to trash', rowMenu.includes( 'Move to trash' ), rowMenu );
+		t.check( 'and Duplicate', rowMenu.includes( 'Duplicate' ), rowMenu );
+		await page.keyboard.press( 'Escape' );
+		await page.mouse.click( 5, 5 );
+
+		// The New menu asks the same list for posts, pages and patterns.
+		await page.evaluate( () => { window.MINN.noCreate = Object.assign( {}, window.MINN.noCreate, { posts: true, blocks: true } ); } );
+		await page.click( '#minn-new-btn' );
+		await page.waitForSelector( '.minn-new-menu:not(.minn-row-menu)', { timeout: 5000 } );
+		const newRows = await page.$$eval( '.minn-new-menu:not(.minn-row-menu) [data-newtype]', ( b ) => b.map( ( x ) => x.dataset.newtype ) );
+		t.check( 'New menu leaves out Post and Pattern when they can\'t be added', ! newRows.includes( 'posts' ) && ! newRows.includes( 'blocks' ), newRows.join( ',' ) );
+		t.check( 'and keeps Page', newRows.includes( 'pages' ), newRows.join( ',' ) );
+		await page.keyboard.press( 'Escape' );
+
 		await openEd( `editor/posts/${ ordinary }` );
 		t.check( 'ordinary post keeps its trash link', await page.locator( '#minn-trash-post' ).count() === 1, '' );
 

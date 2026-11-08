@@ -2346,7 +2346,7 @@ class Minn_Admin {
 			'noCreate' => self::no_create_types(),
 			// REST bases that lead the New menu, for a site that mostly writes one
 			// custom type rather than posts.
-			'newFirst' => array_values( array_filter( array_map( 'strval', (array) apply_filters( 'minn_admin_new_first', array() ) ) ) ),
+			'newFirst' => array_values( array_filter( array_map( 'strval', array_filter( (array) apply_filters( 'minn_admin_new_first', array() ), 'is_scalar' ) ) ) ),
 			'blockTitles' => (object) self::plugin_block_titles(),
 			// Multisite context: users are network-shared (delete becomes
 			// remove-from-site, profile edits need network caps), plugins can
