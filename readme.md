@@ -240,9 +240,10 @@ Expand only the part of Minn you want to explore.
   menu too: the **Query Loop** (post type, ordering, count and more editable from the ⚙
   gear), the **widget blocks** (Latest Posts, Archives, Calendar, Search…), and **Tabs and
   Accordion** with starter sections, all saved as exactly the markup the block editor
-  produces. Link popover on ⌘K, text alignment,
-  table and image controls in island-style cutouts, at the top level and inside
-  containers. Slash commands stay curated and type-to-filter; **Browse all** or **⌘/**
+  produces. **Audio and video** come in from `/audio`, `/video` or a dropped file and play
+  right in the text, saved as WordPress's own Audio and Video blocks. Link popover on ⌘K,
+  text alignment, table and image controls in island-style cutouts, at the top level and
+  inside containers. Slash commands stay curated and type-to-filter; **Browse all** or **⌘/**
   opens the **block picker**, grouped by source (basics, plugin blocks, design libraries,
   patterns). Plugins can register free-form slash items through
   **`minn_admin_editor_commands`** (boilerplate HTML, island templates, or an async REST

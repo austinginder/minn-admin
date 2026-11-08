@@ -4,14 +4,14 @@
     "author": "<a href=\"https://austinginder.com\">Austin Ginder</a>",
     "author_profile": "https://profiles.wordpress.org/austinginder",
     "donate_link": "https://github.com/sponsors/austinginder",
-    "version": "0.48.0",
-    "download_url": "https://github.com/austinginder/minn-admin/releases/download/v0.48.0/minn-admin.zip",
+    "version": "0.49.0",
+    "download_url": "https://github.com/austinginder/minn-admin/releases/download/v0.49.0/minn-admin.zip",
     "sha256": "0ee58d7640e27deb5c9489dbb4a48cc9ce3b35c926a9c7ff71f711c405725a97",
     "requires": "6.0",
     "tested": "7.1",
     "requires_php": "7.4",
     "added": "2026-07-03 16:00:00",
-    "last_updated": "2026-10-30 07:42:16",
+    "last_updated": "2026-11-08 09:27:09",
     "homepage": "https://minnadmin.com",
     "sections": {
         "description": "A reimagined WordPress admin experience. Fast, focused and beautiful. Served at /minn-admin/."
@@ -19,267 +19,267 @@
     "translations": [
         {
             "language": "ar",
-            "version": "0.48.0",
-            "updated": "2026-10-30 11:49:03",
-            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.48.0/minn-admin-ar.zip",
-            "sha256": "112e1962bc59623fb653fa56cd7c08414ad9d7b2433227e696181fb993fc2cf5",
-            "catalog": "d78870ea7c67c252b4efb9fa39295ba8f9e88b1454245e6a7d132ea27047bff9"
+            "version": "0.49.0",
+            "updated": "2026-11-08 14:28:09",
+            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.49.0/minn-admin-ar.zip",
+            "sha256": "0c4dc6b186ceef96dcca69a225c221e67fb68960e1b0fa4ec38d15002425e851",
+            "catalog": "f3475ee9cdc8e3c95be83e1420371d53ac36d2411cf3fea8d78093f1e5667eec"
         },
         {
             "language": "cs_CZ",
-            "version": "0.48.0",
-            "updated": "2026-10-30 11:49:03",
-            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.48.0/minn-admin-cs_CZ.zip",
-            "sha256": "ca842e8a6bf92342ca158149865713f680459e2c5b5f636aa43d3c080e28a864",
-            "catalog": "0627b5bf86d3f1f35bab186324bf2c9e411a7106fd8fccfee66cb2c5e796e0a8"
+            "version": "0.49.0",
+            "updated": "2026-11-08 14:28:09",
+            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.49.0/minn-admin-cs_CZ.zip",
+            "sha256": "744a171564ef08be799beee161917ac4f2534e97a877c4b90639cedbde44fc48",
+            "catalog": "d5e22234461b084c231e867cb50c0cdc8c6e36db9294c31c5520d22beae0d59b"
         },
         {
             "language": "da_DK",
-            "version": "0.48.0",
-            "updated": "2026-10-30 11:49:03",
-            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.48.0/minn-admin-da_DK.zip",
-            "sha256": "1d7192cf6e1def0486a40ad684c4adcf2282ddf7b48826f12610663662bb732e",
-            "catalog": "83079764c653bab0a3eb2422cb5dd3f6995c8c51f975661501e1799a80de50ae"
+            "version": "0.49.0",
+            "updated": "2026-11-08 14:28:09",
+            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.49.0/minn-admin-da_DK.zip",
+            "sha256": "ca6f32c8590546abb375d769d1affc5d3b0f8c0c91be5ae5b2a3baf688809c6a",
+            "catalog": "1b30b9302e08536f8d349a4b32ad4eb646149e6f0179cd5b1be5a3d48f473137"
         },
         {
             "language": "de_AT",
-            "version": "0.48.0",
-            "updated": "2026-10-30 11:49:03",
-            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.48.0/minn-admin-de_AT.zip",
-            "sha256": "a2cbed08649e54b7bdd5ad5c1f7d6fb64165551555c957a1761de7e8f3cb5f33",
-            "catalog": "0028ffdf3c7ef2da6b2404b4b703ffdc2d106207ba5d5e0a21b07d9a6a87703d"
+            "version": "0.49.0",
+            "updated": "2026-11-08 14:28:09",
+            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.49.0/minn-admin-de_AT.zip",
+            "sha256": "ccb160cb921fd62a9ea637690340cfefb0afe3c8a5734830a75c52d45d3c21af",
+            "catalog": "b5b6a51b4c8ce2ff56220ed9cccebd61d345a5208628b8c2be0d397fe6d8d366"
         },
         {
             "language": "de_CH",
-            "version": "0.48.0",
-            "updated": "2026-10-30 11:49:03",
-            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.48.0/minn-admin-de_CH.zip",
-            "sha256": "ad17699cdc1512bce0268166a40fc533541a8d877816b97725748a836334a2fb",
-            "catalog": "0028ffdf3c7ef2da6b2404b4b703ffdc2d106207ba5d5e0a21b07d9a6a87703d"
+            "version": "0.49.0",
+            "updated": "2026-11-08 14:28:09",
+            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.49.0/minn-admin-de_CH.zip",
+            "sha256": "a8832e39235ba447a1b3646a2cb862ca4e593840504a08868419b229a2529ceb",
+            "catalog": "b5b6a51b4c8ce2ff56220ed9cccebd61d345a5208628b8c2be0d397fe6d8d366"
         },
         {
             "language": "de_CH_informal",
-            "version": "0.48.0",
-            "updated": "2026-10-30 11:49:03",
-            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.48.0/minn-admin-de_CH_informal.zip",
-            "sha256": "2262e2cc0bae9c902414b1408abbac920e9775563cdebb3c282f2b4e7d398815",
-            "catalog": "0028ffdf3c7ef2da6b2404b4b703ffdc2d106207ba5d5e0a21b07d9a6a87703d"
+            "version": "0.49.0",
+            "updated": "2026-11-08 14:28:09",
+            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.49.0/minn-admin-de_CH_informal.zip",
+            "sha256": "ea995743be0e6d01d09a7e3a7c7523c59d12cc7b186dd175a20f4034e56b1e77",
+            "catalog": "b5b6a51b4c8ce2ff56220ed9cccebd61d345a5208628b8c2be0d397fe6d8d366"
         },
         {
             "language": "de_DE",
-            "version": "0.48.0",
-            "updated": "2026-10-30 11:49:03",
-            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.48.0/minn-admin-de_DE.zip",
-            "sha256": "6160cf563544c16fdebabc5f9b689d68e33b91e92c182c2544f973f4eeb05d11",
-            "catalog": "0028ffdf3c7ef2da6b2404b4b703ffdc2d106207ba5d5e0a21b07d9a6a87703d"
+            "version": "0.49.0",
+            "updated": "2026-11-08 14:28:09",
+            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.49.0/minn-admin-de_DE.zip",
+            "sha256": "259ccc19585369097e19dd02f785d5645df13e7db953b3c35a7898509096e00b",
+            "catalog": "b5b6a51b4c8ce2ff56220ed9cccebd61d345a5208628b8c2be0d397fe6d8d366"
         },
         {
             "language": "de_DE_formal",
-            "version": "0.48.0",
-            "updated": "2026-10-30 11:49:03",
-            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.48.0/minn-admin-de_DE_formal.zip",
-            "sha256": "b1dee317b13b70237cccd5e5c2b84533939aaadec18bcde32ac67607a9426a0c",
-            "catalog": "0028ffdf3c7ef2da6b2404b4b703ffdc2d106207ba5d5e0a21b07d9a6a87703d"
+            "version": "0.49.0",
+            "updated": "2026-11-08 14:28:09",
+            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.49.0/minn-admin-de_DE_formal.zip",
+            "sha256": "25d5c54603f0e322f7c0db5ec05efc22fe2859e165545ff1736a0f8da615b491",
+            "catalog": "b5b6a51b4c8ce2ff56220ed9cccebd61d345a5208628b8c2be0d397fe6d8d366"
         },
         {
             "language": "en_AU",
-            "version": "0.48.0",
-            "updated": "2026-10-30 11:49:03",
-            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.48.0/minn-admin-en_AU.zip",
-            "sha256": "197a0b6e36d4246eddb961df0998fa767a481e904b6e5dc8a6133521b41255d4",
-            "catalog": "82a0e81910e7e93b81acb31aa7dbddd16d8d51ed6f98527da9086a1ca5040ac5"
+            "version": "0.49.0",
+            "updated": "2026-11-08 14:28:09",
+            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.49.0/minn-admin-en_AU.zip",
+            "sha256": "d61f64d09ba34fa1e6216103192bd8e48a9a815e2739602aaa1b8d332408ce90",
+            "catalog": "0dbae6dc5a9524df58bf5f038628c9795ee21e3b84e214b9646ca24bc5a59581"
         },
         {
             "language": "en_CA",
-            "version": "0.48.0",
-            "updated": "2026-10-30 11:49:03",
-            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.48.0/minn-admin-en_CA.zip",
-            "sha256": "4eab54a8a3dd07d70937d7c39928c1d1e9e266b6ee438e64fec67ae1ae2e57e5",
-            "catalog": "82a0e81910e7e93b81acb31aa7dbddd16d8d51ed6f98527da9086a1ca5040ac5"
+            "version": "0.49.0",
+            "updated": "2026-11-08 14:28:09",
+            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.49.0/minn-admin-en_CA.zip",
+            "sha256": "d6b7e62c03b33ce6276798cf30838eb6583a7502f9b6079e5cab47f7edb3beed",
+            "catalog": "0dbae6dc5a9524df58bf5f038628c9795ee21e3b84e214b9646ca24bc5a59581"
         },
         {
             "language": "en_GB",
-            "version": "0.48.0",
-            "updated": "2026-10-30 11:49:03",
-            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.48.0/minn-admin-en_GB.zip",
-            "sha256": "7caf4c4296e229168a1cada8e5424289518dec159011600f6880918a1227af08",
-            "catalog": "82a0e81910e7e93b81acb31aa7dbddd16d8d51ed6f98527da9086a1ca5040ac5"
+            "version": "0.49.0",
+            "updated": "2026-11-08 14:28:09",
+            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.49.0/minn-admin-en_GB.zip",
+            "sha256": "34c39b326d4fc342d3f728fe770599759c9a7cc2444b52e157e7d14a6b6b2c9f",
+            "catalog": "0dbae6dc5a9524df58bf5f038628c9795ee21e3b84e214b9646ca24bc5a59581"
         },
         {
             "language": "en_NZ",
-            "version": "0.48.0",
-            "updated": "2026-10-30 11:49:03",
-            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.48.0/minn-admin-en_NZ.zip",
-            "sha256": "f8bc995dea42f20791146d08d6a1fe058b2dca1be81a0f825c938e5505fefdc2",
-            "catalog": "82a0e81910e7e93b81acb31aa7dbddd16d8d51ed6f98527da9086a1ca5040ac5"
+            "version": "0.49.0",
+            "updated": "2026-11-08 14:28:09",
+            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.49.0/minn-admin-en_NZ.zip",
+            "sha256": "eea727873d1e9bf9f8441695e2c9678cc10980388ca571c139cfda173432e95d",
+            "catalog": "0dbae6dc5a9524df58bf5f038628c9795ee21e3b84e214b9646ca24bc5a59581"
         },
         {
             "language": "en_ZA",
-            "version": "0.48.0",
-            "updated": "2026-10-30 11:49:03",
-            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.48.0/minn-admin-en_ZA.zip",
-            "sha256": "17057edc447f222720ab8b0c747c08376043376cfcf7cbd4fea8e91963c1268b",
-            "catalog": "82a0e81910e7e93b81acb31aa7dbddd16d8d51ed6f98527da9086a1ca5040ac5"
+            "version": "0.49.0",
+            "updated": "2026-11-08 14:28:09",
+            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.49.0/minn-admin-en_ZA.zip",
+            "sha256": "d149b4dbdfc613c5d7fe697f6644b00e45d3ba2bed60c54b29fe424b70e84bc5",
+            "catalog": "0dbae6dc5a9524df58bf5f038628c9795ee21e3b84e214b9646ca24bc5a59581"
         },
         {
             "language": "es_ES",
-            "version": "0.48.0",
-            "updated": "2026-10-30 11:49:03",
-            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.48.0/minn-admin-es_ES.zip",
-            "sha256": "c8691084f9d8c6bc63175bdd68f7abc6b8876d416edea207632f3e2fb38384c1",
-            "catalog": "032aa1d2c64930202899e2d12e074a0806630cd65f0a56b4cbf088b4eeaec704"
+            "version": "0.49.0",
+            "updated": "2026-11-08 14:28:09",
+            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.49.0/minn-admin-es_ES.zip",
+            "sha256": "ac9462dac2fd5d97de476d3e24d4f0ee4ec37989f031b12ff7e7efbec9672abe",
+            "catalog": "db464206f9b38eb3b4c778f612eed752929e64fc24ecbac5fb4207a0c8460fb0"
         },
         {
             "language": "es_MX",
-            "version": "0.48.0",
-            "updated": "2026-10-30 11:49:03",
-            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.48.0/minn-admin-es_MX.zip",
-            "sha256": "bdb631151f51ef32a6b2e092437fe929cbab9f9871e572552a400f8d32d09fbe",
-            "catalog": "69fc16788e63998b2c83f973b2210b3a623425f5d6629b2bb6a97b4a793ccb75"
+            "version": "0.49.0",
+            "updated": "2026-11-08 14:28:09",
+            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.49.0/minn-admin-es_MX.zip",
+            "sha256": "e3c31dba99b0be91420b88f9602556e4e70912cc86d0369790a082812aff8e9b",
+            "catalog": "38222b206bd75ba1d85b238cbefda3f7c7fbdfade6e679f89b27a3d942a9a1f6"
         },
         {
             "language": "fa_IR",
-            "version": "0.48.0",
-            "updated": "2026-10-30 11:49:03",
-            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.48.0/minn-admin-fa_IR.zip",
-            "sha256": "705b458848c6b06e5f71063e403a77f14350ebb76e07d5b5d7fcb2d29ceebb4e",
-            "catalog": "0babf14d821cf2babf596a0938cc0038da4a6c0ead49d10feef2f3b651a0a09a"
+            "version": "0.49.0",
+            "updated": "2026-11-08 14:28:09",
+            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.49.0/minn-admin-fa_IR.zip",
+            "sha256": "741e42a9cc412e2befc15f9d17d14e175b70fd5c7a4a6f1641da9e9f4cbff02f",
+            "catalog": "73e640124fe0cfc042425c88157c6fd69d4b307b25000141abe50f7cd40d4173"
         },
         {
             "language": "fr_FR",
-            "version": "0.48.0",
-            "updated": "2026-10-30 11:49:03",
-            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.48.0/minn-admin-fr_FR.zip",
-            "sha256": "608e188d938700bcf0d75f6f65f5831c5ac338b14dde9f142dd3f48105617ba1",
-            "catalog": "69f965ea3efac6dfee8b9943daf44b0de90dd99efe22ae2021ad002c3f912746"
+            "version": "0.49.0",
+            "updated": "2026-11-08 14:28:09",
+            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.49.0/minn-admin-fr_FR.zip",
+            "sha256": "1ef11fda3fa76527c561e0ab3f7a77de56d68e7683300109a9a1e5cb2bb7fc0c",
+            "catalog": "35f5e4789db382b4b96eb438234a47f24751a087e0208b528ed4614d9cb94312"
         },
         {
             "language": "fy",
-            "version": "0.48.0",
-            "updated": "2026-10-30 11:49:03",
-            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.48.0/minn-admin-fy.zip",
-            "sha256": "3b24b951981c68c2d8ab894cc41e3731e6fe22dfd7a810a46121fad28a5c5ca2",
-            "catalog": "92f5fd360770ae8215b5ac6efa619ccd12ab575cbf3ee3aeea96f247f52cb3a5"
+            "version": "0.49.0",
+            "updated": "2026-11-08 14:28:09",
+            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.49.0/minn-admin-fy.zip",
+            "sha256": "059f6edfec9dd54d17d379d6b967257fbcb1725a4483c841b8e8e1faa34b79cc",
+            "catalog": "aa2eb9a5c7912e7e6e83599a6bb2e889152f8db0fbbf683fd2e923029b56f963"
         },
         {
             "language": "he_IL",
-            "version": "0.48.0",
-            "updated": "2026-10-30 11:49:03",
-            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.48.0/minn-admin-he_IL.zip",
-            "sha256": "f0dc56447e174b2a8a7610d11172738084023d1e002ea601396522408607b775",
-            "catalog": "c6a48ada318d9a5504b8b216aba81d9fc4175c9ec34148f75e27c2e30cf0c013"
+            "version": "0.49.0",
+            "updated": "2026-11-08 14:28:09",
+            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.49.0/minn-admin-he_IL.zip",
+            "sha256": "0dc7c84f4b13ad811994250a5b0790ff4dc3b903658eee07b14b3babad6476d6",
+            "catalog": "b86bc12e9a71e69bea931cc0fcc984e1ad89aeefa1a0e0c3edb7eda02a841aed"
         },
         {
             "language": "hu_HU",
-            "version": "0.48.0",
-            "updated": "2026-10-30 11:49:03",
-            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.48.0/minn-admin-hu_HU.zip",
-            "sha256": "b3ecbd496105ae10ecf96429fc6eed4c3c444562d9bc415ff2127ae039f8c774",
-            "catalog": "1013da8ae40c74d954827b11ed6c9639c52fa48fe0fe7fd0cd9e223a71c8b86d"
+            "version": "0.49.0",
+            "updated": "2026-11-08 14:28:09",
+            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.49.0/minn-admin-hu_HU.zip",
+            "sha256": "f96a1cc97d4b87a653b1c288ef983f1a0780fd1f4fe511ffb8547609bc8315ad",
+            "catalog": "927b8cfa5af4f0316e1aa41f795b4a5863a03d426b778cf9b14b0232e7b31191"
         },
         {
             "language": "id_ID",
-            "version": "0.48.0",
-            "updated": "2026-10-30 11:49:03",
-            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.48.0/minn-admin-id_ID.zip",
-            "sha256": "a57e653ad317548b7d836e657d22286c4ebd6d09989c0b65de7682740b209a08",
-            "catalog": "a3092f0322a9e91f1a1932e6c105a6552d996bef38a0e9956cc969649fd6d492"
+            "version": "0.49.0",
+            "updated": "2026-11-08 14:28:09",
+            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.49.0/minn-admin-id_ID.zip",
+            "sha256": "1a167cbf345a6bd8187b3d5a043ec46159906678dc80f29f2aa929c545d88ad9",
+            "catalog": "03e7f6ce743aac842b918668162dd805ef6feaccac9949cecbbbda14cd4a7719"
         },
         {
             "language": "it_IT",
-            "version": "0.48.0",
-            "updated": "2026-10-30 11:49:03",
-            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.48.0/minn-admin-it_IT.zip",
-            "sha256": "15466442b8c30bad0db0b0c92029774299cc60a18ac8cc4660d9e85f28417c2e",
-            "catalog": "c1566bc01471c2af228a6532bde155895c3a247e6b201e95db15c8e7ff73099f"
+            "version": "0.49.0",
+            "updated": "2026-11-08 14:28:09",
+            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.49.0/minn-admin-it_IT.zip",
+            "sha256": "6afb552ba27c2ef02212f3ab66dc6d10c95591fadf31bcc7e52418b12e9fc85d",
+            "catalog": "7a27ee57506c3e2f76687e83da0aa12fb9d7a59adc81753cfedaf1b88c3a4c5c"
         },
         {
             "language": "ja",
-            "version": "0.48.0",
-            "updated": "2026-10-30 11:49:03",
-            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.48.0/minn-admin-ja.zip",
-            "sha256": "8ebad33e43edf8265d44dae3645151c315de3ae95034c6a656c08f3a4f937fad",
-            "catalog": "ec9cdfb38a91b2250aa5979943e36af6d385fbce0cbb8ee8f09b17ae97a53aab"
+            "version": "0.49.0",
+            "updated": "2026-11-08 14:28:09",
+            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.49.0/minn-admin-ja.zip",
+            "sha256": "4ed5eeb486ae61594c2b93bc0d9a236a08252e9e508ae1c45b9c98167718df07",
+            "catalog": "b3a712a1066a867989722e4d0d01cc4451e65fc31c93f839c5ab56571d2854b5"
         },
         {
             "language": "nl_NL",
-            "version": "0.48.0",
-            "updated": "2026-10-30 11:49:03",
-            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.48.0/minn-admin-nl_NL.zip",
-            "sha256": "5c635837621b8bba235205d69c185e45478b7891789d55b63ee4c9fcbf095bba",
-            "catalog": "39159fbb04a2fe9f0571db19c2da6f1a8dc0deb776ce12253cc422a523f1747b"
+            "version": "0.49.0",
+            "updated": "2026-11-08 14:28:09",
+            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.49.0/minn-admin-nl_NL.zip",
+            "sha256": "c4c7e7350cf1dc135b865461a96bdf42f32e65126ca114ee694b4801449fd411",
+            "catalog": "c489b1cfd7a037620711f51d9c2f1c66a00dca65be9d9790c190685623977016"
         },
         {
             "language": "nl_NL_formal",
-            "version": "0.48.0",
-            "updated": "2026-10-30 11:49:03",
-            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.48.0/minn-admin-nl_NL_formal.zip",
-            "sha256": "6295e1cf0106b75ba7f225748655d136e7590d2b2408765203b4f8e436187cf9",
-            "catalog": "39159fbb04a2fe9f0571db19c2da6f1a8dc0deb776ce12253cc422a523f1747b"
+            "version": "0.49.0",
+            "updated": "2026-11-08 14:28:09",
+            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.49.0/minn-admin-nl_NL_formal.zip",
+            "sha256": "2a4b84d50c2e03721a8a38679cc155e21bebb04c1e81dae2c5e5dfb14dc887b7",
+            "catalog": "c489b1cfd7a037620711f51d9c2f1c66a00dca65be9d9790c190685623977016"
         },
         {
             "language": "pl_PL",
-            "version": "0.48.0",
-            "updated": "2026-10-30 11:49:03",
-            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.48.0/minn-admin-pl_PL.zip",
-            "sha256": "800c48847c0d3f69a6ee8439b59c0a08bca5337608087aea2687daf4feaee2f2",
-            "catalog": "5f65c0e2ed355db2dd93e1d86337001f7f9ed02e40a8f6dd9f9d53450bd7e365"
+            "version": "0.49.0",
+            "updated": "2026-11-08 14:28:09",
+            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.49.0/minn-admin-pl_PL.zip",
+            "sha256": "8219b06bcd25705cf83e668b313dd264940feda30cb0fbf2e25003cccb0def64",
+            "catalog": "e83903569ef46224a2d9f9e9339b3ae624227459ee430c4467e5eab947cfd643"
         },
         {
             "language": "pt_BR",
-            "version": "0.48.0",
-            "updated": "2026-10-30 11:49:03",
-            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.48.0/minn-admin-pt_BR.zip",
-            "sha256": "15332e4c96d5422a1411daedc412055a59344eddf17264256eb6f515f1900aaa",
-            "catalog": "c621a3be7104d93783481b561beaaaaa4bc5d5023b7bd53c87207ecf657f4550"
+            "version": "0.49.0",
+            "updated": "2026-11-08 14:28:09",
+            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.49.0/minn-admin-pt_BR.zip",
+            "sha256": "099f113785721a1d1d1a3a5a7cbf84647e4791523bb7871fddcc26a5a892f815",
+            "catalog": "c909f5e42a90e8500336d806c4ee460b3c4a72c0e1b1d58535b34bd876c0dab8"
         },
         {
             "language": "pt_PT",
-            "version": "0.48.0",
-            "updated": "2026-10-30 11:49:03",
-            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.48.0/minn-admin-pt_PT.zip",
-            "sha256": "af38353846f7d9a68779055f5f4b44148edf653ef0823f1b5f64ecd6033616a4",
-            "catalog": "bda5fddad8cc7dc7cb50b9248bb299e6fc13b0269c87675ecc6df982b5201981"
+            "version": "0.49.0",
+            "updated": "2026-11-08 14:28:09",
+            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.49.0/minn-admin-pt_PT.zip",
+            "sha256": "22954587df0d796b96063b441d8ce543580aa549a1ce6526277028fa5dbdb8fe",
+            "catalog": "d5a33735b129e45f7ce03eff4a9804814d176ecf1a0f843e376fe4408f49e4f1"
         },
         {
             "language": "ru_RU",
-            "version": "0.48.0",
-            "updated": "2026-10-30 11:49:03",
-            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.48.0/minn-admin-ru_RU.zip",
-            "sha256": "25fd996e53e6a58d23874b3b79a7f0d70cb47a155b99a8e2d5a95c030d28a9e9",
-            "catalog": "006c1faac7fe5067d140375a2730a0e4740b53ff1ea0fc9b73f8fd9d10bd8b28"
+            "version": "0.49.0",
+            "updated": "2026-11-08 14:28:09",
+            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.49.0/minn-admin-ru_RU.zip",
+            "sha256": "d1fe67be63480824fa2454df7e91b4c2ecd06a531e14ea38baa5e7047fdaec00",
+            "catalog": "3b3cddec7c489de29b562730dc1e9934b1f2ed533ccda775a99b4a8ab75a1d49"
         },
         {
             "language": "sv_SE",
-            "version": "0.48.0",
-            "updated": "2026-10-30 11:49:03",
-            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.48.0/minn-admin-sv_SE.zip",
-            "sha256": "088aff56294f12f900fd5fa965218ffe4c7206866f4ea8129b3837a194229b5e",
-            "catalog": "4aa7bae5ffa5ec5614e3da7ce2727c8042d5edc347389a77ba53085aea900856"
+            "version": "0.49.0",
+            "updated": "2026-11-08 14:28:09",
+            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.49.0/minn-admin-sv_SE.zip",
+            "sha256": "ee858ae90c6eface6eba38d79b1b37b713fc80cf5ebadcc03b482182b96dddcb",
+            "catalog": "d5f38ade87c07e4009ca1eeae85421c0a77c4b75b15c96eeaace9ed2ef07b135"
         },
         {
             "language": "tr_TR",
-            "version": "0.48.0",
-            "updated": "2026-10-30 11:49:03",
-            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.48.0/minn-admin-tr_TR.zip",
-            "sha256": "fc7d6f5e4073c4a7ee7f8b960deee633b053dba0c39fe684faf2ff9ddfe064d7",
-            "catalog": "ac64b84b8a6af4086884c2e61fc6a2f321de79390c40cd5acdf517c94d9c31c2"
+            "version": "0.49.0",
+            "updated": "2026-11-08 14:28:09",
+            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.49.0/minn-admin-tr_TR.zip",
+            "sha256": "de8f2b50432ffc83df5d97a1dc912a857cbcc6422d894d0cf58c9c30dff24519",
+            "catalog": "1739fbaf1751d1aa66a82f3922c86bb98b9bb407cac1f3c05aacf4513704e9c8"
         },
         {
             "language": "vi",
-            "version": "0.48.0",
-            "updated": "2026-10-30 11:49:03",
-            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.48.0/minn-admin-vi.zip",
-            "sha256": "ca1f5829587bce2cc8b607f1e105e3bc35de6a23b55556d3a8c1379fd96ea625",
-            "catalog": "51c7cdfc8b65584619e55644cb614604e2e97d65bd9373f754a1ab235c9ea7ba"
+            "version": "0.49.0",
+            "updated": "2026-11-08 14:28:09",
+            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.49.0/minn-admin-vi.zip",
+            "sha256": "0c6d81edcdb1e816c3b6dd6596b8e313d4fb049c9d3487d3978fbec38fa27333",
+            "catalog": "97d21f7eb1edd2d727382db7f4eec6789b1887db7e5646e388e5b6671b248a8b"
         },
         {
             "language": "zh_CN",
-            "version": "0.48.0",
-            "updated": "2026-10-30 11:49:03",
-            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.48.0/minn-admin-zh_CN.zip",
-            "sha256": "38e3d8e6984b4f668aa202d0755c33fedde69a3cdd7e1822848e4a8bc67400ff",
-            "catalog": "ce99b92936433b6e00553df5e0a8c2766fc280bdbfad8e4ffb56f578ef8fa873"
+            "version": "0.49.0",
+            "updated": "2026-11-08 14:28:09",
+            "package": "https://github.com/austinginder/minn-admin/releases/download/v0.49.0/minn-admin-zh_CN.zip",
+            "sha256": "7b0b024382243ea8b6e799113b81d4c4429e076d775e2f9eea7851968e6bf306",
+            "catalog": "68acb3287ff82902fea3dee76c8bf6e100059bac8b206a4eaecda4c3c1e2400f"
         }
     ]
 }

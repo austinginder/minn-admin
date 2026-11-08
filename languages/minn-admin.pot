@@ -2,14 +2,14 @@
 # This file is distributed under the MIT.
 msgid ""
 msgstr ""
-"Project-Id-Version: Minn Admin 0.48.0\n"
+"Project-Id-Version: Minn Admin 0.49.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/minn-admin\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-08T01:48:45+00:00\n"
+"POT-Creation-Date: 2026-11-08T14:27:14+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 
@@ -902,21 +902,21 @@ msgid_plural "%d entries left to ACF’s own tools"
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/adapters/acf.php:2374
-#: includes/adapters/acf.php:3511
+#: includes/adapters/acf.php:2434
+#: includes/adapters/acf.php:3571
 #: includes/adapters/jet-engine-fields.php:776
 msgid "That value was not accepted, so the stored one was kept."
 msgstr ""
 
-#: includes/adapters/acf.php:2385
+#: includes/adapters/acf.php:2445
 #: includes/adapters/jet-engine-fields.php:794
 msgid "One custom field was not saved."
 msgid_plural "Some custom fields were not saved."
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/adapters/acf.php:2634
-#: includes/adapters/acf.php:2705
+#: includes/adapters/acf.php:2694
+#: includes/adapters/acf.php:2765
 #: assets/js/app.js:29227
 #: assets/js/app.js:54381
 #: assets/js/app.js:54389
@@ -924,8 +924,8 @@ msgid "empty"
 msgstr ""
 
 #. translators: %d: number of repeater rows.
-#: includes/adapters/acf.php:2639
-#: includes/adapters/acf.php:2712
+#: includes/adapters/acf.php:2699
+#: includes/adapters/acf.php:2772
 #, php-format
 msgid "%d row"
 msgid_plural "%d rows"
@@ -934,7 +934,7 @@ msgstr[1] ""
 
 #. translators: %d: number of images in a gallery field.
 #. translators: %d: number of images in the gallery field.
-#: includes/adapters/acf.php:2651
+#: includes/adapters/acf.php:2711
 #: assets/js/app.js:44752
 #, php-format,js-format
 msgid "%d image"
@@ -944,7 +944,7 @@ msgstr[1] ""
 
 #. translators: %s: number of index rows
 #. translators: %s: the environment type (e.g. "staging").
-#: includes/adapters/acf.php:2653
+#: includes/adapters/acf.php:2713
 #: includes/adapters/elementor-mcp.php:149
 #: includes/adapters/gravity-smtp.php:1206
 #: includes/adapters/jet-smart-filters.php:81
@@ -958,7 +958,7 @@ msgstr[1] ""
 msgid "Off"
 msgstr ""
 
-#: includes/adapters/acf.php:2653
+#: includes/adapters/acf.php:2713
 #: includes/adapters/code-snippets.php:312
 #: includes/adapters/elementor-mcp.php:149
 #: includes/adapters/gravity-smtp.php:1206
@@ -972,15 +972,15 @@ msgid "On"
 msgstr ""
 
 #. translators: %d: number of flexible-content sections.
-#: includes/adapters/acf.php:2709
+#: includes/adapters/acf.php:2769
 #, php-format
 msgid "%d section"
 msgid_plural "%d sections"
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/adapters/acf.php:2722
-#: includes/adapters/acf.php:2777
+#: includes/adapters/acf.php:2782
+#: includes/adapters/acf.php:2837
 #: includes/adapters/acpt.php:770
 #: includes/adapters/jet-engine-fields.php:815
 #: includes/adapters/meta-box.php:240
@@ -992,18 +992,18 @@ msgid "Custom fields"
 msgstr ""
 
 #. translators: %d: how many rows or sections were edited.
-#: includes/adapters/acf.php:2756
+#: includes/adapters/acf.php:2816
 #, php-format
 msgid "%d edited"
 msgid_plural "%d edited"
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/adapters/acf.php:2759
+#: includes/adapters/acf.php:2819
 msgid "changed"
 msgstr ""
 
-#: includes/adapters/acf.php:2828
+#: includes/adapters/acf.php:2888
 #: includes/adapters/acpt.php:810
 #: includes/adapters/jet-engine-fields.php:844
 #: includes/adapters/public-post-preview.php:55
@@ -1018,7 +1018,7 @@ msgstr ""
 msgid "Post not found."
 msgstr ""
 
-#: includes/adapters/acf.php:2831
+#: includes/adapters/acf.php:2891
 #: includes/adapters/acpt.php:813
 #: includes/adapters/jet-engine-fields.php:847
 #: includes/kernel/class-minn-admin-kernel-panels.php:483
@@ -1026,27 +1026,27 @@ msgstr ""
 msgid "You cannot edit this post."
 msgstr ""
 
-#: includes/adapters/acf.php:2837
+#: includes/adapters/acf.php:2897
 #: includes/adapters/acpt.php:819
 #: includes/adapters/jet-engine-fields.php:853
 #: includes/kernel/class-minn-admin-kernel-panels.php:488
 msgid "You cannot edit that post type."
 msgstr ""
 
-#: includes/adapters/acf.php:2874
+#: includes/adapters/acf.php:2934
 msgid "This picker is no longer available. Reload the screen and try again."
 msgstr ""
 
-#: includes/adapters/acf.php:2881
+#: includes/adapters/acf.php:2941
 msgid "Unknown relational field."
 msgstr ""
 
-#: includes/adapters/acf.php:3055
+#: includes/adapters/acf.php:3115
 msgid "ACF simple field values for Minn Admin."
 msgstr ""
 
 #. translators: %s: comma-separated field names.
-#: includes/adapters/acf.php:3523
+#: includes/adapters/acf.php:3583
 #: includes/adapters/jet-engine-options.php:151
 #, php-format
 msgid "Nothing was saved: %s has a value the field does not accept."
@@ -1054,7 +1054,7 @@ msgid_plural "Nothing was saved: %s have values the fields do not accept."
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/adapters/acf.php:3838
+#: includes/adapters/acf.php:3898
 #: includes/adapters/option-pages.php:197
 #: includes/class-minn-admin-surfaces.php:340
 msgid "Site Options"
@@ -2522,13 +2522,13 @@ msgstr ""
 #: includes/adapters/backwpup.php:522
 #: includes/adapters/updraftplus.php:178
 #: includes/adapters/updraftplus.php:539
-#: includes/adapters/wpvivid.php:565
-#: includes/adapters/wpvivid.php:599
+#: includes/adapters/wpvivid.php:570
+#: includes/adapters/wpvivid.php:604
 msgid "Backup stopped."
 msgstr ""
 
 #: includes/adapters/backwpup.php:478
-#: includes/adapters/wpvivid.php:576
+#: includes/adapters/wpvivid.php:581
 #: assets/js/app.js:7097
 #: assets/js/app.js:8476
 #: assets/js/app.js:18226
@@ -2551,8 +2551,8 @@ msgstr ""
 #: includes/adapters/updraftplus.php:198
 #: includes/adapters/updraftplus.php:201
 #: includes/adapters/updraftplus.php:235
-#: includes/adapters/wpvivid.php:549
-#: includes/adapters/wpvivid.php:559
+#: includes/adapters/wpvivid.php:554
+#: includes/adapters/wpvivid.php:564
 msgid "Backup finished."
 msgstr ""
 
@@ -12182,80 +12182,80 @@ msgstr ""
 msgid "Delivered"
 msgstr ""
 
-#: includes/adapters/site-status.php:213
+#: includes/adapters/site-status.php:217
 msgid "Minn maintenance mode"
 msgstr ""
 
-#: includes/adapters/site-status.php:215
+#: includes/adapters/site-status.php:219
 msgid "Visitors get a 503 holding page"
 msgstr ""
 
-#: includes/adapters/site-status.php:316
+#: includes/adapters/site-status.php:320
 msgid "WooCommerce coming soon"
 msgstr ""
 
-#: includes/adapters/site-status.php:319
+#: includes/adapters/site-status.php:323
 msgid "Only store pages are hidden; the rest of the site is public"
 msgstr ""
 
-#: includes/adapters/site-status.php:319
+#: includes/adapters/site-status.php:323
 msgid "Visitors see the coming-soon page instead of the site"
 msgstr ""
 
-#: includes/adapters/site-status.php:331
+#: includes/adapters/site-status.php:335
 msgid "Elementor maintenance mode"
 msgstr ""
 
-#: includes/adapters/site-status.php:349
+#: includes/adapters/site-status.php:353
 msgid "Bricks maintenance mode"
 msgstr ""
 
-#: includes/adapters/site-status.php:367
+#: includes/adapters/site-status.php:371
 msgid "The whole site is behind a password"
 msgstr ""
 
-#: includes/adapters/site-status.php:451
-#: includes/adapters/site-status.php:459
-#: includes/adapters/site-status.php:467
-#: includes/adapters/site-status.php:475
+#: includes/adapters/site-status.php:455
+#: includes/adapters/site-status.php:463
+#: includes/adapters/site-status.php:471
+#: includes/adapters/site-status.php:479
 #: assets/js/app.js:53091
 msgid "Site visibility"
 msgstr ""
 
-#: includes/adapters/site-status.php:453
+#: includes/adapters/site-status.php:457
 msgid "Hidden from the public by "
 msgstr ""
 
-#: includes/adapters/site-status.php:461
+#: includes/adapters/site-status.php:465
 msgid "The whole site is password-protected ("
 msgstr ""
 
-#: includes/adapters/site-status.php:469
+#: includes/adapters/site-status.php:473
 msgid "Part of the site is hidden by "
 msgstr ""
 
-#: includes/adapters/site-status.php:477
+#: includes/adapters/site-status.php:481
 msgid "Search engines are discouraged (Settings → Reading) — the site is public but asks not to be indexed"
 msgstr ""
 
-#: includes/adapters/site-status.php:501
-#: includes/adapters/site-status.php:508
+#: includes/adapters/site-status.php:505
+#: includes/adapters/site-status.php:512
 msgid "SSL enforcement"
 msgstr ""
 
-#: includes/adapters/site-status.php:503
+#: includes/adapters/site-status.php:507
 msgid "Really Simple SSL is installed but SSL is not enabled yet — finish its setup"
 msgstr ""
 
-#: includes/adapters/site-status.php:510
+#: includes/adapters/site-status.php:514
 msgid "Really Simple SSL is enforcing HTTPS"
 msgstr ""
 
-#: includes/adapters/site-status.php:547
+#: includes/adapters/site-status.php:551
 msgid "No visibility toggle is registered for that provider."
 msgstr ""
 
-#: includes/adapters/site-status.php:550
+#: includes/adapters/site-status.php:554
 msgid "This site keeps that switch to people with the plugin’s own settings access."
 msgstr ""
 
@@ -12924,12 +12924,12 @@ msgid "Full backup started — UpdraftPlus is running it in the background."
 msgstr ""
 
 #: includes/adapters/updraftplus.php:574
-#: includes/adapters/wpvivid.php:656
+#: includes/adapters/wpvivid.php:661
 msgid "Backing up database"
 msgstr ""
 
 #: includes/adapters/updraftplus.php:574
-#: includes/adapters/wpvivid.php:656
+#: includes/adapters/wpvivid.php:661
 msgid "Backing up site"
 msgstr ""
 
@@ -14760,6 +14760,7 @@ msgstr ""
 
 #: includes/adapters/wp-migrate.php:356
 #: includes/adapters/wpvivid.php:431
+#: includes/adapters/wpvivid.php:437
 msgid "Backup not found."
 msgstr ""
 
@@ -15199,72 +15200,72 @@ msgstr ""
 msgid "Delete this backup and its archive files permanently?"
 msgstr ""
 
-#: includes/adapters/wpvivid.php:510
+#: includes/adapters/wpvivid.php:515
 msgid "Backup id is required."
 msgstr ""
 
-#: includes/adapters/wpvivid.php:513
+#: includes/adapters/wpvivid.php:518
 msgid "Backup not found"
 msgstr ""
 
-#: includes/adapters/wpvivid.php:516
+#: includes/adapters/wpvivid.php:521
 msgid "WPvivid is not ready to delete backups."
 msgstr ""
 
-#: includes/adapters/wpvivid.php:522
+#: includes/adapters/wpvivid.php:527
 msgid "WPvivid could not delete: "
 msgstr ""
 
-#: includes/adapters/wpvivid.php:527
+#: includes/adapters/wpvivid.php:532
 msgid "WPvivid refused the delete."
 msgstr ""
 
-#: includes/adapters/wpvivid.php:541
+#: includes/adapters/wpvivid.php:546
 msgid "WPvivid is not loaded."
 msgstr ""
 
-#: includes/adapters/wpvivid.php:562
+#: includes/adapters/wpvivid.php:567
 msgid "WPvivid reported an error. Check its log."
 msgstr ""
 
-#: includes/adapters/wpvivid.php:571
+#: includes/adapters/wpvivid.php:576
 msgid "WPvivid reports the backup stopped responding. Its log shows the last step."
 msgstr ""
 
-#: includes/adapters/wpvivid.php:574
+#: includes/adapters/wpvivid.php:579
 msgid "Waiting for WP-Cron to resume the backup…"
 msgstr ""
 
-#: includes/adapters/wpvivid.php:576
-#: includes/adapters/wpvivid.php:657
+#: includes/adapters/wpvivid.php:581
+#: includes/adapters/wpvivid.php:662
 msgid "Starting WPvivid…"
 msgstr ""
 
-#: includes/adapters/wpvivid.php:597
+#: includes/adapters/wpvivid.php:602
 msgid "WPvivid could not stop the backup."
 msgstr ""
 
-#: includes/adapters/wpvivid.php:610
+#: includes/adapters/wpvivid.php:615
 msgid "A WPvivid backup is already running. Wait for it to finish."
 msgstr ""
 
-#: includes/adapters/wpvivid.php:626
+#: includes/adapters/wpvivid.php:631
 msgid "WPvivid public interface is not loaded."
 msgstr ""
 
-#: includes/adapters/wpvivid.php:632
+#: includes/adapters/wpvivid.php:637
 msgid "WPvivid could not prepare: "
 msgstr ""
 
-#: includes/adapters/wpvivid.php:637
+#: includes/adapters/wpvivid.php:642
 msgid "WPvivid refused to prepare the backup."
 msgstr ""
 
-#: includes/adapters/wpvivid.php:647
+#: includes/adapters/wpvivid.php:652
 msgid "Database backup started — WPvivid is running it in the background."
 msgstr ""
 
-#: includes/adapters/wpvivid.php:648
+#: includes/adapters/wpvivid.php:653
 msgid "Full backup started — WPvivid is running it in the background."
 msgstr ""
 

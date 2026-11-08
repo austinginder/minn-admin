@@ -4,7 +4,7 @@
 checking on things, keeping plugins current. No code in here. If you build
 plugins, you want [for-plugin-authors.md](for-plugin-authors.md) instead.*
 
-*Current as of v0.48.0. This file ships inside the plugin, so the copy you
+*Current as of v0.49.0. This file ships inside the plugin, so the copy you
 are reading always matches the version you have installed.*
 
 ## What Minn is (and is not)
@@ -87,6 +87,11 @@ straight away. The ⇄ button steps on to Traffic and Activity, and the
 chart remembers which one you left it on. Store owners and shop managers
 see it; a vendor who handles only their own orders does not.
 
+The Activity chart and **Recent activity** count every content type Minn
+lists under Content, not just posts and pages, and an Editor sees what
+the whole team has been writing there. A site that mostly writes in its
+own content type can put that count where the posts card sits.
+
 **The command palette** is the fastest way anywhere. Press **⌘K**
 (Ctrl+K on Windows and Linux), start typing, and jump to any view, any
 post, or run a command directly: "Clear site cache", "Back up site now",
@@ -117,7 +122,8 @@ builder's own canvas, the same way the classic admin bar does.
 
 **Right-click is real in Minn.** This is the least discoverable thing in
 the app, so here it is in plain terms: rows in Content and Media have
-right-click menus (open, duplicate, publish, trash), comments have them,
+right-click menus (open, duplicate, publish, trash, offered only when you
+can do them), comments have them,
 the theme toggle has one, sidebar entries have one whether a plugin added
 them or Minn did (that's how you hide them), and group headings in the
 editor's block library have one too. When in doubt, try a right-click.
