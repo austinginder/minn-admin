@@ -1173,6 +1173,19 @@ $named_not_secret = array(
 	'cff_islicence_upgraded'                  => 'Custom Facebook Feed: a flag',
 	'cff_license_last_check_timestamp'        => 'Custom Facebook Feed: a time',
 	'cff_show_access_token'                   => 'Custom Facebook Feed: a switch (use your own token), not the token',
+	// Password Protected (declared since v0.49.0 for its password hash): the
+	// plugin's name carries "password", so its every setting matches.
+	'password_protected_1.5_update_database'  => 'Password Protected: a migration marker',
+	'password_protected_use_transient'        => 'Password Protected: a switch',
+	'password_protected_administrators'       => 'Password Protected: a switch (let admins in)',
+	'password_protected_users'                => 'Password Protected: a switch (let logged-in users in)',
+	'password_protected_feeds'                => 'Password Protected: a switch (open feeds)',
+	'password_protected_rest'                 => 'Password Protected: a switch (open the REST API)',
+	'password_protected_allowed_ip_addresses' => 'Password Protected: an IP allowlist, not a credential',
+	'password_protected_remember_me'          => 'Password Protected: a switch',
+	'password_protected_remember_me_lifetime' => 'Password Protected: a number of days',
+	'password_protected_text_above_password'  => 'Password Protected: login page text',
+	'password_protected_text_below_password'  => 'Password Protected: login page text',
 );
 // Rows that hold a key and belong to an integration file outside the change
 // that added this part. Each is owed a declaration in its adapter; one that

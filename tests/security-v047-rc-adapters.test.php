@@ -181,9 +181,30 @@ rest_get_server();
 	$open = array();
 	foreach ( array( 'fluent-smtp', 'wp-mail-logging', 'post-smtp', 'gravity-smtp', 'suremails', 'site-mailer', 'wp-mail-smtp' ) as $a ) {
 		$src = (string) file_get_contents( MINN_ADMIN_DIR . "includes/adapters/{$a}.php" );
-		if ( preg_match_all( "/'message'\s*\]?\s*=\s*>?\s*(.+);?$/m", $src, $m ) ) {
-			foreach ( $m[1] as $rhs ) {
-				if ( preg_match( '/\$r\[/', $rhs ) && false === strpos( $rhs, 'minn_admin_mail_mask_reset_keys' ) ) {
+		// Since the mail kit's wrapper (d8f93608), an item view built inside
+		// minn_admin_mail_masked() is masked as a whole: find each wrapper's span.
+		$spans = array();
+		$at    = 0;
+		while ( false !== ( $at = strpos( $src, 'minn_admin_mail_masked(', $at ) ) ) {
+			$depth = 0;
+			for ( $i = $at + strlen( 'minn_admin_mail_masked' ), $n = strlen( $src ); $i < $n; $i++ ) {
+				if ( '(' === $src[ $i ] ) {
+					++$depth;
+				} elseif ( ')' === $src[ $i ] && 0 === --$depth ) {
+					break;
+				}
+			}
+			$spans[] = array( $at, $i );
+			$at      = $i;
+		}
+		if ( preg_match_all( "/'message'\s*\]?\s*=\s*>?\s*(.+);?$/m", $src, $m, PREG_OFFSET_CAPTURE ) ) {
+			foreach ( $m[1] as $hit ) {
+				list( $rhs, $off ) = $hit;
+				$wrapped = false;
+				foreach ( $spans as $s ) {
+					$wrapped = $wrapped || ( $off > $s[0] && $off < $s[1] );
+				}
+				if ( preg_match( '/\$r\[/', $rhs ) && false === strpos( $rhs, 'minn_admin_mail_mask_reset_keys' ) && ! $wrapped ) {
 					$open[] = $a . ': ' . trim( $rhs );
 				}
 			}
