@@ -13429,7 +13429,10 @@ Sent from <a href="' . esc_url( $url ) . '" style="color:#5a4ef0;text-decoration
 			// post themselves: protected meta (a _-prefixed key: page template,
 			// builder data, SEO flags) and a key a plugin registered with an
 			// auth_callback alike. core's own meta writes run the same check.
-			if ( ! current_user_can( 'add_post_meta', $new_id, $key ) ) {
+			// ACF refuses that check on its own fields, which it writes itself;
+			// its adapter answers for those as ACF's screen would.
+			if ( ! current_user_can( 'add_post_meta', $new_id, $key )
+				&& ! ( function_exists( 'minn_admin_acf_duplicate_copies' ) && minn_admin_acf_duplicate_copies( $key, $post->ID ) ) ) {
 				continue;
 			}
 			foreach ( $values as $value ) {

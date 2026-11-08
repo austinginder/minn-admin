@@ -175,6 +175,7 @@ MINN_SWAP_ADD=post-smtp/postman-smtp.php,suremails/suremails.php,site-mailer/sit
 MINN_SWAP_ADD=custom-css-js/custom-css-js.php,header-footer-code-manager/99robots-header-footer-code-manager.php run security-v049-rc single --user=admin --require=tests/lib/plugin-swap.php
 # The RC4 hunt: defaults a body left out, and what a detail view writes or prints. Rank Math's section needs the swap.
 run security-v049-hunt single --user=admin
+run security-v049-sweep single --user=admin
 MINN_SEO_SWAP=rank-math run security-v049-hunt single --user=admin --require=tests/lib/seo-swap.php
 # Header Footer Code Manager stays inactive on the lab; the swap loads it for this process only.
 MINN_SWAP_ADD=header-footer-code-manager/99robots-header-footer-code-manager.php run hfcm-storage single --user=admin --require=tests/lib/plugin-swap.php

@@ -430,7 +430,12 @@ function minn_admin_wpvivid_download_files( $id ) {
 	if ( ! is_array( $set ) ) {
 		return new WP_Error( 'not_found', __( 'Backup not found.', 'minn-admin' ), array( 'status' => 404 ) );
 	}
-	$dir   = WP_CONTENT_DIR . '/' . WPvivid_Setting::get_backupdir();
+	// WPvivid throws on a backup folder its settings no longer accept.
+	try {
+		$dir = WP_CONTENT_DIR . '/' . WPvivid_Setting::get_backupdir();
+	} catch ( \Throwable $e ) {
+		return new WP_Error( 'backup_dir', __( 'Backup not found.', 'minn-admin' ), array( 'status' => 404 ) );
+	}
 	$names = array();
 	if ( ! empty( $set['backup']['files'] ) && is_array( $set['backup']['files'] ) ) {
 		foreach ( $set['backup']['files'] as $file ) {

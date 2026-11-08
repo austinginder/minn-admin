@@ -23,6 +23,10 @@
 
 defined( 'ABSPATH' ) || exit;
 
+// Password Protected keeps the hash of the site's shared password in a row of
+// its own.
+minn_admin_secrets( 'password-protected', array( 'options' => array( 'password_protected_password' ) ) );
+
 /**
  * Read an option's stored row directly, bypassing pre_option filters. Only
  * for detectors whose plugin masks its own option per request context

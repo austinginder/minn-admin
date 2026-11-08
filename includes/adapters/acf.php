@@ -835,6 +835,116 @@ function minn_admin_acf_groups_for( $post_id, $post_type ) {
 }
 
 /**
+ * Whether a duplicate copies one of the original's ACF meta keys that core's
+ * meta check refused. ACF writes its values itself and, since 6.8.11, maps
+ * add_post_meta on them to do_not_allow so that nobody writes a value for a
+ * field ACF doesn't show them; its references (`_name`) are protected meta
+ * and always were refused. A key copies when it is where a field ACF shows on
+ * the original to this user keeps its value or reference: the fields of the
+ * groups shown there, each one and each of its sub fields passing
+ * acf/prepare_field, named the way ACF names their storage (clone sub fields
+ * under the clone that shows them, repeater and flexible rows by pattern,
+ * plus a flexible field's layout meta). Before 6.8.11 core's check lets the
+ * values through on its own, and this answers no.
+ *
+ * @param string $key     Meta key on the original.
+ * @param int    $from_id The original post.
+ * @return bool
+ */
+function minn_admin_acf_duplicate_copies( $key, $from_id ) {
+	static $cache = array();
+	if ( ! is_string( $key ) || '' === $key || ! minn_admin_acf_active() || ! function_exists( '_acf_get_field_storage_sub_fields' ) ) {
+		return false;
+	}
+	$from_id = (int) $from_id;
+	$slot    = get_current_user_id() . ':' . $from_id;
+	if ( ! isset( $cache[ $slot ] ) ) {
+		$names = array(
+			'names'    => array(),
+			'patterns' => array(),
+		);
+		$add   = static function ( $field, $top ) use ( &$add, &$names, $from_id ) {
+			$name = is_array( $field ) ? (string) ( $field['name'] ?? '' ) : '';
+			if ( '' === $name ) {
+				return;
+			}
+			// ACF's screen saves a read-only field's input; a hidden one, or
+			// one a site filter couldn't answer for, is left out.
+			if ( function_exists( 'acf_prepare_field' ) ) {
+				$probe = $field;
+				if ( $top && function_exists( 'acf_get_value' ) ) {
+					try {
+						$probe['value'] = acf_get_value( $from_id, $field );
+					} catch ( \Throwable $e ) {
+						$probe['value'] = null;
+					}
+				}
+				try {
+					if ( ! acf_prepare_field( $probe ) ) {
+						return;
+					}
+				} catch ( \Throwable $e ) {
+					return;
+				}
+			}
+			$stored = array( $name );
+			if ( 'flexible_content' === ( $field['type'] ?? '' ) ) {
+				$stored[] = $name . '_layout_meta';
+			}
+			foreach ( $stored as $one ) {
+				if ( false !== strpos( $one, "\0" ) ) {
+					$names['patterns'][] = '/^' . implode( '\d+', array_map( static function ( $part ) {
+						return preg_quote( $part, '/' );
+					}, explode( "\0", $one ) ) ) . '$/';
+				} else {
+					$names['names'][ $one ] = true;
+				}
+			}
+			foreach ( (array) _acf_get_field_storage_sub_fields( $field ) as $sub ) {
+				$add( $sub, false );
+			}
+		};
+		try {
+			foreach ( (array) minn_admin_acf_groups_for( $from_id, get_post_type( $from_id ) ) as $group ) {
+				foreach ( (array) acf_get_fields( $group ) as $field ) {
+					$add( $field, true );
+				}
+			}
+		} catch ( \Throwable $e ) {
+			$names = array(
+				'names'    => array(),
+				'patterns' => array(),
+			);
+		}
+		$names['patterns'] = array_values( array_unique( $names['patterns'] ) );
+		$cache[ $slot ]    = $names;
+	}
+	$ref  = '_' === $key[0];
+	$name = $ref ? substr( $key, 1 ) : $key;
+	if ( '' === $name ) {
+		return false;
+	}
+	// A protected `_name` copies only as what ACF keeps there: a field-key
+	// reference, or a flexible field's layout meta.
+	if ( $ref ) {
+		$held = get_post_meta( $from_id, $key, true );
+		$meta = '_layout_meta' === substr( $name, -12 ) && is_array( $held );
+		if ( ! $meta && ! ( is_string( $held ) && function_exists( 'acf_is_field_key' ) && acf_is_field_key( $held ) ) ) {
+			return false;
+		}
+	}
+	if ( isset( $cache[ $slot ]['names'][ $name ] ) ) {
+		return true;
+	}
+	foreach ( $cache[ $slot ]['patterns'] as $pattern ) {
+		if ( preg_match( $pattern, $name ) ) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
  * Map one ACF field onto the panel vocabulary, or null if locked.
  *
  * ACF types normalize onto engine types: button_group is a styled radio;
@@ -1537,7 +1647,23 @@ function minn_admin_acf_raw_update( $field, $value, $post_id ) {
 	// sub. The panel resends every field on any edit, so an unslashed value
 	// would lose a level of backslashes from every untouched field per save.
 	$value = wp_slash( $value );
-	if ( ! empty( $field['_acf'] ) && ! acf_get_field( $field['key'] ) ) {
+	$local = ! empty( $field['_acf'] ) && ! acf_get_field( $field['key'] );
+	// What a person sends is saved the way ACF saves its own form and REST
+	// API (6.8.11+): inside its submitted-values wrapper, so a relationship
+	// keeps only the posts ACF lets this user pick (stored ones stay) and a
+	// bidirectional field adds a back-reference only to an item this user may
+	// edit. update_field() is ACF's call for values code writes, unchecked.
+	if ( function_exists( '_acf_save_submitted_values' ) ) {
+		$pid = acf_get_valid_post_id( $post_id );
+		$acf = $local ? $field['_acf'] : acf_maybe_get_field( $field['key'], $pid, false );
+		if ( $acf ) {
+			_acf_save_submitted_values( static function () use ( $value, $pid, $acf ) {
+				return acf_update_value( $value, $pid, $acf );
+			} );
+			return;
+		}
+	}
+	if ( $local ) {
 		acf_update_value( $value, acf_get_valid_post_id( $post_id ), $field['_acf'] );
 		return;
 	}
