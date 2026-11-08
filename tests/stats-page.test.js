@@ -18,7 +18,11 @@ const { launch, login, loginAs, reporter, BASE } = require( './helpers' );
 	let authorCtx = null;
 	try {
 		/* ===== Door from the Overview traffic card ===== */
+		// A store's sales lead the chart when the lab has recent orders
+		// (since 1bb79157); the door rides the traffic chart, so pick it.
 		await page.goto( BASE + '/minn-admin/', { waitUntil: 'domcontentloaded' } );
+		await page.evaluate( () => localStorage.setItem( 'minn-chart-source', 'traffic' ) );
+		await page.reload( { waitUntil: 'domcontentloaded' } );
 		await page.waitForSelector( '#minn-chart', { timeout: 20000 } );
 		const door = await page.$( '#minn-open-stats' );
 		t.check( 'Overview traffic card offers the stats door', !! door );

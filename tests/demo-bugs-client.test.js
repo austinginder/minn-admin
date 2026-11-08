@@ -388,9 +388,13 @@ const id = ( v ) => ( Number.isInteger( v ) && v > 1 ? v : null );
 						const k = r.querySelector( '.minn-side-key' );
 						if ( k ) out[ k.textContent.trim() ] = r.textContent.replace( k.textContent, '' ).trim();
 					} );
-					// The site's clock at its offset (an October instant: today's offset).
-					const ms = Date.parse( '2026-10-09T19:44:00Z' ) + window.MINN.gmtOffset * 3600000;
-					out.want = new Date( ms ).toLocaleString( 'en-US', { timeZone: 'UTC', dateStyle: 'medium', timeStyle: 'short' } );
+					// The site's clock at that instant: by its zone name when it has
+					// one (the October offset, not today's after a DST change), else
+					// its fixed offset.
+					const fmt = { dateStyle: 'medium', timeStyle: 'short' };
+					out.want = window.MINN.timezone
+						? new Date( '2026-10-09T19:44:00Z' ).toLocaleString( 'en-US', { ...fmt, timeZone: window.MINN.timezone } )
+						: new Date( Date.parse( '2026-10-09T19:44:00Z' ) + window.MINN.gmtOffset * 3600000 ).toLocaleString( 'en-US', { ...fmt, timeZone: 'UTC' } );
 					return out;
 				} );
 				t.check( 'D-03: a detail row holding an ISO instant reads on the site\'s clock', flat( rows.Sent ) === flat( rows.want ) && flat( rows.Logged ) === flat( rows.want ), JSON.stringify( rows ) );

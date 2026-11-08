@@ -1,5 +1,5 @@
 /**
- * Breakdance 2.8.1 integration: exact plugin fixture, Pro license visibility,
+ * Breakdance 3.0.1 integration: exact plugin fixture, Pro license visibility,
  * and the builder-owned content fence with its canonical editor URL.
  */
 const { BASE, WP, launch, login, reporter } = require( './helpers' );
@@ -28,7 +28,7 @@ function isActive() {
 	const wasActive = isActive();
 	let ids = [];
 
-	t.check( 'the exact Breakdance fixture is installed', /2\.8\.1/.test( wp( [ 'plugin', 'get', 'breakdance', '--field=version' ] ) ) );
+	t.check( 'the exact Breakdance fixture is installed', /3\.0\.1/.test( wp( [ 'plugin', 'get', 'breakdance', '--field=version' ] ) ) );
 
 	const { browser, page, errors } = await launch();
 	await login( page );

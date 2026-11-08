@@ -183,7 +183,9 @@ const { launch, login, createPost, deletePost, openEditor, reporter, pickCombo, 
 			} );
 		}, postId );
 		t.check( 'cleared robots meta is DELETED (inherit)', meta( postId, 'rank_math_robots' ) === '""', meta( postId, 'rank_math_robots' ) );
-		t.check( 'cleared advanced robots meta is DELETED', meta( postId, 'rank_math_advanced_robots' ) === '""' );
+		// Since 0e8d397f a cleared directive is stored as off, not deleted: an
+		// absent map lets Rank Math's global directives back in.
+		t.check( 'cleared advanced robots directive is stored as off', meta( postId, 'rank_math_advanced_robots' ) === '{"max-snippet":false}', meta( postId, 'rank_math_advanced_robots' ) );
 		t.check( 'cleared pillar meta is DELETED', meta( postId, 'rank_math_pillar_content' ) === '""' );
 
 		// --- Bogus enum never reaches storage --------------------------------
